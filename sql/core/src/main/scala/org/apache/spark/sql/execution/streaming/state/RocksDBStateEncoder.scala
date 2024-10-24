@@ -33,6 +33,10 @@ sealed trait RocksDBKeyStateEncoder {
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
+
+  def encodeKeyBytes(row: Array[Byte]): Array[Byte]
+  def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte]
+
   def getColumnFamilyIdBytes(): Array[Byte]
 }
 
@@ -41,6 +45,10 @@ sealed trait RocksDBValueStateEncoder {
   def encodeValue(row: UnsafeRow): Array[Byte]
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
+
+  def encodeValueBytes(row: Array[Byte]): Array[Byte]
+  def decodeValueBytes(valueBytes: Array[Byte]): Array[Byte]
+  def decodeValuesBytes(valueBytes: Array[Byte]): Iterator[Array[Byte]]
 }
 
 abstract class RocksDBKeyStateEncoderBase(
@@ -166,6 +174,34 @@ object RocksDBStateEncoder {
       null
     }
   }
+
+  /**
+   * Encode a byte array of N bytes as a N+1 byte array.
+   * @note This creates a new byte array and copies the input array to the new array.
+   */
+  def encodeByteArray(input: Array[Byte]): Array[Byte] = {
+    val encodedBytes = new Array[Byte](input.length + STATE_ENCODING_NUM_VERSION_BYTES)
+    Platform.putByte(encodedBytes, Platform.BYTE_ARRAY_OFFSET, STATE_ENCODING_VERSION)
+    Platform.copyMemory(
+      input, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
+      input.length)
+    encodedBytes
+  }
+
+  def decodeToByteArray(bytes: Array[Byte]): Array[Byte] = {
+    if (bytes != null) {
+      val decodedBytes = new Array[Byte](bytes.length - STATE_ENCODING_NUM_VERSION_BYTES)
+      Platform.copyMemory(
+        bytes, Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
+        decodedBytes, Platform.BYTE_ARRAY_OFFSET,
+        decodedBytes.length)
+      decodedBytes
+    } else {
+      null
+    }
+  }
+
 }
 
 /**
@@ -247,7 +283,8 @@ class PrefixKeyScanStateEncoder(
     val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
       numFields = keySchema.length - numColsPrefixKey)
 
-    restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
+    val row = joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded)
+    restoreKeyProjection(row)
   }
 
   private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
@@ -267,6 +304,12 @@ class PrefixKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
+
+  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
 }
 
 /**
@@ -644,6 +687,12 @@ class RangeKeyScanStateEncoder(
   }
 
   override def supportPrefixKeyScan: Boolean = true
+
+  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
+
+  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
 }
 
 /**
@@ -706,6 +755,39 @@ class NoPrefixKeyStateEncoder(
         null
       }
     } else decodeToUnsafeRow(keyBytes, keyRow)
+  }
+
+  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] = {
+    if (!useColumnFamilies) {
+      row
+    } else {
+      val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(
+        row.length +
+          STATE_ENCODING_NUM_VERSION_BYTES
+      )
+
+      Platform.putByte(encodedBytes, startingOffset, STATE_ENCODING_VERSION)
+      // Platform.BYTE_ARRAY_OFFSET is the recommended way to memcopy b/w byte arrays. See Platform.
+      Platform.copyMemory(
+        row, Platform.BYTE_ARRAY_OFFSET,
+        encodedBytes, startingOffset + STATE_ENCODING_NUM_VERSION_BYTES, row.length)
+      encodedBytes
+    }
+  }
+
+  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] = {
+    if (keyBytes == null) {
+      null
+    } else if (useColumnFamilies) {
+      val startOffset = decodeKeyStartOffset + STATE_ENCODING_NUM_VERSION_BYTES
+      val length = keyBytes.length -
+        STATE_ENCODING_NUM_VERSION_BYTES - VIRTUAL_COL_FAMILY_PREFIX_BYTES
+      java.util.Arrays.copyOfRange(keyBytes, startOffset, startOffset + length)
+    } else {
+      // Assuming decodeToUnsafeRow is not applicable for byte array encoding
+      // If there's no special decoding needed, just return a copy of the input
+      keyBytes.clone()
+    }
   }
 
   override def supportPrefixKeyScan: Boolean = false
@@ -789,6 +871,95 @@ class MultiValuedStateEncoder(valueSchema: StructType)
   }
 
   override def supportsMultipleValuesPerKey: Boolean = true
+
+  /**
+   * Encodes a raw byte array value in the multi-value format.
+   * Format: [length (4 bytes)][value bytes][delimiter (1 byte)]
+   */
+  override def encodeValueBytes(row: Array[Byte]): Array[Byte] = {
+    if (row == null) {
+      null
+    } else {
+      val numBytes = row.length
+      // Allocate space for:
+      // - 4 bytes for length
+      // - The actual value bytes
+      val encodedBytes = new Array[Byte](java.lang.Integer.BYTES + numBytes)
+
+      // Write length as big-endian int
+      Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, numBytes)
+
+      // Copy value bytes after the length
+      Platform.copyMemory(
+        row, Platform.BYTE_ARRAY_OFFSET,
+        encodedBytes, Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES,
+        numBytes
+      )
+
+      encodedBytes
+    }
+  }
+
+  /**
+   * Decodes a single value from the encoded byte format.
+   * Assumes the bytes represent a single value, not multiple merged values.
+   */
+  override def decodeValueBytes(valueBytes: Array[Byte]): Array[Byte] = {
+    if (valueBytes == null) {
+      null
+    } else {
+      // Read length from first 4 bytes
+      val numBytes = Platform.getInt(valueBytes, Platform.BYTE_ARRAY_OFFSET)
+
+      // Extract just the value bytes after the length
+      val decodedBytes = new Array[Byte](numBytes)
+      Platform.copyMemory(
+        valueBytes, Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES,
+        decodedBytes, Platform.BYTE_ARRAY_OFFSET,
+        numBytes
+      )
+
+      decodedBytes
+    }
+  }
+
+  /**
+   * Decodes multiple values from the merged byte format.
+   * Returns an iterator that lazily decodes each value.
+   */
+  override def decodeValuesBytes(valueBytes: Array[Byte]): Iterator[Array[Byte]] = {
+    if (valueBytes == null) {
+      Iterator.empty
+    } else {
+      new Iterator[Array[Byte]] {
+        // Track current position in the byte array
+        private var pos: Int = Platform.BYTE_ARRAY_OFFSET
+        private val maxPos = Platform.BYTE_ARRAY_OFFSET + valueBytes.length
+
+        override def hasNext: Boolean = pos < maxPos
+
+        override def next(): Array[Byte] = {
+          // Read length prefix
+          val numBytes = Platform.getInt(valueBytes, pos)
+          pos += java.lang.Integer.BYTES
+
+          // Extract value bytes
+          val decodedValue = new Array[Byte](numBytes)
+          Platform.copyMemory(
+            valueBytes, pos,
+            decodedValue, Platform.BYTE_ARRAY_OFFSET,
+            numBytes
+          )
+
+          // Move position past value and delimiter
+          pos += numBytes
+          pos += 1 // Skip delimiter byte
+
+          decodedValue
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -826,6 +997,18 @@ class SingleValueStateEncoder(valueSchema: StructType)
   override def supportsMultipleValuesPerKey: Boolean = false
 
   override def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow] = {
+    throw new IllegalStateException("This encoder doesn't support multiple values!")
+  }
+
+  override def encodeValueBytes(row: Array[Byte]): Array[Byte] = {
+    encodeByteArray(row)
+  }
+
+  override def decodeValueBytes(valueBytes: Array[Byte]): Array[Byte] = {
+    decodeToByteArray(valueBytes)
+  }
+
+  override def decodeValuesBytes(valueBytes: Array[Byte]): Iterator[Array[Byte]] = {
     throw new IllegalStateException("This encoder doesn't support multiple values!")
   }
 }

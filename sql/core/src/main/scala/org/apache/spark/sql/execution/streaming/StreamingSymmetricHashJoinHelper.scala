@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeSet, 
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
-import org.apache.spark.sql.execution.streaming.state.{StateStoreCheckpointInfo, StateStoreCoordinatorRef, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreCoordinatorRef, StateStoreProviderId}
 
 
 /**
@@ -303,6 +303,54 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     }
   }
 
+  /**
+   * A custom RDD that allows partitions to be "zipped" together, while ensuring the tasks'
+   * preferred location is based on which executors have the required join state stores already
+   * loaded. This class is a variant of [[org.apache.spark.rdd.ZippedPartitionsRDD2]] which only
+   * changes signature of `f`.
+   */
+  class StateStoreAwareZipPartitionsRDDWithSchemas[A: ClassTag, B: ClassTag, V: ClassTag](
+      sc: SparkContext,
+      var f: (Int, Iterator[A], Iterator[B], Map[String, StateStoreColFamilySchema]) => Iterator[V],
+      var rdd1: RDD[A],
+      var rdd2: RDD[B],
+      stateInfo: StatefulOperatorStateInfo,
+      stateStoreNames: Seq[String],
+      @transient private val storeCoordinator: Option[StateStoreCoordinatorRef],
+      schemas: Map[String, StateStoreColFamilySchema])
+    extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2)) {
+
+    /**
+     * Set the preferred location of each partition using the executor that has the related
+     * [[StateStoreProvider]] already loaded.
+     */
+    override def getPreferredLocations(partition: Partition): Seq[String] = {
+      stateStoreNames.flatMap { storeName =>
+        val stateStoreProviderId = StateStoreProviderId(stateInfo, partition.index, storeName)
+        storeCoordinator.flatMap(_.getLocation(stateStoreProviderId))
+      }.distinct
+    }
+
+    override def compute(s: Partition, context: TaskContext): Iterator[V] = {
+      val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
+      if (partitions(0).index != partitions(1).index) {
+        throw new IllegalStateException(s"Partition ID should be same in both side: " +
+          s"left ${partitions(0).index} , right ${partitions(1).index}")
+      }
+
+      val partitionId = partitions(0).index
+      f(partitionId, rdd1.iterator(partitions(0), context),
+        rdd2.iterator(partitions(1), context), schemas)
+    }
+
+    override def clearDependencies(): Unit = {
+      super.clearDependencies()
+      rdd1 = null
+      rdd2 = null
+      f = null
+    }
+  }
+
   implicit class StateStoreAwareZipPartitionsHelper[T: ClassTag](dataRDD: RDD[T]) {
     /**
      * Function used by `StreamingSymmetricHashJoinExec` to zip together the partitions of two
@@ -318,6 +366,19 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       )(f: (Int, Iterator[T], Iterator[U]) => Iterator[V]): RDD[V] = {
       new StateStoreAwareZipPartitionsRDD(
         dataRDD.sparkContext, f, dataRDD, dataRDD2, stateInfo, storeNames, Some(storeCoordinator))
+    }
+
+    def stateStoreAwareZipPartitions[U: ClassTag, V: ClassTag](
+        dataRDD2: RDD[U],
+        stateInfo: StatefulOperatorStateInfo,
+        storeNames: Seq[String],
+        storeCoordinator: StateStoreCoordinatorRef,
+        schemas: Map[String, StateStoreColFamilySchema]
+      )(f: (Int, Iterator[T], Iterator[U], Map[String, StateStoreColFamilySchema]) =>
+      Iterator[V]): RDD[V] = {
+      new StateStoreAwareZipPartitionsRDDWithSchemas(
+        dataRDD.sparkContext, f, dataRDD, dataRDD2, stateInfo,
+        storeNames, Some(storeCoordinator), schemas)
     }
   }
 

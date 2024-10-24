@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.avro
+package org.apache.spark.sql.core.avro
 
 import java.util.Locale
 
@@ -30,8 +30,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FIELD_NAME, FIELD_TYPE, RECURSIVE_DEPTH}
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.avro.AvroOptions.RECURSIVE_FIELD_MAX_DEPTH_LIMIT
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.core.avro.AvroOptions.RECURSIVE_FIELD_MAX_DEPTH_LIMIT
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.Decimal.minBytesForPrecision
 
@@ -52,7 +52,7 @@ object SchemaConverters extends Logging {
 
   /**
    * Converts an Avro schema to a corresponding Spark SQL schema.
- *
+   *
    * @param avroSchema The Avro schema to convert.
    * @param useStableIdForUnionType If true, Avro schema is deserialized into Spark SQL schema,
    *                                and the Avro Union type is transformed into a structure where
@@ -310,7 +310,7 @@ object SchemaConverters extends Logging {
       nullable: Boolean = false,
       recordName: String = "topLevelRecord",
       nameSpace: String = "")
-    : Schema = {
+  : Schema = {
     val builder = SchemaBuilder.builder()
 
     val schema = catalystType match {
@@ -375,7 +375,7 @@ object SchemaConverters extends Logging {
   }
 }
 
-private[avro] class IncompatibleSchemaException(
-  msg: String, ex: Throwable = null) extends Exception(msg, ex)
+class IncompatibleSchemaException(
+    msg: String, ex: Throwable = null) extends Exception(msg, ex)
 
-private[avro] class UnsupportedAvroTypeException(msg: String) extends Exception(msg)
+class UnsupportedAvroTypeException(msg: String) extends Exception(msg)

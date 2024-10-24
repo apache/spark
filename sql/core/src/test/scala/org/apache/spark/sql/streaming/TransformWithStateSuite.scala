@@ -399,7 +399,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
   import testImplicits._
 
-  test("transformWithState - streaming with rocksdb and invalid processor should fail") {
+  testWithAvroEncoding(
+    "transformWithState - streaming with rocksdb and invalid processor should fail") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -420,7 +421,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - lazy iterators can properly get/set keyed state") {
+  testWithAvroEncoding("transformWithState - lazy iterators can properly get/set keyed state") {
     class ProcessorWithLazyIterators
       extends StatefulProcessor[Long, Long, Long] {
       @transient protected var _myValueState: ValueState[Long] = _
@@ -495,7 +496,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - streaming with rocksdb should succeed") {
+  testWithAvroEncoding("transformWithState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -533,7 +534,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - streaming with rocksdb and processing time timer " +
+  testWithAvroEncoding("transformWithState - streaming with rocksdb and processing time timer " +
    "should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
@@ -578,7 +579,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - streaming with rocksdb and processing time timer " +
+  testWithAvroEncoding("transformWithState - streaming with rocksdb and processing time timer " +
    "and updating timers should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
@@ -614,7 +615,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - streaming with rocksdb and processing time timer " +
+  testWithAvroEncoding("transformWithState - streaming with rocksdb and processing time timer " +
    "and multiple timers should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
@@ -651,7 +652,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - streaming with rocksdb and event time based timer") {
+  testWithAvroEncoding("transformWithState - streaming with rocksdb and event time based timer") {
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS()
@@ -695,7 +696,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  test("Use statefulProcessor without transformWithState - handle should be absent") {
+  testWithAvroEncoding(
+    "Use statefulProcessor without transformWithState - handle should be absent") {
     val processor = new RunningCountStatefulProcessor()
     val ex = intercept[Exception] {
       processor.getHandle
@@ -707,7 +709,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  test("transformWithState - batch should succeed") {
+  testWithAvroEncoding("transformWithState - batch should succeed") {
     val inputData = Seq("a", "b")
     val result = inputData.toDS()
       .groupByKey(x => x)
@@ -719,7 +721,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     checkAnswer(df, Seq(("a", "1"), ("b", "1")).toDF())
   }
 
-  test("transformWithState - test deleteIfExists operator") {
+  testWithAvroEncoding("transformWithState - test deleteIfExists operator") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -760,7 +762,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - two input streams") {
+  testWithAvroEncoding("transformWithState - two input streams") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -790,7 +792,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - three input streams") {
+  testWithAvroEncoding("transformWithState - three input streams") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -825,7 +827,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - two input streams, different key type") {
+  testWithAvroEncoding("transformWithState - two input streams, different key type") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -872,7 +874,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         OutputMode.Update())
   }
 
-  test("transformWithState - availableNow trigger mode, rate limit is respected") {
+  testWithAvroEncoding("transformWithState - availableNow trigger mode, rate limit is respected") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { srcDir =>
@@ -913,7 +915,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - availableNow trigger mode, multiple restarts") {
+  testWithAvroEncoding("transformWithState - availableNow trigger mode, multiple restarts") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       withTempDir { srcDir =>
@@ -951,7 +953,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify StateSchemaV3 writes correct SQL schema of key/value") {
+  testWithAvroEncoding(
+    "transformWithState - verify StateSchemaV3 writes correct SQL schema of key/value") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1033,7 +1036,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify that OperatorStateMetadataV2" +
+  testWithAvroEncoding("transformWithState - verify that OperatorStateMetadataV2" +
     " file is being written correctly") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,

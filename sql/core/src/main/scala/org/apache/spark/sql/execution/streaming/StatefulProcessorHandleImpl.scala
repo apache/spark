@@ -104,7 +104,8 @@ class StatefulProcessorHandleImpl(
     timeMode: TimeMode,
     isStreaming: Boolean = true,
     batchTimestampMs: Option[Long] = None,
-    metrics: Map[String, SQLMetric] = Map.empty)
+    metrics: Map[String, SQLMetric] = Map.empty,
+    schemas: Map[String, StateStoreColFamilySchema] = Map.empty)
   extends StatefulProcessorHandleImplBase(timeMode, keyEncoder) with Logging {
   import StatefulProcessorHandleState._
 
@@ -139,8 +140,24 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", CREATED)
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder, metrics)
+    val resultState = new ValueStateImpl[T](
+      store, stateName, keyEncoder, valEncoder, schemas(stateName).avroSerde, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numValueStateVars")
+    resultState
+  }
+
+  // This method is for unit-testing ValueState, as the avroSerde will not be
+  // populated unless the handle is created through the TransformWithStateExec operator
+
+  private[sql] def getValueStateWithAvro[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      useAvro: Boolean): ValueState[T] = {
+    verifyStateVarOperations("get_value_state", CREATED)
+    val avroSerde = if (useAvro) new StateStoreColumnFamilySchemaUtils(true).getValueStateSchema[T](
+      stateName, keyEncoder, valEncoder, hasTtl = false).avroSerde else None
+    val resultState = new ValueStateImpl[T](
+      store, stateName, keyEncoder, valEncoder, avroSerde)
     resultState
   }
 
@@ -153,7 +170,31 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, metrics)
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get,
+      schemas(stateName).avroSerde, metrics)
+    ttlStates.add(valueStateWithTTL)
+    TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
+
+    valueStateWithTTL
+  }
+
+  // This method is for unit-testing ValueState, as the avroSerde will not be
+  // populated unless the handle is created through the TransformWithStateExec operator
+  private[sql] def getValueStateWithAvro[T](
+      stateName: String,
+      valEncoder: Encoder[T],
+      ttlConfig: TTLConfig,
+      useAvro: Boolean): ValueState[T] = {
+    verifyStateVarOperations("get_value_state", CREATED)
+    validateTTLConfig(ttlConfig, stateName)
+
+    assert(batchTimestampMs.isDefined)
+    val avroSerde = if (useAvro) new StateStoreColumnFamilySchemaUtils(true).getValueStateSchema[T](
+      stateName, keyEncoder, valEncoder, hasTtl = false).avroSerde else None
+
+    val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get,
+      avroSerde, metrics)
     ttlStates.add(valueStateWithTTL)
     TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
 
@@ -232,7 +273,8 @@ class StatefulProcessorHandleImpl(
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", CREATED)
-    val resultState = new ListStateImpl[T](store, stateName, keyEncoder, valEncoder, metrics)
+    val resultState = new ListStateImpl[T](
+      store, stateName, keyEncoder, valEncoder, schemas(stateName).avroSerde, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numListStateVars")
     resultState
   }
@@ -262,7 +304,7 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val listStateWithTTL = new ListStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, metrics)
+      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, avroSerde = None, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numListStateWithTTLVars")
     ttlStates.add(listStateWithTTL)
 
@@ -275,7 +317,7 @@ class StatefulProcessorHandleImpl(
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", CREATED)
     val resultState = new MapStateImpl[K, V](store, stateName, keyEncoder,
-      userKeyEnc, valEncoder, metrics)
+      userKeyEnc, valEncoder, avroSerde = None, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numMapStateVars")
     resultState
   }
@@ -290,7 +332,7 @@ class StatefulProcessorHandleImpl(
 
     assert(batchTimestampMs.isDefined)
     val mapStateWithTTL = new MapStateImplWithTTL[K, V](store, stateName, keyEncoder, userKeyEnc,
-      valEncoder, ttlConfig, batchTimestampMs.get, metrics)
+      valEncoder, ttlConfig, batchTimestampMs.get, avroSerde = None, metrics)
     TWSMetricsUtils.incrementMetric(metrics, "numMapStateWithTTLVars")
     ttlStates.add(mapStateWithTTL)
 
@@ -313,7 +355,8 @@ class StatefulProcessorHandleImpl(
  * actually done. We need this class because we can only collect the schemas after
  * the StatefulProcessor is initialized.
  */
-class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any])
+class DriverStatefulProcessorHandleImpl(
+    timeMode: TimeMode, keyExprEnc: ExpressionEncoder[Any], initializeAvroSerde: Boolean)
   extends StatefulProcessorHandleImplBase(timeMode, keyExprEnc) {
 
   // Because this is only happening on the driver side, there is only
@@ -323,6 +366,12 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
 
   private val stateVariableInfos: mutable.Map[String, TransformWithStateVariableInfo] =
     new mutable.HashMap[String, TransformWithStateVariableInfo]()
+
+  // If we want use Avro serializers and deserializers, the schemaUtils will create and populate
+  // these objects as a part of the schema, and will add this to the map
+  // These serde objects will eventually be passed to the executors
+  private val schemaUtils: StateStoreColumnFamilySchemaUtils =
+    new StateStoreColumnFamilySchemaUtils(initializeAvroSerde)
 
   // If timeMode is not None, add a timer column family schema to the operator metadata so that
   // registered timers can be read using the state data source reader.
@@ -343,7 +392,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
   private def addTimerColFamily(): Unit = {
     val stateName = TimerStateUtils.getTimerStateVarName(timeMode.toString)
     val timerEncoder = new TimerKeyEncoder(keyExprEnc)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchema = schemaUtils.
       getTimerStateSchema(stateName, timerEncoder.schemaForKeyRow, timerEncoder.schemaForValueRow)
     columnFamilySchemas.put(stateName, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.getTimerState(stateName)
@@ -352,7 +401,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
 
   override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchema = schemaUtils.
       getValueStateSchema(stateName, keyExprEnc, valEncoder, false)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
@@ -367,7 +416,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchema = schemaUtils.
       getValueStateSchema(stateName, keyExprEnc, valEncoder, true)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
@@ -379,7 +428,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
     verifyStateVarOperations("get_list_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchema = schemaUtils.
       getListStateSchema(stateName, keyExprEnc, valEncoder, false)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
@@ -394,7 +443,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ListState[T] = {
     verifyStateVarOperations("get_list_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchema = schemaUtils.
       getListStateSchema(stateName, keyExprEnc, valEncoder, true)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
@@ -409,7 +458,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V]): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchema = schemaUtils.
       getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, false)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
@@ -425,7 +474,7 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V] = {
     verifyStateVarOperations("get_map_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
+    val colFamilySchema = schemaUtils.
       getMapStateSchema(stateName, keyExprEnc, userKeyEnc, valEncoder, true)
     columnFamilySchemas.put(stateName, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.

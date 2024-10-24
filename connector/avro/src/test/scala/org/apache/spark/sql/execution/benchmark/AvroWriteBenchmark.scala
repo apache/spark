@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import scala.util.Random
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.avro.AvroCompressionCodec
+import org.apache.spark.sql.core.avro.AvroCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 

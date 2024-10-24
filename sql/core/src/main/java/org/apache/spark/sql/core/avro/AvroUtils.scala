@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.avro
+package org.apache.spark.sql.core.avro
 
 import java.io.{FileNotFoundException, IOException}
 import java.util.Locale
@@ -34,10 +34,10 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CODEC_LEVEL, CODEC_NAME, CONFIG, PATH}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.avro.AvroCompressionCodec._
-import org.apache.spark.sql.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.core.avro.AvroCompressionCodec._
+import org.apache.spark.sql.core.avro.AvroOptions.IGNORE_EXTENSION
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -322,7 +322,7 @@ private[sql] object AvroUtils extends Logging {
      * @param name The name of the field to search for.
      * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
      */
-    private[avro] def getFieldByName(name: String): Option[Schema.Field] = {
+    def getFieldByName(name: String): Option[Schema.Field] = {
 
       // get candidates, ignoring case of field name
       val candidates = fieldMap.getOrElse(name.toLowerCase(Locale.ROOT), Seq.empty)
