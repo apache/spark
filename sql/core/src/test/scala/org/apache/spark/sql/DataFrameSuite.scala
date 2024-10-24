@@ -1116,7 +1116,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[org.apache.spark.sql.AnalysisException] {
             df(name)
           },
-          condition = "_LEGACY_ERROR_TEMP_1049",
+          condition = "INVALID_ATTRIBUTE_NAME_SYNTAX",
           parameters = Map("name" -> name))
       }
 

@@ -233,6 +233,27 @@ class TransformWithStateInPandasTestsMixin:
             ListStateLargeTTLProcessor(), check_results, True, "processingTime"
         )
 
+    def test_transform_with_state_in_pandas_map_state(self):
+        def check_results(batch_df, _):
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+
+        self._test_transform_with_state_in_pandas_basic(MapStateProcessor(), check_results, True)
+
+    # test map state with ttl has the same behavior as map state when state doesn't expire.
+    def test_transform_with_state_in_pandas_map_state_large_ttl(self):
+        def check_results(batch_df, _):
+            assert set(batch_df.sort("id").collect()) == {
+                Row(id="0", countAsString="2"),
+                Row(id="1", countAsString="2"),
+            }
+
+        self._test_transform_with_state_in_pandas_basic(
+            MapStateLargeTTLProcessor(), check_results, True, "processingTime"
+        )
+
     # test value state with ttl has the same behavior as value state when
     # state doesn't expire.
     def test_value_state_ttl_basic(self):
@@ -261,9 +282,11 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-count-0", count=1),
                         Row(id="count-0", count=1),
                         Row(id="ttl-list-state-count-0", count=1),
+                        Row(id="ttl-map-state-count-0", count=1),
                         Row(id="ttl-count-1", count=1),
                         Row(id="count-1", count=1),
                         Row(id="ttl-list-state-count-1", count=1),
+                        Row(id="ttl-map-state-count-1", count=1),
                     ],
                 )
             elif batch_id == 1:
@@ -273,9 +296,11 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-count-0", count=2),
                         Row(id="count-0", count=2),
                         Row(id="ttl-list-state-count-0", count=3),
+                        Row(id="ttl-map-state-count-0", count=2),
                         Row(id="ttl-count-1", count=2),
                         Row(id="count-1", count=2),
                         Row(id="ttl-list-state-count-1", count=3),
+                        Row(id="ttl-map-state-count-1", count=2),
                     ],
                 )
             elif batch_id == 2:
@@ -292,9 +317,11 @@ class TransformWithStateInPandasTestsMixin:
                         Row(id="ttl-count-0", count=1),
                         Row(id="count-0", count=3),
                         Row(id="ttl-list-state-count-0", count=1),
+                        Row(id="ttl-map-state-count-0", count=1),
                         Row(id="ttl-count-1", count=3),
                         Row(id="count-1", count=3),
                         Row(id="ttl-list-state-count-1", count=7),
+                        Row(id="ttl-map-state-count-1", count=3),
                     ],
                 )
             if batch_id == 0 or batch_id == 1:
@@ -382,14 +409,19 @@ class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
 class TTLStatefulProcessor(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
+        user_key_schema = StructType([StructField("id", StringType(), True)])
         self.ttl_count_state = handle.getValueState("ttl-state", state_schema, 10000)
         self.count_state = handle.getValueState("state", state_schema)
         self.ttl_list_state = handle.getListState("ttl-list-state", state_schema, 10000)
+        self.ttl_map_state = handle.getMapState(
+            "ttl-map-state", user_key_schema, state_schema, 10000
+        )
 
     def handleInputRows(self, key, rows) -> Iterator[pd.DataFrame]:
         count = 0
         ttl_count = 0
         ttl_list_state_count = 0
+        ttl_map_state_count = 0
         id = key[0]
         if self.count_state.exists():
             count = self.count_state.get()[0]
@@ -399,21 +431,30 @@ class TTLStatefulProcessor(StatefulProcessor):
             iter = self.ttl_list_state.get()
             for s in iter:
                 ttl_list_state_count += s[0]
+        if self.ttl_map_state.exists():
+            ttl_map_state_count = self.ttl_map_state.get_value(key)[0]
         for pdf in rows:
             pdf_count = pdf.count().get("temperature")
             count += pdf_count
             ttl_count += pdf_count
             ttl_list_state_count += pdf_count
+            ttl_map_state_count += pdf_count
 
         self.count_state.update((count,))
         # skip updating state for the 2nd batch so that ttl state expire
         if not (ttl_count == 2 and id == "0"):
             self.ttl_count_state.update((ttl_count,))
             self.ttl_list_state.put([(ttl_list_state_count,), (ttl_list_state_count,)])
+            self.ttl_map_state.update_value(key, (ttl_map_state_count,))
         yield pd.DataFrame(
             {
-                "id": [f"ttl-count-{id}", f"count-{id}", f"ttl-list-state-count-{id}"],
-                "count": [ttl_count, count, ttl_list_state_count],
+                "id": [
+                    f"ttl-count-{id}",
+                    f"count-{id}",
+                    f"ttl-list-state-count-{id}",
+                    f"ttl-map-state-count-{id}",
+                ],
+                "count": [ttl_count, count, ttl_list_state_count, ttl_map_state_count],
             }
         )
 
@@ -492,13 +533,59 @@ class ListStateProcessor(StatefulProcessor):
         pass
 
 
-# A stateful processor that inherit all behavior of ListStateProcessor except that it use
-# ttl state with a large timeout.
 class ListStateLargeTTLProcessor(ListStateProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("temperature", IntegerType(), True)])
         self.list_state1 = handle.getListState("listState1", state_schema, 30000)
         self.list_state2 = handle.getListState("listState2", state_schema, 30000)
+
+
+class MapStateProcessor(StatefulProcessor):
+    def init(self, handle: StatefulProcessorHandle):
+        key_schema = StructType([StructField("name", StringType(), True)])
+        value_schema = StructType([StructField("count", IntegerType(), True)])
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema)
+
+    def handleInputRows(self, key, rows):
+        count = 0
+        key1 = ("key1",)
+        key2 = ("key2",)
+        for pdf in rows:
+            pdf_count = pdf.count()
+            count += pdf_count.get("temperature")
+        value1 = count
+        value2 = count
+        if self.map_state.exists():
+            if self.map_state.contains_key(key1):
+                value1 += self.map_state.get_value(key1)[0]
+            if self.map_state.contains_key(key2):
+                value2 += self.map_state.get_value(key2)[0]
+        self.map_state.update_value(key1, (value1,))
+        self.map_state.update_value(key2, (value2,))
+        key_iter = self.map_state.keys()
+        assert next(key_iter)[0] == "key1"
+        assert next(key_iter)[0] == "key2"
+        value_iter = self.map_state.values()
+        assert next(value_iter)[0] == value1
+        assert next(value_iter)[0] == value2
+        map_iter = self.map_state.iterator()
+        assert next(map_iter)[0] == key1
+        assert next(map_iter)[1] == (value2,)
+        self.map_state.remove_key(key1)
+        assert not self.map_state.contains_key(key1)
+        yield pd.DataFrame({"id": key, "countAsString": str(count)})
+
+    def close(self) -> None:
+        pass
+
+
+# A stateful processor that inherit all behavior of MapStateProcessor except that it use
+# ttl state with a large timeout.
+class MapStateLargeTTLProcessor(MapStateProcessor):
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        key_schema = StructType([StructField("name", StringType(), True)])
+        value_schema = StructType([StructField("count", IntegerType(), True)])
+        self.map_state = handle.getMapState("mapState", key_schema, value_schema, 30000)
 
 
 class TransformWithStateInPandasTests(TransformWithStateInPandasTestsMixin, ReusedSQLTestCase):
