@@ -471,7 +471,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0038",
+      errorClass = "DUPLICATED_CTE_NAMES",
       messageParameters = Map("duplicateNames" -> duplicateNames),
       ctx)
   }

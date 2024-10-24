@@ -1253,7 +1253,7 @@ class FunctionsTestsMixin:
         import numpy as np
 
         arr_dtype_to_spark_dtypes = [
-            ("int8", [("b", "array<smallint>")]),
+            ("int8", [("b", "array<tinyint>")]),
             ("int16", [("b", "array<smallint>")]),
             ("int32", [("b", "array<int>")]),
             ("int64", [("b", "array<bigint>")]),
@@ -1278,6 +1278,20 @@ class FunctionsTestsMixin:
         )
 
     @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_bool_ndarray(self):
+        import numpy as np
+
+        for arr in [
+            np.array([], np.bool_),
+            np.array([True, False], np.bool_),
+            np.array([1, 0, 3], np.bool_),
+        ]:
+            self.assertEqual(
+                [("a", "array<boolean>")],
+                self.spark.range(1).select(F.lit(arr).alias("a")).dtypes,
+            )
+
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
     def test_str_ndarray(self):
         import numpy as np
 
@@ -1296,7 +1310,7 @@ class FunctionsTestsMixin:
         import numpy as np
 
         arr_dtype_to_spark_dtypes = [
-            ("int8", [("b", "array<smallint>")]),
+            ("int8", [("b", "array<tinyint>")]),
             ("int16", [("b", "array<smallint>")]),
             ("int32", [("b", "array<int>")]),
             ("int64", [("b", "array<bigint>")]),

@@ -39,7 +39,15 @@ class SparkUncaughtExceptionHandlerSuite extends SparkFunSuite {
     (ThrowableTypes.SparkFatalRuntimeException, true, SparkExitCode.UNCAUGHT_EXCEPTION),
     (ThrowableTypes.SparkFatalRuntimeException, false, 0),
     (ThrowableTypes.SparkFatalOutOfMemoryError, true, SparkExitCode.OOM),
-    (ThrowableTypes.SparkFatalOutOfMemoryError, false, SparkExitCode.OOM)
+    (ThrowableTypes.SparkFatalOutOfMemoryError, false, SparkExitCode.OOM),
+    (ThrowableTypes.NestedOOMError, true, SparkExitCode.OOM),
+    (ThrowableTypes.NestedOOMError, false, SparkExitCode.OOM),
+    (ThrowableTypes.NestedSparkFatalException, true, SparkExitCode.OOM),
+    (ThrowableTypes.NestedSparkFatalException, false, SparkExitCode.OOM),
+    (ThrowableTypes.NonFatalNestedErrors, true, SparkExitCode.UNCAUGHT_EXCEPTION),
+    (ThrowableTypes.NonFatalNestedErrors, false, 0),
+    (ThrowableTypes.DeepNestedOOMError, true, SparkExitCode.UNCAUGHT_EXCEPTION),
+    (ThrowableTypes.DeepNestedOOMError, false, 0)
   ).foreach {
     case (throwable: ThrowableTypes.ThrowableTypesVal,
     exitOnUncaughtException: Boolean, expectedExitCode) =>
@@ -73,6 +81,46 @@ object ThrowableTypes extends Enumeration {
     new SparkFatalException(new RuntimeException))
   val SparkFatalOutOfMemoryError = ThrowableTypesVal("SparkFatalException(OutOfMemoryError)",
     new SparkFatalException(new OutOfMemoryError))
+
+  // SPARK-50034: If there is a fatal error in the cause chain,
+  // we should also identify that fatal error and exit with the
+  // correct exit code.
+  val NestedOOMError = ThrowableTypesVal(
+    "NestedFatalError",
+    new RuntimeException("Nonfatal Level 1",
+      new RuntimeException("Nonfatal Level 2",
+        new RuntimeException("Nonfatal Level 3",
+          new OutOfMemoryError())))
+  )
+
+  val NestedSparkFatalException = ThrowableTypesVal(
+    "NestedSparkFatalException",
+    new RuntimeException("Nonfatal Level 1",
+      new RuntimeException("Nonfatal Level 2",
+        new SparkFatalException(new OutOfMemoryError())))
+  )
+
+  // Nested exception with non-fatal errors only
+  val NonFatalNestedErrors = ThrowableTypesVal(
+    "NonFatalNestedErrors",
+    new RuntimeException("Nonfatal Level 1",
+      new RuntimeException("Nonfatal Level 2",
+        new RuntimeException("Nonfatal Level 3",
+          new RuntimeException("Nonfatal Level 4")))
+    )
+  )
+
+  // Should not report as OOM when its depth is greater than killOnFatalErrorDepth
+  val DeepNestedOOMError = ThrowableTypesVal(
+    "DeepNestedOOMError",
+    new RuntimeException("Nonfatal Level 1",
+      new RuntimeException("Nonfatal Level 2",
+        new RuntimeException("Nonfatal Level 3",
+          new RuntimeException("Nonfatal Level 4",
+            new RuntimeException("Nonfatal Level 5",
+              new OutOfMemoryError()))))
+    )
+  )
 
   // returns the actual Throwable by its name
   def getThrowableByName(name: String): Throwable = {
