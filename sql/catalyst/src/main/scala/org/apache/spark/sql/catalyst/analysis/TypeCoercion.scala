@@ -1016,9 +1016,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, datetime: DatetimeType) => datetime
       case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (_: StringType, BinaryType) => BinaryType
-      // Cast any atomic type to string except if there are strings with different collations. In
-      // that case we skip the cast, but this branch should not be hit in any case.
-      case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => null
+      // Cast any atomic type to string except if there are strings with different collations.
       case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
       case (any: AtomicType, st: AbstractStringType)
         if !any.isInstanceOf[StringType] =>
