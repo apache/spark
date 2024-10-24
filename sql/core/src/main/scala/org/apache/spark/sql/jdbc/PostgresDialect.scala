@@ -35,11 +35,22 @@ import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
 private case class PostgresDialect()
   extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
+
+  /**
+   * Returns jdbc version that this dialect uses.
+   */
+  override def jdbcVersion(): Int = SQLConf.get.getConf(SQLConf.POSTGRES_JDBC_VERSION)
+
+  /**
+   * Returns dialect version that this dialect uses.
+   */
+  override def dialectVersion(): Int = SQLConf.get.getConf(SQLConf.POSTGRES_DIALECT_VERSION)
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")

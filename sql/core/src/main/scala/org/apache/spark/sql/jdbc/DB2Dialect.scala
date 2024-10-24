@@ -29,9 +29,20 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
+
+  /**
+   * Returns jdbc version that this dialect uses.
+   */
+  override def jdbcVersion(): Int = SQLConf.get.getConf(SQLConf.DB2_JDBC_VERSION)
+
+  /**
+   * Returns dialect version that this dialect uses.
+   */
+  override def dialectVersion(): Int = SQLConf.get.getConf(SQLConf.DB2_DIALECT_VERSION)
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:db2")
