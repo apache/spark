@@ -76,9 +76,9 @@ class TransformWithStateInPandasTestsMixin:
         )
 
     def _prepare_test_resource3(self, input_path):
-        with open(input_path + "/text-test3.txt", "w") as fw:
-            fw.write("0, 123\n")
-            fw.write("1, 6\n")
+        self._prepare_input_data(
+            input_path + "/text-test3.txt", [0, 1], [123, 6]
+        )
 
     def _build_test_df(self, input_path):
         df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
