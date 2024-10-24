@@ -476,6 +476,30 @@ Submission Guide for more details.
 
 [adm]: submitting-applications.html#advanced-dependency-management
 
+## Compatibility with Confluent Schema Registry
+
+Note that Avro data produced by the [Confluent Schema Registry based Avro serializer](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/serdes-avro.html) prepends [a magic byte and the 4 byte schema ID](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format) to the serialized data. This means that the `from_avro` function will not deserialize the data correctly unless this is handled. 
+
+A simple workaround is to remove the bytes from the `value` column
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.sql.avro.functions import from_avro, to_avro
+
+jsonFormatSchema = ... # your schema string
+
+df = spark\
+  .readStream\
+  .format("kafka")\
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+  .option("subscribe", "schema-registry-user-topic")\ 
+  .load()
+
+serialized_df = df.select(from_avro(f.expr("substring(value, 6, length(value) - 5)"), jsonFormatSchema))
+
+{% endhighlight %}
+</div>
+
 ## Supported types for Avro -> Spark SQL conversion
 Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.3/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.3/specification/#complex-types) under records of Avro.
 <table>
