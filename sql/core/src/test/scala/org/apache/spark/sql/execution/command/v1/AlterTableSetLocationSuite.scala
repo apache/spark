@@ -94,7 +94,7 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
             sql(s"ALTER TABLE $t PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways3'")
           },
           condition = "PARTITIONS_NOT_FOUND",
-          parameters = Map("key" -> "`A`", "tableName" -> "`spark_catalog`.`ns`.`tbl`")
+          parameters = Map("partitionList" -> "`A`", "tableName" -> "`spark_catalog`.`ns`.`tbl`")
         )
       }
 

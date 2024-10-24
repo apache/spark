@@ -659,7 +659,7 @@ class HiveDDLSuite
           },
           condition = "PARTITIONS_NOT_FOUND",
           parameters = Map(
-            "key" -> "`unknownCol`",
+            "partitionList" -> "`unknownCol`",
             "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`exttable_with_partitions`")
         )
 

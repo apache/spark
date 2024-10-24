@@ -54,7 +54,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       namespace: String,
       table: String): (String, Map[String, String]) = {
     ("PARTITIONS_NOT_FOUND",
-      Map("key" -> "`id`", "tableName" -> s"`$catalog`.`$namespace`.`$table`"))
+      Map("partitionList" -> "`id`", "tableName" -> s"`$catalog`.`$namespace`.`$table`"))
   }
 
   protected override def namespaceKey: String = "Namespace"
