@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer.joinReorder
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Literal}
 import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.optimizer.JoinReorderDP.JoinPlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
@@ -158,9 +158,9 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
         .select(nameToAttr("t1.v-1-10"))
 
     val bestPlan =
-      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
-        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(nameToAttr("t1.v-1-10"))
+        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
         .select(nameToAttr("t1.v-1-10"))
 
     assertEqualJoinPlans(Optimize, originalPlan, bestPlan)
@@ -174,10 +174,12 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
 
     // Items: t1, t3, project(t5.k-1-5, t5)
     val bestPlan =
-      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
-        .join(t5.select(nameToAttr("t5.k-1-5")), Inner,
+      t1.join(
+          t5.select(nameToAttr("t5.k-1-5")), Inner,
           Some(nameToAttr("t1.k-1-2") === nameToAttr("t5.k-1-5")))
+        .select(nameToAttr("t1.v-1-10"))
+        .join(t3, Inner,
+          Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
         .select(nameToAttr("t1.v-1-10"))
 
     assertEqualJoinPlans(Optimize, originalPlan, bestPlan)
@@ -217,10 +219,11 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
   test("keep the order of attributes in the final output") {
     val outputLists = Seq("t1.k-1-2", "t1.v-1-10", "t3.v-1-100").permutations
     while (outputLists.hasNext) {
-      val expectedOrder = outputLists.next().map(nameToAttr)
+      val expectedOrder = outputLists.next().map(nameToAttr) :+ Literal(1)
       val expectedPlan =
-        t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-          .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+          .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
+          .join(t3, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t3.v-1-100")))
           .select(expectedOrder: _*)
       // The plan should not change after optimization
       assertEqualJoinPlans(Optimize, expectedPlan, expectedPlan)
@@ -276,10 +279,10 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     //   / \
     //  t1  t3
     val bestBottomPlan =
-      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
-        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
-        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
         .select(nameToAttr("t1.v-1-10"))
+        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+          .select(nameToAttr("t1.v-1-10"))
 
     val bestPlan = bestBottomPlan
       .union(t4.select(nameToAttr("t4.v-1-10")))
