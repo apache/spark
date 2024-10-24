@@ -18,7 +18,7 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.connector.DatasourceV2SQLBase
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 
@@ -42,6 +42,37 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
     sql(s"SELECT a = CAST('5' as STRING)")
     sql(s"SELECT a = (SELECT b COLLATE UNICODE)")
     sql(s"SELECT a = b")
+  }
+
+  test("user defined cast has the collation strength of its child") {
+    val tableName = "def_coll_tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (c1 STRING COLLATE UNICODE) USING $dataSource")
+      sql(s"INSERT INTO $tableName VALUES ('a')")
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1 || CAST('a' AS STRING)) FROM $tableName"),
+        Seq(Row("UNICODE")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1 || CAST('a' collate UTF8_LCASE AS STRING)) FROM $tableName"),
+        Seq(Row("UTF8_BINARY")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1 || CAST(to_char(DATE'2016-04-08', 'y') AS STRING)) " +
+          s"FROM $tableName"),
+        Seq(Row("UNICODE")))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT COLLATION(c1 || CAST(c1 AS STRING)) FROM $tableName")
+        },
+        condition = "COLLATION_MISMATCH.IMPLICIT",
+        parameters = Map(
+          "implicitTypes" -> """"STRING COLLATE UNICODE", "STRING""""
+        )
+      )
+    }
   }
 
   test("access collated map via literal") {

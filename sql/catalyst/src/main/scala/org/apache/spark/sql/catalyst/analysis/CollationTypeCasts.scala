@@ -135,9 +135,10 @@ object CollationTypeCasts extends TypeCoercionRule {
    * Extracts StringTypes from filtered hasStringType
    */
   @tailrec
-  private def extractStringType(dt: DataType): StringType = dt match {
-    case st: StringType => st
+  private def extractStringType(dt: DataType): Option[StringType] = dt match {
+    case st: StringType => Some(st)
     case ArrayType(et, _) => extractStringType(et)
+    case _ => None
   }
 
   /**
@@ -236,20 +237,23 @@ object CollationTypeCasts extends TypeCoercionRule {
    * before we start computing the least common string type.
    */
   private def preprocessCollationStrengths(expr: Expression): Expression = expr match {
-    // subquery should always have implicit strength
-    case subquery: SubqueryExpression =>
-      val oldType = extractStringType(subquery.dataType)
-      castStringType(subquery, StringType(oldType.collationId, Implicit))
+    // subquery and var reference should always have implicit strength
+    case _: SubqueryExpression | _: VariableReference =>
+      extractStringType(expr.dataType) match {
+        case Some(st) => castStringType(expr, StringType(st.collationId, Implicit))
+        case _ => expr
+      }
 
-    // variable reference should always have implicit strength
-    case variable: VariableReference =>
-      val oldType = extractStringType(variable.dataType)
-      castStringType(variable, StringType(oldType.collationId, Implicit))
-
-    // user specified cast always should have default strength
+    // user specified cast always should have strength of its child
     case cast @ Cast(_, st: StringType, _, _)
         if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
-      cast.copy(dataType = StringType(st.collationId, Default))
+
+      (extractStringType(cast.dataType), extractStringType(cast.child.dataType)) match {
+        case (Some(castType), Some(childType)) =>
+          cast.copy(dataType = StringType(castType.collationId, childType.strength))
+        case _ =>
+          cast
+      }
 
     case _ =>
       expr

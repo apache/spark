@@ -77,8 +77,8 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {
           case Seq(_) =>
-            val sessionCollation = SqlApiConf.get.defaultStringType
-            StringType(sessionCollation.collationId, CollationStrength.Implicit)
+            val collationId = SqlApiConf.get.defaultStringType.collationId
+            StringType(collationId, CollationStrength.Implicit)
           case Seq(_, ctx: CollateClauseContext) =>
             val collationName = visitCollateClause(ctx)
             val collationId = CollationFactory.collationNameToId(collationName)
@@ -120,6 +120,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       YearMonthIntervalType(start)
     }
   }
+
+  private def isCastContext(node: ParseTree): Boolean =
+    node.isInstanceOf[CastContext] || node.isInstanceOf[CastByColonContext]
 
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
     val startStr = ctx.from.getText.toLowerCase(Locale.ROOT)
