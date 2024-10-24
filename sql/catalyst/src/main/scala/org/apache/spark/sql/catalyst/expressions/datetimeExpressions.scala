@@ -2583,6 +2583,8 @@ object MakeTimestampNTZExpressionBuilder extends ExpressionBuilder {
        2019-07-01 00:00:00
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
+      > SELECT _FUNC_(2024, 13, 22, 15, 30, 0);
+       NULL
   """,
   group = "datetime_funcs",
   since = "4.0.0")
@@ -2678,6 +2680,8 @@ object MakeTimestampLTZExpressionBuilder extends ExpressionBuilder {
       > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
        2019-07-01 00:00:00
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
+      > SELECT _FUNC_(2024, 13, 22, 15, 30, 0);
        NULL
   """,
   group = "datetime_funcs",
@@ -2933,6 +2937,8 @@ case class MakeTimestamp(
       > SELECT _FUNC_(2019, 6, 30, 23, 59, 1);
        2019-06-30 23:59:01
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
+      > SELECT _FUNC_(2024, 13, 22, 15, 30, 0);
        NULL
   """,
   group = "datetime_funcs",
