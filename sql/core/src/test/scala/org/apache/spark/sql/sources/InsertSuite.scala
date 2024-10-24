@@ -2735,9 +2735,13 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("spark 50005: Can't overwrite a table that is also being read from") {
     val tableName1 = "t1"
     val tableName2 = "t2"
-    withTable(tableName1, tableName2) {
+    val tableName3 = "t3"
+    val tableName4 = "t4"
+    withTable(tableName1, tableName2, tableName3, tableName4) {
       sql(s"CREATE TABLE $tableName1 (a STRING, b INT) USING parquet")
       sql(s"CREATE TABLE $tableName2 (a STRING, b INT) USING parquet")
+      sql(s"CREATE TABLE $tableName3 (a STRING, b INT) USING parquet")
+      sql(s"CREATE TABLE $tableName4 (a STRING, b INT) USING parquet")
       checkError(
         exception = intercept[AnalysisException] {
           sql(
@@ -2746,6 +2750,24 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
               |SELECT * FROM $tableName2 tb
               |WHERE NOT EXISTS(SELECT ta.b FROM $tableName1 ta WHERE tb.b = ta.b)
               |""".stripMargin)
+        },
+        condition = "UNSUPPORTED_OVERWRITE.TABLE",
+        parameters = Map("table" -> s"`spark_catalog`.`default`.`$tableName1`")
+      )
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $tableName1
+               |SELECT * FROM $tableName2 tb WHERE NOT EXISTS
+               |(
+               |  SELECT * FROM $tableName3 tc WHERE tc.a IN
+               |  (
+               |    SELECT td.a FROM $tableName4 td WHERE td.a >
+               |    (SELECT MAX(ta.a) FROM $tableName1 ta)
+               |  )
+               |)
+               |""".stripMargin)
         },
         condition = "UNSUPPORTED_OVERWRITE.TABLE",
         parameters = Map("table" -> s"`spark_catalog`.`default`.`$tableName1`")
