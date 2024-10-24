@@ -4463,12 +4463,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY =
-    buildConf("spark.sql.legacy.postgres.properReadingOfArrayDimensionality")
+  val POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE =
+    buildConf("spark.sql.legacy.postgres.getArrayDimFromPgAttribute")
       .internal()
       .doc("When true postgres will be asked to return the dimension of array column" +
-        "by calling array_ndims(col). When false, old way of calling pg_attribute.attndims" +
-        "will be done.")
+        "by querying the pg_attribute table. When false, function array_ndims will be called on" +
+        "first record of the table to get the dimension of array column")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -5738,8 +5738,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyPostgresDatetimeMappingEnabled: Boolean =
     getConf(LEGACY_POSTGRES_DATETIME_MAPPING_ENABLED)
 
-  def postgresProperReadingOfArrayDimensionality: Boolean =
-    getConf(POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY)
+  def getArrayDimFromPgAttribute: Boolean =
+    getConf(POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE)
 
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = {
     LegacyBehaviorPolicy.withName(getConf(SQLConf.LEGACY_TIME_PARSER_POLICY))

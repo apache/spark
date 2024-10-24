@@ -141,40 +141,43 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   }
 
   test("Test multi-dimensional column types") {
-    // This test is used to verify that the multi-dimensional
-    // column types are supported by the JDBC V2 data source.
-    // We do not verify any result output
-    //
-    val df = spark.read.format("jdbc")
-      .option("url", jdbcUrl)
-      .option("dbtable", "array_test_table")
-      .load()
-    df.collect()
+    withSQLConf(SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "true") {
 
-    val array_tables = Array(
-      ("array_int", "\"ARRAY<INT>\""),
-      ("array_bigint", "\"ARRAY<BIGINT>\""),
-      ("array_smallint", "\"ARRAY<SMALLINT>\""),
-      ("array_boolean", "\"ARRAY<BOOLEAN>\""),
-      ("array_float", "\"ARRAY<FLOAT>\""),
-      ("array_double", "\"ARRAY<DOUBLE>\""),
-      ("array_timestamp", "\"ARRAY<TIMESTAMP>\""),
-      ("array_timestamptz", "\"ARRAY<TIMESTAMP>\"")
-    )
+      // This test is used to verify that the multi-dimensional
+      // column types are supported by the JDBC V2 data source.
+      // We do not verify any result output
+      //
+      val df = spark.read.format("jdbc")
+        .option("url", jdbcUrl)
+        .option("dbtable", "array_test_table")
+        .load()
+      df.collect()
 
-    array_tables.foreach { case (dbtable, arrayType) =>
-      checkError(
-        exception = intercept[SparkSQLException] {
-          val df = spark.read.format("jdbc")
-            .option("url", jdbcUrl)
-            .option("dbtable", dbtable)
-            .load()
-          df.collect()
-        },
-        condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
-        parameters = Map("pos" -> "0", "type" -> arrayType),
-        sqlState = Some("0A000")
+      val array_tables = Array(
+        ("array_int", "\"ARRAY<INT>\""),
+        ("array_bigint", "\"ARRAY<BIGINT>\""),
+        ("array_smallint", "\"ARRAY<SMALLINT>\""),
+        ("array_boolean", "\"ARRAY<BOOLEAN>\""),
+        ("array_float", "\"ARRAY<FLOAT>\""),
+        ("array_double", "\"ARRAY<DOUBLE>\""),
+        ("array_timestamp", "\"ARRAY<TIMESTAMP>\""),
+        ("array_timestamptz", "\"ARRAY<TIMESTAMP>\"")
       )
+
+      array_tables.foreach { case (dbtable, arrayType) =>
+        checkError(
+          exception = intercept[SparkSQLException] {
+            val df = spark.read.format("jdbc")
+              .option("url", jdbcUrl)
+              .option("dbtable", dbtable)
+              .load()
+            df.collect()
+          },
+          condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+          parameters = Map("pos" -> "0", "type" -> arrayType),
+          sqlState = Some("0A000")
+        )
+      }
     }
   }
 
@@ -317,37 +320,37 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   }
 
   test("Test reading 2d array from table created via CTAS command - negative test") {
-    withSQLConf(SQLConf.POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY.key -> "false") {
-      val exception = intercept[org.apache.spark.SparkException] {
+    withSQLConf(SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "true") {
+      val exception = intercept[org.apache.spark.SparkSQLException] {
         sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int").collect()
       }.getMessage
 
-      assert(exception.contains("""Bad value for type int : {{1},{2}}"""))
+      assert(exception.contains("Some values in field 0 are incompatible " +
+        "with the column array type. Expected type \"ARRAY<INT>\""))
     }
   }
 
   test("Test reading 2d array from table created via CTAS command - positive test") {
     val rowsWithOldBehaviour =
       withSQLConf(
-        SQLConf.POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY.key -> "false"
+        SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "true"
       ) {
         sql(s"SELECT * FROM $catalogName.array_of_array_of_int").collect()
       }
 
     withSQLConf(
-      SQLConf.POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY.key -> "true"
+      SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "false"
     ) {
       val dfWithNewBehaviour = sql(s"SELECT * FROM $catalogName.array_of_array_of_int")
       val CTASdfWithNewBehaviour = sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int")
 
-      checkAnswer(dfWithNewBehaviour, rowsWithOldBehaviour)
-      checkAnswer(CTASdfWithNewBehaviour, rowsWithOldBehaviour)
+      checkAnswer(CTASdfWithNewBehaviour, dfWithNewBehaviour.collect())
     }
   }
 
   test("Test reading multiple dimension array from table created via CTAS command " +
     "- negative test") {
-    withSQLConf(SQLConf.POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY.key -> "true") {
+    withSQLConf(SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "false") {
       val exception = intercept[org.apache.spark.SparkSQLException] {
         sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
       }.getMessage
