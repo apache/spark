@@ -308,6 +308,8 @@ private[spark] class AppStatusStore(
         gettingResultTime = toValues(_.gettingResultTime),
         schedulerDelay = toValues(_.schedulerDelay),
         peakExecutionMemory = toValues(_.peakExecutionMemory),
+        peakOnHeapExecutionMemory = toValues(_.peakOnHeapExecutionMemory),
+        peakOffHeapExecutionMemory = toValues(_.peakOffHeapExecutionMemory),
         memoryBytesSpilled = toValues(_.memoryBytesSpilled),
         diskBytesSpilled = toValues(_.diskBytesSpilled),
         inputMetrics = new v1.InputMetricDistributions(
@@ -399,6 +401,10 @@ private[spark] class AppStatusStore(
       },
       schedulerDelay = scanTasks(TaskIndexNames.SCHEDULER_DELAY) { t => t.schedulerDelay },
       peakExecutionMemory = scanTasks(TaskIndexNames.PEAK_MEM) { t => t.peakExecutionMemory },
+      peakOnHeapExecutionMemory =
+        scanTasks(TaskIndexNames.PEAK_ON_HEAP_MEM) { t => t.peakOnHeapExecutionMemory },
+      peakOffHeapExecutionMemory =
+        scanTasks(TaskIndexNames.PEAK_OFF_HEAP_MEM) { t => t.peakOffHeapExecutionMemory },
       memoryBytesSpilled = scanTasks(TaskIndexNames.MEM_SPILL) { t => t.memoryBytesSpilled },
       diskBytesSpilled = scanTasks(TaskIndexNames.DISK_SPILL) { t => t.diskBytesSpilled },
       inputMetrics = new v1.InputMetricDistributions(
@@ -474,6 +480,8 @@ private[spark] class AppStatusStore(
           gettingResultTime = computedQuantiles.gettingResultTime(idx),
           schedulerDelay = computedQuantiles.schedulerDelay(idx),
           peakExecutionMemory = computedQuantiles.peakExecutionMemory(idx),
+          peakOnHeapExecutionMemory = computedQuantiles.peakOnHeapExecutionMemory(idx),
+          peakOffHeapExecutionMemory = computedQuantiles.peakOffHeapExecutionMemory(idx),
           memoryBytesSpilled = computedQuantiles.memoryBytesSpilled(idx),
           diskBytesSpilled = computedQuantiles.diskBytesSpilled(idx),
 
@@ -692,6 +700,8 @@ private[spark] class AppStatusStore(
         memoryBytesSpilled = stage.memoryBytesSpilled,
         diskBytesSpilled = stage.diskBytesSpilled,
         peakExecutionMemory = stage.peakExecutionMemory,
+        peakOnHeapExecutionMemory = stage.peakOnHeapExecutionMemory,
+        peakOffHeapExecutionMemory = stage.peakOffHeapExecutionMemory,
         inputBytes = stage.inputBytes,
         inputRecords = stage.inputRecords,
         outputBytes = stage.outputBytes,

@@ -181,6 +181,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
         assertQuantiles(_.memoryBytesSpilled.toDouble, summary.memoryBytesSpilled)
         assertQuantiles(_.diskBytesSpilled.toDouble, summary.diskBytesSpilled)
         assertQuantiles(_.peakExecutionMemory.toDouble, summary.peakExecutionMemory)
+        assertQuantiles(_.peakOnHeapExecutionMemory.toDouble, summary.peakOnHeapExecutionMemory)
+        assertQuantiles(_.peakOffHeapExecutionMemory.toDouble, summary.peakOffHeapExecutionMemory)
         assertQuantiles(_.inputMetrics.bytesRead.toDouble, summary.inputMetrics.bytesRead)
         assertQuantiles(_.inputMetrics.recordsRead.toDouble, summary.inputMetrics.recordsRead)
         assertQuantiles(_.outputMetrics.bytesWritten.toDouble, summary.outputMetrics.bytesWritten)
@@ -282,7 +284,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
       i, i, i, i, i, i, i, i, i, i,
-      i, i, i, i, stageId, attemptId)
+      i, i, i, i, i, i, stageId, attemptId)
   }
 
   private def writeTaskDataToStore(i: Int, store: KVStore, status: String): Unit = {
