@@ -310,6 +310,10 @@ private case class PostgresDialect()
         case _ => super.visitExtract(field, source)
       }
     }
+
+    override def visitBinaryArithmetic(name: String, l: String, r: String): String = {
+      l + " " + name.replace('^', '#') + " " + r
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {

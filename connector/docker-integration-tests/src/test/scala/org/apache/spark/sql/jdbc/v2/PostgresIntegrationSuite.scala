@@ -230,6 +230,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     }
   }
 
+  test("SPARK-49695: Postgres fix xor push-down") {
+    val df = spark.sql("select id, name from employee where id ^ 6 = 0")
+    val rows = df.collect()
+    assert(!df.queryExecution.optimizedPlan.exists { plan =>
+      plan.isInstanceOf[Filter]
+    })
+    assert(rows.length == 1)
+    assert(rows(0).getInt(1) === 6)
+    assert(rows(0).getString(2) === "jen")
+  }
+
   override def testDatetime(tbl: String): Unit = {
     val df1 = sql(s"SELECT name FROM $tbl WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
