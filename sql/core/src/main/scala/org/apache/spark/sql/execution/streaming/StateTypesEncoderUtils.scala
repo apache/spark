@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.ByteArrayOutputStream
+
+import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.core.avro.SchemaConverters
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
+import org.apache.spark.sql.execution.streaming.state.{AvroSerde, StateStoreErrors}
 import org.apache.spark.sql.types._
 
 /**
@@ -59,6 +66,21 @@ object TransformWithStateKeyValueRowSchemaUtils {
   }
 }
 
+trait StateTypesEncoder[V, S] {
+  def encodeGroupingKey(): S
+
+  def encodeValue(value: V): S
+
+  def decodeValue(row: S): V
+
+  def encodeValue(value: V, expirationMs: Long): S
+
+
+  def decodeTtlExpirationMs(row: S): Option[Long]
+
+  def isExpired(row: S, batchTimestampMs: Long): Boolean
+}
+
 /**
  * Helper class providing APIs to encode the grouping key, and user provided values
  * to Spark [[UnsafeRow]].
@@ -73,11 +95,11 @@ object TransformWithStateKeyValueRowSchemaUtils {
  * @param stateName - name of logical state partition
  * @tparam V - value type
  */
-class StateTypesEncoder[V](
+class UnsafeRowTypesEncoder[V](
     keyEncoder: ExpressionEncoder[Any],
     valEncoder: Encoder[V],
     stateName: String,
-    hasTtl: Boolean) {
+    hasTtl: Boolean) extends StateTypesEncoder[V, UnsafeRow] {
 
   /** Variables reused for value conversions between spark sql and object */
   private val keySerializer = keyEncoder.createSerializer()
@@ -143,23 +165,118 @@ class StateTypesEncoder[V](
   }
 }
 
-object StateTypesEncoder {
+
+object UnsafeRowTypesEncoder {
   def apply[V](
       keyEncoder: ExpressionEncoder[Any],
       valEncoder: Encoder[V],
       stateName: String,
-      hasTtl: Boolean = false): StateTypesEncoder[V] = {
-    new StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl)
+      hasTtl: Boolean = false): UnsafeRowTypesEncoder[V] = {
+    new UnsafeRowTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl)
   }
 }
 
-class CompositeKeyStateEncoder[K, V](
+/**
+ * Helper class providing APIs to encode the grouping key, and user provided values
+ * to Spark [[UnsafeRow]].
+ *
+ * CAUTION: StateTypesEncoder class instance is *not* thread-safe.
+ * This class reuses the keyProjection and valueProjection for encoding grouping
+ * key and state value respectively. As UnsafeProjection is not thread safe, this
+ * class is also not thread safe.
+ *
+ * @param keyEncoder - SQL encoder for the grouping key, key type is implicit
+ * @param valEncoder - SQL encoder for value of type `S`
+ * @param stateName - name of logical state partition
+ * @tparam V - value type
+ */
+class AvroTypesEncoder[V](
+    keyEncoder: ExpressionEncoder[Any],
+    valEncoder: Encoder[V],
+    stateName: String,
+    hasTtl: Boolean,
+    avroSerde: Option[AvroSerde]) extends StateTypesEncoder[V, Array[Byte]] {
+
+  val out = new ByteArrayOutputStream
+
+  /** Variables reused for value conversions between spark sql and object */
+  private val keySerializer = keyEncoder.createSerializer()
+  private val valExpressionEnc = encoderFor(valEncoder)
+  private val objToRowSerializer = valExpressionEnc.createSerializer()
+  private val rowToObjDeserializer = valExpressionEnc.resolveAndBind().createDeserializer()
+
+  private val keySchema = keyEncoder.schema
+  private val keyAvroType = SchemaConverters.toAvroType(keySchema)
+
+  // case class -> dataType
+  private val valSchema: StructType = valEncoder.schema
+  // dataType -> avroType
+  private val valueAvroType = SchemaConverters.toAvroType(valSchema)
+
+  override def encodeGroupingKey(): Array[Byte] = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+
+    val keyRow = keySerializer.apply(keyOption.get).copy() // V -> InternalRow
+    val avroData = avroSerde.get.keySerializer.serialize(keyRow) // InternalRow -> GenericDataRecord
+
+    out.reset()
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](keyAvroType)
+
+    writer.write(avroData, encoder)
+    encoder.flush()
+    out.toByteArray
+  }
+
+  override def encodeValue(value: V): Array[Byte] = {
+    val objRow: InternalRow = objToRowSerializer.apply(value).copy() // V -> InternalRow
+    val avroData =
+      avroSerde.get.valueSerializer.serialize(objRow) // InternalRow -> GenericDataRecord
+    out.reset()
+
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](
+      valueAvroType) // Defining Avro writer for this struct type
+
+    writer.write(avroData, encoder) // GenericDataRecord -> bytes
+    encoder.flush()
+    out.toByteArray
+  }
+
+  override def decodeValue(row: Array[Byte]): V = {
+    val reader = new GenericDatumReader[Any](valueAvroType)
+    val decoder = DecoderFactory.get().binaryDecoder(row, 0, row.length, null)
+    val genericData = reader.read(null, decoder) // bytes -> GenericDataRecord
+    val internalRow = avroSerde.get.valueDeserializer.deserialize(
+      genericData).orNull.asInstanceOf[InternalRow] // GenericDataRecord -> InternalRow
+    if (hasTtl) {
+      rowToObjDeserializer.apply(internalRow.getStruct(0, valEncoder.schema.length))
+    } else rowToObjDeserializer.apply(internalRow)
+  }
+
+  override def encodeValue(value: V, expirationMs: Long): Array[Byte] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def decodeTtlExpirationMs(row: Array[Byte]): Option[Long] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def isExpired(row: Array[Byte], batchTimestampMs: Long): Boolean = {
+    throw new UnsupportedOperationException
+  }
+}
+
+class CompositeKeyUnsafeRowEncoder[K, V](
     keyEncoder: ExpressionEncoder[Any],
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V],
     stateName: String,
     hasTtl: Boolean = false)
-  extends StateTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
+  extends UnsafeRowTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl) {
   import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 
   /** Encoders */
@@ -235,6 +352,92 @@ class CompositeKeyStateEncoder[K, V](
    */
   def decodeCompositeKey(row: UnsafeRow): K = {
     userKeyRowToObjDeserializer.apply(row.getStruct(1, userKeyEnc.schema.length))
+  }
+}
+
+class CompositeKeyAvroRowEncoder[K, V](
+      keyEncoder: ExpressionEncoder[Any],
+      userKeyEnc: Encoder[K],
+      valEncoder: Encoder[V],
+      stateName: String,
+      hasTtl: Boolean,
+      avroSerde: Option[AvroSerde])
+  extends AvroTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl, avroSerde) with Logging {
+
+  import TransformWithStateKeyValueRowSchemaUtils._
+
+  /** Encoders */
+  private val userKeyExpressionEnc = encoderFor(userKeyEnc)
+
+  /** Schemas */
+  private val schemaForGroupingKeyRow = new StructType().add("key", keyEncoder.schema)
+  private val schemaForUserKeyRow = new StructType().add("userKey", userKeyEnc.schema)
+  private val schemaForCompositeKeyRow = getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
+
+  /** Avro Types */
+  private val groupingKeyAvroType = SchemaConverters.toAvroType(schemaForGroupingKeyRow)
+  private val userKeyAvroType = SchemaConverters.toAvroType(schemaForUserKeyRow)
+  private val compositeKeyAvroType = SchemaConverters.toAvroType(schemaForCompositeKeyRow)
+
+  /** Serializers */
+  private val groupingKeySerializer = keyEncoder.createSerializer()
+  private val userKeySerializer = userKeyExpressionEnc.createSerializer()
+
+  /** Deserializer */
+  private val userKeyRowToObjDeserializer =
+    userKeyExpressionEnc.resolveAndBind().createDeserializer()
+
+  override def encodeGroupingKey(): Array[Byte] = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+
+    // First convert the key to an InternalRow using the encoder
+    val valueRow = groupingKeySerializer.apply(keyOption.get)
+    // Then wrap it in another InternalRow with field name "key"
+    val keyRow = InternalRow(valueRow)
+    // Now serialize to Avro
+    val avroData = avroSerde.get.keySerializer.serialize(keyRow)
+
+    out.reset()
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](groupingKeyAvroType)
+
+    writer.write(avroData, encoder)
+    encoder.flush()
+    out.toByteArray
+  }
+
+  def encodeCompositeKey(userKey: K): Array[Byte] = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+    val groupingKey = keyOption.get
+
+    val keyRow = groupingKeySerializer.apply(groupingKey)
+    val userKeyRow = userKeySerializer.apply(userKey)
+
+    // InternalRow(InternalRow) -> GenericDataRecord
+    val avroData = avroSerde.get.compositeKeySerializer.get.
+      serialize(InternalRow(keyRow, userKeyRow))
+    out.reset()
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](compositeKeyAvroType)
+
+    writer.write(avroData, encoder)
+    encoder.flush()
+    out.toByteArray
+  }
+
+  def decodeCompositeKey(row: Array[Byte]): K = {
+    val reader = new GenericDatumReader[Any](compositeKeyAvroType)
+    val decoder = DecoderFactory.get().binaryDecoder(row, 0, row.length, null)
+    val genericData = reader.read(null, decoder) // bytes -> GenericDataRecord
+    val internalRow = avroSerde.get.compositeKeyDeserializer.get.deserialize(
+      genericData).orNull.asInstanceOf[InternalRow] // GenericDataRecord -> InternalRow
+    userKeyRowToObjDeserializer.apply(internalRow.getStruct(1, userKeyEnc.schema.length))
   }
 }
 

@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.avro
+package org.apache.spark.sql.core.avro
 
 import java.io._
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.{LogicalTypes, Schema}
-import org.apache.avro.LogicalType
+import org.apache.avro.{LogicalType, LogicalTypes, Schema}
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -40,7 +39,7 @@ import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
-private[sql] class AvroFileFormat extends FileFormat
+class AvroFileFormat extends FileFormat
   with DataSourceRegister with Logging with Serializable {
 
   AvroFileFormat.registerCustomAvroTypes()
@@ -173,7 +172,7 @@ private[sql] class AvroFileFormat extends FileFormat
   }
 }
 
-private[avro] object AvroFileFormat {
+object AvroFileFormat {
   val IgnoreFilesWithoutExtensionProperty = "avro.mapred.ignore.inputs.without.extension"
 
   /**

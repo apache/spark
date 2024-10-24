@@ -127,6 +127,22 @@ trait AlsoTestWithChangelogCheckpointingEnabled
       super.afterEach()
     }
   }
+  def testWithAvroEncoding(testName: String, testTags: Tag*)
+                          (testBody: => Any): Unit = {
+    Seq(true, false).foreach { useAvroEncoding =>
+      super.test(testName + s" (useAvroEncoding = $useAvroEncoding)", testTags: _*) {
+        // in case tests have any code that needs to execute before every test
+        super.beforeEach()
+        withSQLConf(
+          SQLConf.STREAMING_STATE_STORE_USE_AVRO_ENCODING.key ->
+            useAvroEncoding.toString) {
+          testBody
+        }
+        // in case tests have any code that needs to execute after every test
+        super.afterEach()
+      }
+    }
+  }
 
   def testWithColumnFamilies(
       testName: String,

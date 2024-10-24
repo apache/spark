@@ -157,7 +157,7 @@ class TransformWithMapStateSuite extends StreamTest
     }
   }
 
-  test("Test map state correctness") {
+  testWithAvroEncoding("Test map state correctness") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputMapRow]

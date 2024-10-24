@@ -18,7 +18,8 @@ package org.apache.spark.sql.avro
 
 import org.apache.avro.SchemaBuilder
 
-import org.apache.spark.sql.avro.AvroUtils.AvroMatchedField
+import org.apache.spark.sql.core.avro.{AvroUtils, IncompatibleSchemaException, SchemaConverters}
+import org.apache.spark.sql.core.avro.AvroUtils.AvroMatchedField
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
