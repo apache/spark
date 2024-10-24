@@ -216,9 +216,10 @@ def process_column_param(column: Optional[Union[str, List[str]]], data: "DataFra
     Processes the provided column parameter for a DataFrame.
     - If `column` is None, returns a list of numeric or datetime columns from the DataFrame.
     - If `column` is a string, converts it to a list first.
-    - If `column` is a list, it checks if all specified columns exist in the DataFrame and are of valid types
-      (NumericType, DateType, or TimestampType).
-    - Raises a PySparkTypeError if any column in the list is not present in the DataFrame or has an invalid type.
+    - If `column` is a list, it checks if all specified columns exist in the DataFrame
+      and are of valid types (NumericType, DateType, or TimestampType).
+    - Raises a PySparkTypeError if any column in the list is not present in the DataFrame
+      or has an invalid type.
     """
     valid_types = (NumericType, DateType, TimestampType)
     if column is None:
