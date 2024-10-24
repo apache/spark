@@ -458,13 +458,26 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
+  // Exposed for testing
+  @volatile private[sql] var sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf)
+    .getOrElse(new SparkConf)
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
     val storeIdStr = s"StateStoreId(opId=${stateStoreId.operatorId}," +
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
-    val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-    val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
+
+    val rocksDBConf = RocksDBConf(storeConf)
+
+    // When running on Yarn, we just use the java.io.tmpdir property, which Yarn sets to a
+    // container specific tmp directory. This makes sure the state data gets cleaned up when
+    // the executor stops, even from a hard shutdown or failure where the shutdown hooks
+    // don't get run. When not running on Yarn, fallback to a configured local directory.
+    val localRootDir = if (Utils.isRunningInYarnContainer(sparkConf)) {
+      Utils.createTempDir(namePrefix = storeIdStr)
+    } else {
+      Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
+    }
     new RocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, storeIdStr,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds)
   }
