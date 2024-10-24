@@ -478,13 +478,16 @@ Submission Guide for more details.
 
 ## Compatibility with Confluent Schema Registry
 
-Note that Avro data produced by the [Confluent Schema Registry based Avro serializer](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/serdes-avro.html) prepends [a magic byte and the 4 byte schema ID](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format) to the serialized data. This means that the `from_avro` function will not deserialize the data correctly unless this is handled explicitly.
+Note that Avro data produced by the [Confluent Schema Registry based Avro serializer](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/serdes-avro.html) prepends [a magic byte and the 4 byte schema ID](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format) to the serialized data. The `from_avro` function has no built-in support for the Schema Registry and so will not deserialize the data correctly unless handled explicitly, e.g. by [using the Confluent deserializer and a map](https://stackoverflow.com/a/49182004/15037018).
 
-A simple workaround is to remove the bytes from the `"value"` field.
+A simpler workaround is to just remove the bytes from the `"value"` field.
+
+<div class="codetabs">
 
 <div data-lang="python" markdown="1">
 {% highlight python %}
-from pyspark.sql.avro.functions import from_avro, to_avro
+from pyspark.sql.avro.functions import from_avro
+from pyspark.sql import functions as f
 
 jsonFormatSchema = ... # your schema string
 
@@ -498,6 +501,8 @@ df = spark\
 serialized_df = df.select(from_avro(f.expr("substring(value, 6, length(value) - 5)"), jsonFormatSchema))
 
 {% endhighlight %}
+</div>
+
 </div>
 
 ## Supported types for Avro -> Spark SQL conversion
