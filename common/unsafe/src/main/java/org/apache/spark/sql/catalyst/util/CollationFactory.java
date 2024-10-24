@@ -359,8 +359,8 @@ public final class CollationFactory {
       }
 
       /**
-       * Returns if leading/trailing spaces should be ignored in trim string expressions. This is needed
-       * because space trimming collation directly changes behaviour of trim functions.
+       * Returns if leading/trailing spaces should be ignored in trim string expressions. This is
+       * needed because space trimming collation directly changes behaviour of trim functions.
        */
       protected static boolean ignoresSpacesInTrimFunctions(
           int collationId,

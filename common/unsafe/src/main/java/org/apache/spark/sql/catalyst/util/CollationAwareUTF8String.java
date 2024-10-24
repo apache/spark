@@ -1517,14 +1517,15 @@ public class CollationAwareUTF8String {
     // Return the substring from the start of the string until that position and append
     // trailing spaces if they were ignored
     if (charIndex == src.length()) {
-      return UTF8String.fromString(src);
+      return srcString;
     }
     if (lastNonSpacePosition == srcString.numChars()) {
-      return srcString.substring(0, charIndex);
+      return UTF8String.fromString(src.substring(0, charIndex));
     }
-    return UTF8String.concat(
-      srcString.substring(0, charIndex),
-      srcString.substring(lastNonSpacePosition, srcString.numChars()));
+    return UTF8String.fromString(
+      src.substring(0, charIndex) +
+      src.substring(lastNonSpacePosition)
+    );
   }
 
   public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,
