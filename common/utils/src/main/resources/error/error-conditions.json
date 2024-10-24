@@ -4622,6 +4622,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "TUPLE_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
+    ],
+    "sqlState" : "54011"
+  },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
@@ -7248,11 +7254,6 @@
   "_LEGACY_ERROR_TEMP_2148" : {
     "message" : [
       "null value found but field <name> is not nullable."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2150" : {
-    "message" : [
-      "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_2154" : {

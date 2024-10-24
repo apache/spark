@@ -228,7 +228,7 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
+    new SparkUnsupportedOperationException("TUPLE_SIZE_EXCEEDS_LIMIT")
   }
 
   def invalidAgnosticEncoderError(encoder: AnyRef): Throwable = {
