@@ -35,8 +35,8 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -45,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.hiveTableWithAnsiIntervalsError
-import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -1074,10 +1074,17 @@ object DDLUtils extends Logging {
       query: LogicalPlan,
       outputPath: Path,
       table: Option[CatalogTable] = None) : Unit = {
-    val inputPaths = query.collect {
-      case LogicalRelationWithTable(r: HadoopFsRelation, _) =>
+    def getPaths(query: LogicalPlan): Seq[Path] = query.collect {
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
         r.location.rootPaths
+      case Filter(condition: Expression, _) =>
+        condition.collect {
+          case se: SubqueryExpression =>
+            getPaths(se.plan)
+        }.flatten
     }.flatten
+
+    val inputPaths = getPaths(query)
 
     if (inputPaths.contains(outputPath)) {
       table match {
