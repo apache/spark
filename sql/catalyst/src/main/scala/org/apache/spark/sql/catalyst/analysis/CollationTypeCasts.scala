@@ -244,13 +244,15 @@ object CollationTypeCasts extends TypeCoercionRule {
         case _ => expr
       }
 
-    // user specified cast always should have strength of its child
-    case cast @ Cast(_, st: StringType, _, _)
+    // user specified cast should always have the collation of child
+    // if child is of StringType
+    case cast @ Cast(_, _: StringType, _, _)
         if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
 
       (extractStringType(cast.dataType), extractStringType(cast.child.dataType)) match {
-        case (Some(castType), Some(childType)) =>
-          cast.copy(dataType = StringType(castType.collationId, childType.strength))
+        case (Some(_), Some(childType)) =>
+          val newType = castStringType(cast.dataType, childType)
+          cast.copy(dataType = newType.get)
         case _ =>
           cast
       }
