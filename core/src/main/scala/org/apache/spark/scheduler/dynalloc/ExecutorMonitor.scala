@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.dynalloc
 
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -57,6 +57,8 @@ private[spark] class ExecutorMonitor(
 
   private val executors = new ConcurrentHashMap[String, Tracker]()
   private val execResourceProfileCount = new ConcurrentHashMap[Int, Int]()
+  private val executorIdToHosts = new ConcurrentHashMap[String, String]()
+  private val isMaxNeedAdjust = new AtomicBoolean()
 
   // The following fields are an optimization to avoid having to scan all executors on every EAM
   // schedule interval to find out which ones are timed out. They keep track of when the next
@@ -100,6 +102,8 @@ private[spark] class ExecutorMonitor(
     execResourceProfileCount.clear()
     nextTimeout.set(Long.MaxValue)
     timedOutExecs = Nil
+    executorIdToHosts.clear()
+    isMaxNeedAdjust.set(false)
   }
 
   /**
@@ -168,6 +172,22 @@ private[spark] class ExecutorMonitor(
   }
 
   def executorCount: Int = executors.size()
+
+  def executorHostsCount: Int = {
+    executorIdToHosts.values().toArray().distinct.size
+  }
+
+  def getExecutorHostsName: Seq[String] = {
+    executorIdToHosts.asScala.values.toSeq.distinct
+  }
+
+  def hasAdjustMaxNeed: Boolean = {
+    isMaxNeedAdjust.get()
+  }
+
+  def setAdjustMaxNeed(flag: Boolean): Unit = {
+    isMaxNeedAdjust.set(flag)
+  }
 
   def executorCountWithResourceProfile(id: Int): Int = {
     execResourceProfileCount.getOrDefault(id, 0)
@@ -341,6 +361,8 @@ private[spark] class ExecutorMonitor(
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     val exec = ensureExecutorIsTracked(event.executorId, event.executorInfo.resourceProfileId)
+    executorIdToHosts.computeIfAbsent(event.executorId, _ => event.executorInfo.executorHost)
+    isMaxNeedAdjust.compareAndSet(true, false)
     exec.updateRunningTasks(0)
     logInfo(log"New executor ${MDC(LogKeys.EXECUTOR_ID, event.executorId)} has registered " +
       log"(new total is ${MDC(LogKeys.COUNT, executors.size())})")
@@ -354,6 +376,7 @@ private[spark] class ExecutorMonitor(
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     val removed = executors.remove(event.executorId)
+    executorIdToHosts.remove(event.executorId)
     if (removed != null) {
       decrementExecResourceProfileCount(removed.resourceProfileId)
       if (event.reason == ExecutorLossMessage.decommissionFinished ||
