@@ -359,9 +359,9 @@ public final class CollationFactory {
       }
 
       protected static boolean ignoresSpacesInTrimFunctions(
-              int collationId,
-              boolean isLTrim,
-              boolean isRTrim) {
+          int collationId,
+          boolean isLTrim,
+          boolean isRTrim) {
         if (isRTrim && getSpaceTrimming(collationId) == SpaceTrimming.RTRIM) {
           return true;
         }
@@ -1216,9 +1216,9 @@ public final class CollationFactory {
    * because space trimming collation directly changes behaviour of trim functions.
    */
   public static boolean ignoresSpacesInTrimFunctions(
-          int collationId,
-          boolean isLTrim,
-          boolean isRTrim) {
+      int collationId,
+      boolean isLTrim,
+      boolean isRTrim) {
     return Collation.CollationSpec.ignoresSpacesInTrimFunctions(collationId, isLTrim, isRTrim);
   }
 

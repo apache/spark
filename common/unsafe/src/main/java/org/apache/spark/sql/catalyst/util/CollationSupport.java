@@ -481,6 +481,7 @@ public final class CollationSupport {
     public static UTF8String exec(final UTF8String source, Map<String, String> dict,
         final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+      // Space trimming does not affect the output of this expression.
       if (collation.isUtf8BinaryType) {
         return execBinary(source, dict);
       } else if (collation.isUtf8LcaseType) {

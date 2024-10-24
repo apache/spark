@@ -396,6 +396,7 @@ select TRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select TRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select TRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
 select TRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
+select TRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5;
 select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5;
 select TRIM('ABc' collate utf8_lcase, utf8_binary), TRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
 -- StringTrimBoth
