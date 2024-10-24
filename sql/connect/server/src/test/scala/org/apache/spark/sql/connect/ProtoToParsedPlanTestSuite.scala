@@ -190,8 +190,9 @@ class ProtoToParsedPlanTestSuite
       val relation = readRelation(file)
       val planner = new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
       val catalystPlan =
-        analyzer.executeAndCheck(planner.transformRelation(
-          normalizeRelation(relation)), new QueryPlanningTracker)
+        analyzer.executeAndCheck(
+          planner.transformRelation(normalizeRelation(relation)),
+          new QueryPlanningTracker)
       val finalAnalyzedPlan = {
         object Helper extends RuleExecutor[LogicalPlan] {
           val batches =
@@ -276,10 +277,12 @@ class ProtoToParsedPlanTestSuite
         if (read.getDataSource.getFormat != "jdbc" && read.getDataSource.getPredicatesCount == 0) {
           if (read.getDataSource.getPathsCount != 0) {
             val dataSourceBuilder = proto.Read.DataSource.newBuilder(read.getDataSource)
-            read.getDataSource.getPathsList.asScala.toSeq.map(path => normalizePath(path)).
-              zipWithIndex.foreach { case (newPath, index) =>
+            read.getDataSource.getPathsList.asScala.toSeq
+              .map(path => normalizePath(path))
+              .zipWithIndex
+              .foreach { case (newPath, index) =>
                 dataSourceBuilder.setPaths(index, newPath)
-            }
+              }
             return proto.Read.newBuilder(read).setDataSource(dataSourceBuilder.build()).build()
           }
         }
@@ -290,6 +293,8 @@ class ProtoToParsedPlanTestSuite
 
   private def normalizePath(path: String): String = {
     val paths: Seq[String] = path.split(java.io.File.separator).toSeq
-    getWorkspaceFilePath("sql", "connect" +: paths.slice(1, paths.size): _*).toFile.getAbsolutePath
+    getWorkspaceFilePath(
+      "sql",
+      "connect" +: paths.slice(1, paths.size): _*).toFile.getAbsolutePath
   }
 }
