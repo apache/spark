@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractStringType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
@@ -149,10 +148,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // interval type the string should be promoted as. There are many possible interval
       // types, such as year interval, month interval, day interval, hour interval, etc.
       case (_: StringType, _: AnsiIntervalType) => None
-      // [SPARK-50060] If a binary operation contains two collated string types, we can't decide
-      // which collation the result should have.
-      case (d1: StringType, d2: StringType) if !UnsafeRowUtils.isBinaryStable(d1)
-        && !UnsafeRowUtils.isBinaryStable(d2) => None
+      // [SPARK-50060] If a binary operation contains two collated string types with different
+      // collation IDs, we can't decide which collation ID the result should have.
+      case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => None
       case (_: StringType, a: AtomicType) => Some(a)
       case (other, st: StringType) if !other.isInstanceOf[StringType] =>
         findWiderTypeForString(st, other)

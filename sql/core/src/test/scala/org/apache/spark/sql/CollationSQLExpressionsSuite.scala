@@ -3260,6 +3260,39 @@ class CollationSQLExpressionsSuite
     }
   }
 
+  test("SPARK-50060: set operators with conflicting collations") {
+    val setOperators = Seq[(String, Int)](
+      ("UNION", 64),
+      ("INTERSECT", 68),
+      ("EXCEPT", 65))
+
+    for {
+      ansiEnabled <- Seq(true, false)
+      (operator, stop) <- setOperators
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+        SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+        val query = s"SELECT 'a' COLLATE UTF8_LCASE $operator SELECT 'A' COLLATE UNICODE_CI"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query)
+          },
+          condition = "INCOMPATIBLE_COLUMN_TYPE",
+          parameters = Map(
+            "columnOrdinalNumber" -> "first",
+            "tableOrdinalNumber" -> "second",
+            "dataType1" -> "\"STRING COLLATE UNICODE_CI\"",
+            "dataType2" -> "\"STRING COLLATE UTF8_LCASE\"",
+            "operator" -> operator,
+            "hint" -> ""),
+          context = ExpectedContext(
+            fragment = query,
+            start = 0,
+            stop = stop))
+      }
+    }
+  }
+
   test("Support HyperLogLogPlusPlus expression with collation") {
     case class HyperLogLogPlusPlusTestCase(
       collation: String,

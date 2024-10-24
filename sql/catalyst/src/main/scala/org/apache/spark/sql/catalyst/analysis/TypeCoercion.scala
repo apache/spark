@@ -32,8 +32,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType,
-  StringTypeWithCollation}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, AbstractMapType, AbstractStringType, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 
@@ -905,6 +904,9 @@ object TypeCoercion extends TypeCoercionBase {
 
   /** Promotes all the way to StringType. */
   private def stringPromotion(dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
+    // [SPARK-50060] If a binary operation contains two collated string types with different
+    // collation IDs, we can't decide which collation ID the result should have.
+    case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => None
     case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
     case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
     case _ => None
@@ -1014,7 +1016,9 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: StringType, datetime: DatetimeType) => datetime
       case (_: StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (_: StringType, BinaryType) => BinaryType
-      // Cast any atomic type to string.
+      // Cast any atomic type to string except if there are strings with different collations. In
+      // that case we skip the cast.
+      case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => null
       case (any: AtomicType, st: StringType) if !any.isInstanceOf[StringType] => st
       case (any: AtomicType, st: AbstractStringType)
         if !any.isInstanceOf[StringType] =>
