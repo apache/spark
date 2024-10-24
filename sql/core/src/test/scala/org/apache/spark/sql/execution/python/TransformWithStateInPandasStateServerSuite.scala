@@ -64,6 +64,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
   var mapStateMap: mutable.HashMap[String, MapStateInfo] = mutable.HashMap()
+  var expiryTimerIter: Iterator[(Any, Long)] = _
+  var listTimerMap: mutable.HashMap[String, Iterator[Long]] = mutable.HashMap()
 
   override def beforeEach(): Unit = {
     statefulProcessorHandle = mock(classOf[StatefulProcessorHandleImpl])
@@ -85,9 +87,11 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     // reset the iterator map to empty so be careful to call it if you want to access the iterator
     // map later.
     val testRow = getIntegerRow(1)
+    expiryTimerIter = Iterator.single(testRow, 1L /* a random long type value */)
     val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId -> Iterator(testRow))
     val keyValueIteratorMap = mutable.HashMap[String, Iterator[(Row, Row)]](iteratorId ->
       Iterator((testRow, testRow)))
+    listTimerMap = mutable.HashMap[String, Iterator[Long]](iteratorId -> Iterator(1L))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])
     arrowStreamWriter = mock(classOf[BaseStreamingArrowWriter])
     batchTimestampMs = mock(classOf[Option[Long]])
@@ -96,7 +100,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
       batchTimestampMs, eventTimeWatermarkForEviction,
       outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
-      listStateMap, iteratorMap, mapStateMap, keyValueIteratorMap)
+      listStateMap, iteratorMap, mapStateMap, keyValueIteratorMap, expiryTimerIter, listTimerMap)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
       .thenReturn(Seq(getIntegerRow(1)))
   }
@@ -500,7 +504,6 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       ).build()
     ).build()
     stateServer.handleTimerRequest(message)
-    verify(statefulProcessorHandle).getExpiredTimers(any[Long])
     verify(arrowStreamWriter).writeRow(any)
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
   }
@@ -527,18 +530,37 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(outputStream).writeInt(0)
   }
 
-  test("stateful processor list timer") {
+  test("stateful processor list timer - iterator in map") {
     val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
       TimerStateCallCommand.newBuilder()
-        .setList(ListTimers.newBuilder().build())
+        .setList(ListTimers.newBuilder().setIteratorId(iteratorId).build())
         .build()
     ).build()
     stateServer.handleStatefulProcessorCall(message)
-    verify(statefulProcessorHandle).listTimers()
+    verify(statefulProcessorHandle, times(0)).listTimers()
     verify(arrowStreamWriter).writeRow(any)
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
   }
-  
+
+  test("stateful processor list timer - iterator not in map") {
+    val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
+      TimerStateCallCommand.newBuilder()
+        .setList(ListTimers.newBuilder().setIteratorId("non-exist").build())
+        .build()
+    ).build()
+    stateServer = new TransformWithStateInPandasStateServer(serverSocket,
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      2, batchTimestampMs, eventTimeWatermarkForEviction, outputStream,
+      valueStateMap, transformWithStateInPandasDeserializer,
+      arrowStreamWriter, listStateMap, null, mapStateMap, null,
+      null, listTimerMap)
+    when(statefulProcessorHandle.listTimers()).thenReturn(Iterator(1))
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle, times(1)).listTimers()
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
   private def getIntegerRow(value: Int): Row = {
     new GenericRowWithSchema(Array(value), stateSchema)
   }

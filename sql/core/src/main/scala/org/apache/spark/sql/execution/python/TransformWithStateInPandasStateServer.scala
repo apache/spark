@@ -67,7 +67,9 @@ class TransformWithStateInPandasStateServer(
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
     mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
-    keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null)
+    keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null,
+    expiryTimerIterForTest: Iterator[(Any, Long)] = null,
+    listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null)
   extends Runnable with Logging {
 
   import PythonResponseWriterUtils._
@@ -118,13 +120,18 @@ class TransformWithStateInPandasStateServer(
   }
 
   /** Timer related class variables */
-  private var expiryTimestampIter: Option[Iterator[(Any, Long)]] = None
+  private var expiryTimestampIter: Option[Iterator[(Any, Long)]] =
+    if (expiryTimerIterForTest != null) {
+      Option(expiryTimerIterForTest)
+    } else None
 
   // A map to store the iterator id -> Iterator[Long] mapping. This is to keep track of the
   // current iterator position for each iterator id in the same partition for a grouping key in case
   // user tries to fetch multiple iterators before the current iterator is exhausted. This is
   // used for list timer function call
-  private var listTimerIters = new mutable.HashMap[String, Iterator[Long]]()
+  private var listTimerIters = if (listTimerMapForTest != null) {
+    listTimerMapForTest
+  } else new mutable.HashMap[String, Iterator[Long]]()
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()

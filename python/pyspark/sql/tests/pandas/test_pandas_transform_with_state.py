@@ -523,8 +523,6 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a", timestamp="20")
                 }
             elif batch_id == 1:
-                # event time = 4 will be discarded because the watermark = 15 - 10 = 5
-                # the timer registered in the first batch (watermark = 0) has expired
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="20"),
                     Row(id="a-expired", timestamp="0")
