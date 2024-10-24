@@ -571,7 +571,7 @@
       },
       "IMPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly."
+          "Error occurred due to the mismatch between implicit collations: [<implicitTypes>]. Use COLLATE function to set the collation explicitly."
         ]
       }
     },
@@ -1153,6 +1153,12 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012"
+  },
+  "DUPLICATED_CTE_NAMES" : {
+    "message" : [
+      "CTE definition can't have duplicate names: <duplicateNames>."
+    ],
+    "sqlState" : "42602"
   },
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
     "message" : [
@@ -2072,6 +2078,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_ATTRIBUTE_NAME_SYNTAX" : {
+    "message" : [
+      "Syntax error in the attribute name: <name>. Check that backticks appear in pairs, a quoted string is a complete name part and use a backtick only inside quoted name parts."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_BITMAP_POSITION" : {
     "message" : [
       "The 0-indexed bitmap position <bitPosition> is out of bounds. The bitmap has <bitmapNumBits> bits (<bitmapNumBytes> bytes)."
@@ -2149,6 +2161,12 @@
       }
     },
     "sqlState" : "22022"
+  },
+  "INVALID_CORRUPT_RECORD_TYPE" : {
+    "message" : [
+      "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
+    ],
+    "sqlState" : "42804"
   },
   "INVALID_CURSOR" : {
     "message" : [
@@ -2959,6 +2977,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_REGEXP_REPLACE" : {
+    "message" : [
+      "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_SAVE_MODE" : {
     "message" : [
       "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
@@ -3113,6 +3137,11 @@
           "Unsupported function name <funcName>."
         ]
       },
+      "UNSUPPORTED_SQL_STATEMENT" : {
+        "message" : [
+          "Unsupported SQL statement: <sqlText>."
+        ]
+      },
       "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
         "message" : [
           "The definition of a SQL variable requires either a datatype or a DEFAULT clause.",
@@ -3207,7 +3236,7 @@
   },
   "INVALID_URL" : {
     "message" : [
-      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The url is invalid: <url>. Use `try_parse_url` to tolerate invalid URL and return NULL instead."
     ],
     "sqlState" : "22P02"
   },
@@ -3416,6 +3445,12 @@
     ],
     "sqlState" : "23K01"
   },
+  "MERGE_WITHOUT_WHEN" : {
+    "message" : [
+      "There must be at least one WHEN clause in a MERGE statement."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -3448,11 +3483,23 @@
     ],
     "sqlState" : "42803"
   },
+  "MISSING_TIMEOUT_CONFIGURATION" : {
+    "message" : [
+      "The operation has timed out, but no timeout duration is configured. To set a processing time-based timeout, use 'GroupState.setTimeoutDuration()' in your 'mapGroupsWithState' or 'flatMapGroupsWithState' operation. For event-time-based timeout, use 'GroupState.setTimeoutTimestamp()' and define a watermark using 'Dataset.withWatermark()'."
+    ],
+    "sqlState" : "HY000"
+  },
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+    "message" : [
+      "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
+    ],
+    "sqlState" : "42000"
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3491,6 +3538,12 @@
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ],
     "sqlState" : "0A000"
+  },
+  "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION" : {
+    "message" : [
+      "Found the negative value in <frequencyExpression>: <negativeValue>, but expected a positive integral value."
+    ],
+    "sqlState" : "22003"
   },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -4697,6 +4750,12 @@
     ],
     "sqlState" : "42704"
   },
+  "UNRECOGNIZED_STATISTIC" : {
+    "message" : [
+      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values."
+    ],
+    "sqlState" : "42704"
+  },
   "UNRESOLVABLE_TABLE_VALUED_FUNCTION" : {
     "message" : [
       "Could not resolve <name> to a table-valued function.",
@@ -4978,6 +5037,11 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "CLAUSE_WITH_PIPE_OPERATORS" : {
+        "message" : [
+          "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
@@ -5644,11 +5708,6 @@
       "The number of inserted values cannot match the fields."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0008" : {
-    "message" : [
-      "There must be at least one WHEN clause in a MERGE statement."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
       "DISTRIBUTE BY is not supported."
@@ -5727,16 +5786,6 @@
   "_LEGACY_ERROR_TEMP_0037" : {
     "message" : [
       "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0038" : {
-    "message" : [
-      "CTE definition can't have duplicate names: <duplicateNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0039" : {
-    "message" : [
-      "Unsupported SQL statement."
     ]
   },
   "_LEGACY_ERROR_TEMP_0043" : {
@@ -5936,11 +5985,6 @@
       "<hintName> Hint expects a partition number as a parameter."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1049" : {
-    "message" : [
-      "Syntax error in attribute name: <name>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1050" : {
     "message" : [
       "Can only star expand struct data types. Attribute: `<attributes>`."
@@ -6039,11 +6083,6 @@
   "_LEGACY_ERROR_TEMP_1090" : {
     "message" : [
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1097" : {
-    "message" : [
-      "The field for corrupt records must be string type and nullable."
     ]
   },
   "_LEGACY_ERROR_TEMP_1098" : {
@@ -6520,16 +6559,6 @@
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1252" : {
-    "message" : [
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1253" : {
-    "message" : [
-      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1255" : {
     "message" : [
       "Cannot drop built-in function '<functionName>'."
@@ -6778,11 +6807,6 @@
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2013" : {
-    "message" : [
-      "Negative values found in <frequencyExpression>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {
@@ -7097,11 +7121,6 @@
       "Dictionary encoding should not be used because of dictionary overflow."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2104" : {
-    "message" : [
-      "End of the iterator."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2105" : {
     "message" : [
       "Could not allocate memory to grow BytesToBytesMap."
@@ -7145,11 +7164,6 @@
   "_LEGACY_ERROR_TEMP_2113" : {
     "message" : [
       "Unable to parse <stats> as a percentile."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2114" : {
-    "message" : [
-      "<stats> is not a recognised statistic."
     ]
   },
   "_LEGACY_ERROR_TEMP_2115" : {
@@ -7260,11 +7274,6 @@
   "_LEGACY_ERROR_TEMP_2164" : {
     "message" : [
       "Initial type <dataType> must be an <arrayType>, a <structType> or a <mapType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2165" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2166" : {
@@ -8382,11 +8391,6 @@
       "continuous mode is not supported!"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3168" : {
-    "message" : [
-      "hasTimedOut is true however there's no timeout configured"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3169" : {
     "message" : [
       "AcceptsLatestSeenOffset is not supported with DSv1 streaming source: <unsupportedSources>"
@@ -8605,11 +8609,6 @@
   "_LEGACY_ERROR_TEMP_3226" : {
     "message" : [
       "Cannot delete map key"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3227" : {
-    "message" : [
-      "Cannot find field: <fieldName>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3228" : {

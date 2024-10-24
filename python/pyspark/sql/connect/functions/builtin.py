@@ -267,21 +267,14 @@ def lit(col: Any) -> Column:
             )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
-        if _from_numpy_type(col.dtype) is None:
+        dt = _from_numpy_type(col.dtype)
+        if dt is None:
             raise PySparkTypeError(
                 errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
                 messageParameters={"dtype": col.dtype.name},
             )
-
-        # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
-        # Actually this is not a problem for Connect, but here still convert it
-        # to int16 for compatibility.
-        if col.dtype == np.int8:
-            col = col.astype(np.int16)
-
-        return array(*[lit(c) for c in col])
-    else:
-        return ConnectColumn(LiteralExpression._from_value(col))
+        return array(*[lit(c) for c in col]).cast(ArrayType(dt))
+    return ConnectColumn(LiteralExpression._from_value(col))
 
 
 lit.__doc__ = pysparkfuncs.lit.__doc__
@@ -1498,7 +1491,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
 lead.__doc__ = pysparkfuncs.lead.__doc__
 
 
-def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = None) -> Column:
+def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = False) -> Column:
     if ignoreNulls is None:
         return _invoke_function("nth_value", _to_col(col), lit(offset))
     else:
@@ -2236,7 +2229,7 @@ size.__doc__ = pysparkfuncs.size.__doc__
 
 
 def slice(
-    col: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
+    x: "ColumnOrName", start: Union["ColumnOrName", int], length: Union["ColumnOrName", int]
 ) -> Column:
     start = _enum_to_value(start)
     if isinstance(start, (Column, str)):
@@ -2260,7 +2253,7 @@ def slice(
             messageParameters={"arg_name": "length", "arg_type": type(length).__name__},
         )
 
-    return _invoke_function_over_columns("slice", col, _start, _length)
+    return _invoke_function_over_columns("slice", x, _start, _length)
 
 
 slice.__doc__ = pysparkfuncs.slice.__doc__
@@ -2443,6 +2436,34 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
 
 
 encode.__doc__ = pysparkfuncs.encode.__doc__
+
+
+def is_valid_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("is_valid_utf8", _to_col(str))
+
+
+is_valid_utf8.__doc__ = pysparkfuncs.is_valid_utf8.__doc__
+
+
+def make_valid_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("make_valid_utf8", _to_col(str))
+
+
+make_valid_utf8.__doc__ = pysparkfuncs.make_valid_utf8.__doc__
+
+
+def validate_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("validate_utf8", _to_col(str))
+
+
+validate_utf8.__doc__ = pysparkfuncs.validate_utf8.__doc__
+
+
+def try_validate_utf8(str: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("try_validate_utf8", _to_col(str))
+
+
+try_validate_utf8.__doc__ = pysparkfuncs.try_validate_utf8.__doc__
 
 
 def format_number(col: "ColumnOrName", d: int) -> Column:
@@ -2786,6 +2807,18 @@ def parse_url(
 
 
 parse_url.__doc__ = pysparkfuncs.parse_url.__doc__
+
+
+def try_parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    if key is not None:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract)
+
+
+try_parse_url.__doc__ = pysparkfuncs.try_parse_url.__doc__
 
 
 def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
@@ -3147,21 +3180,21 @@ def dayname(col: "ColumnOrName") -> Column:
 dayname.__doc__ = pysparkfuncs.dayname.__doc__
 
 
-def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def extract(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("extract", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def date_part(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("date_part", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def datepart(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("datepart", field, source)
 
 
@@ -4167,6 +4200,7 @@ unwrap_udt.__doc__ = pysparkfuncs.unwrap_udt.__doc__
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
+    *,
     useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     if f is None or isinstance(f, (str, DataType)):

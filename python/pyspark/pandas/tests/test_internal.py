@@ -17,6 +17,7 @@
 
 import pandas as pd
 
+from pyspark.sql.types import LongType, StructType, StructField
 from pyspark.pandas.internal import (
     InternalFrame,
     SPARK_DEFAULT_INDEX_NAME,
@@ -105,6 +106,32 @@ class InternalFrameTestsMixin:
         self.assertTrue(spark_column_equals(internal.spark_column_for(("x", "b")), sdf["(x, b)"]))
 
         self.assert_eq(internal.to_pandas_frame, pdf)
+
+    def test_attach_distributed_column(self):
+        sdf1 = self.spark.range(10)
+        self.assert_eq(
+            InternalFrame.attach_distributed_sequence_column(sdf1, "index").schema,
+            StructType(
+                [
+                    StructField("index", LongType(), False),
+                    StructField("id", LongType(), False),
+                ]
+            ),
+        )
+
+        # zero columns
+        sdf2 = self.spark.range(10).select()
+        self.assert_eq(
+            InternalFrame.attach_distributed_sequence_column(sdf2, "index").schema,
+            StructType([StructField("index", LongType(), False)]),
+        )
+
+        # empty dataframe, zero columns
+        sdf3 = self.spark.range(10).where("id < 0").select()
+        self.assert_eq(
+            InternalFrame.attach_distributed_sequence_column(sdf3, "index").schema,
+            StructType([StructField("index", LongType(), False)]),
+        )
 
 
 class InternalFrameTests(InternalFrameTestsMixin, PandasOnSparkTestCase, SQLTestUtils):

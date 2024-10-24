@@ -21,12 +21,8 @@ import datetime
 import json
 import struct
 from array import array
-from decimal import Decimal
 from typing import Any, Callable, Dict, List, Tuple
-from pyspark.errors import (
-    PySparkNotImplementedError,
-    PySparkValueError,
-)
+from pyspark.errors import PySparkValueError
 from zoneinfo import ZoneInfo
 
 
@@ -111,12 +107,6 @@ class VariantUtils:
     # Long string value. The content is (4-byte little-endian unsigned integer representing the
     # string size) + (size bytes of string content).
     LONG_STR = 16
-    # year-month interval value. The content is one byte representing the start and end field values
-    # (1 bit each starting at least significant bits) and a 4-byte little-endian signed integer
-    YEAR_MONTH_INTERVAL = 19
-    # day-time interval value. The content is one byte representing the start and end field values
-    # (2 bits each starting at least significant bits) and an 8-byte little-endian signed integer
-    DAY_TIME_INTERVAL = 20
 
     U32_SIZE = 4
 
@@ -131,11 +121,6 @@ class VariantUtils:
     MAX_DECIMAL8_VALUE = 10**MAX_DECIMAL8_PRECISION
     MAX_DECIMAL16_PRECISION = 38
     MAX_DECIMAL16_VALUE = 10**MAX_DECIMAL16_PRECISION
-
-    # There is no PySpark equivalent of the SQL year-month interval type. This class acts as a
-    # placeholder for this type
-    class _PlaceholderYearMonthIntervalInternalType:
-        pass
 
     @classmethod
     def to_json(cls, value: bytes, metadata: bytes, zone_id: str = "UTC") -> str:
@@ -174,32 +159,6 @@ class VariantUtils:
         basic_type = value[pos] & VariantUtils.BASIC_TYPE_MASK
         type_info = (value[pos] >> VariantUtils.BASIC_TYPE_BITS) & VariantUtils.TYPE_INFO_MASK
         return (basic_type, type_info)
-
-    @classmethod
-    def _get_day_time_interval_fields(cls, value: bytes, pos: int) -> Tuple[int, int]:
-        """
-        Returns the (start_field, end_field) pair for a variant representing a day-time interval
-        value stored at a given position in the value.
-        """
-        cls._check_index(pos, len(value))
-        start_field = value[pos] & 0x3
-        end_field = (value[pos] >> 2) & 0x3
-        if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        return (start_field, end_field)
-
-    @classmethod
-    def _get_year_month_interval_fields(cls, value: bytes, pos: int) -> Tuple[int, int]:
-        """
-        Returns the (start_field, end_field) paid for a variant representing a year-month interval
-        value stored at a given position in the value.
-        """
-        cls._check_index(pos, len(value))
-        start_field = value[pos] & 0x1
-        end_field = (value[pos] >> 1) & 0x1
-        if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        return (start_field, end_field)
 
     @classmethod
     def _get_metadata_key(cls, metadata: bytes, id: int) -> str:
@@ -274,38 +233,6 @@ class VariantUtils:
             return (
                 VariantUtils.EPOCH + datetime.timedelta(microseconds=microseconds_since_epoch)
             ).astimezone(ZoneInfo(zone_id))
-        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-
-    @classmethod
-    def _get_yminterval_info(cls, value: bytes, pos: int) -> Tuple[int, int, int]:
-        """
-        Returns the (months, start_field, end_field) tuple from a year-month interval value at a
-        given position in a variant.
-        """
-        cls._check_index(pos, len(value))
-        basic_type, type_info = cls._get_type_info(value, pos)
-        if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        if type_info == VariantUtils.YEAR_MONTH_INTERVAL:
-            months = cls._read_long(value, pos + 2, 4, signed=True)
-            start_field, end_field = cls._get_year_month_interval_fields(value, pos + 1)
-            return (months, start_field, end_field)
-        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-
-    @classmethod
-    def _get_dtinterval_info(cls, value: bytes, pos: int) -> Tuple[int, int, int]:
-        """
-        Returns the (micros, start_field, end_field) tuple from a day-time interval value at a given
-        position in a variant.
-        """
-        cls._check_index(pos, len(value))
-        basic_type, type_info = cls._get_type_info(value, pos)
-        if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        if type_info == VariantUtils.DAY_TIME_INTERVAL:
-            micros = cls._read_long(value, pos + 2, 8, signed=True)
-            start_field, end_field = cls._get_day_time_interval_fields(value, pos + 1)
-            return (micros, start_field, end_field)
         raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
@@ -423,146 +350,7 @@ class VariantUtils:
             return datetime.datetime
         elif type_info == VariantUtils.LONG_STR:
             return str
-        elif type_info == VariantUtils.DAY_TIME_INTERVAL:
-            return datetime.timedelta
-        elif type_info == VariantUtils.YEAR_MONTH_INTERVAL:
-            return cls._PlaceholderYearMonthIntervalInternalType
         raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-
-    @classmethod
-    def _to_year_month_interval_ansi_string(
-        cls, months: int, start_field: int, end_field: int
-    ) -> str:
-        """
-        Used to convert months representing a year-month interval with given start and end
-        fields to its ANSI SQL string representation.
-        """
-        YEAR = 0
-        MONTHS_PER_YEAR = 12
-        sign = ""
-        abs_months = months
-        if months < 0:
-            sign = "-"
-            abs_months = -abs_months
-        year = sign + str(abs_months // MONTHS_PER_YEAR)
-        year_and_month = year + "-" + str(abs_months % MONTHS_PER_YEAR)
-        format_builder = ["INTERVAL '"]
-        if start_field == end_field:
-            if start_field == YEAR:
-                format_builder.append(year + "' YEAR")
-            else:
-                format_builder.append(str(months) + "' MONTH")
-        else:
-            format_builder.append(year_and_month + "' YEAR TO MONTH")
-        return "".join(format_builder)
-
-    @classmethod
-    def _to_day_time_interval_ansi_string(
-        cls, micros: int, start_field: int, end_field: int
-    ) -> str:
-        """
-        Used to convert microseconds representing a day-tine interval with given start and end
-        fields to its ANSI SQL string representation.
-        """
-        DAY = 0
-        HOUR = 1
-        MINUTE = 2
-        SECOND = 3
-        MIN_LONG_VALUE = -9223372036854775808
-        MAX_LONG_VALUE = 9223372036854775807
-        MICROS_PER_SECOND = 1000 * 1000
-        MICROS_PER_MINUTE = MICROS_PER_SECOND * 60
-        MICROS_PER_HOUR = MICROS_PER_MINUTE * 60
-        MICROS_PER_DAY = MICROS_PER_HOUR * 24
-        MAX_SECOND = MAX_LONG_VALUE // MICROS_PER_SECOND
-        MAX_MINUTE = MAX_LONG_VALUE // MICROS_PER_MINUTE
-        MAX_HOUR = MAX_LONG_VALUE // MICROS_PER_HOUR
-        MAX_DAY = MAX_LONG_VALUE // MICROS_PER_DAY
-
-        def field_to_string(field: int) -> str:
-            if field == DAY:
-                return "DAY"
-            elif field == HOUR:
-                return "HOUR"
-            elif field == MINUTE:
-                return "MINUTE"
-            elif field == SECOND:
-                return "SECOND"
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-
-        if end_field < start_field:
-            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
-        sign = ""
-        rest = micros
-        from_str = field_to_string(start_field).upper()
-        to_str = field_to_string(end_field).upper()
-        prefix = "INTERVAL '"
-        postfix = f"' {from_str}" if (start_field == end_field) else f"' {from_str} TO {to_str}"
-        if micros < 0:
-            if micros == MIN_LONG_VALUE:
-                # Especial handling of minimum `Long` value because negate op overflows `Long`.
-                # seconds = 106751991 * (24 * 60 * 60) + 4 * 60 * 60 + 54 = 9223372036854
-                # microseconds = -9223372036854000000L-775808 == Long.MinValue
-                base_str = "-106751991 04:00:54.775808000"
-                first_str = "-" + (
-                    str(MAX_DAY)
-                    if (start_field == DAY)
-                    else (
-                        str(MAX_HOUR)
-                        if (start_field == HOUR)
-                        else (
-                            str(MAX_MINUTE)
-                            if (start_field == MINUTE)
-                            else str(MAX_SECOND) + ".775808"
-                        )
-                    )
-                )
-                if start_field == end_field:
-                    return prefix + first_str + postfix
-                else:
-                    substr_start = (
-                        10 if (start_field == DAY) else (13 if (start_field == HOUR) else 16)
-                    )
-                    substr_end = (
-                        13 if (end_field == HOUR) else (16 if (end_field == MINUTE) else 26)
-                    )
-                    return prefix + first_str + base_str[substr_start:substr_end] + postfix
-            else:
-                sign = "-"
-                rest = -rest
-        format_builder = [sign]
-        format_args = []
-        if start_field == DAY:
-            format_builder.append(str(rest // MICROS_PER_DAY))
-            rest %= MICROS_PER_DAY
-        elif start_field == HOUR:
-            format_builder.append("%02d")
-            format_args.append(rest // MICROS_PER_HOUR)
-            rest %= MICROS_PER_HOUR
-        elif start_field == MINUTE:
-            format_builder.append("%02d")
-            format_args.append(rest // MICROS_PER_MINUTE)
-            rest %= MICROS_PER_MINUTE
-        elif start_field == SECOND:
-            lead_zero = "0" if (rest < 10 * MICROS_PER_SECOND) else ""
-            format_builder.append(
-                lead_zero + (Decimal(rest) / Decimal(1000000)).normalize().to_eng_string()
-            )
-
-        if start_field < HOUR and HOUR <= end_field:
-            format_builder.append(" %02d")
-            format_args.append(rest // MICROS_PER_HOUR)
-            rest %= MICROS_PER_HOUR
-        if start_field < MINUTE and MINUTE <= end_field:
-            format_builder.append(":%02d")
-            format_args.append(rest // MICROS_PER_MINUTE)
-            rest %= MICROS_PER_MINUTE
-        if start_field < SECOND and SECOND <= end_field:
-            lead_zero = "0" if (rest < 10 * MICROS_PER_SECOND) else ""
-            format_builder.append(
-                ":" + lead_zero + (Decimal(rest) / Decimal(1000000)).normalize().to_eng_string()
-            )
-        return prefix + ("".join(format_builder) % tuple(format_args)) + postfix
 
     @classmethod
     def _to_json(cls, value: bytes, metadata: bytes, pos: int, zone_id: str) -> str:
@@ -587,14 +375,6 @@ class VariantUtils:
                 return "[" + ",".join(value_list) + "]"
 
             return cls._handle_array(value, pos, handle_array)
-        elif variant_type == datetime.timedelta:
-            micros, start_field, end_field = cls._get_dtinterval_info(value, pos)
-            return '"' + cls._to_day_time_interval_ansi_string(micros, start_field, end_field) + '"'
-        elif variant_type == cls._PlaceholderYearMonthIntervalInternalType:
-            months, start_field, end_field = cls._get_yminterval_info(value, pos)
-            return (
-                '"' + cls._to_year_month_interval_ansi_string(months, start_field, end_field) + '"'
-            )
         else:
             value = cls._get_scalar(variant_type, value, metadata, pos, zone_id)
             if value is None:
@@ -632,14 +412,6 @@ class VariantUtils:
                 return value_list
 
             return cls._handle_array(value, pos, handle_array)
-        elif variant_type == datetime.timedelta:
-            # day-time intervals are represented using timedelta in a trivial manner
-            return datetime.timedelta(microseconds=cls._get_dtinterval_info(value, pos)[0])
-        elif variant_type == cls._PlaceholderYearMonthIntervalInternalType:
-            raise PySparkNotImplementedError(
-                errorClass="NOT_IMPLEMENTED",
-                messageParameters={"feature": "VariantUtils.YEAR_MONTH_INTERVAL"},
-            )
         else:
             return cls._get_scalar(variant_type, value, metadata, pos, zone_id="UTC")
 

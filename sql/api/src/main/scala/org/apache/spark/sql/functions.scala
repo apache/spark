@@ -1901,7 +1901,8 @@ object functions {
    * @group string_funcs
    * @since 4.0.0
    */
-  def randstr(length: Column): Column = Column.fn("randstr", length)
+  def randstr(length: Column): Column =
+    randstr(length, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a string of the specified length whose characters are chosen uniformly at random from
@@ -3767,7 +3768,8 @@ object functions {
    * @group math_funcs
    * @since 4.0.0
    */
-  def uniform(min: Column, max: Column): Column = Column.fn("uniform", min, max)
+  def uniform(min: Column, max: Column): Column =
+    uniform(min, max, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) values with the
@@ -4675,6 +4677,24 @@ object functions {
    * @since 3.5.0
    */
   def substr(str: Column, pos: Column): Column = Column.fn("substr", str, pos)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column, key: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract, key)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract)
 
   /**
    * Extracts a part from a URL.

@@ -25,12 +25,40 @@ from pyspark.sql.classic.dataframe import DataFrame as ClassicDataFrame
 from pyspark.sql.classic.column import Column as ClassicColumn
 from pyspark.sql.session import SparkSession as ClassicSparkSession
 from pyspark.sql.catalog import Catalog as ClassicCatalog
+from pyspark.sql.readwriter import DataFrameReader as ClassicDataFrameReader
+from pyspark.sql.readwriter import DataFrameWriter as ClassicDataFrameWriter
+from pyspark.sql.readwriter import DataFrameWriterV2 as ClassicDataFrameWriterV2
+from pyspark.sql.window import Window as ClassicWindow
+from pyspark.sql.window import WindowSpec as ClassicWindowSpec
+import pyspark.sql.functions as ClassicFunctions
+from pyspark.sql.group import GroupedData as ClassicGroupedData
+import pyspark.sql.avro.functions as ClassicAvro
+import pyspark.sql.protobuf.functions as ClassicProtobuf
+from pyspark.sql.streaming.query import StreamingQuery as ClassicStreamingQuery
+from pyspark.sql.streaming.query import StreamingQueryManager as ClassicStreamingQueryManager
+from pyspark.sql.streaming.readwriter import DataStreamReader as ClassicDataStreamReader
+from pyspark.sql.streaming.readwriter import DataStreamWriter as ClassicDataStreamWriter
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.sql.connect.column import Column as ConnectColumn
     from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
     from pyspark.sql.connect.catalog import Catalog as ConnectCatalog
+    from pyspark.sql.connect.readwriter import DataFrameReader as ConnectDataFrameReader
+    from pyspark.sql.connect.readwriter import DataFrameWriter as ConnectDataFrameWriter
+    from pyspark.sql.connect.readwriter import DataFrameWriterV2 as ConnectDataFrameWriterV2
+    from pyspark.sql.connect.window import Window as ConnectWindow
+    from pyspark.sql.connect.window import WindowSpec as ConnectWindowSpec
+    import pyspark.sql.connect.functions as ConnectFunctions
+    from pyspark.sql.connect.group import GroupedData as ConnectGroupedData
+    import pyspark.sql.connect.avro.functions as ConnectAvro
+    import pyspark.sql.connect.protobuf.functions as ConnectProtobuf
+    from pyspark.sql.connect.streaming.query import StreamingQuery as ConnectStreamingQuery
+    from pyspark.sql.connect.streaming.query import (
+        StreamingQueryManager as ConnectStreamingQueryManager,
+    )
+    from pyspark.sql.connect.streaming.readwriter import DataStreamReader as ConnectDataStreamReader
+    from pyspark.sql.connect.streaming.readwriter import DataStreamWriter as ConnectDataStreamWriter
 
 
 class ConnectCompatibilityTestsMixin:
@@ -63,7 +91,9 @@ class ConnectCompatibilityTestsMixin:
             classic_signature = inspect.signature(classic_methods[method])
             connect_signature = inspect.signature(connect_methods[method])
 
-            if not method == "createDataFrame":
+            # Cannot support RDD arguments from Spark Connect
+            has_rdd_arguments = ("createDataFrame", "xml", "json")
+            if method not in has_rdd_arguments:
                 self.assertEqual(
                     classic_signature,
                     connect_signature,
@@ -241,6 +271,226 @@ class ConnectCompatibilityTestsMixin:
             ClassicCatalog,
             ConnectCatalog,
             "Catalog",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_dataframe_reader_compatibility(self):
+        """Test DataFrameReader compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicDataFrameReader,
+            ConnectDataFrameReader,
+            "DataFrameReader",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_dataframe_writer_compatibility(self):
+        """Test DataFrameWriter compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicDataFrameWriter,
+            ConnectDataFrameWriter,
+            "DataFrameWriter",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_dataframe_writer_v2_compatibility(self):
+        """Test DataFrameWriterV2 compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicDataFrameWriterV2,
+            ConnectDataFrameWriterV2,
+            "DataFrameWriterV2",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_window_compatibility(self):
+        """Test Window compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicWindow,
+            ConnectWindow,
+            "Window",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_window_spec_compatibility(self):
+        """Test WindowSpec compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicWindowSpec,
+            ConnectWindowSpec,
+            "WindowSpec",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_functions_compatibility(self):
+        """Test Functions compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = {"check_dependencies"}
+        self.check_compatibility(
+            ClassicFunctions,
+            ConnectFunctions,
+            "Functions",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_grouping_compatibility(self):
+        """Test Grouping compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = {"transformWithStateInPandas"}
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicGroupedData,
+            ConnectGroupedData,
+            "Grouping",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_avro_compatibility(self):
+        """Test Avro compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        # The current supported Avro functions are only `from_avro` and `to_avro`.
+        # The missing methods belows are just util functions that imported to implement them.
+        expected_missing_connect_methods = {
+            "try_remote_avro_functions",
+            "cast",
+            "get_active_spark_context",
+        }
+        expected_missing_classic_methods = {"lit", "check_dependencies"}
+        self.check_compatibility(
+            ClassicAvro,
+            ConnectAvro,
+            "Avro",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_streaming_query_compatibility(self):
+        """Test Streaming Query compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicStreamingQuery,
+            ConnectStreamingQuery,
+            "StreamingQuery",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_protobuf_compatibility(self):
+        """Test Protobuf compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        # The current supported Avro functions are only `from_protobuf` and `to_protobuf`.
+        # The missing methods belows are just util functions that imported to implement them.
+        expected_missing_connect_methods = {
+            "cast",
+            "try_remote_protobuf_functions",
+            "get_active_spark_context",
+        }
+        expected_missing_classic_methods = {"lit", "check_dependencies"}
+        self.check_compatibility(
+            ClassicProtobuf,
+            ConnectProtobuf,
+            "Protobuf",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_streaming_query_manager_compatibility(self):
+        """Test Streaming Query Manager compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = {"close"}
+        self.check_compatibility(
+            ClassicStreamingQueryManager,
+            ConnectStreamingQueryManager,
+            "StreamingQueryManager",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_streaming_reader_compatibility(self):
+        """Test Data Stream Reader compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicDataStreamReader,
+            ConnectDataStreamReader,
+            "DataStreamReader",
+            expected_missing_connect_properties,
+            expected_missing_classic_properties,
+            expected_missing_connect_methods,
+            expected_missing_classic_methods,
+        )
+
+    def test_streaming_writer_compatibility(self):
+        """Test Data Stream Writer compatibility between classic and connect."""
+        expected_missing_connect_properties = set()
+        expected_missing_classic_properties = set()
+        expected_missing_connect_methods = set()
+        expected_missing_classic_methods = set()
+        self.check_compatibility(
+            ClassicDataStreamWriter,
+            ConnectDataStreamWriter,
+            "DataStreamWriter",
             expected_missing_connect_properties,
             expected_missing_classic_properties,
             expected_missing_connect_methods,

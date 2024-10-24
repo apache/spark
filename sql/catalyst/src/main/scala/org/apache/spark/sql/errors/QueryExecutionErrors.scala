@@ -362,12 +362,28 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "groupIndex" -> groupIndex.toString()))
   }
 
+  def invalidRegexpReplaceError(
+      source: String,
+      pattern: String,
+      replacement: String,
+      position: Int,
+      cause: Throwable): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_REGEXP_REPLACE",
+      messageParameters = Map(
+        "source" -> source,
+        "pattern" -> pattern,
+        "replacement" -> replacement,
+        "position" -> position.toString
+      ),
+      cause = cause
+    )
+  }
+
   def invalidUrlError(url: UTF8String, e: URISyntaxException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_URL",
-      messageParameters = Map(
-        "url" -> url.toString,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map("url" -> url.toString),
       cause = e)
   }
 
@@ -385,10 +401,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def negativeValueUnexpectedError(
-      frequencyExpression : Expression): SparkIllegalArgumentException = {
+      frequencyExpression: Expression, negativeValue: Long): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2013",
-      messageParameters = Map("frequencyExpression" -> frequencyExpression.sql))
+      errorClass = "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION",
+      messageParameters = Map(
+        "frequencyExpression" -> toSQLExpr(frequencyExpression),
+        "negativeValue" -> toSQLValue(negativeValue)))
   }
 
   def addNewFunctionMismatchedWithFunctionError(funcName: String): Throwable = {
@@ -1081,8 +1099,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def endOfIteratorError(): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2104",
-      messageParameters = Map.empty,
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> "End of the iterator."),
       cause = null)
   }
 
@@ -1141,8 +1159,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def statisticNotRecognizedError(stats: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2114",
-      messageParameters = Map("stats" -> stats))
+      errorClass = "UNRECOGNIZED_STATISTIC",
+      messageParameters = Map("stats" -> toSQLId(stats)))
   }
 
   def unknownColumnError(unknownColumn: String): SparkIllegalArgumentException = {
@@ -1398,10 +1416,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "mapType" -> MapType.simpleString))
   }
 
-  def malformedRecordsDetectedInSchemaInferenceError(e: Throwable): Throwable = {
+  def malformedRecordsDetectedInSchemaInferenceError(e: Throwable, badRecord: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       messageParameters = Map(
+        "badRecord" -> badRecord,
         "failFastMode" -> FailFastMode.name),
       cause = e)
   }
