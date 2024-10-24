@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -253,6 +253,21 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           inputSet
             .map(s => new GenericArrayData(Array(UTF8String.fromString(s))))
             .asInstanceOf[Set[Any]]),
+        result)
+      checkEvaluation(
+        InSet(
+          Literal.create(
+            if (elem == null) null
+            else new ArrayBasedMapData(
+              new GenericArrayData(Array(UTF8String.fromString(elem))),
+              new GenericArrayData(Array(UTF8String.fromString("aBc")))),
+            MapType(StringType(collation), StringType("UTF8_BINARY"))),
+          inputSet
+            .map { s =>
+              new ArrayBasedMapData(
+                new GenericArrayData(Array(UTF8String.fromString(s))),
+                new GenericArrayData(Array(UTF8String.fromString("aBc"))))
+            }.asInstanceOf[Set[Any]]),
         result)
     }
   }
