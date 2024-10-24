@@ -310,6 +310,10 @@ private case class PostgresDialect()
         case _ => super.visitExtract(field, source)
       }
     }
+
+    override def visitBinaryArithmetic(name: String, l: String, r: String): String = {
+      l + " " + name.replace('^', '#') + " " + r
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -402,28 +406,6 @@ private case class PostgresDialect()
               log"Failed to get array dimension for column ${MDC(COLUMN_NAME, columnName)}", e)
         }
       case _ =>
-    }
-  }
-
-  override def compileExpression(expr: Expression): Option[String] = {
-    val builder = new PostgresSQLBuilder()
-    try {
-      Some(builder.build(expr))
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Error occurs while compiling V2 expression", e)
-        None
-    }
-  }
-
-  private class PostgresSQLBuilder extends JDBCSQLBuilder {
-    override def build(expr: Expression): String = {
-      expr match {
-        // Postgres uses '#' for xor, rather then '^'.
-        case e: GeneralScalarExpression if e.name() == "^" =>
-          visitBinaryArithmetic("#", inputToSQL(e.children().head), inputToSQL(e.children()(1)))
-        case _ => super.build(expr)
-      }
     }
   }
 }
