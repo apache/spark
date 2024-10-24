@@ -167,6 +167,7 @@ case class TransformWithStateInPandasExec(
             valueSchema = schemaForValueRow,
             NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
             version = stateInfo.get.storeVersion,
+            stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
             useColumnFamilies = true,
             storeConf = storeConf,
             hadoopConf = hadoopConfBroadcast.value.value

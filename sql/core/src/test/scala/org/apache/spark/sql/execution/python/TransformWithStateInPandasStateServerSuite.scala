@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, Exists, Get, GetValue, HandleState, IsFirstBatch, Keys, ListStateCall, ListStateGet, ListStatePut, MapStateCall, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, UpdateValue, Values, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, Exists, Get, GetValue, HandleState, IsFirstBatch, Keys, ListStateCall, ListStateGet, ListStatePut, MapStateCall, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, UpdateValue, UtilsCallCommand, Values, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -256,7 +256,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3), getIntegerRow(4)))
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap,
+      maxRecordsPerBatch, false, outputStream, valueStateMap,
       transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, iteratorMap)
     // First call should send 2 records.
     stateServer.handleListStateRequest(message)
@@ -279,7 +279,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap,
+      maxRecordsPerBatch, false, outputStream, valueStateMap,
       transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, iteratorMap)
     when(listState.get()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3)))
     stateServer.handleListStateRequest(message)
@@ -374,8 +374,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         (getIntegerRow(3), getIntegerRow(3)), (getIntegerRow(4), getIntegerRow(4))))
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
-      arrowStreamWriter, listStateMap, null, mapStateMap, keyValueIteratorMap)
+      maxRecordsPerBatch, false, outputStream, valueStateMap,
+      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, null,
+      mapStateMap, keyValueIteratorMap)
     // First call should send 2 records.
     stateServer.handleMapStateRequest(message)
     verify(mapState, times(0)).iterator()
@@ -397,8 +398,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val keyValueIteratorMap: mutable.HashMap[String, Iterator[(Row, Row)]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
-      arrowStreamWriter, listStateMap, null, mapStateMap, keyValueIteratorMap)
+      maxRecordsPerBatch, false, outputStream, valueStateMap,
+      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap,
+      null, mapStateMap, keyValueIteratorMap)
     when(mapState.iterator()).thenReturn(Iterator((getIntegerRow(1), getIntegerRow(1)),
       (getIntegerRow(2), getIntegerRow(2)), (getIntegerRow(3), getIntegerRow(3))))
     stateServer.handleMapStateRequest(message)
@@ -425,8 +427,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
-      arrowStreamWriter, listStateMap, iteratorMap, mapStateMap)
+      maxRecordsPerBatch, false, outputStream, valueStateMap,
+      transformWithStateInPandasDeserializer, arrowStreamWriter,
+      listStateMap, iteratorMap, mapStateMap)
     when(mapState.keys()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3)))
     stateServer.handleMapStateRequest(message)
     verify(mapState).keys()
@@ -452,8 +455,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
-      arrowStreamWriter, listStateMap, iteratorMap, mapStateMap)
+      maxRecordsPerBatch, false, outputStream, valueStateMap,
+      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap,
+      iteratorMap, mapStateMap)
     when(mapState.values()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2),
       getIntegerRow(3)))
     stateServer.handleMapStateRequest(message)

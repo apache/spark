@@ -524,11 +524,11 @@ class PandasGroupedOpsMixin:
             UDF for TWS operator with non-empty initial states. Possible input combinations
             of inputRows and initialStates iterator:
             - Both `inputRows` and `initialStates` are non-empty: for the given key, both input rows
-              and initial states contains the grouping key.
+              and initial states contains the grouping key, both input rows and initial states contains data.
             - `InitialStates` is non-empty, while `initialStates` is empty. For the given key, only
-              initial states contains the key, and it is first batch.
-            - `initialStates` is empty, while `inputRows` is not empty. For the given key, only inputRows
-              contains the key, and it is first batch.
+              initial states contains the grouping key and data, and it is first batch.
+            - `initialStates` is empty, while `inputRows` is not empty. For the given grouping key, only inputRows
+              contains the grouping key and data, and it is first batch.
             - `initialStates` is None, while `inputRows` is not empty. This is not first batch. `initialStates`
               is initialized to the positional value as None.
             """
@@ -543,15 +543,9 @@ class PandasGroupedOpsMixin:
             # only process initial state if first batch
             is_first_batch = statefulProcessorApiClient.is_first_batch()
             if is_first_batch and initialStates is not None:
-                seen_init_state_on_key = False
                 for cur_initial_state in initialStates:
-                    if seen_init_state_on_key:
-                        raise Exception(f"TransformWithStateWithInitState: Cannot have more "
-                                        f"than one row in the initial states for the same key. "
-                                        f"Grouping key: {key}.")
                     statefulProcessorApiClient.set_implicit_key(key)
                     statefulProcessor.handleInitialState(key, cur_initial_state)
-                    seen_init_state_on_key = True
 
             # if we don't have input rows for the given key but only have initial state
             # for the grouping key, the inputRows iterator could be empty
