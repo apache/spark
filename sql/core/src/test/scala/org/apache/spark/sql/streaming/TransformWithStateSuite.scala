@@ -395,7 +395,7 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
  * Class that adds tests for transformWithState stateful streaming operator
  */
 class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
 

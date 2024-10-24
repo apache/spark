@@ -351,6 +351,8 @@ private[spark] object LogKeys {
   case object LABEL_COLUMN extends LogKey
   case object LARGEST_CLUSTER_INDEX extends LogKey
   case object LAST_ACCESS_TIME extends LogKey
+  case object LAST_COMMITTED_CHECKPOINT_ID extends LogKey
+  case object LAST_COMMIT_BASED_CHECKPOINT_ID extends LogKey
   case object LAST_VALID_TIME extends LogKey
   case object LATEST_BATCH_ID extends LogKey
   case object LATEST_COMMITTED_BATCH_ID extends LogKey
@@ -359,8 +361,10 @@ private[spark] object LogKeys {
   case object LEFT_EXPR extends LogKey
   case object LEFT_LOGICAL_PLAN_STATS_SIZE_IN_BYTES extends LogKey
   case object LINE extends LogKey
+  case object LINEAGE extends LogKey
   case object LINE_NUM extends LogKey
   case object LISTENER extends LogKey
+  case object LOADED_CHECKPOINT_ID extends LogKey
   case object LOADED_VERSION extends LogKey
   case object LOAD_FACTOR extends LogKey
   case object LOAD_TIME extends LogKey
