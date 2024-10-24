@@ -22,6 +22,7 @@ import java.nio.file.attribute.BasicFileAttributes
 import java.sql.DriverManager
 import java.util
 
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -189,7 +190,8 @@ class ProtoToParsedPlanTestSuite
       val relation = readRelation(file)
       val planner = new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(spark))
       val catalystPlan =
-        analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
+        analyzer.executeAndCheck(planner.transformRelation(
+          normalizeRelation(relation)), new QueryPlanningTracker)
       val finalAnalyzedPlan = {
         object Helper extends RuleExecutor[LogicalPlan] {
           val batches =
@@ -258,5 +260,36 @@ class ProtoToParsedPlanTestSuite
     finally {
       writer.close()
     }
+  }
+
+  protected def normalizeRelation(rel: proto.Relation): proto.Relation = {
+    rel.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.READ =>
+        proto.Relation.newBuilder(rel).setRead(normalizeDataSource(rel.getRead)).build()
+      case _ => rel
+    }
+  }
+
+  private def normalizeDataSource(read: proto.Read): proto.Read = {
+    read.getReadTypeCase match {
+      case proto.Read.ReadTypeCase.DATA_SOURCE if !read.getIsStreaming =>
+        if (read.getDataSource.getFormat != "jdbc" && read.getDataSource.getPredicatesCount == 0) {
+          if (read.getDataSource.getPathsCount != 0) {
+            val dataSourceBuilder = proto.Read.DataSource.newBuilder(read.getDataSource)
+            read.getDataSource.getPathsList.asScala.toSeq.map(path => normalizePath(path)).
+              zipWithIndex.foreach { case (newPath, index) =>
+                dataSourceBuilder.setPaths(index, newPath)
+            }
+            return proto.Read.newBuilder(read).setDataSource(dataSourceBuilder.build()).build()
+          }
+        }
+      case _ =>
+    }
+    read
+  }
+
+  private def normalizePath(path: String): String = {
+    val paths: Seq[String] = path.split(java.io.File.separator).toSeq
+    getWorkspaceFilePath("sql", "connect" +: paths.slice(1, paths.size): _*).toFile.getAbsolutePath
   }
 }
