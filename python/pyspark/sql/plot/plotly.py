@@ -174,7 +174,7 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
     import plotly.graph_objs as go
 
     bins = kwargs.get("bins", 10)
-    colnames = (kwargs.pop("column", None), data)
+    colnames = process_column_param(kwargs.pop("column", None), data)
     numeric_data = data.select(*colnames)  # type: ignore
     bins = PySparkHistogramPlotBase.get_bins(numeric_data, bins)
     assert len(bins) > 2, "the number of buckets must be higher than 2."
