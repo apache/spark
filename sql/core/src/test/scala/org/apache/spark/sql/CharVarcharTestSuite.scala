@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
-import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -767,7 +767,7 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       def checkSchema(df: DataFrame): Unit = {
         val schemas = df.queryExecution.analyzed.collect {
           case l: LogicalRelation => l.relation.schema
-          case d: DataSourceV2Relation => d.table.schema()
+          case d: DataSourceV2Relation => CatalogV2Util.v2ColumnsToStructType(d.table.columns())
         }
         assert(schemas.length == 1)
         assert(schemas.head.map(_.dataType) == Seq(StringType))

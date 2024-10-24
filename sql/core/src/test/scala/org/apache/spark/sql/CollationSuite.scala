@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
@@ -884,7 +884,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       assert(table.columns().head.dataType() == StringType(collationId))
 
       val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-      checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+      checkAnswer(spark.internalCreateDataFrame(rdd,
+        CatalogV2Util.v2ColumnsToStructType(table.columns())), Seq.empty)
 
       sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
 
