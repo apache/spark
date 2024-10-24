@@ -233,6 +233,8 @@ class TransformWithStateInPandasStateServer(
           valueStates.remove(stateName)
         } else if (listStates.contains(stateName)) {
           listStates.remove(stateName)
+        } else if (mapStates.contains(stateName)) {
+          mapStates.remove(stateName)
         }
         sendResponse(0)
       case _ =>
