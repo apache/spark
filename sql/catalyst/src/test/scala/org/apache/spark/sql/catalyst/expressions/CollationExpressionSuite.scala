@@ -244,30 +244,22 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
             StringType(collation)),
           inputSet.map(UTF8String.fromString).asInstanceOf[Set[Any]]),
         result)
+      def arr(s: String): GenericArrayData = new GenericArrayData(Array(UTF8String.fromString(s)))
       checkEvaluation(
         InSet(
           Literal.create(
-            if (elem == null) null
-            else new GenericArrayData(Array(UTF8String.fromString(elem))),
+            if (elem == null) null else arr(elem),
             ArrayType(StringType(collation))),
-          inputSet
-            .map(s => new GenericArrayData(Array(UTF8String.fromString(s))))
-            .asInstanceOf[Set[Any]]),
+          inputSet.map(arr).asInstanceOf[Set[Any]]),
         result)
       checkEvaluation(
         InSet(
           Literal.create(
             if (elem == null) null
-            else new ArrayBasedMapData(
-              new GenericArrayData(Array(UTF8String.fromString(elem))),
-              new GenericArrayData(Array(UTF8String.fromString("aBc")))),
+            else new ArrayBasedMapData(arr(elem), arr("aBc")),
             MapType(StringType(collation), StringType("UTF8_BINARY"))),
           inputSet
-            .map { s =>
-              new ArrayBasedMapData(
-                new GenericArrayData(Array(UTF8String.fromString(s))),
-                new GenericArrayData(Array(UTF8String.fromString("aBc"))))
-            }.asInstanceOf[Set[Any]]),
+            .map(s => new ArrayBasedMapData(arr(s), arr("aBc"))).asInstanceOf[Set[Any]]),
         result)
     }
   }
