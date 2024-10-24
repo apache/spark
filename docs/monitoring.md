@@ -350,10 +350,10 @@ Security options for the Spark History Server are covered more detail in the
   </tr>
   <tr>
     <td>spark.history.store.serializer</td>
-    <td>JSON</td>
+    <td>PROTOBUF</td>
     <td>
-        Serializer for writing/reading in-memory UI objects to/from disk-based KV Store; JSON or PROTOBUF.
-        JSON serializer is the only choice before Spark 3.4.0, thus it is the default value.
+        Serializer for writing/reading in-memory UI objects to/from disk-based KV Store; JSON or PROTOBUF (default).
+        JSON serializer was the only choice before Spark 3.4.0.
         PROTOBUF serializer is fast and compact, compared to the JSON serializer.
     </td>
     <td>3.4.0</td>
