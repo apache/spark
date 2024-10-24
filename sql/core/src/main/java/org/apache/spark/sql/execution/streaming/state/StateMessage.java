@@ -48,9 +48,13 @@ public final class StateMessage {
      */
     DATA_PROCESSED(2),
     /**
-     * <code>CLOSED = 3;</code>
+     * <code>TIMER_PROCESSED = 3;</code>
      */
-    CLOSED(3),
+    TIMER_PROCESSED(3),
+    /**
+     * <code>CLOSED = 4;</code>
+     */
+    CLOSED(4),
     UNRECOGNIZED(-1),
     ;
 
@@ -67,9 +71,13 @@ public final class StateMessage {
      */
     public static final int DATA_PROCESSED_VALUE = 2;
     /**
-     * <code>CLOSED = 3;</code>
+     * <code>TIMER_PROCESSED = 3;</code>
      */
-    public static final int CLOSED_VALUE = 3;
+    public static final int TIMER_PROCESSED_VALUE = 3;
+    /**
+     * <code>CLOSED = 4;</code>
+     */
+    public static final int CLOSED_VALUE = 4;
 
 
     public final int getNumber() {
@@ -99,7 +107,8 @@ public final class StateMessage {
         case 0: return CREATED;
         case 1: return INITIALIZED;
         case 2: return DATA_PROCESSED;
-        case 3: return CLOSED;
+        case 3: return TIMER_PROCESSED;
+        case 4: return CLOSED;
         default: return null;
       }
     }
@@ -211,6 +220,21 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder getImplicitGroupingKeyRequestOrBuilder();
 
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+     * @return Whether the timerRequest field is set.
+     */
+    boolean hasTimerRequest();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+     * @return The timerRequest.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest getTimerRequest();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequestOrBuilder getTimerRequestOrBuilder();
+
     public org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest.MethodCase getMethodCase();
   }
   /**
@@ -261,6 +285,7 @@ public final class StateMessage {
       STATEFULPROCESSORCALL(2),
       STATEVARIABLEREQUEST(3),
       IMPLICITGROUPINGKEYREQUEST(4),
+      TIMERREQUEST(5),
       METHOD_NOT_SET(0);
       private final int value;
       private MethodCase(int value) {
@@ -281,6 +306,7 @@ public final class StateMessage {
           case 2: return STATEFULPROCESSORCALL;
           case 3: return STATEVARIABLEREQUEST;
           case 4: return IMPLICITGROUPINGKEYREQUEST;
+          case 5: return TIMERREQUEST;
           case 0: return METHOD_NOT_SET;
           default: return null;
         }
@@ -400,6 +426,37 @@ public final class StateMessage {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest.getDefaultInstance();
     }
 
+    public static final int TIMERREQUEST_FIELD_NUMBER = 5;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+     * @return Whether the timerRequest field is set.
+     */
+    @java.lang.Override
+    public boolean hasTimerRequest() {
+      return methodCase_ == 5;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+     * @return The timerRequest.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest getTimerRequest() {
+      if (methodCase_ == 5) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequestOrBuilder getTimerRequestOrBuilder() {
+      if (methodCase_ == 5) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -426,6 +483,9 @@ public final class StateMessage {
       if (methodCase_ == 4) {
         output.writeMessage(4, (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_);
       }
+      if (methodCase_ == 5) {
+        output.writeMessage(5, (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) method_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -450,6 +510,10 @@ public final class StateMessage {
       if (methodCase_ == 4) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(4, (org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest) method_);
+      }
+      if (methodCase_ == 5) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(5, (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) method_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -482,6 +546,10 @@ public final class StateMessage {
           if (!getImplicitGroupingKeyRequest()
               .equals(other.getImplicitGroupingKeyRequest())) return false;
           break;
+        case 5:
+          if (!getTimerRequest()
+              .equals(other.getTimerRequest())) return false;
+          break;
         case 0:
         default:
       }
@@ -510,6 +578,10 @@ public final class StateMessage {
         case 4:
           hash = (37 * hash) + IMPLICITGROUPINGKEYREQUEST_FIELD_NUMBER;
           hash = (53 * hash) + getImplicitGroupingKeyRequest().hashCode();
+          break;
+        case 5:
+          hash = (37 * hash) + TIMERREQUEST_FIELD_NUMBER;
+          hash = (53 * hash) + getTimerRequest().hashCode();
           break;
         case 0:
         default:
@@ -653,6 +725,9 @@ public final class StateMessage {
         if (implicitGroupingKeyRequestBuilder_ != null) {
           implicitGroupingKeyRequestBuilder_.clear();
         }
+        if (timerRequestBuilder_ != null) {
+          timerRequestBuilder_.clear();
+        }
         methodCase_ = 0;
         method_ = null;
         return this;
@@ -701,6 +776,13 @@ public final class StateMessage {
             result.method_ = method_;
           } else {
             result.method_ = implicitGroupingKeyRequestBuilder_.build();
+          }
+        }
+        if (methodCase_ == 5) {
+          if (timerRequestBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = timerRequestBuilder_.build();
           }
         }
         result.methodCase_ = methodCase_;
@@ -768,6 +850,10 @@ public final class StateMessage {
             mergeImplicitGroupingKeyRequest(other.getImplicitGroupingKeyRequest());
             break;
           }
+          case TIMERREQUEST: {
+            mergeTimerRequest(other.getTimerRequest());
+            break;
+          }
           case METHOD_NOT_SET: {
             break;
           }
@@ -824,6 +910,13 @@ public final class StateMessage {
                 methodCase_ = 4;
                 break;
               } // case 34
+              case 42: {
+                input.readMessage(
+                    getTimerRequestFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 5;
+                break;
+              } // case 42
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -1310,6 +1403,148 @@ public final class StateMessage {
         methodCase_ = 4;
         onChanged();;
         return implicitGroupingKeyRequestBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequestOrBuilder> timerRequestBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       * @return Whether the timerRequest field is set.
+       */
+      @java.lang.Override
+      public boolean hasTimerRequest() {
+        return methodCase_ == 5;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       * @return The timerRequest.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest getTimerRequest() {
+        if (timerRequestBuilder_ == null) {
+          if (methodCase_ == 5) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance();
+        } else {
+          if (methodCase_ == 5) {
+            return timerRequestBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       */
+      public Builder setTimerRequest(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest value) {
+        if (timerRequestBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          timerRequestBuilder_.setMessage(value);
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       */
+      public Builder setTimerRequest(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.Builder builderForValue) {
+        if (timerRequestBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          timerRequestBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       */
+      public Builder mergeTimerRequest(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest value) {
+        if (timerRequestBuilder_ == null) {
+          if (methodCase_ == 5 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 5) {
+            timerRequestBuilder_.mergeFrom(value);
+          } else {
+            timerRequestBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       */
+      public Builder clearTimerRequest() {
+        if (timerRequestBuilder_ == null) {
+          if (methodCase_ == 5) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 5) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          timerRequestBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.Builder getTimerRequestBuilder() {
+        return getTimerRequestFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequestOrBuilder getTimerRequestOrBuilder() {
+        if ((methodCase_ == 5) && (timerRequestBuilder_ != null)) {
+          return timerRequestBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 5) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerRequest timerRequest = 5;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequestOrBuilder> 
+          getTimerRequestFieldBuilder() {
+        if (timerRequestBuilder_ == null) {
+          if (!(methodCase_ == 5)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance();
+          }
+          timerRequestBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequestOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 5;
+        onChanged();;
+        return timerRequestBuilder_;
       }
       @java.lang.Override
       public final Builder setUnknownFields(
@@ -2068,6 +2303,696 @@ public final class StateMessage {
 
   }
 
+  public interface StateResponseWithLongTypeValOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.StateResponseWithLongTypeVal)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>int32 statusCode = 1;</code>
+     * @return The statusCode.
+     */
+    int getStatusCode();
+
+    /**
+     * <code>string errorMessage = 2;</code>
+     * @return The errorMessage.
+     */
+    java.lang.String getErrorMessage();
+    /**
+     * <code>string errorMessage = 2;</code>
+     * @return The bytes for errorMessage.
+     */
+    com.google.protobuf.ByteString
+        getErrorMessageBytes();
+
+    /**
+     * <code>int64 value = 3;</code>
+     * @return The value.
+     */
+    long getValue();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateResponseWithLongTypeVal}
+   */
+  public static final class StateResponseWithLongTypeVal extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.StateResponseWithLongTypeVal)
+      StateResponseWithLongTypeValOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use StateResponseWithLongTypeVal.newBuilder() to construct.
+    private StateResponseWithLongTypeVal(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private StateResponseWithLongTypeVal() {
+      errorMessage_ = "";
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new StateResponseWithLongTypeVal();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal.class, org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal.Builder.class);
+    }
+
+    public static final int STATUSCODE_FIELD_NUMBER = 1;
+    private int statusCode_;
+    /**
+     * <code>int32 statusCode = 1;</code>
+     * @return The statusCode.
+     */
+    @java.lang.Override
+    public int getStatusCode() {
+      return statusCode_;
+    }
+
+    public static final int ERRORMESSAGE_FIELD_NUMBER = 2;
+    private volatile java.lang.Object errorMessage_;
+    /**
+     * <code>string errorMessage = 2;</code>
+     * @return The errorMessage.
+     */
+    @java.lang.Override
+    public java.lang.String getErrorMessage() {
+      java.lang.Object ref = errorMessage_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        errorMessage_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string errorMessage = 2;</code>
+     * @return The bytes for errorMessage.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getErrorMessageBytes() {
+      java.lang.Object ref = errorMessage_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        errorMessage_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    public static final int VALUE_FIELD_NUMBER = 3;
+    private long value_;
+    /**
+     * <code>int64 value = 3;</code>
+     * @return The value.
+     */
+    @java.lang.Override
+    public long getValue() {
+      return value_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (statusCode_ != 0) {
+        output.writeInt32(1, statusCode_);
+      }
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(errorMessage_)) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 2, errorMessage_);
+      }
+      if (value_ != 0L) {
+        output.writeInt64(3, value_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (statusCode_ != 0) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(1, statusCode_);
+      }
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(errorMessage_)) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, errorMessage_);
+      }
+      if (value_ != 0L) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(3, value_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal other = (org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal) obj;
+
+      if (getStatusCode()
+          != other.getStatusCode()) return false;
+      if (!getErrorMessage()
+          .equals(other.getErrorMessage())) return false;
+      if (getValue()
+          != other.getValue()) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + STATUSCODE_FIELD_NUMBER;
+      hash = (53 * hash) + getStatusCode();
+      hash = (37 * hash) + ERRORMESSAGE_FIELD_NUMBER;
+      hash = (53 * hash) + getErrorMessage().hashCode();
+      hash = (37 * hash) + VALUE_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+          getValue());
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateResponseWithLongTypeVal}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.StateResponseWithLongTypeVal)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeValOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal.class, org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        statusCode_ = 0;
+
+        errorMessage_ = "";
+
+        value_ = 0L;
+
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal result = new org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal(this);
+        result.statusCode_ = statusCode_;
+        result.errorMessage_ = errorMessage_;
+        result.value_ = value_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal.getDefaultInstance()) return this;
+        if (other.getStatusCode() != 0) {
+          setStatusCode(other.getStatusCode());
+        }
+        if (!other.getErrorMessage().isEmpty()) {
+          errorMessage_ = other.errorMessage_;
+          onChanged();
+        }
+        if (other.getValue() != 0L) {
+          setValue(other.getValue());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 8: {
+                statusCode_ = input.readInt32();
+
+                break;
+              } // case 8
+              case 18: {
+                errorMessage_ = input.readStringRequireUtf8();
+
+                break;
+              } // case 18
+              case 24: {
+                value_ = input.readInt64();
+
+                break;
+              } // case 24
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+
+      private int statusCode_ ;
+      /**
+       * <code>int32 statusCode = 1;</code>
+       * @return The statusCode.
+       */
+      @java.lang.Override
+      public int getStatusCode() {
+        return statusCode_;
+      }
+      /**
+       * <code>int32 statusCode = 1;</code>
+       * @param value The statusCode to set.
+       * @return This builder for chaining.
+       */
+      public Builder setStatusCode(int value) {
+        
+        statusCode_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>int32 statusCode = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearStatusCode() {
+        
+        statusCode_ = 0;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object errorMessage_ = "";
+      /**
+       * <code>string errorMessage = 2;</code>
+       * @return The errorMessage.
+       */
+      public java.lang.String getErrorMessage() {
+        java.lang.Object ref = errorMessage_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          errorMessage_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string errorMessage = 2;</code>
+       * @return The bytes for errorMessage.
+       */
+      public com.google.protobuf.ByteString
+          getErrorMessageBytes() {
+        java.lang.Object ref = errorMessage_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          errorMessage_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string errorMessage = 2;</code>
+       * @param value The errorMessage to set.
+       * @return This builder for chaining.
+       */
+      public Builder setErrorMessage(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        errorMessage_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string errorMessage = 2;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearErrorMessage() {
+        
+        errorMessage_ = getDefaultInstance().getErrorMessage();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string errorMessage = 2;</code>
+       * @param value The bytes for errorMessage to set.
+       * @return This builder for chaining.
+       */
+      public Builder setErrorMessageBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        errorMessage_ = value;
+        onChanged();
+        return this;
+      }
+
+      private long value_ ;
+      /**
+       * <code>int64 value = 3;</code>
+       * @return The value.
+       */
+      @java.lang.Override
+      public long getValue() {
+        return value_;
+      }
+      /**
+       * <code>int64 value = 3;</code>
+       * @param value The value to set.
+       * @return This builder for chaining.
+       */
+      public Builder setValue(long value) {
+        
+        value_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>int64 value = 3;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearValue() {
+        
+        value_ = 0L;
+        onChanged();
+        return this;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.StateResponseWithLongTypeVal)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.StateResponseWithLongTypeVal)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<StateResponseWithLongTypeVal>
+        PARSER = new com.google.protobuf.AbstractParser<StateResponseWithLongTypeVal>() {
+      @java.lang.Override
+      public StateResponseWithLongTypeVal parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<StateResponseWithLongTypeVal> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<StateResponseWithLongTypeVal> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseWithLongTypeVal getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface StatefulProcessorCallOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.StatefulProcessorCall)
       com.google.protobuf.MessageOrBuilder {
@@ -2132,6 +3057,21 @@ public final class StateMessage {
      */
     org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder getGetMapStateOrBuilder();
 
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+     * @return Whether the timerStateCall field is set.
+     */
+    boolean hasTimerStateCall();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+     * @return The timerStateCall.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand getTimerStateCall();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommandOrBuilder getTimerStateCallOrBuilder();
+
     public org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall.MethodCase getMethodCase();
   }
   /**
@@ -2183,6 +3123,7 @@ public final class StateMessage {
       GETVALUESTATE(2),
       GETLISTSTATE(3),
       GETMAPSTATE(4),
+      TIMERSTATECALL(5),
       METHOD_NOT_SET(0);
       private final int value;
       private MethodCase(int value) {
@@ -2204,6 +3145,7 @@ public final class StateMessage {
           case 2: return GETVALUESTATE;
           case 3: return GETLISTSTATE;
           case 4: return GETMAPSTATE;
+          case 5: return TIMERSTATECALL;
           case 0: return METHOD_NOT_SET;
           default: return null;
         }
@@ -2343,6 +3285,37 @@ public final class StateMessage {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand.getDefaultInstance();
     }
 
+    public static final int TIMERSTATECALL_FIELD_NUMBER = 5;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+     * @return Whether the timerStateCall field is set.
+     */
+    @java.lang.Override
+    public boolean hasTimerStateCall() {
+      return methodCase_ == 5;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+     * @return The timerStateCall.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand getTimerStateCall() {
+      if (methodCase_ == 5) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommandOrBuilder getTimerStateCallOrBuilder() {
+      if (methodCase_ == 5) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -2369,6 +3342,9 @@ public final class StateMessage {
       if (methodCase_ == 4) {
         output.writeMessage(4, (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_);
       }
+      if (methodCase_ == 5) {
+        output.writeMessage(5, (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) method_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -2393,6 +3369,10 @@ public final class StateMessage {
       if (methodCase_ == 4) {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(4, (org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand) method_);
+      }
+      if (methodCase_ == 5) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(5, (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) method_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -2427,6 +3407,10 @@ public final class StateMessage {
           if (!getGetMapState()
               .equals(other.getGetMapState())) return false;
           break;
+        case 5:
+          if (!getTimerStateCall()
+              .equals(other.getTimerStateCall())) return false;
+          break;
         case 0:
         default:
       }
@@ -2457,6 +3441,10 @@ public final class StateMessage {
         case 4:
           hash = (37 * hash) + GETMAPSTATE_FIELD_NUMBER;
           hash = (53 * hash) + getGetMapState().hashCode();
+          break;
+        case 5:
+          hash = (37 * hash) + TIMERSTATECALL_FIELD_NUMBER;
+          hash = (53 * hash) + getTimerStateCall().hashCode();
           break;
         case 0:
         default:
@@ -2601,6 +3589,9 @@ public final class StateMessage {
         if (getMapStateBuilder_ != null) {
           getMapStateBuilder_.clear();
         }
+        if (timerStateCallBuilder_ != null) {
+          timerStateCallBuilder_.clear();
+        }
         methodCase_ = 0;
         method_ = null;
         return this;
@@ -2655,6 +3646,13 @@ public final class StateMessage {
             result.method_ = method_;
           } else {
             result.method_ = getMapStateBuilder_.build();
+          }
+        }
+        if (methodCase_ == 5) {
+          if (timerStateCallBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = timerStateCallBuilder_.build();
           }
         }
         result.methodCase_ = methodCase_;
@@ -2723,6 +3721,10 @@ public final class StateMessage {
             mergeGetMapState(other.getGetMapState());
             break;
           }
+          case TIMERSTATECALL: {
+            mergeTimerStateCall(other.getTimerStateCall());
+            break;
+          }
           case METHOD_NOT_SET: {
             break;
           }
@@ -2781,6 +3783,13 @@ public final class StateMessage {
                 methodCase_ = 4;
                 break;
               } // case 34
+              case 42: {
+                input.readMessage(
+                    getTimerStateCallFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 5;
+                break;
+              } // case 42
               default: {
                 if (!super.parseUnknownField(input, extensionRegistry, tag)) {
                   done = true; // was an endgroup tag
@@ -3378,6 +4387,148 @@ public final class StateMessage {
         methodCase_ = 4;
         onChanged();;
         return getMapStateBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommandOrBuilder> timerStateCallBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       * @return Whether the timerStateCall field is set.
+       */
+      @java.lang.Override
+      public boolean hasTimerStateCall() {
+        return methodCase_ == 5;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       * @return The timerStateCall.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand getTimerStateCall() {
+        if (timerStateCallBuilder_ == null) {
+          if (methodCase_ == 5) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance();
+        } else {
+          if (methodCase_ == 5) {
+            return timerStateCallBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       */
+      public Builder setTimerStateCall(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand value) {
+        if (timerStateCallBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          timerStateCallBuilder_.setMessage(value);
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       */
+      public Builder setTimerStateCall(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.Builder builderForValue) {
+        if (timerStateCallBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          timerStateCallBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       */
+      public Builder mergeTimerStateCall(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand value) {
+        if (timerStateCallBuilder_ == null) {
+          if (methodCase_ == 5 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 5) {
+            timerStateCallBuilder_.mergeFrom(value);
+          } else {
+            timerStateCallBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 5;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       */
+      public Builder clearTimerStateCall() {
+        if (timerStateCallBuilder_ == null) {
+          if (methodCase_ == 5) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 5) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          timerStateCallBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.Builder getTimerStateCallBuilder() {
+        return getTimerStateCallFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommandOrBuilder getTimerStateCallOrBuilder() {
+        if ((methodCase_ == 5) && (timerStateCallBuilder_ != null)) {
+          return timerStateCallBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 5) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand timerStateCall = 5;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommandOrBuilder> 
+          getTimerStateCallFieldBuilder() {
+        if (timerStateCallBuilder_ == null) {
+          if (!(methodCase_ == 5)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance();
+          }
+          timerStateCallBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommandOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 5;
+        onChanged();;
+        return timerStateCallBuilder_;
       }
       @java.lang.Override
       public final Builder setUnknownFields(
@@ -5515,6 +6666,3123 @@ public final class StateMessage {
 
   }
 
+  public interface TimerRequestOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.TimerRequest)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+     * @return Whether the timerValueRequest field is set.
+     */
+    boolean hasTimerValueRequest();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+     * @return The timerValueRequest.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest getTimerValueRequest();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequestOrBuilder getTimerValueRequestOrBuilder();
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+     * @return Whether the expiryTimerRequest field is set.
+     */
+    boolean hasExpiryTimerRequest();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+     * @return The expiryTimerRequest.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest getExpiryTimerRequest();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequestOrBuilder getExpiryTimerRequestOrBuilder();
+
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.MethodCase getMethodCase();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.TimerRequest}
+   */
+  public static final class TimerRequest extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.TimerRequest)
+      TimerRequestOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use TimerRequest.newBuilder() to construct.
+    private TimerRequest(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private TimerRequest() {
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new TimerRequest();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.class, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.Builder.class);
+    }
+
+    private int methodCase_ = 0;
+    private java.lang.Object method_;
+    public enum MethodCase
+        implements com.google.protobuf.Internal.EnumLite,
+            com.google.protobuf.AbstractMessage.InternalOneOfEnum {
+      TIMERVALUEREQUEST(1),
+      EXPIRYTIMERREQUEST(2),
+      METHOD_NOT_SET(0);
+      private final int value;
+      private MethodCase(int value) {
+        this.value = value;
+      }
+      /**
+       * @param value The number of the enum to look for.
+       * @return The enum associated with the given number.
+       * @deprecated Use {@link #forNumber(int)} instead.
+       */
+      @java.lang.Deprecated
+      public static MethodCase valueOf(int value) {
+        return forNumber(value);
+      }
+
+      public static MethodCase forNumber(int value) {
+        switch (value) {
+          case 1: return TIMERVALUEREQUEST;
+          case 2: return EXPIRYTIMERREQUEST;
+          case 0: return METHOD_NOT_SET;
+          default: return null;
+        }
+      }
+      public int getNumber() {
+        return this.value;
+      }
+    };
+
+    public MethodCase
+    getMethodCase() {
+      return MethodCase.forNumber(
+          methodCase_);
+    }
+
+    public static final int TIMERVALUEREQUEST_FIELD_NUMBER = 1;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+     * @return Whether the timerValueRequest field is set.
+     */
+    @java.lang.Override
+    public boolean hasTimerValueRequest() {
+      return methodCase_ == 1;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+     * @return The timerValueRequest.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest getTimerValueRequest() {
+      if (methodCase_ == 1) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequestOrBuilder getTimerValueRequestOrBuilder() {
+      if (methodCase_ == 1) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance();
+    }
+
+    public static final int EXPIRYTIMERREQUEST_FIELD_NUMBER = 2;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+     * @return Whether the expiryTimerRequest field is set.
+     */
+    @java.lang.Override
+    public boolean hasExpiryTimerRequest() {
+      return methodCase_ == 2;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+     * @return The expiryTimerRequest.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest getExpiryTimerRequest() {
+      if (methodCase_ == 2) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequestOrBuilder getExpiryTimerRequestOrBuilder() {
+      if (methodCase_ == 2) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance();
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (methodCase_ == 1) {
+        output.writeMessage(1, (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) method_);
+      }
+      if (methodCase_ == 2) {
+        output.writeMessage(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) method_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (methodCase_ == 1) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(1, (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) method_);
+      }
+      if (methodCase_ == 2) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) method_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest other = (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) obj;
+
+      if (!getMethodCase().equals(other.getMethodCase())) return false;
+      switch (methodCase_) {
+        case 1:
+          if (!getTimerValueRequest()
+              .equals(other.getTimerValueRequest())) return false;
+          break;
+        case 2:
+          if (!getExpiryTimerRequest()
+              .equals(other.getExpiryTimerRequest())) return false;
+          break;
+        case 0:
+        default:
+      }
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      switch (methodCase_) {
+        case 1:
+          hash = (37 * hash) + TIMERVALUEREQUEST_FIELD_NUMBER;
+          hash = (53 * hash) + getTimerValueRequest().hashCode();
+          break;
+        case 2:
+          hash = (37 * hash) + EXPIRYTIMERREQUEST_FIELD_NUMBER;
+          hash = (53 * hash) + getExpiryTimerRequest().hashCode();
+          break;
+        case 0:
+        default:
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.TimerRequest}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.TimerRequest)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequestOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.class, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        if (timerValueRequestBuilder_ != null) {
+          timerValueRequestBuilder_.clear();
+        }
+        if (expiryTimerRequestBuilder_ != null) {
+          expiryTimerRequestBuilder_.clear();
+        }
+        methodCase_ = 0;
+        method_ = null;
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest result = new org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest(this);
+        if (methodCase_ == 1) {
+          if (timerValueRequestBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = timerValueRequestBuilder_.build();
+          }
+        }
+        if (methodCase_ == 2) {
+          if (expiryTimerRequestBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = expiryTimerRequestBuilder_.build();
+          }
+        }
+        result.methodCase_ = methodCase_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest.getDefaultInstance()) return this;
+        switch (other.getMethodCase()) {
+          case TIMERVALUEREQUEST: {
+            mergeTimerValueRequest(other.getTimerValueRequest());
+            break;
+          }
+          case EXPIRYTIMERREQUEST: {
+            mergeExpiryTimerRequest(other.getExpiryTimerRequest());
+            break;
+          }
+          case METHOD_NOT_SET: {
+            break;
+          }
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                input.readMessage(
+                    getTimerValueRequestFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 1;
+                break;
+              } // case 10
+              case 18: {
+                input.readMessage(
+                    getExpiryTimerRequestFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 2;
+                break;
+              } // case 18
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int methodCase_ = 0;
+      private java.lang.Object method_;
+      public MethodCase
+          getMethodCase() {
+        return MethodCase.forNumber(
+            methodCase_);
+      }
+
+      public Builder clearMethod() {
+        methodCase_ = 0;
+        method_ = null;
+        onChanged();
+        return this;
+      }
+
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequestOrBuilder> timerValueRequestBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       * @return Whether the timerValueRequest field is set.
+       */
+      @java.lang.Override
+      public boolean hasTimerValueRequest() {
+        return methodCase_ == 1;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       * @return The timerValueRequest.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest getTimerValueRequest() {
+        if (timerValueRequestBuilder_ == null) {
+          if (methodCase_ == 1) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance();
+        } else {
+          if (methodCase_ == 1) {
+            return timerValueRequestBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       */
+      public Builder setTimerValueRequest(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest value) {
+        if (timerValueRequestBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          timerValueRequestBuilder_.setMessage(value);
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       */
+      public Builder setTimerValueRequest(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.Builder builderForValue) {
+        if (timerValueRequestBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          timerValueRequestBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       */
+      public Builder mergeTimerValueRequest(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest value) {
+        if (timerValueRequestBuilder_ == null) {
+          if (methodCase_ == 1 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 1) {
+            timerValueRequestBuilder_.mergeFrom(value);
+          } else {
+            timerValueRequestBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       */
+      public Builder clearTimerValueRequest() {
+        if (timerValueRequestBuilder_ == null) {
+          if (methodCase_ == 1) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 1) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          timerValueRequestBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.Builder getTimerValueRequestBuilder() {
+        return getTimerValueRequestFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequestOrBuilder getTimerValueRequestOrBuilder() {
+        if ((methodCase_ == 1) && (timerValueRequestBuilder_ != null)) {
+          return timerValueRequestBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 1) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.TimerValueRequest timerValueRequest = 1;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequestOrBuilder> 
+          getTimerValueRequestFieldBuilder() {
+        if (timerValueRequestBuilder_ == null) {
+          if (!(methodCase_ == 1)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance();
+          }
+          timerValueRequestBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequestOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 1;
+        onChanged();;
+        return timerValueRequestBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequestOrBuilder> expiryTimerRequestBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       * @return Whether the expiryTimerRequest field is set.
+       */
+      @java.lang.Override
+      public boolean hasExpiryTimerRequest() {
+        return methodCase_ == 2;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       * @return The expiryTimerRequest.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest getExpiryTimerRequest() {
+        if (expiryTimerRequestBuilder_ == null) {
+          if (methodCase_ == 2) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance();
+        } else {
+          if (methodCase_ == 2) {
+            return expiryTimerRequestBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       */
+      public Builder setExpiryTimerRequest(org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest value) {
+        if (expiryTimerRequestBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          expiryTimerRequestBuilder_.setMessage(value);
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       */
+      public Builder setExpiryTimerRequest(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.Builder builderForValue) {
+        if (expiryTimerRequestBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          expiryTimerRequestBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       */
+      public Builder mergeExpiryTimerRequest(org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest value) {
+        if (expiryTimerRequestBuilder_ == null) {
+          if (methodCase_ == 2 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 2) {
+            expiryTimerRequestBuilder_.mergeFrom(value);
+          } else {
+            expiryTimerRequestBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       */
+      public Builder clearExpiryTimerRequest() {
+        if (expiryTimerRequestBuilder_ == null) {
+          if (methodCase_ == 2) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 2) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          expiryTimerRequestBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.Builder getExpiryTimerRequestBuilder() {
+        return getExpiryTimerRequestFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequestOrBuilder getExpiryTimerRequestOrBuilder() {
+        if ((methodCase_ == 2) && (expiryTimerRequestBuilder_ != null)) {
+          return expiryTimerRequestBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 2) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest expiryTimerRequest = 2;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequestOrBuilder> 
+          getExpiryTimerRequestFieldBuilder() {
+        if (expiryTimerRequestBuilder_ == null) {
+          if (!(methodCase_ == 2)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance();
+          }
+          expiryTimerRequestBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest, org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequestOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 2;
+        onChanged();;
+        return expiryTimerRequestBuilder_;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.TimerRequest)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.TimerRequest)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<TimerRequest>
+        PARSER = new com.google.protobuf.AbstractParser<TimerRequest>() {
+      @java.lang.Override
+      public TimerRequest parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<TimerRequest> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<TimerRequest> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerRequest getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface TimerValueRequestOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.TimerValueRequest)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+     * @return Whether the getProcessingTimer field is set.
+     */
+    boolean hasGetProcessingTimer();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+     * @return The getProcessingTimer.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime getGetProcessingTimer();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTimeOrBuilder getGetProcessingTimerOrBuilder();
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+     * @return Whether the getWatermark field is set.
+     */
+    boolean hasGetWatermark();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+     * @return The getWatermark.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark getGetWatermark();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermarkOrBuilder getGetWatermarkOrBuilder();
+
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.MethodCase getMethodCase();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.TimerValueRequest}
+   */
+  public static final class TimerValueRequest extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.TimerValueRequest)
+      TimerValueRequestOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use TimerValueRequest.newBuilder() to construct.
+    private TimerValueRequest(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private TimerValueRequest() {
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new TimerValueRequest();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.class, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.Builder.class);
+    }
+
+    private int methodCase_ = 0;
+    private java.lang.Object method_;
+    public enum MethodCase
+        implements com.google.protobuf.Internal.EnumLite,
+            com.google.protobuf.AbstractMessage.InternalOneOfEnum {
+      GETPROCESSINGTIMER(1),
+      GETWATERMARK(2),
+      METHOD_NOT_SET(0);
+      private final int value;
+      private MethodCase(int value) {
+        this.value = value;
+      }
+      /**
+       * @param value The number of the enum to look for.
+       * @return The enum associated with the given number.
+       * @deprecated Use {@link #forNumber(int)} instead.
+       */
+      @java.lang.Deprecated
+      public static MethodCase valueOf(int value) {
+        return forNumber(value);
+      }
+
+      public static MethodCase forNumber(int value) {
+        switch (value) {
+          case 1: return GETPROCESSINGTIMER;
+          case 2: return GETWATERMARK;
+          case 0: return METHOD_NOT_SET;
+          default: return null;
+        }
+      }
+      public int getNumber() {
+        return this.value;
+      }
+    };
+
+    public MethodCase
+    getMethodCase() {
+      return MethodCase.forNumber(
+          methodCase_);
+    }
+
+    public static final int GETPROCESSINGTIMER_FIELD_NUMBER = 1;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+     * @return Whether the getProcessingTimer field is set.
+     */
+    @java.lang.Override
+    public boolean hasGetProcessingTimer() {
+      return methodCase_ == 1;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+     * @return The getProcessingTimer.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime getGetProcessingTimer() {
+      if (methodCase_ == 1) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTimeOrBuilder getGetProcessingTimerOrBuilder() {
+      if (methodCase_ == 1) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance();
+    }
+
+    public static final int GETWATERMARK_FIELD_NUMBER = 2;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+     * @return Whether the getWatermark field is set.
+     */
+    @java.lang.Override
+    public boolean hasGetWatermark() {
+      return methodCase_ == 2;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+     * @return The getWatermark.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark getGetWatermark() {
+      if (methodCase_ == 2) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermarkOrBuilder getGetWatermarkOrBuilder() {
+      if (methodCase_ == 2) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance();
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (methodCase_ == 1) {
+        output.writeMessage(1, (org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) method_);
+      }
+      if (methodCase_ == 2) {
+        output.writeMessage(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) method_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (methodCase_ == 1) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(1, (org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) method_);
+      }
+      if (methodCase_ == 2) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) method_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest other = (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) obj;
+
+      if (!getMethodCase().equals(other.getMethodCase())) return false;
+      switch (methodCase_) {
+        case 1:
+          if (!getGetProcessingTimer()
+              .equals(other.getGetProcessingTimer())) return false;
+          break;
+        case 2:
+          if (!getGetWatermark()
+              .equals(other.getGetWatermark())) return false;
+          break;
+        case 0:
+        default:
+      }
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      switch (methodCase_) {
+        case 1:
+          hash = (37 * hash) + GETPROCESSINGTIMER_FIELD_NUMBER;
+          hash = (53 * hash) + getGetProcessingTimer().hashCode();
+          break;
+        case 2:
+          hash = (37 * hash) + GETWATERMARK_FIELD_NUMBER;
+          hash = (53 * hash) + getGetWatermark().hashCode();
+          break;
+        case 0:
+        default:
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.TimerValueRequest}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.TimerValueRequest)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequestOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.class, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        if (getProcessingTimerBuilder_ != null) {
+          getProcessingTimerBuilder_.clear();
+        }
+        if (getWatermarkBuilder_ != null) {
+          getWatermarkBuilder_.clear();
+        }
+        methodCase_ = 0;
+        method_ = null;
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest result = new org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest(this);
+        if (methodCase_ == 1) {
+          if (getProcessingTimerBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = getProcessingTimerBuilder_.build();
+          }
+        }
+        if (methodCase_ == 2) {
+          if (getWatermarkBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = getWatermarkBuilder_.build();
+          }
+        }
+        result.methodCase_ = methodCase_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest.getDefaultInstance()) return this;
+        switch (other.getMethodCase()) {
+          case GETPROCESSINGTIMER: {
+            mergeGetProcessingTimer(other.getGetProcessingTimer());
+            break;
+          }
+          case GETWATERMARK: {
+            mergeGetWatermark(other.getGetWatermark());
+            break;
+          }
+          case METHOD_NOT_SET: {
+            break;
+          }
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                input.readMessage(
+                    getGetProcessingTimerFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 1;
+                break;
+              } // case 10
+              case 18: {
+                input.readMessage(
+                    getGetWatermarkFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 2;
+                break;
+              } // case 18
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int methodCase_ = 0;
+      private java.lang.Object method_;
+      public MethodCase
+          getMethodCase() {
+        return MethodCase.forNumber(
+            methodCase_);
+      }
+
+      public Builder clearMethod() {
+        methodCase_ = 0;
+        method_ = null;
+        onChanged();
+        return this;
+      }
+
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime, org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTimeOrBuilder> getProcessingTimerBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       * @return Whether the getProcessingTimer field is set.
+       */
+      @java.lang.Override
+      public boolean hasGetProcessingTimer() {
+        return methodCase_ == 1;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       * @return The getProcessingTimer.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime getGetProcessingTimer() {
+        if (getProcessingTimerBuilder_ == null) {
+          if (methodCase_ == 1) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance();
+        } else {
+          if (methodCase_ == 1) {
+            return getProcessingTimerBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       */
+      public Builder setGetProcessingTimer(org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime value) {
+        if (getProcessingTimerBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          getProcessingTimerBuilder_.setMessage(value);
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       */
+      public Builder setGetProcessingTimer(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.Builder builderForValue) {
+        if (getProcessingTimerBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          getProcessingTimerBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       */
+      public Builder mergeGetProcessingTimer(org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime value) {
+        if (getProcessingTimerBuilder_ == null) {
+          if (methodCase_ == 1 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 1) {
+            getProcessingTimerBuilder_.mergeFrom(value);
+          } else {
+            getProcessingTimerBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       */
+      public Builder clearGetProcessingTimer() {
+        if (getProcessingTimerBuilder_ == null) {
+          if (methodCase_ == 1) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 1) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          getProcessingTimerBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.Builder getGetProcessingTimerBuilder() {
+        return getGetProcessingTimerFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTimeOrBuilder getGetProcessingTimerOrBuilder() {
+        if ((methodCase_ == 1) && (getProcessingTimerBuilder_ != null)) {
+          return getProcessingTimerBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 1) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetProcessingTime getProcessingTimer = 1;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime, org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTimeOrBuilder> 
+          getGetProcessingTimerFieldBuilder() {
+        if (getProcessingTimerBuilder_ == null) {
+          if (!(methodCase_ == 1)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance();
+          }
+          getProcessingTimerBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime, org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTimeOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 1;
+        onChanged();;
+        return getProcessingTimerBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark, org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermarkOrBuilder> getWatermarkBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       * @return Whether the getWatermark field is set.
+       */
+      @java.lang.Override
+      public boolean hasGetWatermark() {
+        return methodCase_ == 2;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       * @return The getWatermark.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark getGetWatermark() {
+        if (getWatermarkBuilder_ == null) {
+          if (methodCase_ == 2) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance();
+        } else {
+          if (methodCase_ == 2) {
+            return getWatermarkBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       */
+      public Builder setGetWatermark(org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark value) {
+        if (getWatermarkBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          getWatermarkBuilder_.setMessage(value);
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       */
+      public Builder setGetWatermark(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.Builder builderForValue) {
+        if (getWatermarkBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          getWatermarkBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       */
+      public Builder mergeGetWatermark(org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark value) {
+        if (getWatermarkBuilder_ == null) {
+          if (methodCase_ == 2 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 2) {
+            getWatermarkBuilder_.mergeFrom(value);
+          } else {
+            getWatermarkBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       */
+      public Builder clearGetWatermark() {
+        if (getWatermarkBuilder_ == null) {
+          if (methodCase_ == 2) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 2) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          getWatermarkBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.Builder getGetWatermarkBuilder() {
+        return getGetWatermarkFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermarkOrBuilder getGetWatermarkOrBuilder() {
+        if ((methodCase_ == 2) && (getWatermarkBuilder_ != null)) {
+          return getWatermarkBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 2) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.GetWatermark getWatermark = 2;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark, org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermarkOrBuilder> 
+          getGetWatermarkFieldBuilder() {
+        if (getWatermarkBuilder_ == null) {
+          if (!(methodCase_ == 2)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance();
+          }
+          getWatermarkBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark, org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermarkOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 2;
+        onChanged();;
+        return getWatermarkBuilder_;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.TimerValueRequest)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.TimerValueRequest)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<TimerValueRequest>
+        PARSER = new com.google.protobuf.AbstractParser<TimerValueRequest>() {
+      @java.lang.Override
+      public TimerValueRequest parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<TimerValueRequest> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<TimerValueRequest> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerValueRequest getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface ExpiryTimerRequestOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>int64 expiryTimestampMs = 1;</code>
+     * @return The expiryTimestampMs.
+     */
+    long getExpiryTimestampMs();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest}
+   */
+  public static final class ExpiryTimerRequest extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest)
+      ExpiryTimerRequestOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use ExpiryTimerRequest.newBuilder() to construct.
+    private ExpiryTimerRequest(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private ExpiryTimerRequest() {
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new ExpiryTimerRequest();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.class, org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.Builder.class);
+    }
+
+    public static final int EXPIRYTIMESTAMPMS_FIELD_NUMBER = 1;
+    private long expiryTimestampMs_;
+    /**
+     * <code>int64 expiryTimestampMs = 1;</code>
+     * @return The expiryTimestampMs.
+     */
+    @java.lang.Override
+    public long getExpiryTimestampMs() {
+      return expiryTimestampMs_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (expiryTimestampMs_ != 0L) {
+        output.writeInt64(1, expiryTimestampMs_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (expiryTimestampMs_ != 0L) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(1, expiryTimestampMs_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest other = (org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) obj;
+
+      if (getExpiryTimestampMs()
+          != other.getExpiryTimestampMs()) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + EXPIRYTIMESTAMPMS_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+          getExpiryTimestampMs());
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequestOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.class, org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        expiryTimestampMs_ = 0L;
+
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest result = new org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest(this);
+        result.expiryTimestampMs_ = expiryTimestampMs_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest.getDefaultInstance()) return this;
+        if (other.getExpiryTimestampMs() != 0L) {
+          setExpiryTimestampMs(other.getExpiryTimestampMs());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 8: {
+                expiryTimestampMs_ = input.readInt64();
+
+                break;
+              } // case 8
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+
+      private long expiryTimestampMs_ ;
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @return The expiryTimestampMs.
+       */
+      @java.lang.Override
+      public long getExpiryTimestampMs() {
+        return expiryTimestampMs_;
+      }
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @param value The expiryTimestampMs to set.
+       * @return This builder for chaining.
+       */
+      public Builder setExpiryTimestampMs(long value) {
+        
+        expiryTimestampMs_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearExpiryTimestampMs() {
+        
+        expiryTimestampMs_ = 0L;
+        onChanged();
+        return this;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.ExpiryTimerRequest)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<ExpiryTimerRequest>
+        PARSER = new com.google.protobuf.AbstractParser<ExpiryTimerRequest>() {
+      @java.lang.Override
+      public ExpiryTimerRequest parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<ExpiryTimerRequest> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ExpiryTimerRequest> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ExpiryTimerRequest getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface GetProcessingTimeOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.GetProcessingTime)
+      com.google.protobuf.MessageOrBuilder {
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.GetProcessingTime}
+   */
+  public static final class GetProcessingTime extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.GetProcessingTime)
+      GetProcessingTimeOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use GetProcessingTime.newBuilder() to construct.
+    private GetProcessingTime(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private GetProcessingTime() {
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new GetProcessingTime();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.class, org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.Builder.class);
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime other = (org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) obj;
+
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.GetProcessingTime}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.GetProcessingTime)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTimeOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.class, org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime result = new org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime(this);
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime.getDefaultInstance()) return this;
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.GetProcessingTime)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.GetProcessingTime)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<GetProcessingTime>
+        PARSER = new com.google.protobuf.AbstractParser<GetProcessingTime>() {
+      @java.lang.Override
+      public GetProcessingTime parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<GetProcessingTime> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<GetProcessingTime> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.GetProcessingTime getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface GetWatermarkOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.GetWatermark)
+      com.google.protobuf.MessageOrBuilder {
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.GetWatermark}
+   */
+  public static final class GetWatermark extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.GetWatermark)
+      GetWatermarkOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use GetWatermark.newBuilder() to construct.
+    private GetWatermark(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private GetWatermark() {
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new GetWatermark();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.class, org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.Builder.class);
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark other = (org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) obj;
+
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.GetWatermark}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.GetWatermark)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermarkOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.class, org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark result = new org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark(this);
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark.getDefaultInstance()) return this;
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.GetWatermark)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.GetWatermark)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<GetWatermark>
+        PARSER = new com.google.protobuf.AbstractParser<GetWatermark>() {
+      @java.lang.Override
+      public GetWatermark parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<GetWatermark> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<GetWatermark> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.GetWatermark getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface StateCallCommandOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.StateCallCommand)
       com.google.protobuf.MessageOrBuilder {
@@ -6554,6 +10822,1155 @@ public final class StateMessage {
 
     @java.lang.Override
     public org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface TimerStateCallCommandOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+     * @return Whether the register field is set.
+     */
+    boolean hasRegister();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+     * @return The register.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer getRegister();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimerOrBuilder getRegisterOrBuilder();
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+     * @return Whether the delete field is set.
+     */
+    boolean hasDelete();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+     * @return The delete.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer getDelete();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimerOrBuilder getDeleteOrBuilder();
+
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+     * @return Whether the list field is set.
+     */
+    boolean hasList();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+     * @return The list.
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers getList();
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+     */
+    org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimersOrBuilder getListOrBuilder();
+
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.MethodCase getMethodCase();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand}
+   */
+  public static final class TimerStateCallCommand extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand)
+      TimerStateCallCommandOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use TimerStateCallCommand.newBuilder() to construct.
+    private TimerStateCallCommand(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private TimerStateCallCommand() {
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new TimerStateCallCommand();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.class, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.Builder.class);
+    }
+
+    private int methodCase_ = 0;
+    private java.lang.Object method_;
+    public enum MethodCase
+        implements com.google.protobuf.Internal.EnumLite,
+            com.google.protobuf.AbstractMessage.InternalOneOfEnum {
+      REGISTER(1),
+      DELETE(2),
+      LIST(3),
+      METHOD_NOT_SET(0);
+      private final int value;
+      private MethodCase(int value) {
+        this.value = value;
+      }
+      /**
+       * @param value The number of the enum to look for.
+       * @return The enum associated with the given number.
+       * @deprecated Use {@link #forNumber(int)} instead.
+       */
+      @java.lang.Deprecated
+      public static MethodCase valueOf(int value) {
+        return forNumber(value);
+      }
+
+      public static MethodCase forNumber(int value) {
+        switch (value) {
+          case 1: return REGISTER;
+          case 2: return DELETE;
+          case 3: return LIST;
+          case 0: return METHOD_NOT_SET;
+          default: return null;
+        }
+      }
+      public int getNumber() {
+        return this.value;
+      }
+    };
+
+    public MethodCase
+    getMethodCase() {
+      return MethodCase.forNumber(
+          methodCase_);
+    }
+
+    public static final int REGISTER_FIELD_NUMBER = 1;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+     * @return Whether the register field is set.
+     */
+    @java.lang.Override
+    public boolean hasRegister() {
+      return methodCase_ == 1;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+     * @return The register.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer getRegister() {
+      if (methodCase_ == 1) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimerOrBuilder getRegisterOrBuilder() {
+      if (methodCase_ == 1) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance();
+    }
+
+    public static final int DELETE_FIELD_NUMBER = 2;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+     * @return Whether the delete field is set.
+     */
+    @java.lang.Override
+    public boolean hasDelete() {
+      return methodCase_ == 2;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+     * @return The delete.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer getDelete() {
+      if (methodCase_ == 2) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimerOrBuilder getDeleteOrBuilder() {
+      if (methodCase_ == 2) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance();
+    }
+
+    public static final int LIST_FIELD_NUMBER = 3;
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+     * @return Whether the list field is set.
+     */
+    @java.lang.Override
+    public boolean hasList() {
+      return methodCase_ == 3;
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+     * @return The list.
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers getList() {
+      if (methodCase_ == 3) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance();
+    }
+    /**
+     * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+     */
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimersOrBuilder getListOrBuilder() {
+      if (methodCase_ == 3) {
+         return (org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) method_;
+      }
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance();
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (methodCase_ == 1) {
+        output.writeMessage(1, (org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) method_);
+      }
+      if (methodCase_ == 2) {
+        output.writeMessage(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) method_);
+      }
+      if (methodCase_ == 3) {
+        output.writeMessage(3, (org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) method_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (methodCase_ == 1) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(1, (org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) method_);
+      }
+      if (methodCase_ == 2) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) method_);
+      }
+      if (methodCase_ == 3) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(3, (org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) method_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand other = (org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) obj;
+
+      if (!getMethodCase().equals(other.getMethodCase())) return false;
+      switch (methodCase_) {
+        case 1:
+          if (!getRegister()
+              .equals(other.getRegister())) return false;
+          break;
+        case 2:
+          if (!getDelete()
+              .equals(other.getDelete())) return false;
+          break;
+        case 3:
+          if (!getList()
+              .equals(other.getList())) return false;
+          break;
+        case 0:
+        default:
+      }
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      switch (methodCase_) {
+        case 1:
+          hash = (37 * hash) + REGISTER_FIELD_NUMBER;
+          hash = (53 * hash) + getRegister().hashCode();
+          break;
+        case 2:
+          hash = (37 * hash) + DELETE_FIELD_NUMBER;
+          hash = (53 * hash) + getDelete().hashCode();
+          break;
+        case 3:
+          hash = (37 * hash) + LIST_FIELD_NUMBER;
+          hash = (53 * hash) + getList().hashCode();
+          break;
+        case 0:
+        default:
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommandOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.class, org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        if (registerBuilder_ != null) {
+          registerBuilder_.clear();
+        }
+        if (deleteBuilder_ != null) {
+          deleteBuilder_.clear();
+        }
+        if (listBuilder_ != null) {
+          listBuilder_.clear();
+        }
+        methodCase_ = 0;
+        method_ = null;
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand result = new org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand(this);
+        if (methodCase_ == 1) {
+          if (registerBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = registerBuilder_.build();
+          }
+        }
+        if (methodCase_ == 2) {
+          if (deleteBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = deleteBuilder_.build();
+          }
+        }
+        if (methodCase_ == 3) {
+          if (listBuilder_ == null) {
+            result.method_ = method_;
+          } else {
+            result.method_ = listBuilder_.build();
+          }
+        }
+        result.methodCase_ = methodCase_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand.getDefaultInstance()) return this;
+        switch (other.getMethodCase()) {
+          case REGISTER: {
+            mergeRegister(other.getRegister());
+            break;
+          }
+          case DELETE: {
+            mergeDelete(other.getDelete());
+            break;
+          }
+          case LIST: {
+            mergeList(other.getList());
+            break;
+          }
+          case METHOD_NOT_SET: {
+            break;
+          }
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                input.readMessage(
+                    getRegisterFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 1;
+                break;
+              } // case 10
+              case 18: {
+                input.readMessage(
+                    getDeleteFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 2;
+                break;
+              } // case 18
+              case 26: {
+                input.readMessage(
+                    getListFieldBuilder().getBuilder(),
+                    extensionRegistry);
+                methodCase_ = 3;
+                break;
+              } // case 26
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+      private int methodCase_ = 0;
+      private java.lang.Object method_;
+      public MethodCase
+          getMethodCase() {
+        return MethodCase.forNumber(
+            methodCase_);
+      }
+
+      public Builder clearMethod() {
+        methodCase_ = 0;
+        method_ = null;
+        onChanged();
+        return this;
+      }
+
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer, org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimerOrBuilder> registerBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       * @return Whether the register field is set.
+       */
+      @java.lang.Override
+      public boolean hasRegister() {
+        return methodCase_ == 1;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       * @return The register.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer getRegister() {
+        if (registerBuilder_ == null) {
+          if (methodCase_ == 1) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance();
+        } else {
+          if (methodCase_ == 1) {
+            return registerBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       */
+      public Builder setRegister(org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer value) {
+        if (registerBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          registerBuilder_.setMessage(value);
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       */
+      public Builder setRegister(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.Builder builderForValue) {
+        if (registerBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          registerBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       */
+      public Builder mergeRegister(org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer value) {
+        if (registerBuilder_ == null) {
+          if (methodCase_ == 1 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 1) {
+            registerBuilder_.mergeFrom(value);
+          } else {
+            registerBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 1;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       */
+      public Builder clearRegister() {
+        if (registerBuilder_ == null) {
+          if (methodCase_ == 1) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 1) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          registerBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.Builder getRegisterBuilder() {
+        return getRegisterFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimerOrBuilder getRegisterOrBuilder() {
+        if ((methodCase_ == 1) && (registerBuilder_ != null)) {
+          return registerBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 1) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.RegisterTimer register = 1;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer, org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimerOrBuilder> 
+          getRegisterFieldBuilder() {
+        if (registerBuilder_ == null) {
+          if (!(methodCase_ == 1)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance();
+          }
+          registerBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer, org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimerOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 1;
+        onChanged();;
+        return registerBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer, org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimerOrBuilder> deleteBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       * @return Whether the delete field is set.
+       */
+      @java.lang.Override
+      public boolean hasDelete() {
+        return methodCase_ == 2;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       * @return The delete.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer getDelete() {
+        if (deleteBuilder_ == null) {
+          if (methodCase_ == 2) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance();
+        } else {
+          if (methodCase_ == 2) {
+            return deleteBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       */
+      public Builder setDelete(org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer value) {
+        if (deleteBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          deleteBuilder_.setMessage(value);
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       */
+      public Builder setDelete(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.Builder builderForValue) {
+        if (deleteBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          deleteBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       */
+      public Builder mergeDelete(org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer value) {
+        if (deleteBuilder_ == null) {
+          if (methodCase_ == 2 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 2) {
+            deleteBuilder_.mergeFrom(value);
+          } else {
+            deleteBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 2;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       */
+      public Builder clearDelete() {
+        if (deleteBuilder_ == null) {
+          if (methodCase_ == 2) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 2) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          deleteBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.Builder getDeleteBuilder() {
+        return getDeleteFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimerOrBuilder getDeleteOrBuilder() {
+        if ((methodCase_ == 2) && (deleteBuilder_ != null)) {
+          return deleteBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 2) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.DeleteTimer delete = 2;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer, org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimerOrBuilder> 
+          getDeleteFieldBuilder() {
+        if (deleteBuilder_ == null) {
+          if (!(methodCase_ == 2)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance();
+          }
+          deleteBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer, org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimerOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 2;
+        onChanged();;
+        return deleteBuilder_;
+      }
+
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers, org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimersOrBuilder> listBuilder_;
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       * @return Whether the list field is set.
+       */
+      @java.lang.Override
+      public boolean hasList() {
+        return methodCase_ == 3;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       * @return The list.
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers getList() {
+        if (listBuilder_ == null) {
+          if (methodCase_ == 3) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance();
+        } else {
+          if (methodCase_ == 3) {
+            return listBuilder_.getMessage();
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       */
+      public Builder setList(org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers value) {
+        if (listBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          method_ = value;
+          onChanged();
+        } else {
+          listBuilder_.setMessage(value);
+        }
+        methodCase_ = 3;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       */
+      public Builder setList(
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.Builder builderForValue) {
+        if (listBuilder_ == null) {
+          method_ = builderForValue.build();
+          onChanged();
+        } else {
+          listBuilder_.setMessage(builderForValue.build());
+        }
+        methodCase_ = 3;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       */
+      public Builder mergeList(org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers value) {
+        if (listBuilder_ == null) {
+          if (methodCase_ == 3 &&
+              method_ != org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance()) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.newBuilder((org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) method_)
+                .mergeFrom(value).buildPartial();
+          } else {
+            method_ = value;
+          }
+          onChanged();
+        } else {
+          if (methodCase_ == 3) {
+            listBuilder_.mergeFrom(value);
+          } else {
+            listBuilder_.setMessage(value);
+          }
+        }
+        methodCase_ = 3;
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       */
+      public Builder clearList() {
+        if (listBuilder_ == null) {
+          if (methodCase_ == 3) {
+            methodCase_ = 0;
+            method_ = null;
+            onChanged();
+          }
+        } else {
+          if (methodCase_ == 3) {
+            methodCase_ = 0;
+            method_ = null;
+          }
+          listBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       */
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.Builder getListBuilder() {
+        return getListFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       */
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimersOrBuilder getListOrBuilder() {
+        if ((methodCase_ == 3) && (listBuilder_ != null)) {
+          return listBuilder_.getMessageOrBuilder();
+        } else {
+          if (methodCase_ == 3) {
+            return (org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) method_;
+          }
+          return org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance();
+        }
+      }
+      /**
+       * <code>.org.apache.spark.sql.execution.streaming.state.ListTimers list = 3;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers, org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimersOrBuilder> 
+          getListFieldBuilder() {
+        if (listBuilder_ == null) {
+          if (!(methodCase_ == 3)) {
+            method_ = org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance();
+          }
+          listBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers, org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.Builder, org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimersOrBuilder>(
+                  (org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) method_,
+                  getParentForChildren(),
+                  isClean());
+          method_ = null;
+        }
+        methodCase_ = 3;
+        onChanged();;
+        return listBuilder_;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.TimerStateCallCommand)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<TimerStateCallCommand>
+        PARSER = new com.google.protobuf.AbstractParser<TimerStateCallCommand>() {
+      @java.lang.Override
+      public TimerStateCallCommand parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<TimerStateCallCommand> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<TimerStateCallCommand> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.TimerStateCallCommand getDefaultInstanceForType() {
       return DEFAULT_INSTANCE;
     }
 
@@ -14387,6 +19804,1497 @@ public final class StateMessage {
 
   }
 
+  public interface RegisterTimerOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.RegisterTimer)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>int64 expiryTimestampMs = 1;</code>
+     * @return The expiryTimestampMs.
+     */
+    long getExpiryTimestampMs();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RegisterTimer}
+   */
+  public static final class RegisterTimer extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.RegisterTimer)
+      RegisterTimerOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use RegisterTimer.newBuilder() to construct.
+    private RegisterTimer(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private RegisterTimer() {
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new RegisterTimer();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.class, org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.Builder.class);
+    }
+
+    public static final int EXPIRYTIMESTAMPMS_FIELD_NUMBER = 1;
+    private long expiryTimestampMs_;
+    /**
+     * <code>int64 expiryTimestampMs = 1;</code>
+     * @return The expiryTimestampMs.
+     */
+    @java.lang.Override
+    public long getExpiryTimestampMs() {
+      return expiryTimestampMs_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (expiryTimestampMs_ != 0L) {
+        output.writeInt64(1, expiryTimestampMs_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (expiryTimestampMs_ != 0L) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(1, expiryTimestampMs_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer other = (org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) obj;
+
+      if (getExpiryTimestampMs()
+          != other.getExpiryTimestampMs()) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + EXPIRYTIMESTAMPMS_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+          getExpiryTimestampMs());
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RegisterTimer}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.RegisterTimer)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimerOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.class, org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        expiryTimestampMs_ = 0L;
+
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer result = new org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer(this);
+        result.expiryTimestampMs_ = expiryTimestampMs_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer.getDefaultInstance()) return this;
+        if (other.getExpiryTimestampMs() != 0L) {
+          setExpiryTimestampMs(other.getExpiryTimestampMs());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 8: {
+                expiryTimestampMs_ = input.readInt64();
+
+                break;
+              } // case 8
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+
+      private long expiryTimestampMs_ ;
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @return The expiryTimestampMs.
+       */
+      @java.lang.Override
+      public long getExpiryTimestampMs() {
+        return expiryTimestampMs_;
+      }
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @param value The expiryTimestampMs to set.
+       * @return This builder for chaining.
+       */
+      public Builder setExpiryTimestampMs(long value) {
+        
+        expiryTimestampMs_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearExpiryTimestampMs() {
+        
+        expiryTimestampMs_ = 0L;
+        onChanged();
+        return this;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.RegisterTimer)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.RegisterTimer)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<RegisterTimer>
+        PARSER = new com.google.protobuf.AbstractParser<RegisterTimer>() {
+      @java.lang.Override
+      public RegisterTimer parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<RegisterTimer> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<RegisterTimer> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.RegisterTimer getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface DeleteTimerOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.DeleteTimer)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>int64 expiryTimestampMs = 1;</code>
+     * @return The expiryTimestampMs.
+     */
+    long getExpiryTimestampMs();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.DeleteTimer}
+   */
+  public static final class DeleteTimer extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.DeleteTimer)
+      DeleteTimerOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use DeleteTimer.newBuilder() to construct.
+    private DeleteTimer(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private DeleteTimer() {
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new DeleteTimer();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.class, org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.Builder.class);
+    }
+
+    public static final int EXPIRYTIMESTAMPMS_FIELD_NUMBER = 1;
+    private long expiryTimestampMs_;
+    /**
+     * <code>int64 expiryTimestampMs = 1;</code>
+     * @return The expiryTimestampMs.
+     */
+    @java.lang.Override
+    public long getExpiryTimestampMs() {
+      return expiryTimestampMs_;
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (expiryTimestampMs_ != 0L) {
+        output.writeInt64(1, expiryTimestampMs_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (expiryTimestampMs_ != 0L) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt64Size(1, expiryTimestampMs_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer other = (org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) obj;
+
+      if (getExpiryTimestampMs()
+          != other.getExpiryTimestampMs()) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + EXPIRYTIMESTAMPMS_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+          getExpiryTimestampMs());
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.DeleteTimer}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.DeleteTimer)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimerOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.class, org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        expiryTimestampMs_ = 0L;
+
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer result = new org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer(this);
+        result.expiryTimestampMs_ = expiryTimestampMs_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer.getDefaultInstance()) return this;
+        if (other.getExpiryTimestampMs() != 0L) {
+          setExpiryTimestampMs(other.getExpiryTimestampMs());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 8: {
+                expiryTimestampMs_ = input.readInt64();
+
+                break;
+              } // case 8
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+
+      private long expiryTimestampMs_ ;
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @return The expiryTimestampMs.
+       */
+      @java.lang.Override
+      public long getExpiryTimestampMs() {
+        return expiryTimestampMs_;
+      }
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @param value The expiryTimestampMs to set.
+       * @return This builder for chaining.
+       */
+      public Builder setExpiryTimestampMs(long value) {
+        
+        expiryTimestampMs_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>int64 expiryTimestampMs = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearExpiryTimestampMs() {
+        
+        expiryTimestampMs_ = 0L;
+        onChanged();
+        return this;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.DeleteTimer)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.DeleteTimer)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<DeleteTimer>
+        PARSER = new com.google.protobuf.AbstractParser<DeleteTimer>() {
+      @java.lang.Override
+      public DeleteTimer parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<DeleteTimer> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<DeleteTimer> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.DeleteTimer getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
+  public interface ListTimersOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.ListTimers)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The iteratorId.
+     */
+    java.lang.String getIteratorId();
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The bytes for iteratorId.
+     */
+    com.google.protobuf.ByteString
+        getIteratorIdBytes();
+  }
+  /**
+   * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListTimers}
+   */
+  public static final class ListTimers extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ListTimers)
+      ListTimersOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use ListTimers.newBuilder() to construct.
+    private ListTimers(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private ListTimers() {
+      iteratorId_ = "";
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new ListTimers();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.class, org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.Builder.class);
+    }
+
+    public static final int ITERATORID_FIELD_NUMBER = 1;
+    private volatile java.lang.Object iteratorId_;
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The iteratorId.
+     */
+    @java.lang.Override
+    public java.lang.String getIteratorId() {
+      java.lang.Object ref = iteratorId_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        iteratorId_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string iteratorId = 1;</code>
+     * @return The bytes for iteratorId.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getIteratorIdBytes() {
+      java.lang.Object ref = iteratorId_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        iteratorId_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, iteratorId_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, iteratorId_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers)) {
+        return super.equals(obj);
+      }
+      org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers other = (org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) obj;
+
+      if (!getIteratorId()
+          .equals(other.getIteratorId())) return false;
+      if (!getUnknownFields().equals(other.getUnknownFields())) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + ITERATORID_FIELD_NUMBER;
+      hash = (53 * hash) + getIteratorId().hashCode();
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListTimers}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ListTimers)
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimersOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.class, org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.Builder.class);
+      }
+
+      // Construct using org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.newBuilder()
+      private Builder() {
+
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        iteratorId_ = "";
+
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_descriptor;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers getDefaultInstanceForType() {
+        return org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers build() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers buildPartial() {
+        org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers result = new org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers(this);
+        result.iteratorId_ = iteratorId_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers) {
+          return mergeFrom((org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers other) {
+        if (other == org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers.getDefaultInstance()) return this;
+        if (!other.getIteratorId().isEmpty()) {
+          iteratorId_ = other.iteratorId_;
+          onChanged();
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                iteratorId_ = input.readStringRequireUtf8();
+
+                break;
+              } // case 10
+              default: {
+                if (!super.parseUnknownField(input, extensionRegistry, tag)) {
+                  done = true; // was an endgroup tag
+                }
+                break;
+              } // default:
+            } // switch (tag)
+          } // while (!done)
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.unwrapIOException();
+        } finally {
+          onChanged();
+        } // finally
+        return this;
+      }
+
+      private java.lang.Object iteratorId_ = "";
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return The iteratorId.
+       */
+      public java.lang.String getIteratorId() {
+        java.lang.Object ref = iteratorId_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          iteratorId_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return The bytes for iteratorId.
+       */
+      public com.google.protobuf.ByteString
+          getIteratorIdBytes() {
+        java.lang.Object ref = iteratorId_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          iteratorId_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @param value The iteratorId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIteratorId(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        iteratorId_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearIteratorId() {
+        
+        iteratorId_ = getDefaultInstance().getIteratorId();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string iteratorId = 1;</code>
+       * @param value The bytes for iteratorId to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIteratorIdBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        iteratorId_ = value;
+        onChanged();
+        return this;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:org.apache.spark.sql.execution.streaming.state.ListTimers)
+    }
+
+    // @@protoc_insertion_point(class_scope:org.apache.spark.sql.execution.streaming.state.ListTimers)
+    private static final org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers();
+    }
+
+    public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<ListTimers>
+        PARSER = new com.google.protobuf.AbstractParser<ListTimers>() {
+      @java.lang.Override
+      public ListTimers parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        Builder builder = newBuilder();
+        try {
+          builder.mergeFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(builder.buildPartial());
+        } catch (com.google.protobuf.UninitializedMessageException e) {
+          throw e.asInvalidProtocolBufferException().setUnfinishedMessage(builder.buildPartial());
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(e)
+              .setUnfinishedMessage(builder.buildPartial());
+        }
+        return builder.buildPartial();
+      }
+    };
+
+    public static com.google.protobuf.Parser<ListTimers> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ListTimers> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public org.apache.spark.sql.execution.streaming.state.StateMessage.ListTimers getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface ValueStateUpdateOrBuilder extends
       // @@protoc_insertion_point(interface_extends:org.apache.spark.sql.execution.streaming.state.ValueStateUpdate)
       com.google.protobuf.MessageOrBuilder {
@@ -21688,6 +28596,11 @@ public final class StateMessage {
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
@@ -21703,10 +28616,40 @@ public final class StateMessage {
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor;
   private static final 
@@ -21742,6 +28685,21 @@ public final class StateMessage {
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_Get_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_descriptor;
   private static final 
@@ -21827,7 +28785,7 @@ public final class StateMessage {
   static {
     java.lang.String[] descriptorData = {
       "\n\022StateMessage.proto\022.org.apache.spark.s" +
-      "ql.execution.streaming.state\"\351\002\n\014StateRe" +
+      "ql.execution.streaming.state\"\277\003\n\014StateRe" +
       "quest\022\017\n\007version\030\001 \001(\005\022f\n\025statefulProces" +
       "sorCall\030\002 \001(\0132E.org.apache.spark.sql.exe" +
       "cution.streaming.state.StatefulProcessor" +
@@ -21836,93 +28794,123 @@ public final class StateMessage {
       "state.StateVariableRequestH\000\022p\n\032implicit" +
       "GroupingKeyRequest\030\004 \001(\0132J.org.apache.sp" +
       "ark.sql.execution.streaming.state.Implic" +
-      "itGroupingKeyRequestH\000B\010\n\006method\"H\n\rStat" +
-      "eResponse\022\022\n\nstatusCode\030\001 \001(\005\022\024\n\014errorMe" +
-      "ssage\030\002 \001(\t\022\r\n\005value\030\003 \001(\014\"\211\003\n\025StatefulP" +
-      "rocessorCall\022X\n\016setHandleState\030\001 \001(\0132>.o" +
-      "rg.apache.spark.sql.execution.streaming." +
-      "state.SetHandleStateH\000\022Y\n\rgetValueState\030" +
-      "\002 \001(\0132@.org.apache.spark.sql.execution.s" +
-      "treaming.state.StateCallCommandH\000\022X\n\014get" +
-      "ListState\030\003 \001(\0132@.org.apache.spark.sql.e" +
-      "xecution.streaming.state.StateCallComman" +
-      "dH\000\022W\n\013getMapState\030\004 \001(\0132@.org.apache.sp" +
-      "ark.sql.execution.streaming.state.StateC" +
-      "allCommandH\000B\010\n\006method\"\250\002\n\024StateVariable" +
-      "Request\022X\n\016valueStateCall\030\001 \001(\0132>.org.ap" +
-      "ache.spark.sql.execution.streaming.state" +
-      ".ValueStateCallH\000\022V\n\rlistStateCall\030\002 \001(\013" +
-      "2=.org.apache.spark.sql.execution.stream" +
-      "ing.state.ListStateCallH\000\022T\n\014mapStateCal" +
-      "l\030\003 \001(\0132<.org.apache.spark.sql.execution" +
-      ".streaming.state.MapStateCallH\000B\010\n\006metho" +
-      "d\"\340\001\n\032ImplicitGroupingKeyRequest\022X\n\016setI" +
-      "mplicitKey\030\001 \001(\0132>.org.apache.spark.sql." +
-      "execution.streaming.state.SetImplicitKey" +
-      "H\000\022^\n\021removeImplicitKey\030\002 \001(\0132A.org.apac" +
-      "he.spark.sql.execution.streaming.state.R" +
-      "emoveImplicitKeyH\000B\010\n\006method\"\232\001\n\020StateCa" +
-      "llCommand\022\021\n\tstateName\030\001 \001(\t\022\016\n\006schema\030\002" +
-      " \001(\t\022\033\n\023mapStateValueSchema\030\003 \001(\t\022F\n\003ttl" +
-      "\030\004 \001(\01329.org.apache.spark.sql.execution." +
-      "streaming.state.TTLConfig\"\341\002\n\016ValueState" +
-      "Call\022\021\n\tstateName\030\001 \001(\t\022H\n\006exists\030\002 \001(\0132" +
-      "6.org.apache.spark.sql.execution.streami" +
-      "ng.state.ExistsH\000\022B\n\003get\030\003 \001(\01323.org.apa" +
+      "itGroupingKeyRequestH\000\022T\n\014timerRequest\030\005" +
+      " \001(\0132<.org.apache.spark.sql.execution.st" +
+      "reaming.state.TimerRequestH\000B\010\n\006method\"H" +
+      "\n\rStateResponse\022\022\n\nstatusCode\030\001 \001(\005\022\024\n\014e" +
+      "rrorMessage\030\002 \001(\t\022\r\n\005value\030\003 \001(\014\"W\n\034Stat" +
+      "eResponseWithLongTypeVal\022\022\n\nstatusCode\030\001" +
+      " \001(\005\022\024\n\014errorMessage\030\002 \001(\t\022\r\n\005value\030\003 \001(" +
+      "\003\"\352\003\n\025StatefulProcessorCall\022X\n\016setHandle" +
+      "State\030\001 \001(\0132>.org.apache.spark.sql.execu" +
+      "tion.streaming.state.SetHandleStateH\000\022Y\n" +
+      "\rgetValueState\030\002 \001(\0132@.org.apache.spark." +
+      "sql.execution.streaming.state.StateCallC" +
+      "ommandH\000\022X\n\014getListState\030\003 \001(\0132@.org.apa" +
       "che.spark.sql.execution.streaming.state." +
-      "GetH\000\022\\\n\020valueStateUpdate\030\004 \001(\0132@.org.ap" +
-      "ache.spark.sql.execution.streaming.state" +
-      ".ValueStateUpdateH\000\022F\n\005clear\030\005 \001(\01325.org" +
-      ".apache.spark.sql.execution.streaming.st" +
-      "ate.ClearH\000B\010\n\006method\"\220\004\n\rListStateCall\022" +
-      "\021\n\tstateName\030\001 \001(\t\022H\n\006exists\030\002 \001(\01326.org" +
-      ".apache.spark.sql.execution.streaming.st" +
-      "ate.ExistsH\000\022T\n\014listStateGet\030\003 \001(\0132<.org" +
-      ".apache.spark.sql.execution.streaming.st" +
-      "ate.ListStateGetH\000\022T\n\014listStatePut\030\004 \001(\013" +
-      "2<.org.apache.spark.sql.execution.stream" +
-      "ing.state.ListStatePutH\000\022R\n\013appendValue\030" +
-      "\005 \001(\0132;.org.apache.spark.sql.execution.s" +
-      "treaming.state.AppendValueH\000\022P\n\nappendLi" +
-      "st\030\006 \001(\0132:.org.apache.spark.sql.executio" +
-      "n.streaming.state.AppendListH\000\022F\n\005clear\030" +
-      "\007 \001(\01325.org.apache.spark.sql.execution.s" +
-      "treaming.state.ClearH\000B\010\n\006method\"\341\005\n\014Map" +
-      "StateCall\022\021\n\tstateName\030\001 \001(\t\022H\n\006exists\030\002" +
-      " \001(\01326.org.apache.spark.sql.execution.st" +
-      "reaming.state.ExistsH\000\022L\n\010getValue\030\003 \001(\013" +
-      "28.org.apache.spark.sql.execution.stream" +
-      "ing.state.GetValueH\000\022R\n\013containsKey\030\004 \001(" +
-      "\0132;.org.apache.spark.sql.execution.strea" +
-      "ming.state.ContainsKeyH\000\022R\n\013updateValue\030" +
-      "\005 \001(\0132;.org.apache.spark.sql.execution.s" +
-      "treaming.state.UpdateValueH\000\022L\n\010iterator" +
-      "\030\006 \001(\01328.org.apache.spark.sql.execution." +
-      "streaming.state.IteratorH\000\022D\n\004keys\030\007 \001(\013" +
-      "24.org.apache.spark.sql.execution.stream" +
-      "ing.state.KeysH\000\022H\n\006values\030\010 \001(\01326.org.a" +
+      "StateCallCommandH\000\022W\n\013getMapState\030\004 \001(\0132" +
+      "@.org.apache.spark.sql.execution.streami" +
+      "ng.state.StateCallCommandH\000\022_\n\016timerStat" +
+      "eCall\030\005 \001(\0132E.org.apache.spark.sql.execu" +
+      "tion.streaming.state.TimerStateCallComma" +
+      "ndH\000B\010\n\006method\"\250\002\n\024StateVariableRequest\022" +
+      "X\n\016valueStateCall\030\001 \001(\0132>.org.apache.spa" +
+      "rk.sql.execution.streaming.state.ValueSt" +
+      "ateCallH\000\022V\n\rlistStateCall\030\002 \001(\0132=.org.a" +
       "pache.spark.sql.execution.streaming.stat" +
-      "e.ValuesH\000\022N\n\tremoveKey\030\t \001(\01329.org.apac" +
-      "he.spark.sql.execution.streaming.state.R" +
-      "emoveKeyH\000\022F\n\005clear\030\n \001(\01325.org.apache.s" +
-      "park.sql.execution.streaming.state.Clear" +
-      "H\000B\010\n\006method\"\035\n\016SetImplicitKey\022\013\n\003key\030\001 " +
-      "\001(\014\"\023\n\021RemoveImplicitKey\"\010\n\006Exists\"\005\n\003Ge" +
-      "t\"!\n\020ValueStateUpdate\022\r\n\005value\030\001 \001(\014\"\007\n\005" +
-      "Clear\"\"\n\014ListStateGet\022\022\n\niteratorId\030\001 \001(" +
-      "\t\"\016\n\014ListStatePut\"\034\n\013AppendValue\022\r\n\005valu" +
-      "e\030\001 \001(\014\"\014\n\nAppendList\"\033\n\010GetValue\022\017\n\007use" +
-      "rKey\030\001 \001(\014\"\036\n\013ContainsKey\022\017\n\007userKey\030\001 \001" +
-      "(\014\"-\n\013UpdateValue\022\017\n\007userKey\030\001 \001(\014\022\r\n\005va" +
-      "lue\030\002 \001(\014\"\036\n\010Iterator\022\022\n\niteratorId\030\001 \001(" +
-      "\t\"\032\n\004Keys\022\022\n\niteratorId\030\001 \001(\t\"\034\n\006Values\022" +
-      "\022\n\niteratorId\030\001 \001(\t\"\034\n\tRemoveKey\022\017\n\007user" +
-      "Key\030\001 \001(\014\"\\\n\016SetHandleState\022J\n\005state\030\001 \001" +
-      "(\0162;.org.apache.spark.sql.execution.stre" +
-      "aming.state.HandleState\"\037\n\tTTLConfig\022\022\n\n" +
-      "durationMs\030\001 \001(\005*K\n\013HandleState\022\013\n\007CREAT" +
-      "ED\020\000\022\017\n\013INITIALIZED\020\001\022\022\n\016DATA_PROCESSED\020" +
-      "\002\022\n\n\006CLOSED\020\003b\006proto3"
+      "e.ListStateCallH\000\022T\n\014mapStateCall\030\003 \001(\0132" +
+      "<.org.apache.spark.sql.execution.streami" +
+      "ng.state.MapStateCallH\000B\010\n\006method\"\340\001\n\032Im" +
+      "plicitGroupingKeyRequest\022X\n\016setImplicitK" +
+      "ey\030\001 \001(\0132>.org.apache.spark.sql.executio" +
+      "n.streaming.state.SetImplicitKeyH\000\022^\n\021re" +
+      "moveImplicitKey\030\002 \001(\0132A.org.apache.spark" +
+      ".sql.execution.streaming.state.RemoveImp" +
+      "licitKeyH\000B\010\n\006method\"\332\001\n\014TimerRequest\022^\n" +
+      "\021timerValueRequest\030\001 \001(\0132A.org.apache.sp" +
+      "ark.sql.execution.streaming.state.TimerV" +
+      "alueRequestH\000\022`\n\022expiryTimerRequest\030\002 \001(" +
+      "\0132B.org.apache.spark.sql.execution.strea" +
+      "ming.state.ExpiryTimerRequestH\000B\010\n\006metho" +
+      "d\"\324\001\n\021TimerValueRequest\022_\n\022getProcessing" +
+      "Timer\030\001 \001(\0132A.org.apache.spark.sql.execu" +
+      "tion.streaming.state.GetProcessingTimeH\000" +
+      "\022T\n\014getWatermark\030\002 \001(\0132<.org.apache.spar" +
+      "k.sql.execution.streaming.state.GetWater" +
+      "markH\000B\010\n\006method\"/\n\022ExpiryTimerRequest\022\031" +
+      "\n\021expiryTimestampMs\030\001 \001(\003\"\023\n\021GetProcessi" +
+      "ngTime\"\016\n\014GetWatermark\"\232\001\n\020StateCallComm" +
+      "and\022\021\n\tstateName\030\001 \001(\t\022\016\n\006schema\030\002 \001(\t\022\033" +
+      "\n\023mapStateValueSchema\030\003 \001(\t\022F\n\003ttl\030\004 \001(\013" +
+      "29.org.apache.spark.sql.execution.stream" +
+      "ing.state.TTLConfig\"\217\002\n\025TimerStateCallCo" +
+      "mmand\022Q\n\010register\030\001 \001(\0132=.org.apache.spa" +
+      "rk.sql.execution.streaming.state.Registe" +
+      "rTimerH\000\022M\n\006delete\030\002 \001(\0132;.org.apache.sp" +
+      "ark.sql.execution.streaming.state.Delete" +
+      "TimerH\000\022J\n\004list\030\003 \001(\0132:.org.apache.spark" +
+      ".sql.execution.streaming.state.ListTimer" +
+      "sH\000B\010\n\006method\"\341\002\n\016ValueStateCall\022\021\n\tstat" +
+      "eName\030\001 \001(\t\022H\n\006exists\030\002 \001(\01326.org.apache" +
+      ".spark.sql.execution.streaming.state.Exi" +
+      "stsH\000\022B\n\003get\030\003 \001(\01323.org.apache.spark.sq" +
+      "l.execution.streaming.state.GetH\000\022\\\n\020val" +
+      "ueStateUpdate\030\004 \001(\0132@.org.apache.spark.s" +
+      "ql.execution.streaming.state.ValueStateU" +
+      "pdateH\000\022F\n\005clear\030\005 \001(\01325.org.apache.spar" +
+      "k.sql.execution.streaming.state.ClearH\000B" +
+      "\010\n\006method\"\220\004\n\rListStateCall\022\021\n\tstateName" +
+      "\030\001 \001(\t\022H\n\006exists\030\002 \001(\01326.org.apache.spar" +
+      "k.sql.execution.streaming.state.ExistsH\000" +
+      "\022T\n\014listStateGet\030\003 \001(\0132<.org.apache.spar" +
+      "k.sql.execution.streaming.state.ListStat" +
+      "eGetH\000\022T\n\014listStatePut\030\004 \001(\0132<.org.apach" +
+      "e.spark.sql.execution.streaming.state.Li" +
+      "stStatePutH\000\022R\n\013appendValue\030\005 \001(\0132;.org." +
+      "apache.spark.sql.execution.streaming.sta" +
+      "te.AppendValueH\000\022P\n\nappendList\030\006 \001(\0132:.o" +
+      "rg.apache.spark.sql.execution.streaming." +
+      "state.AppendListH\000\022F\n\005clear\030\007 \001(\01325.org." +
+      "apache.spark.sql.execution.streaming.sta" +
+      "te.ClearH\000B\010\n\006method\"\341\005\n\014MapStateCall\022\021\n" +
+      "\tstateName\030\001 \001(\t\022H\n\006exists\030\002 \001(\01326.org.a" +
+      "pache.spark.sql.execution.streaming.stat" +
+      "e.ExistsH\000\022L\n\010getValue\030\003 \001(\01328.org.apach" +
+      "e.spark.sql.execution.streaming.state.Ge" +
+      "tValueH\000\022R\n\013containsKey\030\004 \001(\0132;.org.apac" +
+      "he.spark.sql.execution.streaming.state.C" +
+      "ontainsKeyH\000\022R\n\013updateValue\030\005 \001(\0132;.org." +
+      "apache.spark.sql.execution.streaming.sta" +
+      "te.UpdateValueH\000\022L\n\010iterator\030\006 \001(\01328.org" +
+      ".apache.spark.sql.execution.streaming.st" +
+      "ate.IteratorH\000\022D\n\004keys\030\007 \001(\01324.org.apach" +
+      "e.spark.sql.execution.streaming.state.Ke" +
+      "ysH\000\022H\n\006values\030\010 \001(\01326.org.apache.spark." +
+      "sql.execution.streaming.state.ValuesH\000\022N" +
+      "\n\tremoveKey\030\t \001(\01329.org.apache.spark.sql" +
+      ".execution.streaming.state.RemoveKeyH\000\022F" +
+      "\n\005clear\030\n \001(\01325.org.apache.spark.sql.exe" +
+      "cution.streaming.state.ClearH\000B\010\n\006method" +
+      "\"\035\n\016SetImplicitKey\022\013\n\003key\030\001 \001(\014\"\023\n\021Remov" +
+      "eImplicitKey\"\010\n\006Exists\"\005\n\003Get\"*\n\rRegiste" +
+      "rTimer\022\031\n\021expiryTimestampMs\030\001 \001(\003\"(\n\013Del" +
+      "eteTimer\022\031\n\021expiryTimestampMs\030\001 \001(\003\" \n\nL" +
+      "istTimers\022\022\n\niteratorId\030\001 \001(\t\"!\n\020ValueSt" +
+      "ateUpdate\022\r\n\005value\030\001 \001(\014\"\007\n\005Clear\"\"\n\014Lis" +
+      "tStateGet\022\022\n\niteratorId\030\001 \001(\t\"\016\n\014ListSta" +
+      "tePut\"\034\n\013AppendValue\022\r\n\005value\030\001 \001(\014\"\014\n\nA" +
+      "ppendList\"\033\n\010GetValue\022\017\n\007userKey\030\001 \001(\014\"\036" +
+      "\n\013ContainsKey\022\017\n\007userKey\030\001 \001(\014\"-\n\013Update" +
+      "Value\022\017\n\007userKey\030\001 \001(\014\022\r\n\005value\030\002 \001(\014\"\036\n" +
+      "\010Iterator\022\022\n\niteratorId\030\001 \001(\t\"\032\n\004Keys\022\022\n" +
+      "\niteratorId\030\001 \001(\t\"\034\n\006Values\022\022\n\niteratorI" +
+      "d\030\001 \001(\t\"\034\n\tRemoveKey\022\017\n\007userKey\030\001 \001(\014\"\\\n" +
+      "\016SetHandleState\022J\n\005state\030\001 \001(\0162;.org.apa" +
+      "che.spark.sql.execution.streaming.state." +
+      "HandleState\"\037\n\tTTLConfig\022\022\n\ndurationMs\030\001" +
+      " \001(\005*`\n\013HandleState\022\013\n\007CREATED\020\000\022\017\n\013INIT" +
+      "IALIZED\020\001\022\022\n\016DATA_PROCESSED\020\002\022\023\n\017TIMER_P" +
+      "ROCESSED\020\003\022\n\n\006CLOSED\020\004b\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -21933,165 +28921,225 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_descriptor,
-        new java.lang.String[] { "Version", "StatefulProcessorCall", "StateVariableRequest", "ImplicitGroupingKeyRequest", "Method", });
+        new java.lang.String[] { "Version", "StatefulProcessorCall", "StateVariableRequest", "ImplicitGroupingKeyRequest", "TimerRequest", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_descriptor =
       getDescriptor().getMessageTypes().get(1);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_descriptor,
         new java.lang.String[] { "StatusCode", "ErrorMessage", "Value", });
-    internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor =
+    internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_descriptor =
       getDescriptor().getMessageTypes().get(2);
+    internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_StateResponseWithLongTypeVal_descriptor,
+        new java.lang.String[] { "StatusCode", "ErrorMessage", "Value", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor =
+      getDescriptor().getMessageTypes().get(3);
     internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor,
-        new java.lang.String[] { "SetHandleState", "GetValueState", "GetListState", "GetMapState", "Method", });
+        new java.lang.String[] { "SetHandleState", "GetValueState", "GetListState", "GetMapState", "TimerStateCall", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_descriptor =
-      getDescriptor().getMessageTypes().get(3);
+      getDescriptor().getMessageTypes().get(4);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_descriptor,
         new java.lang.String[] { "ValueStateCall", "ListStateCall", "MapStateCall", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor =
-      getDescriptor().getMessageTypes().get(4);
+      getDescriptor().getMessageTypes().get(5);
     internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor,
         new java.lang.String[] { "SetImplicitKey", "RemoveImplicitKey", "Method", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_descriptor =
+      getDescriptor().getMessageTypes().get(6);
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_TimerRequest_descriptor,
+        new java.lang.String[] { "TimerValueRequest", "ExpiryTimerRequest", "Method", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_descriptor =
+      getDescriptor().getMessageTypes().get(7);
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_TimerValueRequest_descriptor,
+        new java.lang.String[] { "GetProcessingTimer", "GetWatermark", "Method", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_descriptor =
+      getDescriptor().getMessageTypes().get(8);
+    internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_ExpiryTimerRequest_descriptor,
+        new java.lang.String[] { "ExpiryTimestampMs", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_descriptor =
+      getDescriptor().getMessageTypes().get(9);
+    internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_GetProcessingTime_descriptor,
+        new java.lang.String[] { });
+    internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_descriptor =
+      getDescriptor().getMessageTypes().get(10);
+    internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_GetWatermark_descriptor,
+        new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor =
-      getDescriptor().getMessageTypes().get(5);
+      getDescriptor().getMessageTypes().get(11);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor,
         new java.lang.String[] { "StateName", "Schema", "MapStateValueSchema", "Ttl", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_descriptor =
+      getDescriptor().getMessageTypes().get(12);
+    internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_TimerStateCallCommand_descriptor,
+        new java.lang.String[] { "Register", "Delete", "List", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor =
-      getDescriptor().getMessageTypes().get(6);
+      getDescriptor().getMessageTypes().get(13);
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor,
         new java.lang.String[] { "StateName", "Exists", "Get", "ValueStateUpdate", "Clear", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_descriptor =
-      getDescriptor().getMessageTypes().get(7);
+      getDescriptor().getMessageTypes().get(14);
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_descriptor,
         new java.lang.String[] { "StateName", "Exists", "ListStateGet", "ListStatePut", "AppendValue", "AppendList", "Clear", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_descriptor =
-      getDescriptor().getMessageTypes().get(8);
+      getDescriptor().getMessageTypes().get(15);
     internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_descriptor,
         new java.lang.String[] { "StateName", "Exists", "GetValue", "ContainsKey", "UpdateValue", "Iterator", "Keys", "Values", "RemoveKey", "Clear", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor =
-      getDescriptor().getMessageTypes().get(9);
+      getDescriptor().getMessageTypes().get(16);
     internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor,
         new java.lang.String[] { "Key", });
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor =
-      getDescriptor().getMessageTypes().get(10);
+      getDescriptor().getMessageTypes().get(17);
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor =
-      getDescriptor().getMessageTypes().get(11);
+      getDescriptor().getMessageTypes().get(18);
     internal_static_org_apache_spark_sql_execution_streaming_state_Exists_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_Get_descriptor =
-      getDescriptor().getMessageTypes().get(12);
+      getDescriptor().getMessageTypes().get(19);
     internal_static_org_apache_spark_sql_execution_streaming_state_Get_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Get_descriptor,
         new java.lang.String[] { });
+    internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_descriptor =
+      getDescriptor().getMessageTypes().get(20);
+    internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_RegisterTimer_descriptor,
+        new java.lang.String[] { "ExpiryTimestampMs", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_descriptor =
+      getDescriptor().getMessageTypes().get(21);
+    internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_DeleteTimer_descriptor,
+        new java.lang.String[] { "ExpiryTimestampMs", });
+    internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_descriptor =
+      getDescriptor().getMessageTypes().get(22);
+    internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_org_apache_spark_sql_execution_streaming_state_ListTimers_descriptor,
+        new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_descriptor =
-      getDescriptor().getMessageTypes().get(13);
+      getDescriptor().getMessageTypes().get(23);
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_descriptor,
         new java.lang.String[] { "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor =
-      getDescriptor().getMessageTypes().get(14);
+      getDescriptor().getMessageTypes().get(24);
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_descriptor =
-      getDescriptor().getMessageTypes().get(15);
+      getDescriptor().getMessageTypes().get(25);
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_descriptor,
         new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_descriptor =
-      getDescriptor().getMessageTypes().get(16);
+      getDescriptor().getMessageTypes().get(26);
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_descriptor =
-      getDescriptor().getMessageTypes().get(17);
+      getDescriptor().getMessageTypes().get(27);
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_descriptor,
         new java.lang.String[] { "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_descriptor =
-      getDescriptor().getMessageTypes().get(18);
+      getDescriptor().getMessageTypes().get(28);
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_descriptor =
-      getDescriptor().getMessageTypes().get(19);
+      getDescriptor().getMessageTypes().get(29);
     internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_descriptor,
         new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_descriptor =
-      getDescriptor().getMessageTypes().get(20);
+      getDescriptor().getMessageTypes().get(30);
     internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_descriptor,
         new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_descriptor =
-      getDescriptor().getMessageTypes().get(21);
+      getDescriptor().getMessageTypes().get(31);
     internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_descriptor,
         new java.lang.String[] { "UserKey", "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_descriptor =
-      getDescriptor().getMessageTypes().get(22);
+      getDescriptor().getMessageTypes().get(32);
     internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_descriptor,
         new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Keys_descriptor =
-      getDescriptor().getMessageTypes().get(23);
+      getDescriptor().getMessageTypes().get(33);
     internal_static_org_apache_spark_sql_execution_streaming_state_Keys_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Keys_descriptor,
         new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Values_descriptor =
-      getDescriptor().getMessageTypes().get(24);
+      getDescriptor().getMessageTypes().get(34);
     internal_static_org_apache_spark_sql_execution_streaming_state_Values_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Values_descriptor,
         new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_descriptor =
-      getDescriptor().getMessageTypes().get(25);
+      getDescriptor().getMessageTypes().get(35);
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_descriptor,
         new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor =
-      getDescriptor().getMessageTypes().get(26);
+      getDescriptor().getMessageTypes().get(36);
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor,
         new java.lang.String[] { "State", });
     internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_descriptor =
-      getDescriptor().getMessageTypes().get(27);
+      getDescriptor().getMessageTypes().get(37);
     internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_descriptor,

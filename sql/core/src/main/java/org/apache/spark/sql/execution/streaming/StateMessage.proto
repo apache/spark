@@ -25,6 +25,7 @@ message StateRequest {
     StatefulProcessorCall statefulProcessorCall = 2;
     StateVariableRequest stateVariableRequest = 3;
     ImplicitGroupingKeyRequest implicitGroupingKeyRequest = 4;
+    TimerRequest timerRequest = 5;
   }
 }
 
@@ -34,12 +35,19 @@ message StateResponse {
   bytes value = 3;
 }
 
+message StateResponseWithLongTypeVal {
+  int32 statusCode = 1;
+  string errorMessage = 2;
+  int64 value = 3;
+}
+
 message StatefulProcessorCall {
   oneof method {
     SetHandleState setHandleState = 1;
     StateCallCommand getValueState = 2;
     StateCallCommand getListState = 3;
     StateCallCommand getMapState = 4;
+    TimerStateCallCommand timerStateCall = 5;
   }
 }
 
@@ -58,11 +66,43 @@ message ImplicitGroupingKeyRequest {
   }
 }
 
+message TimerRequest {
+  oneof method {
+    TimerValueRequest timerValueRequest = 1;
+    ExpiryTimerRequest expiryTimerRequest = 2;
+  }
+}
+
+message TimerValueRequest {
+  oneof method {
+    GetProcessingTime getProcessingTimer = 1;
+    GetWatermark getWatermark = 2;
+  }
+}
+
+message ExpiryTimerRequest {
+  int64 expiryTimestampMs = 1;
+}
+
+message GetProcessingTime {
+}
+
+message GetWatermark {
+}
+
 message StateCallCommand {
   string stateName = 1;
   string schema = 2;
   string mapStateValueSchema = 3;
   TTLConfig ttl = 4;
+}
+
+message TimerStateCallCommand {
+  oneof method {
+    RegisterTimer register = 1;
+    DeleteTimer delete = 2;
+    ListTimers list = 3;
+  }
 }
 
 message ValueStateCall {
@@ -113,6 +153,18 @@ message Exists {
 }
 
 message Get {
+}
+
+message RegisterTimer {
+  int64 expiryTimestampMs = 1;
+}
+
+message DeleteTimer {
+  int64 expiryTimestampMs = 1;
+}
+
+message ListTimers {
+  string iteratorId = 1;
 }
 
 message ValueStateUpdate {
@@ -169,7 +221,8 @@ enum HandleState {
   CREATED = 0;
   INITIALIZED = 1;
   DATA_PROCESSED = 2;
-  CLOSED = 3;
+  TIMER_PROCESSED = 3;
+  CLOSED = 4;
 }
 
 message SetHandleState {
