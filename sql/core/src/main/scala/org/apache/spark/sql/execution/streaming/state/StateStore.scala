@@ -219,6 +219,9 @@ trait StateStore extends ReadStateStore {
   def merge(key: UnsafeRow, value: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
 
+  def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit
+
+
   /**
    * Commit all the updates that have been made to the store, and return the new version.
    * Implementations should ensure that no more updates (puts, removes) can be after a commit in

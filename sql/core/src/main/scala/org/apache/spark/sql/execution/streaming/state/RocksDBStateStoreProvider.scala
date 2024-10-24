@@ -371,9 +371,47 @@ private[sql] class RocksDBStateStoreProvider
       kvEncoder._2.decodeValueBytes(rocksDB.get(kvEncoder._1.encodeKeyBytes(key)))
     }
 
+    override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
+      // Verify column family operation is valid
+      verifyColFamilyOperations("byteArrayIter", colFamilyName)
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val pair = new ByteArrayPair()
+
+      // Similar to the regular iterator, we need to handle both column family
+      // and non-column family cases
+      if (useColumnFamilies) {
+        rocksDB.prefixScan(kvEncoder._1.getColumnFamilyIdBytes()).map { kv =>
+          pair.set(
+            kvEncoder._1.decodeKeyBytes(kv.key),
+            kvEncoder._2.decodeValueBytes(kv.value))
+          pair
+        }
+      } else {
+        rocksDB.iterator().map { kv =>
+          pair.set(
+            kvEncoder._1.decodeKeyBytes(kv.key),
+            kvEncoder._2.decodeValueBytes(kv.value))
+          pair
+        }
+      }
+    }
+
     override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
-      throw StateStoreErrors.unsupportedOperationException(
-        "bytearray valuesIterator", "RocksDBStateStore")
+      verify(key != null, "Key cannot be null")
+      verifyColFamilyOperations("valuesIterator", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val valueEncoder = kvEncoder._2
+      val keyEncoder = kvEncoder._1
+
+      verify(valueEncoder.supportsMultipleValuesPerKey,
+        "valuesIterator requires an encoder that supports multiple values for a single key.")
+
+      // Get the encoded value bytes using the encoded key
+      val encodedValues = rocksDB.get(keyEncoder.encodeKeyBytes(key))
+
+      // Decode multiple values from the merged value bytes
+      valueEncoder.decodeValuesBytes(encodedValues)
     }
 
     override def prefixScan(
@@ -382,9 +420,19 @@ private[sql] class RocksDBStateStoreProvider
         "bytearray prefixScan", "RocksDBStateStore")
     }
 
-    override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
-      throw StateStoreErrors.unsupportedOperationException(
-        "byteArray iterator", "RocksDBStateStore")
+    override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+      verify(state == UPDATING, "Cannot merge after already committed or aborted")
+      verifyColFamilyOperations("merge", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val keyEncoder = kvEncoder._1
+      val valueEncoder = kvEncoder._2
+      verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
+        " which supports multiple values for a single key")
+      verify(key != null, "Key cannot be null")
+      require(value != null, "Cannot merge a null value")
+
+      rocksDB.merge(keyEncoder.encodeKeyBytes(key), valueEncoder.encodeValueBytes(value))
     }
   }
 

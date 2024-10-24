@@ -301,6 +301,11 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.unsupportedOperationException(
         "Byte Array iter", "HDFSStateStore")
     }
+
+    override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "Byte Array merge", "HDFSStateStore")
+    }
   }
 
   def getMetricsForProvider(): Map[String, Long] = synchronized {

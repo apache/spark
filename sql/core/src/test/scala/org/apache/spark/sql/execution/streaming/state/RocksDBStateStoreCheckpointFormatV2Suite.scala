@@ -156,6 +156,10 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
   override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
     throw new UnsupportedOperationException
   }
+
+  override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
 }
 
 class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {

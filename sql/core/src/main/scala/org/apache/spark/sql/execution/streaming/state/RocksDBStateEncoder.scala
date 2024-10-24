@@ -872,16 +872,93 @@ class MultiValuedStateEncoder(valueSchema: StructType)
 
   override def supportsMultipleValuesPerKey: Boolean = true
 
+  /**
+   * Encodes a raw byte array value in the multi-value format.
+   * Format: [length (4 bytes)][value bytes][delimiter (1 byte)]
+   */
   override def encodeValueBytes(row: Array[Byte]): Array[Byte] = {
-    throw new UnsupportedOperationException
+    if (row == null) {
+      null
+    } else {
+      val numBytes = row.length
+      // Allocate space for:
+      // - 4 bytes for length
+      // - The actual value bytes
+      val encodedBytes = new Array[Byte](java.lang.Integer.BYTES + numBytes)
+
+      // Write length as big-endian int
+      Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, numBytes)
+
+      // Copy value bytes after the length
+      Platform.copyMemory(
+        row, Platform.BYTE_ARRAY_OFFSET,
+        encodedBytes, Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES,
+        numBytes
+      )
+
+      encodedBytes
+    }
   }
 
+  /**
+   * Decodes a single value from the encoded byte format.
+   * Assumes the bytes represent a single value, not multiple merged values.
+   */
   override def decodeValueBytes(valueBytes: Array[Byte]): Array[Byte] = {
-    throw new UnsupportedOperationException
+    if (valueBytes == null) {
+      null
+    } else {
+      // Read length from first 4 bytes
+      val numBytes = Platform.getInt(valueBytes, Platform.BYTE_ARRAY_OFFSET)
+
+      // Extract just the value bytes after the length
+      val decodedBytes = new Array[Byte](numBytes)
+      Platform.copyMemory(
+        valueBytes, Platform.BYTE_ARRAY_OFFSET + java.lang.Integer.BYTES,
+        decodedBytes, Platform.BYTE_ARRAY_OFFSET,
+        numBytes
+      )
+
+      decodedBytes
+    }
   }
 
+  /**
+   * Decodes multiple values from the merged byte format.
+   * Returns an iterator that lazily decodes each value.
+   */
   override def decodeValuesBytes(valueBytes: Array[Byte]): Iterator[Array[Byte]] = {
-    throw new UnsupportedOperationException
+    if (valueBytes == null) {
+      Iterator.empty
+    } else {
+      new Iterator[Array[Byte]] {
+        // Track current position in the byte array
+        private var pos: Int = Platform.BYTE_ARRAY_OFFSET
+        private val maxPos = Platform.BYTE_ARRAY_OFFSET + valueBytes.length
+
+        override def hasNext: Boolean = pos < maxPos
+
+        override def next(): Array[Byte] = {
+          // Read length prefix
+          val numBytes = Platform.getInt(valueBytes, pos)
+          pos += java.lang.Integer.BYTES
+
+          // Extract value bytes
+          val decodedValue = new Array[Byte](numBytes)
+          Platform.copyMemory(
+            valueBytes, pos,
+            decodedValue, Platform.BYTE_ARRAY_OFFSET,
+            numBytes
+          )
+
+          // Move position past value and delimiter
+          pos += numBytes
+          pos += 1 // Skip delimiter byte
+
+          decodedValue
+        }
+      }
+    }
   }
 }
 
