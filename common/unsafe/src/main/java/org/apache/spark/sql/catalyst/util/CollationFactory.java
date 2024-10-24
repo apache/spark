@@ -326,11 +326,6 @@ public final class CollationFactory {
       private static final int INDETERMINATE_COLLATION_ID = -1;
 
       /**
-       * UTF8 Binary collation version.
-       */
-      private static final String UTF8_BINARY_VERSION = "1.0";
-
-      /**
        * Thread-safe cache mapping collation IDs to corresponding `Collation` instances.
        * We add entries to this cache lazily as new `Collation` instances are requested.
        */
@@ -580,7 +575,7 @@ public final class CollationFactory {
             PROVIDER_SPARK,
             null,
             comparator,
-            CollationSpec.UTF8_BINARY_VERSION,
+            CollationSpecICU.ICU_VERSION,
             hashFunction,
             equalsFunction,
             /* isUtf8BinaryType = */ true,
@@ -670,7 +665,7 @@ public final class CollationFactory {
         CollationIdentifier UTF8_BINARY_COLLATION_IDENT = new CollationIdentifier(
             PROVIDER_SPARK,
             UTF8_BINARY_COLLATION_NAME,
-            CollationSpec.UTF8_BINARY_VERSION
+            CollationSpecICU.ICU_VERSION
         );
         CollationIdentifier UTF8_LCASE_COLLATION_IDENT = new CollationIdentifier(
             PROVIDER_SPARK,
@@ -753,7 +748,9 @@ public final class CollationFactory {
       /**
        * ICU library version.
        */
-      private static final String ICU_VERSION = VersionInfo.ICU_VERSION.toString();
+      private static final String ICU_VERSION = String.format("%d.%d",
+        VersionInfo.ICU_VERSION.getMajor(),
+        VersionInfo.ICU_VERSION.getMinor());
 
       static {
         ICULocaleMap.put("UNICODE", ULocale.ROOT);

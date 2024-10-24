@@ -33,7 +33,7 @@ import org.apache.spark.unsafe.types.UTF8String.{fromString => toUTF8}
 
 class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ignore funsuite
 
-  val currentIcuVersion: String = "75.1.0.0"
+  val currentIcuVersion: String = "75.1"
 
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
@@ -42,7 +42,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
     assert(utf8Binary.isUtf8BinaryType)
-    assert(utf8Binary.version == "1.0")
+    assert(utf8Binary.version == currentIcuVersion)
 
     assert(UTF8_LCASE_COLLATION_ID == 1)
     val utf8Lcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
