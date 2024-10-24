@@ -383,9 +383,7 @@ private case class PostgresDialect()
         val tableName = rsmd.getTableName(columnIdx)
         val columnName = rsmd.getColumnName(columnIdx)
         val query = if (conf.postgresProperReadingOfArrayDimensionality) {
-          s"""
-             |SELECT min(array_ndims($columnName)) FROM $tableName
-             |""".stripMargin
+             s"SELECT array_ndims($columnName)) FROM $tableName LIMIT 1"
         } else {
           s"""
              |SELECT pg_attribute.attndims
@@ -398,7 +396,7 @@ private case class PostgresDialect()
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
-              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
+              if (rs.next()) metadata.putLong("arrayDimension", Math.max(rs.getLong(1), 1))
             }
           }
         } catch {

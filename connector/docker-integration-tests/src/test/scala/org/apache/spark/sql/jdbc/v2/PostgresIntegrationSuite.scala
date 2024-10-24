@@ -108,25 +108,21 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement("CREATE TABLE array_timestamptz (col timestamptz[])")
       .executeUpdate()
 
-    connection.prepareStatement("INSERT INTO array_int VALUES " +
-      "(array[array[10]]), (array[10])").executeUpdate()
-    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[array[10]]), (array[10])")
+    connection.prepareStatement("INSERT INTO array_int VALUES (array[array[10]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[array[10]])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[array[10]]), (array[10])")
+    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[array[10]])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_boolean VALUES " +
-        "(array[array[true]]), (array[true])")
+    connection.prepareStatement("INSERT INTO array_boolean VALUES (array[array[true]])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_float VALUES " +
-      "(array[array[10.5]]), (array[10.5])").executeUpdate()
-    connection.prepareStatement("INSERT INTO array_double " +
-      "VALUES (array[array[10.1]]), (array[10.1])").executeUpdate()
-    connection.prepareStatement("INSERT INTO array_timestamp VALUES " +
-        "(array[array['2022-01-01 09:15'::timestamp]]), (array['2022-01-01 09:15'::timestamp])")
+    connection.prepareStatement("INSERT INTO array_float VALUES (array[array[10.5]])")
       .executeUpdate()
+    connection.prepareStatement("INSERT INTO array_double VALUES (array[array[10.1]])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO array_timestamp VALUES (" +
+      "array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
     connection.prepareStatement("INSERT INTO array_timestamptz VALUES " +
-        "(array[array['2022-01-01 09:15'::timestamptz]]), (array['2022-01-01 09:15'::timestamptz])")
-      .executeUpdate()
+      "(array[array['2022-01-01 09:15'::timestamptz]])").executeUpdate()
     connection.prepareStatement(
     "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
     .executeUpdate()
@@ -137,6 +133,11 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       "VALUES (array[array[1],array[2]])").executeUpdate()
     connection.prepareStatement("CREATE TABLE ctas_array_of_array_of_int " +
       "AS SELECT * FROM array_of_array_of_int").executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE unsupported_array_of_array_of_int (col int[][])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO unsupported_array_of_array_of_int " +
+      "VALUES (array[array[1],array[2]]), (array[3])").executeUpdate()
   }
 
   test("Test multi-dimensional column types") {
@@ -341,6 +342,20 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
 
       checkAnswer(dfWithNewBehaviour, rowsWithOldBehaviour)
       checkAnswer(CTASdfWithNewBehaviour, rowsWithOldBehaviour)
+    }
+  }
+
+  test("Test reading multiple dimension array from table created via CTAS command " +
+    "- negative test") {
+    withSQLConf(SQLConf.POSTGRES_PROPER_READING_OF_ARRAY_DIMENSIONALITY.key -> "true") {
+      val exception = intercept[org.apache.spark.SparkSQLException] {
+        sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
+      }.getMessage
+
+      // There is 2d and 1d array in unsupported_array_of_array_of_int. Reading this table
+      // is not supported
+      assert(exception.contains("Some values in field 0 are incompatible with the" +
+        " column array type. Expected type \"ARRAY<ARRAY<INT>>\""))
     }
   }
 }
