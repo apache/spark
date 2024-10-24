@@ -369,7 +369,8 @@ class TransformWithStateInPandasTestsMixin:
             input_dir.cleanup()
 
     def _test_transform_with_state_in_pandas_proc_timer(
-            self, stateful_processor, check_results):
+        self, stateful_processor, check_results
+    ):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource3(input_path)
         self._prepare_test_resource1(input_path)
@@ -808,7 +809,7 @@ class MapStateProcessor(StatefulProcessor):
         value_schema = StructType([StructField("count", IntegerType(), True)])
         self.map_state = handle.getMapState("mapState", key_schema, value_schema)
 
-    def handleInputRows(self, key, rows):
+    def handleInputRows(self, key, rows, timer_values, expired_timer_info):
         count = 0
         key1 = ("key1",)
         key2 = ("key2",)

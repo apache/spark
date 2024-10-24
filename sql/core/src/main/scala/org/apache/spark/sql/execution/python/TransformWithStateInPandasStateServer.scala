@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
 import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
-import org.apache.spark.sql.streaming.{ListState, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
@@ -556,24 +556,6 @@ class TransformWithStateInPandasStateServer(
     }
   }
 
-  private def sendResponse(
-      status: Int,
-      errorMessage: String = null,
-      byteString: ByteString = null): Unit = {
-    val responseMessageBuilder = StateResponse.newBuilder().setStatusCode(status)
-    if (status != 0 && errorMessage != null) {
-      responseMessageBuilder.setErrorMessage(errorMessage)
-    }
-    if (byteString != null) {
-      responseMessageBuilder.setValue(byteString)
-    }
-    val responseMessage = responseMessageBuilder.build()
-    val responseMessageBytes = responseMessage.toByteArray
-    val byteLength = responseMessageBytes.length
-    outputStream.writeInt(byteLength)
-    outputStream.write(responseMessageBytes)
-  }
-
   private def initializeStateVariable(
       stateName: String,
       schemaString: String,
@@ -667,42 +649,44 @@ class TransformWithStateInPandasStateServer(
       outputStream.write(responseMessageBytes)
     }
 
-    private def sendIteratorAsArrowBatches[T](
-      iter: Iterator[T],
-      outputSchema: StructType,
-      arrowStreamWriterForTest: BaseStreamingArrowWriter = null)(func: T => InternalRow): Unit = {
-    outputStream.flush()
-    val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+    def sendIteratorAsArrowBatches[T](
+        iter: Iterator[T],
+        outputSchema: StructType,
+        arrowStreamWriterForTest: BaseStreamingArrowWriter = null)(func: T => InternalRow): Unit = {
+      outputStream.flush()
+      val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
         errorOnDuplicatedFieldNames, largeVarTypes)
-    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-      s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-    val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    val writer = new ArrowStreamWriter(root, null, outputStream)
-    val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-      arrowStreamWriterForTest
-    } else {
-      new BaseStreamingArrowWriter(root, writer, arrowTransformWithStateInPandasMaxRecordsPerBatch)
-    }
-    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
-    // when there are multiple state variables, user tries to access a different state variable
-    // while the current state variable is not exhausted yet.
-    var rowCount = 0
-    while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
-      val data = iter.next()
-      val internalRow = func(data)
-      arrowStreamWriter.writeRow(internalRow)
-      rowCount += 1
-    }
-    arrowStreamWriter.finalizeCurrentArrowBatch()
-    Utils.tryWithSafeFinally {
-      // end writes footer to the output stream and doesn't clean any resources.
-      // It could throw exception if the output stream is closed, so it should be
-      // in the try block.
-      writer.end()
-    } {
-      root.close()
-      allocator.close()
+      val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+        s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      val writer = new ArrowStreamWriter(root, null, outputStream)
+      val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
+        arrowStreamWriterForTest
+      } else {
+        new BaseStreamingArrowWriter(root, writer,
+          arrowTransformWithStateInPandasMaxRecordsPerBatch)
+      }
+      // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+      // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
+      // when there are multiple state variables, user tries to access a different state variable
+      // while the current state variable is not exhausted yet.
+      var rowCount = 0
+      while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+        val data = iter.next()
+        val internalRow = func(data)
+        arrowStreamWriter.writeRow(internalRow)
+        rowCount += 1
+      }
+      arrowStreamWriter.finalizeCurrentArrowBatch()
+      Utils.tryWithSafeFinally {
+        // end writes footer to the output stream and doesn't clean any resources.
+        // It could throw exception if the output stream is closed, so it should be
+        // in the try block.
+        writer.end()
+      } {
+        root.close()
+        allocator.close()
+      }
     }
   }
 }
