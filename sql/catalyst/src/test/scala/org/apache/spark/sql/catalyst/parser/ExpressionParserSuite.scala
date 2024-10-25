@@ -1082,8 +1082,8 @@ class ExpressionParserSuite extends AnalysisTest {
     // Unknown FROM TO intervals
     checkError(
       exception = parseException("interval '10' month to second"),
-      condition = "_LEGACY_ERROR_TEMP_0028",
-      parameters = Map("from" -> "month", "to" -> "second"),
+      condition = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
+      parameters = Map("input" -> "10", "from" -> "month", "to" -> "second"),
       context = ExpectedContext(
         fragment = "'10' month to second",
         start = 9,
