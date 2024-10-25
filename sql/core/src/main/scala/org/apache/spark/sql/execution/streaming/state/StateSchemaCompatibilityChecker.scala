@@ -41,7 +41,9 @@ case class StateSchemaValidationResult(
 case class AvroEncoderSpec(
   keySerializer: AvroSerializer,
   valueSerializer: AvroSerializer,
-  valueDeserializer: AvroDeserializer
+  valueDeserializer: AvroDeserializer,
+  compositeKeySerializer: Option[AvroSerializer] = None,
+  compositeKeyDeserializer: Option[AvroDeserializer] = None
 ) extends Serializable
 
 // Used to represent the schema of a column family in the state store

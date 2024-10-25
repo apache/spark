@@ -282,8 +282,24 @@ private[sql] class RocksDBStateStoreProvider
     override def prefixScan(
         prefixKey: Array[Byte],
         colFamilyName: String): Iterator[ByteArrayPair] = {
-      throw StateStoreErrors.unsupportedOperationException(
-        "bytearray prefixScan", "RocksDBStateStore")
+      verifyColFamilyOperations("prefixScan", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      require(kvEncoder._1.supportPrefixKeyScan,
+        "Prefix scan requires setting prefix key!")
+
+      // For byte arrays, we can use the prefix key directly since it's already encoded
+      val prefix = kvEncoder._1.encodePrefixKeyBytes(prefixKey)
+      rocksDB.prefixScan(prefix).map { kv =>
+        // Create new byte arrays to ensure no modification of underlying data
+        val keyBytes = new Array[Byte](kv.key.length)
+        val valueBytes = new Array[Byte](kv.value.length)
+        System.arraycopy(kv.key, 0, keyBytes, 0, kv.key.length)
+        System.arraycopy(kv.value, 0, valueBytes, 0, kv.value.length)
+
+        new ByteArrayPair(kvEncoder._1.decodeKeyBytes(keyBytes),
+          kvEncoder._2.decodeValueBytes(valueBytes))
+      }
     }
 
     override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {

@@ -33,6 +33,7 @@ sealed trait RocksDBKeyStateEncoder {
   def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def encodeKey(row: UnsafeRow): Array[Byte]
   def decodeKey(keyBytes: Array[Byte]): UnsafeRow
+  def encodePrefixKeyBytes(prefixKey: Array[Byte]): Array[Byte]
   def encodeKeyBytes(row: Array[Byte]): Array[Byte]
   def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte]
   def getColumnFamilyIdBytes(): Array[Byte]
@@ -316,11 +317,40 @@ class PrefixKeyScanStateEncoder(
 
   override def supportPrefixKeyScan: Boolean = true
 
-  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] =
-    throw new UnsupportedOperationException
+  override def encodePrefixKeyBytes(prefixKey: Array[Byte]): Array[Byte] = {
+    // The input prefixKey is already correctly encoded
+    // Just add column family prefix
+    val totalSize = prefixKey.length + offsetForColFamilyPrefix
+    val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(totalSize)
 
-  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] =
-    throw new UnsupportedOperationException
+    Platform.copyMemory(prefixKey, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, startingOffset, prefixKey.length)
+
+    encodedBytes
+  }
+
+  override def encodeKeyBytes(row: Array[Byte]): Array[Byte] = {
+    // The input row already has correct composite structure
+    // We just need to add column family prefix
+    val totalSize = row.length + offsetForColFamilyPrefix
+    val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(totalSize)
+
+    Platform.copyMemory(row, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, startingOffset, row.length)
+
+    encodedBytes
+  }
+
+  override def decodeKeyBytes(keyBytes: Array[Byte]): Array[Byte] = {
+    // Remove column family prefix and return original bytes
+    val dataLength = keyBytes.length - offsetForColFamilyPrefix
+    val result = new Array[Byte](dataLength)
+
+    Platform.copyMemory(keyBytes, decodeKeyStartOffset,
+      result, Platform.BYTE_ARRAY_OFFSET, dataLength)
+
+    result
+  }
 }
 
 /**
@@ -699,6 +729,10 @@ class RangeKeyScanStateEncoder(
 
   override def supportPrefixKeyScan: Boolean = true
 
+
+  override def encodePrefixKeyBytes(prefixKey: Array[Byte]): Array[Byte] =
+    throw new UnsupportedOperationException
+
   override def encodeKeyBytes(row: Array[Byte]): Array[Byte] =
     throw new UnsupportedOperationException
 
@@ -834,6 +868,10 @@ class NoPrefixKeyStateEncoder(
   override def supportPrefixKeyScan: Boolean = false
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
+    throw new IllegalStateException("This encoder doesn't support prefix key!")
+  }
+
+  override def encodePrefixKeyBytes(prefixKey: Array[Byte]): Array[Byte] = {
     throw new IllegalStateException("This encoder doesn't support prefix key!")
   }
 }

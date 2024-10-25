@@ -21,7 +21,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{AvroEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{AvroEncoderSpec, ByteArrayPair, PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors, UnsafeRowPair}
 import org.apache.spark.sql.streaming.MapState
 import org.apache.spark.sql.types.StructType
 
@@ -42,7 +42,7 @@ class MapStateImpl[K, V](
     keyExprEnc: ExpressionEncoder[Any],
     userKeyEnc: Encoder[K],
     valEncoder: Encoder[V],
-    avroEnc: Option[AvroEncoderSpec],
+    avroSerde: Option[AvroEncoderSpec],
     metrics: Map[String, SQLMetric] = Map.empty) extends MapState[K, V] with Logging {
 
   // Pack grouping key and user key together as a prefixed composite key
@@ -50,7 +50,13 @@ class MapStateImpl[K, V](
     getCompositeKeySchema(keyExprEnc.schema, userKeyEnc.schema)
   }
   private val schemaForValueRow: StructType = valEncoder.schema
-  private val stateTypesEncoder = new CompositeKeyUnsafeRowEncoder(
+
+  // If we are using Avro, the avroSerde parameter must be populated
+  // else, we will default to using UnsafeRow.
+  private val usingAvro: Boolean = avroSerde.isDefined
+  private val avroTypesEncoder = new CompositeKeyAvroRowEncoder(
+    keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = false, avroSerde)
+  private val unsafeRowTypesEncoder = new CompositeKeyUnsafeRowEncoder(
     keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = false)
 
   store.createColFamilyIfAbsent(stateName, schemaForCompositeKeyRow, schemaForValueRow,
@@ -58,17 +64,30 @@ class MapStateImpl[K, V](
 
   /** Whether state exists or not. */
   override def exists(): Boolean = {
-    store.prefixScan(stateTypesEncoder.encodeGroupingKey(), stateName).nonEmpty
+    if (usingAvro) {
+      val encodedGroupingKey = avroTypesEncoder.encodeGroupingKey()
+      store.prefixScan(encodedGroupingKey, stateName).nonEmpty
+    } else {
+      val encodedGroupingKey = unsafeRowTypesEncoder.encodeGroupingKey()
+      store.prefixScan(encodedGroupingKey, stateName).nonEmpty
+    }
   }
 
   /** Get the state value if it exists */
   override def getValue(key: K): V = {
     StateStoreErrors.requireNonNullStateValue(key, stateName)
-    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
-    val unsafeRowValue = store.get(encodedCompositeKey, stateName)
 
-    if (unsafeRowValue == null) return null.asInstanceOf[V]
-    stateTypesEncoder.decodeValue(unsafeRowValue)
+    if (usingAvro) {
+      val encodedCompositeKey = avroTypesEncoder.encodeCompositeKey(key)
+      val valueBytes = store.get(encodedCompositeKey, stateName)
+      if (valueBytes == null) return null.asInstanceOf[V]
+      avroTypesEncoder.decodeValue(valueBytes)
+    } else {
+      val encodedCompositeKey = unsafeRowTypesEncoder.encodeCompositeKey(key)
+      val unsafeRowValue = store.get(encodedCompositeKey, stateName)
+      if (unsafeRowValue == null) return null.asInstanceOf[V]
+      unsafeRowTypesEncoder.decodeValue(unsafeRowValue)
+    }
   }
 
   /** Check if the user key is contained in the map */
@@ -81,21 +100,36 @@ class MapStateImpl[K, V](
   override def updateValue(key: K, value: V): Unit = {
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     StateStoreErrors.requireNonNullStateValue(value, stateName)
-    val encodedValue = stateTypesEncoder.encodeValue(value)
-    val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
-    store.put(encodedCompositeKey, encodedValue, stateName)
+
+    if (usingAvro) {
+      val encodedValue = avroTypesEncoder.encodeValue(value)
+      val encodedCompositeKey = avroTypesEncoder.encodeCompositeKey(key)
+      store.put(encodedCompositeKey, encodedValue, stateName)
+    } else {
+      val encodedValue = unsafeRowTypesEncoder.encodeValue(value)
+      val encodedCompositeKey = unsafeRowTypesEncoder.encodeCompositeKey(key)
+      store.put(encodedCompositeKey, encodedValue, stateName)
+    }
     TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
   }
 
   /** Get the map associated with grouping key */
   override def iterator(): Iterator[(K, V)] = {
-    val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
-    store.prefixScan(encodedGroupingKey, stateName)
-      .map {
-        case iter: UnsafeRowPair =>
-          (stateTypesEncoder.decodeCompositeKey(iter.key),
-            stateTypesEncoder.decodeValue(iter.value))
-      }
+    if (usingAvro) {
+      val encodedGroupingKey = avroTypesEncoder.encodeGroupingKey()
+      store.prefixScan(encodedGroupingKey, stateName)
+        .map { case pair: ByteArrayPair =>
+          (avroTypesEncoder.decodeCompositeKey(pair.key),
+            avroTypesEncoder.decodeValue(pair.value))
+        }
+    } else {
+      val encodedGroupingKey = unsafeRowTypesEncoder.encodeGroupingKey()
+      store.prefixScan(encodedGroupingKey, stateName)
+        .map { case pair: UnsafeRowPair =>
+          (unsafeRowTypesEncoder.decodeCompositeKey(pair.key),
+            unsafeRowTypesEncoder.decodeValue(pair.value))
+        }
+    }
   }
 
   /** Get the list of keys present in map associated with grouping key */
@@ -111,8 +145,13 @@ class MapStateImpl[K, V](
   /** Remove user key from map state */
   override def removeKey(key: K): Unit = {
     StateStoreErrors.requireNonNullStateValue(key, stateName)
-    val compositeKey = stateTypesEncoder.encodeCompositeKey(key)
-    store.remove(compositeKey, stateName)
+    if (usingAvro) {
+      val compositeKey = avroTypesEncoder.encodeCompositeKey(key)
+      store.remove(compositeKey, stateName)
+    } else {
+      val compositeKey = unsafeRowTypesEncoder.encodeCompositeKey(key)
+      store.remove(compositeKey, stateName)
+    }
     // Note that for mapState, the rows are flattened. So we count the number of rows removed
     // proportional to the number of keys in the map per grouping key.
     TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
@@ -120,8 +159,8 @@ class MapStateImpl[K, V](
 
   /** Remove this state. */
   override def clear(): Unit = {
-    keys().foreach { itr =>
-      removeKey(itr)
+    keys().foreach { key =>
+      removeKey(key)
     }
   }
 }

@@ -348,6 +348,92 @@ class CompositeKeyUnsafeRowEncoder[K, V](
   }
 }
 
+class CompositeKeyAvroRowEncoder[K, V](
+    keyEncoder: ExpressionEncoder[Any],
+    userKeyEnc: Encoder[K],
+    valEncoder: Encoder[V],
+    stateName: String,
+    hasTtl: Boolean,
+    avroEnc: Option[AvroEncoderSpec])
+  extends AvroTypesEncoder[V](keyEncoder, valEncoder, stateName, hasTtl, avroEnc) {
+
+  import TransformWithStateKeyValueRowSchemaUtils._
+
+  /** Encoders */
+  private val userKeyExpressionEnc = encoderFor(userKeyEnc)
+
+  /** Schemas */
+  private val schemaForGroupingKeyRow = new StructType().add("key", keyEncoder.schema)
+  private val schemaForUserKeyRow = new StructType().add("userKey", userKeyEnc.schema)
+  private val schemaForCompositeKeyRow = getCompositeKeySchema(keyEncoder.schema, userKeyEnc.schema)
+
+  /** Avro Types */
+  private val groupingKeyAvroType = SchemaConverters.toAvroType(schemaForGroupingKeyRow)
+  private val userKeyAvroType = SchemaConverters.toAvroType(schemaForUserKeyRow)
+  private val compositeKeyAvroType = SchemaConverters.toAvroType(schemaForCompositeKeyRow)
+
+  /** Serializers */
+  private val groupingKeySerializer = keyEncoder.createSerializer()
+  private val userKeySerializer = userKeyExpressionEnc.createSerializer()
+
+  /** Deserializer */
+  private val userKeyRowToObjDeserializer =
+    userKeyExpressionEnc.resolveAndBind().createDeserializer()
+
+  override def encodeGroupingKey(): Array[Byte] = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+
+    // First convert the key to an InternalRow using the encoder
+    val valueRow = groupingKeySerializer.apply(keyOption.get)
+    // Then wrap it in another InternalRow with field name "key"
+    val keyRow = InternalRow(valueRow)
+    // Now serialize to Avro
+    val avroData = avroEnc.get.keySerializer.serialize(keyRow)
+
+    out.reset()
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](groupingKeyAvroType)
+
+    writer.write(avroData, encoder)
+    encoder.flush()
+    out.toByteArray
+  }
+
+  def encodeCompositeKey(userKey: K): Array[Byte] = {
+    val keyOption = ImplicitGroupingKeyTracker.getImplicitKeyOption
+    if (keyOption.isEmpty) {
+      throw StateStoreErrors.implicitKeyNotFound(stateName)
+    }
+    val groupingKey = keyOption.get
+
+    val keyRow = groupingKeySerializer.apply(groupingKey)
+    val userKeyRow = userKeySerializer.apply(userKey)
+
+    // InternalRow(InternalRow) -> GenericDataRecord
+    val avroData = avroEnc.get.compositeKeySerializer.get.
+      serialize(InternalRow(keyRow, userKeyRow))
+    out.reset()
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](compositeKeyAvroType)
+
+    writer.write(avroData, encoder)
+    encoder.flush()
+    out.toByteArray
+  }
+
+  def decodeCompositeKey(row: Array[Byte]): K = {
+    val reader = new GenericDatumReader[Any](compositeKeyAvroType)
+    val decoder = DecoderFactory.get().binaryDecoder(row, 0, row.length, null)
+    val genericData = reader.read(null, decoder) // bytes -> GenericDataRecord
+    val internalRow = avroEnc.get.compositeKeyDeserializer.get.deserialize(
+      genericData).orNull.asInstanceOf[InternalRow] // GenericDataRecord -> InternalRow
+    userKeyRowToObjDeserializer.apply(internalRow.getStruct(1, userKeyEnc.schema.length))
+  }
+}
+
 /** Class for TTL with single key serialization */
 class SingleKeyTTLEncoder(
     keyExprEnc: ExpressionEncoder[Any]) {
