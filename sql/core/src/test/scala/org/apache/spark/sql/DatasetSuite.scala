@@ -20,7 +20,9 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import scala.beans.BeanProperty
 import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -34,10 +36,10 @@ import org.apache.spark.{SparkConf, SparkRuntimeException, SparkUnsupportedOpera
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, InternalRow, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoders, ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BoxedIntEncoder
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericInternalRow, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.DataFrameQueryContext
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -51,6 +53,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
@@ -2784,6 +2787,22 @@ class DatasetSuite extends QueryTest
       WithSet(0, HashSet("foo", "bar")), WithSet(1, HashSet("bar", "zoo")))
   }
 
+  test("SPARK-49727: Bean with a serializable POJO looses Data when recreated from" +
+    " corresponding dataframe") {
+    val data = Seq(1, 2, 3).map(id => {
+      val b = new BeanWithPojo()
+      b.setPrimitiveInt(id)
+      b.setPojo(new JavaData(id))
+      b
+    })
+    val enc = Encoders.bean(classOf[BeanWithPojo])
+    val ds = spark.createDataset(data)(enc)
+    val df = ds.toDF()
+    // get data set back
+    val recoveredDS = df.as(enc).collect().toSet
+    assert(recoveredDS == data.toSet)
+  }
+
   test("SPARK-47270: isEmpty does not trigger job execution on CommandResults") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       withTable("t1") {
@@ -2801,6 +2820,79 @@ class DatasetSuite extends QueryTest
         assert(jobCounter === 0)
       }
     }
+  }
+
+  test("SPARK-49789 Bean class encoding with generic type implementing Serializable") {
+    // just create encoder
+    val enc = Encoders.bean(classOf[MessageWrapper[_]])
+    val data = Seq("test1", "test2").map(str => {
+      val msg = new MessageWrapper[String]()
+      msg.setMessage(str)
+      msg
+    })
+    validateParamBeanDataset(classOf[MessageWrapper[String]],
+      data, mutable.Buffer(data: _*),
+      StructType(Seq(StructField("message", BinaryType, true)))
+    )
+  }
+
+  test("SPARK-49789 Bean class encoding with  generic type indirectly extending" +
+    " Serializable class") {
+    // just create encoder
+    Encoders.bean(classOf[BigDecimalMessageWrapper[_]])
+    val data = Seq(2d, 8d).map(doub => {
+      val bean = new BigDecimalMessageWrapper[DerivedBigDecimalExtender]()
+      bean.setMessage(new DerivedBigDecimalExtender(doub))
+      bean
+    })
+    validateParamBeanDataset(
+      classOf[BigDecimalMessageWrapper[DerivedBigDecimalExtender]],
+      data, mutable.Buffer(data: _*),
+      StructType(Seq(StructField("message", BinaryType, true))))
+  }
+
+  test("SPARK-49789. test bean class with  generictype bound of UDTType") {
+    // just create encoder
+    UDTRegistration.register(classOf[TestUDT].getName, classOf[TestUDTType].getName)
+    val enc = Encoders.bean(classOf[UDTBean[_]])
+    val baseData = Seq((1, "a"), (2, "b"))
+    val data = baseData.map(tup => {
+      val bean = new UDTBean[TestUDT]()
+      bean.setMessage(new TestUDTImplSub(tup._1, tup._2))
+      bean
+    })
+    val expectedData = baseData.map(tup => {
+      val bean = new UDTBean[TestUDT]()
+      bean.setMessage(new TestUDTImpl(tup._1, tup._2))
+      bean
+    })
+    validateParamBeanDataset(
+      classOf[UDTBean[TestUDT]],
+      data, mutable.Buffer(expectedData: _*),
+      StructType(Seq(StructField("message", new TestUDTType(), true))))
+  }
+
+  private def validateParamBeanDataset[T](
+                                           classToEncode: Class[T],
+                                           data: Seq[T],
+                                           expectedData: mutable.Buffer[T],
+                                           expectedSchema: StructType): Unit = {
+
+    val ds = spark.createDataset(data)(Encoders.bean(classToEncode))
+    val resultData = ds.collect()
+    assertResult(expectedData.size)(resultData.length)
+    resultData.foreach(e => {
+      val i = expectedData.indexOf(e)
+      assert(i >= 0)
+      expectedData.remove(i)
+    })
+    assert(expectedData.isEmpty)
+
+    val df = ds.toDF()
+    val schema = df.schema
+    assertResult(expectedSchema)(schema)
+    val resultRows = df.collect()
+    assertResult(data.size)(resultRows.length)
   }
 }
 
@@ -2859,6 +2951,21 @@ case class WithSet(id: Int, values: Set[String])
 
 case class Generic[T](id: T, value: Double)
 
+class BeanWithPojo {
+  @BeanProperty var primitiveInt: Int = 0
+  @BeanProperty var pojo: JavaData = null
+
+  override def equals(obj: Any): Boolean = obj match {
+    case b: BeanWithPojo => b.primitiveInt == this.primitiveInt &&
+      (((this.pojo eq null) && (b.pojo eq null)) ||
+        ((this.pojo ne null) && (b.pojo ne null) && this.pojo == b.pojo))
+
+    case _ => false
+  }
+
+  override def hashCode(): Int = Option(pojo).hashCode() + this.primitiveInt
+}
+
 case class OtherTuple(_1: String, _2: Int)
 
 case class TupleClass(data: (Int, String))
@@ -2909,6 +3016,7 @@ object KryoData {
 
 /** Used to test Java encoder. */
 class JavaData(val a: Int) extends Serializable {
+  def this() = this(0)
   override def equals(other: Any): Boolean = {
     a == other.asInstanceOf[JavaData].a
   }
@@ -2945,3 +3053,132 @@ case class SaveModeArrayCase(modes: Array[SaveMode])
 
 case class K1(a: Long)
 case class K2(a: Long, b: Long)
+
+class MessageWrapper[T <: java.io.Serializable] extends java.io.Serializable {
+  private var message: T = _
+
+  def getMessage: T = message
+
+  def setMessage(message: T): Unit = {
+    this.message = message
+  }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case m: MessageWrapper[_] => m.message == this.message
+
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = this.message.hashCode()
+}
+
+class BigDecimalMessageWrapper[T <: BigDecimalExtender] extends java.io.Serializable {
+  private var message: T = _
+
+  def getMessage: T = message
+
+  def setMessage(message: T): Unit = {
+    this.message = message
+  }
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case m: BigDecimalMessageWrapper[_] => m.message == this.message
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = this.message.hashCode()
+}
+
+class BigDecimalExtender(doub: Double) extends java.math.BigDecimal(doub) {
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case m: BigDecimalExtender => super.equals(m.asInstanceOf[java.math.BigDecimal])
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = super.hashCode()
+}
+
+class DerivedBigDecimalExtender(doub: Double) extends BigDecimalExtender(doub) {
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case m: DerivedBigDecimalExtender => super.equals(m.asInstanceOf[BigDecimalExtender])
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = super.hashCode()
+}
+
+trait TestUDT extends Serializable {
+  def intField: Int
+
+  def stringField: String
+}
+
+class TestUDTImpl(var intF: Int, var stringF: String) extends TestUDT {
+  def this() = this(0, "")
+
+  override def intField: Int = intF
+
+  override def stringField: String = stringF
+
+  override def hashCode(): Int = intF.hashCode() + stringF.hashCode
+
+  override def equals(obj: Any): Boolean = obj match {
+    case b: TestUDT => b.intField == this.intField && b.stringField == this.stringField
+
+    case _ => false
+  }
+}
+
+class TestUDTImplSub(var iF: Int, var sF: String) extends TestUDTImpl(iF, sF) {
+  def this() = this(0, "")
+}
+
+class UDTBean[T <: TestUDT] extends java.io.Serializable {
+  private var message: T = _
+
+  def getMessage: T = message
+
+  def setMessage(message: T): Unit = {
+    this.message = message
+  }
+
+  override def hashCode(): Int = message.hashCode()
+
+  override def equals(obj: Any): Boolean = obj match {
+    case b: UDTBean[_] => b.message == this.message
+
+    case _ => false
+  }
+}
+
+class TestUDTType extends UserDefinedType[TestUDT] {
+
+  override def sqlType: StructType = {
+    StructType(Seq(
+      StructField("intField", IntegerType, nullable = false),
+      StructField("stringField", StringType, nullable = false)))
+  }
+
+  override def serialize(obj: TestUDT): InternalRow = {
+    new GenericInternalRow(Array(obj.intField, UTF8String.fromString(obj.stringField)))
+  }
+
+  override def deserialize(datum: Any): TestUDT = {
+    datum match {
+      case row: InternalRow =>
+        val intF = row.getInt(0)
+        val strF = row.getString(1)
+        new TestUDTImpl(intF, strF)
+    }
+  }
+
+  override def userClass: Class[TestUDT] = classOf[TestUDT]
+}
