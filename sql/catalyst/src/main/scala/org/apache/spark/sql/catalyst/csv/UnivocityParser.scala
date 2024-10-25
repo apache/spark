@@ -167,7 +167,7 @@ class UnivocityParser(
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
-  private def tryWithTrim[T](f: String => T): String => T = {
+  private def retryWithTrim[T](f: String => T): String => T = {
     value => try f(value) catch {
       case _: NumberFormatException | _: IllegalArgumentException => f(value.trim)
     }
@@ -185,16 +185,16 @@ class UnivocityParser(
       dataType: DataType,
       nullable: Boolean = true): ValueConverter = dataType match {
     case _: ByteType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(tryWithTrim[Byte](_.toByte))
+      nullSafeDatum(d, name, nullable, options)(retryWithTrim[Byte](_.toByte))
 
     case _: ShortType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(tryWithTrim[Short](_.toShort))
+      nullSafeDatum(d, name, nullable, options)(retryWithTrim[Short](_.toShort))
 
     case _: IntegerType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(tryWithTrim[Int](_.toInt))
+      nullSafeDatum(d, name, nullable, options)(retryWithTrim[Int](_.toInt))
 
     case _: LongType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(tryWithTrim[Long](_.toLong))
+      nullSafeDatum(d, name, nullable, options)(retryWithTrim[Long](_.toLong))
 
     case _: FloatType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) {
@@ -213,7 +213,7 @@ class UnivocityParser(
       }
 
     case _: BooleanType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(tryWithTrim[Boolean](_.toBoolean))
+      nullSafeDatum(d, name, nullable, options)(retryWithTrim[Boolean](_.toBoolean))
 
     case dt: DecimalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
