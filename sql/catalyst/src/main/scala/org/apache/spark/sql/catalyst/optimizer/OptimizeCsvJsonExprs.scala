@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_NAMED_STRUCT, EXTRACT_VALUE,
-  JSON_TO_STRUCT}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_NAMED_STRUCT, CSV_TO_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT}
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
@@ -35,12 +34,14 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  *      if JsonToStructs(json) is shared among all fields of CreateNamedStruct. `prunedSchema`
  *      contains all accessed fields in original CreateNamedStruct.
  * 4. Prune unnecessary columns from GetStructField + CsvToStructs.
+ * 5. CsvToStructs(StructsToCsv(child)) => child.
  */
 object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def nameOfCorruptRecord = conf.columnNameOfCorruptRecord
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT), ruleId) {
+    _.containsAnyPattern(CREATE_NAMED_STRUCT, CSV_TO_STRUCT,
+      EXTRACT_VALUE, JSON_TO_STRUCT), ruleId) {
     case p =>
       val optimized = if (conf.jsonExpressionOptimization) {
         p.transformExpressionsWithPruning(
@@ -52,7 +53,7 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
       if (conf.csvExpressionOptimization) {
         optimized.transformExpressionsWithPruning(
-          _.containsAnyPattern(EXTRACT_VALUE))(csvOptimization)
+          _.containsAnyPattern(EXTRACT_VALUE, CSV_TO_STRUCT))(csvOptimization)
       } else {
         optimized
       }
@@ -127,5 +128,11 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
         // is set.
       val prunedSchema = StructType(Array(schema(ordinal)))
       g.copy(child = c.copy(requiredSchema = Some(prunedSchema)), ordinal = 0)
+
+    case csvToStructs @ CsvToStructs(_, options1,
+      StructsToCsv(options2, child, timeZoneId2), timeZoneId1, _)
+        if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 &&
+          csvToStructs.dataType == child.dataType =>
+      child
   }
 }

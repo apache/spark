@@ -168,4 +168,6 @@ object TreePattern extends Enumeration  {
 
   // Execution Plan patterns (alphabetically ordered)
   val EXCHANGE: Value = Value
+
+  val CSV_TO_STRUCT: Value = Value
 }
