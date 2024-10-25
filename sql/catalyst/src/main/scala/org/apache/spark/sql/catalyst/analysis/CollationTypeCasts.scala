@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
@@ -152,16 +150,15 @@ object CollationTypeCasts extends TypeCoercionRule {
   }
 
   private def castStringType(inType: DataType, castType: StringType): Option[DataType] = {
-    @Nullable val ret: DataType = inType match {
+    inType match {
       case st: StringType
           // TODO: should we override equals to do this?
           if st.collationId != castType.collationId || st.strength != castType.strength =>
-        castType
+        Some(castType)
       case ArrayType(arrType, nullable) =>
-        castStringType(arrType, castType).map(ArrayType(_, nullable)).orNull
-      case _ => null
+        castStringType(arrType, castType).map(ArrayType(_, nullable))
+      case _ => None
     }
-    Option(ret)
   }
 
   /**
@@ -237,8 +234,8 @@ object CollationTypeCasts extends TypeCoercionRule {
    * before we start computing the least common string type.
    */
   private def preprocessCollationStrengths(expr: Expression): Expression = expr match {
-    // subquery and var reference should always have implicit strength
-    case _: SubqueryExpression | _: VariableReference =>
+    // var reference should always have implicit strength
+    case _: VariableReference =>
       extractStringType(expr.dataType) match {
         case Some(st) => castStringType(expr, StringType(st.collationId, Implicit))
         case _ => expr
@@ -251,8 +248,10 @@ object CollationTypeCasts extends TypeCoercionRule {
 
       (extractStringType(cast.dataType), extractStringType(cast.child.dataType)) match {
         case (Some(_), Some(childType)) =>
-          val newType = castStringType(cast.dataType, childType)
-          cast.copy(dataType = newType.get)
+          castStringType(cast.dataType, childType) match {
+            case Some(dt) => cast.copy(dataType = dt)
+            case None => cast
+          }
         case _ =>
           cast
       }

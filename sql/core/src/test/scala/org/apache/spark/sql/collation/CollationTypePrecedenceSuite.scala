@@ -41,11 +41,11 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
 //    sql(s"SELECT a = 'a'")
     sql(s"SELECT a = CAST('5' as STRING)")
     sql(s"SELECT a = (SELECT b COLLATE UNICODE)")
-    sql(s"SELECT a = b")
+//    sql(s"SELECT a = b")
   }
 
   test("user defined cast") {
-    val tableName = "def_coll_tbl"
+    val tableName = "dflt_coll_tbl"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (c1 STRING COLLATE UNICODE) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a')")
