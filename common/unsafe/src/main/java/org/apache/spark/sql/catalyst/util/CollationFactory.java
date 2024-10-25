@@ -360,6 +360,23 @@ public final class CollationFactory {
       }
 
       /**
+       * Returns if leading/trailing spaces should be ignored in trim string expressions. This is
+       * needed because space trimming collation directly changes behaviour of trim functions.
+       */
+      protected static boolean ignoresSpacesInTrimFunctions(
+          int collationId,
+          boolean isLTrim,
+          boolean isRTrim) {
+        if (isRTrim && getSpaceTrimming(collationId) == SpaceTrimming.RTRIM) {
+          return true;
+        }
+
+        // In case of adding new trimming collations in the future (LTRIM and TRIM) here logic
+        // should be added.
+        return false;
+      }
+
+      /**
        * Utility function to trim spaces when collation uses space trimming.
        */
       protected static UTF8String applyTrimmingPolicy(UTF8String s, SpaceTrimming spaceTrimming) {
@@ -1198,6 +1215,24 @@ public final class CollationFactory {
 
   public static String[] getICULocaleNames() {
     return Collation.CollationSpecICU.ICULocaleNames;
+  }
+
+  /**
+   * Applies trimming policy depending up on trim collation type.
+   */
+  public static UTF8String applyTrimmingPolicy(UTF8String input, int collationId) {
+    return Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
+  }
+
+  /**
+   * Returns if leading/trailing spaces should be ignored in trim string expressions. This is needed
+   * because space trimming collation directly changes behaviour of trim functions.
+   */
+  public static boolean ignoresSpacesInTrimFunctions(
+      int collationId,
+      boolean isLTrim,
+      boolean isRTrim) {
+    return Collation.CollationSpec.ignoresSpacesInTrimFunctions(collationId, isLTrim, isRTrim);
   }
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
