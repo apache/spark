@@ -21448,11 +21448,11 @@ def try_make_timestamp(
     >>> df.select(sf.try_make_timestamp(
     ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
     ... ).show(truncate=False)
-    +--------------------------------------------------------------+
-    |try_make_timestamp(year, month, day, hour, min, sec, timezone)|
-    +--------------------------------------------------------------+
-    |2014-12-27 21:30:45.887                                       |
-    +--------------------------------------------------------------+
+    +----------------------------------------------------+
+    |try_make_timestamp(year, month, day, hour, min, sec)|
+    +----------------------------------------------------+
+    |2014-12-27 21:30:45.887                             |
+    +----------------------------------------------------+
 
     Example 2: Make timestamp without timezone.
 
@@ -21482,7 +21482,7 @@ def try_make_timestamp(
     +----------------------------------------------------+
     |try_make_timestamp(year, month, day, hour, min, sec)|
     +----------------------------------------------------+
-    |null                                                |
+    |NULL                                                |
     +----------------------------------------------------+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
@@ -21671,7 +21671,7 @@ def try_make_timestamp_ltz(
     +--------------------------------------------------------+
     |try_make_timestamp_ltz(year, month, day, hour, min, sec)|
     +--------------------------------------------------------+
-    |null                                                    |
+    |NULL                                                    |
     +--------------------------------------------------------+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
@@ -21810,7 +21810,7 @@ def try_make_timestamp_ntz(
 
     >>> import pyspark.sql.functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
+    >>> df = spark.createDataFrame([[2014, 13, 28, 6, 30, 45.887]],
     ...     ["year", "month", "day", "hour", "min", "sec"])
     >>> df.select(sf.try_make_timestamp_ntz(
     ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
@@ -21818,7 +21818,7 @@ def try_make_timestamp_ntz(
     +--------------------------------------------------------+
     |try_make_timestamp_ntz(year, month, day, hour, min, sec)|
     +--------------------------------------------------------+
-    |null                                                    |
+    |NULL                                                    |
     +--------------------------------------------------------+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
