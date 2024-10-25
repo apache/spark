@@ -611,7 +611,7 @@ class HiveDDLSuite
     )
   }
 
-  test("add/drop partitions - external table") {
+  test("SEX add/drop partitions - external table") {
     val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
       val basePath = tmpDir.getCanonicalPath
@@ -657,10 +657,10 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
           },
-          condition = "_LEGACY_ERROR_TEMP_1231",
+          condition = "PARTITIONS_NOT_FOUND",
           parameters = Map(
-            "key" -> "unknownCol",
-            "tblName" -> s"`$SESSION_CATALOG_NAME`.`default`.`exttable_with_partitions`")
+            "partitionList" -> "`unknownCol`",
+            "tableName" -> s"`$SESSION_CATALOG_NAME`.`default`.`exttable_with_partitions`")
         )
 
         sql(
