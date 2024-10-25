@@ -6,6 +6,7 @@ struct<keyword:string,reserved:boolean>
 -- !query output
 ADD	false
 AFTER	false
+AGGREGATE	false
 ALL	false
 ALTER	false
 ALWAYS	false
