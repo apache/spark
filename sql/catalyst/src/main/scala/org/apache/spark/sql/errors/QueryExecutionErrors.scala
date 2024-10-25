@@ -2894,11 +2894,4 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       )
     )
   }
-
-  def invalidLambdaFunctionCall(): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "INVALID_LAMBDA_FUNCTION_CALL",
-      messageParameters = Map()
-    )
-  }
 }

@@ -6303,6 +6303,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
 
   }
+
+  test("SPARK-50119 UnresolvedException thrown instead of NON_HIGHER_ORDER_FUNCTION") {
+    val df = Seq(1).toDF("s")
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.selectExpr("x -> x = 2")
+      },
+      condition = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+      parameters = Map("class" -> "?")
+    )
+  }
 }
 
 object DataFrameFunctionsSuite {

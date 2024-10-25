@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -46,7 +47,9 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
 
   override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def dataType: DataType = throw new QueryExecutionErrors.invalidLambdaFunctionCall()
+  override def dataType: DataType = throw new SparkRuntimeException(
+    errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+    messageParameters = Map("class" -> "?"))
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")

@@ -53,13 +53,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
   }
 
-  test("test test") {
-    val sqlScriptText = "select if(!x -> x = 2, 10, 20);"
-    verifySqlScriptResult(sqlScriptText, Seq())
-
-    val sqlScriptText2 = "select if(x -> x = 2, 10, 20);"
-  }
-
   // Tests
   test("select 1") {
     verifySqlScriptResult("SELECT 1;", Seq(Seq(Row(1))))
