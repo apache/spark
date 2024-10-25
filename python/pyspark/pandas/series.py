@@ -2388,8 +2388,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def clip(
         self,
-        lower: Union[float, int] = None,
-        upper: Union[float, int] = None,
+        lower: Optional[Union[float, int]] = None,
+        upper: Optional[Union[float, int]] = None,
         inplace: bool = False,
     ) -> "Series":
         """
