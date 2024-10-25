@@ -19,12 +19,31 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
-import org.apache.spark.sql.types.CollationStrength.{Default, Explicit, Implicit}
+
+private[spark] sealed trait CollationStrength {
+  def strength: Int
+}
+private[spark] object CollationStrength {
+  case object Explicit extends CollationStrength {
+    override def strength: Int = 2
+  }
+  case object Implicit extends CollationStrength {
+    override def strength: Int = 1
+  }
+  case object Default extends CollationStrength {
+    override def strength: Int = 0
+  }
+}
+
+private[spark] case class CollationContext(
+                                            dataType: DataType,
+                                            strength: CollationStrength) {}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
@@ -151,9 +170,7 @@ object CollationTypeCasts extends TypeCoercionRule {
 
   private def castStringType(inType: DataType, castType: StringType): Option[DataType] = {
     inType match {
-      case st: StringType
-          // TODO: should we override equals to do this?
-          if st.collationId != castType.collationId || st.strength != castType.strength =>
+      case st: StringType if st.collationId != castType.collationId =>
         Some(castType)
       case ArrayType(arrType, nullable) =>
         castStringType(arrType, castType).map(ArrayType(_, nullable))
@@ -180,83 +197,72 @@ object CollationTypeCasts extends TypeCoercionRule {
       return None
     }
 
-    expressions
-      .map(e => preprocessCollationStrengths(e).dataType)
-      .reduceLeftOption { (left, right) =>
-        findLeastCommonStringType(left, right).getOrElse(return None)
-      }.collect { case st: StringType => st }
+    expressions.foldLeft(findCollationStrength(expressions.head)) {
+      case (Some(left), expr) =>
+        findCollationStrength(expr).map(right => collationPrecedenceWinner(left, right))
+      case (None, _) => return None
+    }.collect { case CollationContext(dt, _) => extractStringType(dt).get}
   }
 
-  @tailrec
-  private def findLeastCommonStringType(left: DataType, right: DataType): Option[StringType] = {
-    (left, right) match {
-      case (leftStringType: StringType, rightStringType: StringType) =>
-        Some(collationPrecedenceWinner(leftStringType, rightStringType))
+  private def findCollationStrength(expr: Expression): Option[CollationContext] = expr match {
+    case _ if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
+      None
 
-      case (ArrayType(elemType, _), stringType: StringType) =>
-        findLeastCommonStringType(elemType, stringType)
+    case coll: Collate =>
+      Some(CollationContext(coll.dataType, Explicit))
 
-      case (stringType: StringType, ArrayType(elemType, _)) =>
-        findLeastCommonStringType(stringType, elemType)
+    case _: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference =>
+      Some(CollationContext(expr.dataType, Implicit))
 
-      case (ArrayType(leftType, _), ArrayType(rightType, _)) =>
-        findLeastCommonStringType(leftType, rightType)
+    case _: Literal =>
+      Some(CollationContext(expr.dataType, Default))
 
-      case _ => None
+    case extract: ExtractValue => extract match {
+      case g: GetStructField =>
+        findCollationStrength(g.child).map(cc => CollationContext(g.dataType, cc.strength))
+
+      case g: GetMapValue =>
+        findCollationStrength(g.child).map(cc => CollationContext(g.dataType, cc.strength))
+
+      case g: GetArrayItem =>
+        findCollationStrength(g.child).map(cc => CollationContext(g.dataType, cc.strength))
+
+      case a: GetArrayStructFields =>
+        findCollationStrength(a.child).map(cc => CollationContext(a.dataType, cc.strength))
     }
-  }
-
-  private def collationPrecedenceWinner(left: StringType, right: StringType): StringType = {
-    (left.strength, right.strength) match {
-      case (Explicit, Explicit) if left.collationId != right.collationId =>
-        throw QueryCompilationErrors.explicitCollationMismatchError(Seq(left, right))
-
-      case (Explicit, _) => left
-
-      case (_, Explicit) => right
-
-      case (Implicit, Implicit) if left.collationId != right.collationId =>
-        throw QueryCompilationErrors.implicitCollationMismatchError(Seq(left, right))
-
-      case (Implicit, _) => left
-
-      case (_, Implicit) => right
-
-      case (Default, Default) if left.collationId != right.collationId =>
-        SQLConf.get.defaultStringType
-
-      case _ => left
-    }
-  }
-
-  /**
-   * Some expressions are special, and we should preprocess them to have correct collation strength
-   * before we start computing the least common string type.
-   */
-  private def preprocessCollationStrengths(expr: Expression): Expression = expr match {
-    // var reference should always have implicit strength
-    case _: VariableReference =>
-      extractStringType(expr.dataType) match {
-        case Some(st) => castStringType(expr, StringType(st.collationId, Implicit))
-        case _ => expr
-      }
-
-    // user specified cast should always have the collation of child
-    // if child is of StringType
-    case cast @ Cast(_, _: StringType, _, _)
-        if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
-
-      (extractStringType(cast.dataType), extractStringType(cast.child.dataType)) match {
-        case (Some(_), Some(childType)) =>
-          castStringType(cast.dataType, childType) match {
-            case Some(dt) => cast.copy(dataType = dt)
-            case None => cast
-          }
-        case _ =>
-          cast
-      }
 
     case _ =>
-      expr
+      expr.children
+        .flatMap(findCollationStrength)
+        .reduceOption(collationPrecedenceWinner)
+  }
+
+  private def collationPrecedenceWinner(
+    left: CollationContext,
+    right: CollationContext): CollationContext = {
+
+    val leftStringType = extractStringType(left.dataType).get
+    val rightStringType = extractStringType(right.dataType).get
+    (left.strength, right.strength) match {
+      case (Explicit, Explicit) if leftStringType !=  rightStringType =>
+        throw QueryCompilationErrors.explicitCollationMismatchError(
+          Seq(leftStringType, rightStringType))
+
+      case (Explicit, _) | (_, Explicit) =>
+        if (left.strength == Explicit) left else right
+
+      case (Implicit, Implicit) if leftStringType != rightStringType =>
+        throw QueryCompilationErrors.implicitCollationMismatchError(
+          Seq(leftStringType, rightStringType))
+
+      case (Implicit, _) | (_, Implicit) =>
+        if (left.strength == Implicit) left else right
+
+      case (Default, Default) if leftStringType != rightStringType =>
+        CollationContext(SQLConf.get.defaultStringType, Default)
+
+      case _ =>
+        left
+    }
   }
 }

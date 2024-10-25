@@ -1114,14 +1114,6 @@ object TypeCoercion extends TypeCoercionBase {
     case _ => false
   }
 
-  @tailrec
-  def hasStringType(dt: DataType, strength: CollationStrength): Boolean = dt match {
-    case st: StringType => st.strength == strength
-    case ArrayType(et, _) => hasStringType(et, strength)
-    // Add StructType if we support string promotion for struct fields in the future.
-    case _ => false
-  }
-
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
