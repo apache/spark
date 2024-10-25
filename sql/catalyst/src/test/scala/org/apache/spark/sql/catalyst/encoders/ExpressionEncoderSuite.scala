@@ -518,7 +518,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       exception = intercept[SparkUnsupportedOperationException] {
         Encoders.tupleEncoder(encoders: _*)
       },
-      condition = "_LEGACY_ERROR_TEMP_2150",
+      condition = "TUPLE_SIZE_EXCEEDS_LIMIT",
       parameters = Map.empty)
   }
 
