@@ -1790,11 +1790,11 @@ class DataFrame(ParentDataFrame):
 
     def scalar(self) -> Column:
         # TODO(SPARK-50134): Implement this method
-        ...
+        raise NotImplementedError("This method is not implemented yet")
 
     def exists(self) -> Column:
         # TODO(SPARK-50134): Implement this method
-        ...
+        raise NotImplementedError("This method is not implemented yet")
 
     @property
     def schema(self) -> StructType:

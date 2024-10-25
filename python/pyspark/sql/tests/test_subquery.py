@@ -19,7 +19,6 @@ import unittest
 
 from pyspark.errors import AnalysisException, QueryContextType, SparkRuntimeException
 from pyspark.sql import functions as sf
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DoubleType
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
@@ -237,7 +236,9 @@ class SubqueryTestsMixin:
                         ),
                     ),
                     self.spark.sql(
-                        """select a, (select sum(b) from l l2 where l2.a <=> l1.a) sum_b from l l1"""
+                        """
+                        select a, (select sum(b) from l l2 where l2.a <=> l1.a) sum_b from l l1
+                        """
                     ),
                 )
 
@@ -256,7 +257,9 @@ class SubqueryTestsMixin:
                         .select("a", "sum_d")
                     ),
                     self.spark.sql(
-                        """select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2"""
+                        """
+                        select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2
+                        """
                     ),
                 )
 
@@ -341,7 +344,9 @@ class SubqueryTestsMixin:
                         & (sf.col("a") <= sf.lit(2))
                     ),
                     self.spark.sql(
-                        """select * from l where exists (select * from r where l.a = r.c) and l.a <= 2"""
+                        """
+                        select * from l where exists (select * from r where l.a = r.c) and l.a <= 2
+                        """
                     ),
                 )
 
@@ -365,7 +370,10 @@ class SubqueryTestsMixin:
                         .exists()
                     ),
                     self.spark.sql(
-                        """select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)"""
+                        """
+                        select * from l
+                            where not exists (select * from r where l.a = r.c and l.b < r.d)
+                        """
                     ),
                 )
 
