@@ -90,7 +90,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       }
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
-    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
+    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _, _)
       if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
         mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
       s

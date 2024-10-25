@@ -584,6 +584,22 @@ class Dataset[T] private[sql] (
     buildTranspose(Seq.empty)
 
   /** @inheritdoc */
+  def scalar(): Column = {
+    // TODO(SPARK-50134): Support scalar Subquery API in Spark Connect
+    // scalastyle:off not.implemented.error.usage
+    ???
+    // scalastyle:on not.implemented.error.usage
+  }
+
+  /** @inheritdoc */
+  def exists(): Column = {
+    // TODO(SPARK-50134): Support exists Subquery API in Spark Connect
+    // scalastyle:off not.implemented.error.usage
+    ???
+    // scalastyle:on not.implemented.error.usage
+  }
+
+  /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
     builder.getLimitBuilder
       .setInput(plan.getRoot)

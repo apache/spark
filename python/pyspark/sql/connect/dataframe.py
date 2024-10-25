@@ -1788,6 +1788,14 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def scalar(self) -> Column:
+        # TODO(SPARK-50134): Implement this method
+        ...
+
+    def exists(self) -> Column:
+        # TODO(SPARK-50134): Implement this method
+        ...
+
     @property
     def schema(self) -> StructType:
         # Schema caching is correct in most cases. Connect is lazy by nature. This means that

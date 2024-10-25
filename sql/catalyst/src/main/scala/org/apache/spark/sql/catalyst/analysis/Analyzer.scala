@@ -2476,9 +2476,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQuery(
         e: SubqueryExpression,
-        outer: LogicalPlan)(
+        outer: LogicalPlan,
+        hasExplicitOuterRefs: Boolean = false)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
+      val newSubqueryPlan = if (hasExplicitOuterRefs) {
+        executeSameContext(e.plan).transformAllExpressionsWithPruning(
+          _.containsPattern(UNRESOLVED_OUTER_REFERENCE), ruleId) {
+          case u: UnresolvedOuterReference =>
+            resolveOuterReference(u.nameParts, outer).getOrElse(u)
+        }
+      } else AnalysisContext.withOuterPlan(outer) {
         executeSameContext(e.plan)
       }
 
@@ -2503,10 +2510,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _) if !sub.resolved =>
-          resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
-          resolveSubQuery(e, outer)(Exists(_, _, exprId))
+        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _, hasExplicitOuterRefs)
+            if !sub.resolved =>
+          resolveSubQuery(s, outer, hasExplicitOuterRefs)(ScalarSubquery(_, _, exprId))
+        case e @ Exists(sub, _, exprId, _, _, hasExplicitOuterRefs) if !sub.resolved =>
+          resolveSubQuery(e, outer, hasExplicitOuterRefs)(Exists(_, _, exprId))
         case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {

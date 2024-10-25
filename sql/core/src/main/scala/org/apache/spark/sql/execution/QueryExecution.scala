@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
+import org.apache.spark.sql.catalyst.trees.TreePattern.LAZY_ANALYSIS_EXPRESSION
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
@@ -68,6 +69,8 @@ class QueryExecution(
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
+  lazy val isLazyAnalysis: Boolean = logical.containsAnyPattern(LAZY_ANALYSIS_EXPRESSION)
+
   def assertAnalyzed(): Unit = {
     try {
       analyzed
@@ -87,6 +90,12 @@ class QueryExecution(
   }
 
   private val lazyAnalyzed = LazyTry {
+    if (isLazyAnalysis) {
+      // TODO: Use the error class.
+      throw new SparkException(
+        "QueryExecution cannot execute lazy analysis plans. " +
+          "Please use the SQLExecution API to execute this query.")
+    }
     val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
       // We can't clone `logical` here, which will reset the `_analyzed` flag.
       sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)

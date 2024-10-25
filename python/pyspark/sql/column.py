@@ -1522,6 +1522,13 @@ class Column:
         ...
 
     @dispatch_col_method
+    def outer(self) -> "Column":
+        """
+        TODO: Add documentation
+        """
+        ...
+
+    @dispatch_col_method
     def __nonzero__(self) -> None:
         ...
 

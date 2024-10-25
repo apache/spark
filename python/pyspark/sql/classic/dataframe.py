@@ -1787,6 +1787,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         else:
             return DataFrame(self._jdf.transpose(), self.sparkSession)
 
+    def scalar(self) -> Column:
+        return Column(self._jdf.scalar())
+
+    def exists(self) -> Column:
+        return Column(self._jdf.exists())
+
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
         raise PySparkValueError(
