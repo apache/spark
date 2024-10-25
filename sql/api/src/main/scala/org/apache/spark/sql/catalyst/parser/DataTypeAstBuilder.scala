@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, CollationStrength, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
 
 class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -76,11 +76,13 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       case (TIMESTAMP_LTZ, Nil) => TimestampType
       case (STRING, Nil) =>
         typeCtx.children.asScala.toSeq match {
-          case Seq(_) => SqlApiConf.get.defaultStringType
+          case Seq(_) =>
+            val collationId = SqlApiConf.get.defaultStringType.collationId
+            StringType(collationId, CollationStrength.Implicit)
           case Seq(_, ctx: CollateClauseContext) =>
             val collationName = visitCollateClause(ctx)
             val collationId = CollationFactory.collationNameToId(collationName)
-            StringType(collationId)
+            StringType(collationId, CollationStrength.Implicit)
         }
       case (CHARACTER | CHAR, length :: Nil) => CharType(length.getText.toInt)
       case (VARCHAR, length :: Nil) => VarcharType(length.getText.toInt)
@@ -118,6 +120,9 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
       YearMonthIntervalType(start)
     }
   }
+
+  private def isCastContext(node: ParseTree): Boolean =
+    node.isInstanceOf[CastContext] || node.isInstanceOf[CastByColonContext]
 
   override def visitDayTimeIntervalDataType(ctx: DayTimeIntervalDataTypeContext): DataType = {
     val startStr = ctx.from.getText.toLowerCase(Locale.ROOT)
