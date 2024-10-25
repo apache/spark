@@ -512,6 +512,11 @@
       "A master URL must be set in your configuration."
     ]
   },
+  "MEMORY_PROFILE_INVALID_SOURCE":{
+    "message": [
+      "Memory profiler can only be used on editors with line numbers."
+    ]
+  },
   "MISSING_LIBRARY_FOR_PROFILER": {
     "message": [
       "Install the 'memory_profiler' library in the cluster to enable memory profiling."

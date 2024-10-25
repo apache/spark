@@ -383,9 +383,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidUrlError(url: UTF8String, e: URISyntaxException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_URL",
-      messageParameters = Map(
-        "url" -> url.toString,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map("url" -> url.toString),
       cause = e)
   }
 
@@ -403,10 +401,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def negativeValueUnexpectedError(
-      frequencyExpression : Expression): SparkIllegalArgumentException = {
+      frequencyExpression: Expression, negativeValue: Long): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2013",
-      messageParameters = Map("frequencyExpression" -> frequencyExpression.sql))
+      errorClass = "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION",
+      messageParameters = Map(
+        "frequencyExpression" -> toSQLExpr(frequencyExpression),
+        "negativeValue" -> toSQLValue(negativeValue)))
   }
 
   def addNewFunctionMismatchedWithFunctionError(funcName: String): Throwable = {
