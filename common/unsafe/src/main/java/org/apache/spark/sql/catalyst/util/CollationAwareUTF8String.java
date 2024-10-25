@@ -1450,7 +1450,7 @@ public class CollationAwareUTF8String {
     assert collation.isUtf8BinaryType || collation.isUtf8LcaseType :
         "Unsupported collation type for split operation.";
 
-    if (CollationFactory.fetchCollation(collationId).isUtf8BinaryType) {
+    if (collation.isUtf8BinaryType) {
       return string.split(delimiter, limit);
     } else {
       return lowercaseSplit(string, delimiter, limit);
