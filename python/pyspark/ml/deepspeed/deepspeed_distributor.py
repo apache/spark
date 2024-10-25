@@ -49,7 +49,7 @@ class DeepspeedTorchDistributor(TorchDistributor):
         Parameters
         ----------
         numGpus: int
-            The number of GPUs to use per node (analagous to num_gpus in deepspeed command).
+            The number of GPUs to use per node (analogous to num_gpus in deepspeed command).
         nnodes: int
             The number of nodes that should be used for the run.
         localMode: bool

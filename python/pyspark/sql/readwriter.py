@@ -215,7 +215,7 @@ class DataFrameReader(OptionUtils):
         Parameters
         ----------
         **options : dict
-            The dictionary of string keys and prmitive-type values.
+            The dictionary of string keys and primitive-type values.
 
         Examples
         --------

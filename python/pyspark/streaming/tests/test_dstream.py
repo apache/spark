@@ -403,7 +403,7 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         self.fail("a failed func should throw an error")
 
-    def test_failed_func_with_reseting_failure(self):
+    def test_failed_func_with_resetting_failure(self):
         input = [self.sc.parallelize([d], 1) for d in range(4)]
         input_stream = self.ssc.queueStream(input)
 

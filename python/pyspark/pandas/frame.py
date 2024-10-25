@@ -7686,7 +7686,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        # Mapper: Get a spark colum
+        # Mapper: Get a spark column
         # n function for (ascending, na_position) combination
         mapper = {
             (True, "first"): PySparkColumn.asc_nulls_first,
@@ -9808,7 +9808,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if is_all_string_type:
             # Handling string type columns
-            # We will retrive the `count`, `unique`, `top` and `freq`.
+            # We will retrieve the `count`, `unique`, `top` and `freq`.
             internal = self._internal.resolved_copy
             exprs_string = [
                 internal.spark_column_for(psser._column_label) for psser in psser_string

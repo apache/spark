@@ -232,10 +232,10 @@ class Distributor:
 
     def _validate_input_params(self) -> None:
         if self.num_processes <= 0:
-            raise ValueError("num_proccesses has to be a positive integer")
+            raise ValueError("num_processes has to be a positive integer")
 
     def _check_encryption(self) -> None:
-        """Checks to see if the user requires encrpytion of data.
+        """Checks to see if the user requires encryption of data.
         If required, throw an exception since we don't support that.
 
         Raises
