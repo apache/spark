@@ -21,108 +21,17 @@ import javax.annotation.Nullable
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.hasStringType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
-
-    case ifExpr: If =>
-      ifExpr.withNewChildren(
-        ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue)))
-
-    case caseWhenExpr: CaseWhen if !haveSameType(caseWhenExpr.inputTypesForMerging) =>
-      val outputStringType =
-        getOutputCollation(caseWhenExpr.branches.map(_._2) ++ caseWhenExpr.elseValue)
-        val newBranches = caseWhenExpr.branches.map { case (condition, value) =>
-          (condition, castStringType(value, outputStringType).getOrElse(value))
-        }
-        val newElseValue =
-          caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
-        CaseWhen(newBranches, newElseValue)
-
-    case stringLocate: StringLocate =>
-      stringLocate.withNewChildren(collateToSingleType(
-        Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
-
-    case substringIndex: SubstringIndex =>
-      substringIndex.withNewChildren(
-        collateToSingleType(
-          Seq(substringIndex.first, substringIndex.second)) :+ substringIndex.third)
-
-    case eltExpr: Elt =>
-      eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
-
-    case overlayExpr: Overlay =>
-      overlayExpr.withNewChildren(collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
-        ++ Seq(overlayExpr.pos, overlayExpr.len))
-
-    case regExpReplace: RegExpReplace =>
-      val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
-      val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
-      regExpReplace.withNewChildren(newChildren)
-
-    case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
-      val Seq(str, len, pad) = stringPadExpr.children
-      val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
-      stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
-
-    case raiseError: RaiseError =>
-      val newErrorParams = raiseError.errorParms.dataType match {
-        case MapType(StringType, StringType, _) => raiseError.errorParms
-        case _ => Cast(raiseError.errorParms, MapType(StringType, StringType))
-      }
-      raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
-
-    case framelessOffsetWindow @ (_: Lag | _: Lead) =>
-      val Seq(input, offset, default) = framelessOffsetWindow.children
-      val Seq(newInput, newDefault) = collateToSingleType(Seq(input, default))
-      framelessOffsetWindow.withNewChildren(Seq(newInput, offset, newDefault))
-
-    case mapCreate : CreateMap if mapCreate.children.size % 2 == 0 =>
-      // We only take in mapCreate if it has even number of children, as otherwise it should fail
-      // with wrong number of arguments
-      val newKeys = collateToSingleType(mapCreate.keys)
-      val newValues = collateToSingleType(mapCreate.values)
-      mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
-
-    case splitPart: SplitPart =>
-      val Seq(str, delimiter, partNum) = splitPart.children
-      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
-      splitPart.withNewChildren(Seq(newStr, newDelimiter, partNum))
-
-    case stringSplitSQL: StringSplitSQL =>
-      val Seq(str, delimiter) = stringSplitSQL.children
-      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
-      stringSplitSQL.withNewChildren(Seq(newStr, newDelimiter))
-
-    case levenshtein: Levenshtein =>
-      val Seq(left, right, threshold @ _*) = levenshtein.children
-      val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
-      levenshtein.withNewChildren(Seq(newLeft, newRight) ++ threshold)
-
-    case getMap @ GetMapValue(child, key) if getMap.keyType != key.dataType =>
-      key match {
-        case Literal(_, _: StringType) =>
-          GetMapValue(child, Cast(key, getMap.keyType))
-        case _ =>
-          getMap
-      }
-
-    case otherExpr @ (
-      _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
-      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: ArrayAppend |
-      _: ArrayIntersect | _: ArrayPosition | _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap |
-      _: Contains | _: EndsWith | _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan |
-      _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr |
-      _: ToNumber | _: TryToNumber | _: StringToMap) =>
-      val newChildren = collateToSingleType(otherExpr.children)
-      otherExpr.withNewChildren(newChildren)
+    case withChildrenResolved if CollationTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
+      CollationTypeCoercion.apply(withChildrenResolved)
   }
   /**
    * Extracts StringTypes from filtered hasStringType
