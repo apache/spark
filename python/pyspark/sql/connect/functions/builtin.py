@@ -3751,6 +3751,28 @@ def make_timestamp(
 make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
 
 
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "try_make_timestamp", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "try_make_timestamp", years, months, days, hours, mins, secs
+        )
+
+
+try_make_timestamp.__doc__ = pysparkfuncs.try_make_timestamp.__doc__
+
+
 def make_timestamp_ltz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3773,6 +3795,28 @@ def make_timestamp_ltz(
 make_timestamp_ltz.__doc__ = pysparkfuncs.make_timestamp_ltz.__doc__
 
 
+def try_make_timestamp_ltz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ltz", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ltz", years, months, days, hours, mins, secs
+        )
+
+
+try_make_timestamp_ltz.__doc__ = pysparkfuncs.try_make_timestamp_ltz.__doc__
+
+
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3787,6 +3831,22 @@ def make_timestamp_ntz(
 
 
 make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
+
+
+def try_make_timestamp_ntz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+) -> Column:
+    return _invoke_function_over_columns(
+        "try_make_timestamp_ntz", years, months, days, hours, mins, secs
+    )
+
+
+try_make_timestamp_ntz.__doc__ = pysparkfuncs.try_make_timestamp_ntz.__doc__
 
 
 def make_ym_interval(

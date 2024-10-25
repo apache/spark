@@ -665,10 +665,15 @@ object FunctionRegistry {
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[TryMakeTimestamp]("try_make_timestamp"),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
     expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
+    expressionBuilder(
+      "try_make_timestamp_ntz", TryMakeTimestampNTZExpressionBuilder, setAlias = true),
+    expressionBuilder(
+      "try_make_timestamp_ltz", TryMakeTimestampLTZExpressionBuilder, setAlias = true),
     expression[MakeInterval]("make_interval"),
     expression[MakeDTInterval]("make_dt_interval"),
     expression[MakeYMInterval]("make_ym_interval"),

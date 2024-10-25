@@ -279,6 +279,9 @@ Date and Timestamp Functions
     make_timestamp
     make_timestamp_ltz
     make_timestamp_ntz
+    try_make_timestamp
+    try_make_timestamp_ltz
+    try_make_timestamp_ntz
     make_ym_interval
     minute
     month
