@@ -127,8 +127,8 @@ class ClientE2ETestSuite
       assert(ex.getCause.isInstanceOf[SparkException])
 
       val cause = ex.getCause.asInstanceOf[SparkException]
-      assert(cause.getCondition == null)
-      assert(cause.getMessageParameters.isEmpty)
+      assert(cause.getCondition == "_LEGACY_ERROR_TEMP_3264")
+      assert(!cause.getMessageParameters.isEmpty)
       assert(cause.getMessage.contains("test" * 10000))
     }
   }

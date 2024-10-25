@@ -245,7 +245,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       throw new SparkException("Arbitrary legacy message")
     } catch {
       case e: SparkThrowable =>
-        assert(e.getCondition == null)
+        assert(e.getCondition == "_LEGACY_ERROR_TEMP_3264")
         assert(!e.isInternalError)
         assert(e.getSqlState == null)
       case _: Throwable =>
