@@ -2904,4 +2904,16 @@ package object config {
       .checkValue(v => v.forall(Set("stdout", "stderr").contains),
         "The value only can be one or more of 'stdout, stderr'.")
       .createWithDefault(Seq("stdout", "stderr"))
+
+  private[spark] val SPARK_TTL_BLOCK_CLEANER =
+    ConfigBuilder("spark.cleaner.ttl.all")
+      .doc("Add a TTL for all blocks tracked in Spark. By default blocks are only removed after GC on driver.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
+
+  private[spark] val SPARK_TTL_SHUFFLE_BLOCK_CLEANER =
+    ConfigBuilder("spark.cleaner.ttl.shuffle")
+      .doc("Add a TTL for shuffle blocks tracked in Spark. By default blocks are only removed after GC on driver.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
 }

@@ -85,6 +85,9 @@ class BlockManagerMasterEndpoint(
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
+  // Keep track of last access times if we're using block TTLs
+  private val blockAccessTime = new JHashMap[BlockId, Long]
+
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
   // Record the RDD blocks which are not visible yet, a block will be removed from this collection
@@ -143,6 +146,8 @@ class BlockManagerMasterEndpoint(
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
 
+      // We don't update the block access times here because the update block infos are triggered by
+      // migrations rather than actual access.
       @inline def handleResult(success: Boolean): Unit = {
         // SPARK-30594: we should not post `SparkListenerBlockUpdated` when updateBlockInfo
         // returns false since the block info would be updated again later.
@@ -247,6 +252,14 @@ class BlockManagerMasterEndpoint(
       // If the task finished successfully, rdd blocks can be turned to be visible, otherwise rdd
       // blocks' visibility status won't change.
       context.reply(updateRDDBlockVisibility(taskId, visible))
+  }
+
+  private def updateBlockAtime(blockId: BlockId) = {
+    // Only update access times if we have the cleaner enabled.
+    if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined ||
+      blockId.isShuffle && conf.get(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
+      // TODO: Update the access time.
+    }
   }
 
   private def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
@@ -412,6 +425,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
+    // Start with removing shuffle blocks without an associated executor (e.g. ESS only).
     // Find all shuffle blocks on executors that are no longer running
     val blocksToDeleteByShuffleService =
       new mutable.HashMap[BlockManagerId, mutable.HashSet[BlockId]]
@@ -465,6 +479,7 @@ class BlockManagerMasterEndpoint(
         }
       }.getOrElse(Seq.empty)
 
+    // Remove shuffle blocks from running executors.
     val removeMsg = RemoveShuffle(shuffleId)
     val removeShuffleFromExecutorsFutures = blockManagerInfo.values.map { bm =>
       bm.storageEndpoint.ask[Boolean](removeMsg).recover {
@@ -823,6 +838,8 @@ class BlockManagerMasterEndpoint(
     } else {
       locations = new mutable.HashSet[BlockManagerId]
       blockLocations.put(blockId, locations)
+      // Since it's the initial put we register this as an access as well.
+      updateBlockAtime(blockId)
     }
 
     if (storageLevel.isValid) {
@@ -863,12 +880,14 @@ class BlockManagerMasterEndpoint(
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
+    updateBlockAtime(blockId)
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
   private def getLocationsAndStatus(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
+    updateBlockAtime(blockId)
     val allLocations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val blockStatusWithBlockManagerId: Option[(BlockStatus, BlockManagerId)] =
       (if (externalShuffleServiceRddFetchEnabled && blockId.isRDD) {
