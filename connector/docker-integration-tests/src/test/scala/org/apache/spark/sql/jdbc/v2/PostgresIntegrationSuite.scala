@@ -23,7 +23,6 @@ import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -108,20 +107,23 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     connection.prepareStatement("CREATE TABLE array_timestamptz (col timestamptz[])")
       .executeUpdate()
 
-    connection.prepareStatement("INSERT INTO array_int VALUES (array[array[10]])").executeUpdate()
-    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[array[10]])")
+    connection.prepareStatement("INSERT INTO array_int VALUES (array[10]), (array[array[10]])")
       .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[array[10]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_boolean VALUES (array[array[true]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_float VALUES (array[array[10.5]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_double VALUES (array[array[10.1]])")
-      .executeUpdate()
-    connection.prepareStatement("INSERT INTO array_timestamp VALUES (" +
-      "array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[10]), " +
+      "(array[array[10]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[10]), " +
+      "(array[array[10]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_boolean VALUES (array[true]), " +
+      "(array[array[true]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_float VALUES (array[10.5]), " +
+      "(array[array[10.5]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_double VALUES (array[10.1]), " +
+      "(array[array[10.1]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_timestamp VALUES " +
+      "(array['2022-01-01 09:15'::timestamp]), " +
+      "(array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
     connection.prepareStatement("INSERT INTO array_timestamptz VALUES " +
+      "(array['2022-01-01 09:15'::timestamptz]), " +
       "(array[array['2022-01-01 09:15'::timestamptz]])").executeUpdate()
     connection.prepareStatement(
     "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
@@ -141,43 +143,40 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   }
 
   test("Test multi-dimensional column types") {
-    withSQLConf(SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "true") {
+    // This test is used to verify that the multi-dimensional
+    // column types are supported by the JDBC V2 data source.
+    // We do not verify any result output
+    //
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "array_test_table")
+      .load()
+    df.collect()
 
-      // This test is used to verify that the multi-dimensional
-      // column types are supported by the JDBC V2 data source.
-      // We do not verify any result output
-      //
-      val df = spark.read.format("jdbc")
-        .option("url", jdbcUrl)
-        .option("dbtable", "array_test_table")
-        .load()
-      df.collect()
+    val array_tables = Array(
+      ("array_int", "\"ARRAY<INT>\""),
+      ("array_bigint", "\"ARRAY<BIGINT>\""),
+      ("array_smallint", "\"ARRAY<SMALLINT>\""),
+      ("array_boolean", "\"ARRAY<BOOLEAN>\""),
+      ("array_float", "\"ARRAY<FLOAT>\""),
+      ("array_double", "\"ARRAY<DOUBLE>\""),
+      ("array_timestamp", "\"ARRAY<TIMESTAMP>\""),
+      ("array_timestamptz", "\"ARRAY<TIMESTAMP>\"")
+    )
 
-      val array_tables = Array(
-        ("array_int", "\"ARRAY<INT>\""),
-        ("array_bigint", "\"ARRAY<BIGINT>\""),
-        ("array_smallint", "\"ARRAY<SMALLINT>\""),
-        ("array_boolean", "\"ARRAY<BOOLEAN>\""),
-        ("array_float", "\"ARRAY<FLOAT>\""),
-        ("array_double", "\"ARRAY<DOUBLE>\""),
-        ("array_timestamp", "\"ARRAY<TIMESTAMP>\""),
-        ("array_timestamptz", "\"ARRAY<TIMESTAMP>\"")
+    array_tables.foreach { case (dbtable, arrayType) =>
+      checkError(
+        exception = intercept[SparkSQLException] {
+          val df = spark.read.format("jdbc")
+            .option("url", jdbcUrl)
+            .option("dbtable", dbtable)
+            .load()
+          df.collect()
+        },
+        condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+        parameters = Map("pos" -> "0", "type" -> arrayType),
+        sqlState = Some("0A000")
       )
-
-      array_tables.foreach { case (dbtable, arrayType) =>
-        checkError(
-          exception = intercept[SparkSQLException] {
-            val df = spark.read.format("jdbc")
-              .option("url", jdbcUrl)
-              .option("dbtable", dbtable)
-              .load()
-            df.collect()
-          },
-          condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
-          parameters = Map("pos" -> "0", "type" -> arrayType),
-          sqlState = Some("0A000")
-        )
-      }
     }
   }
 
@@ -319,46 +318,21 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows10(1).getString(0) === "alex")
   }
 
-  test("Test reading 2d array from table created via CTAS command - negative test") {
-    withSQLConf(SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "true") {
-      val exception = intercept[org.apache.spark.SparkSQLException] {
-        sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int").collect()
-      }.getMessage
+  test("Test reading 2d array from table created via CTAS command") {
+    val dfWithNewBehaviour = sql(s"SELECT * FROM $catalogName.array_of_array_of_int")
+    val CTASdfWithNewBehaviour = sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int")
 
-      assert(exception.contains("Some values in field 0 are incompatible " +
-        "with the column array type. Expected type \"ARRAY<INT>\""))
-    }
+    checkAnswer(CTASdfWithNewBehaviour, dfWithNewBehaviour.collect())
   }
 
-  test("Test reading 2d array from table created via CTAS command - positive test") {
-    val rowsWithOldBehaviour =
-      withSQLConf(
-        SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "true"
-      ) {
-        sql(s"SELECT * FROM $catalogName.array_of_array_of_int").collect()
-      }
+  test("Test reading multiple dimension array from table created via CTAS command") {
+    val exception = intercept[org.apache.spark.SparkSQLException] {
+      sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
+    }.getMessage
 
-    withSQLConf(
-      SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "false"
-    ) {
-      val dfWithNewBehaviour = sql(s"SELECT * FROM $catalogName.array_of_array_of_int")
-      val CTASdfWithNewBehaviour = sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int")
-
-      checkAnswer(CTASdfWithNewBehaviour, dfWithNewBehaviour.collect())
-    }
-  }
-
-  test("Test reading multiple dimension array from table created via CTAS command " +
-    "- negative test") {
-    withSQLConf(SQLConf.POSTGRES_GET_ARRAY_DIM_FROM_PG_ATTRIBUTE_METADATA_TABLE.key -> "false") {
-      val exception = intercept[org.apache.spark.SparkSQLException] {
-        sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
-      }.getMessage
-
-      // There is 2d and 1d array in unsupported_array_of_array_of_int. Reading this table
-      // is not supported
-      assert(exception.contains("Some values in field 0 are incompatible with the" +
-        " column array type. Expected type \"ARRAY<ARRAY<INT>>\""))
-    }
+    // There is 2d and 1d array in unsupported_array_of_array_of_int. Reading this table
+    // is not supported
+    assert(exception.contains("Some values in field 0 are incompatible with the" +
+      " column array type. Expected type \"ARRAY<ARRAY<INT>>\""))
   }
 }

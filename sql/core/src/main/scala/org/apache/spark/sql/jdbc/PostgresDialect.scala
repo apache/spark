@@ -382,25 +382,7 @@ private case class PostgresDialect()
       case Types.ARRAY =>
         val tableName = rsmd.getTableName(columnIdx)
         val columnName = rsmd.getColumnName(columnIdx)
-        val query = if (conf.getArrayDimFromPgAttribute) {
-          /*
-            We send the query to Pg to read from pg_attribute table. There is one caveat here:
-            If table is created with CTAS command on Pg side, the information about dimensionality
-            of array column will be lost and attndims will be 0. Therefore, for example,
-            array<int> will be mapped to int. If this is the case, it can be resolved by setting
-            spark.sql.legacy.postgres.getArrayDimFromPgAttribute flag to false.
-          */
-
-          s"""
-             |SELECT pg_attribute.attndims
-             |FROM pg_attribute
-             |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
-             |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
-             |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
-             |""".stripMargin
-        } else {
-          s"SELECT array_ndims($columnName) FROM $tableName LIMIT 1"
-        }
+        val query = s"SELECT array_ndims($columnName) FROM $tableName LIMIT 1"
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
