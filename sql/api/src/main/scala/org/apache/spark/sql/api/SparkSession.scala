@@ -24,8 +24,9 @@ import _root_.java.io.Closeable
 import _root_.java.lang
 import _root_.java.net.URI
 import _root_.java.util
+import _root_.java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
@@ -663,9 +664,19 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   def stop(): Unit = close()
+
+  /**
+   * Check to see if the session is still usable.
+   *
+   * In Classic this means that the underlying `SparkContext` is still active. In Connect this
+   * means the connection to the server is usable.
+   */
+  private[sql] def isUsable: Boolean
 }
 
 object SparkSession extends SparkSessionCompanion {
+  type Session = SparkSession
+
   private[this] val companion: SparkSessionCompanion = {
     val cls = SparkClassUtils.classForName("org.apache.spark.sql.SparkSession")
     val mirror = scala.reflect.runtime.currentMirror
@@ -675,12 +686,97 @@ object SparkSession extends SparkSessionCompanion {
 
   /** @inheritdoc */
   override def builder(): SparkSessionBuilder = companion.builder()
+
+  /** @inheritdoc */
+  override def setActiveSession(session: SparkSession): Unit =
+    companion.setActiveSession(session.asInstanceOf[companion.Session])
+
+  /** @inheritdoc */
+  override def clearActiveSession(): Unit = companion.clearActiveSession()
+
+  /** @inheritdoc */
+  override def setDefaultSession(session: SparkSession): Unit =
+    companion.setDefaultSession(session.asInstanceOf[companion.Session])
+
+  /** @inheritdoc */
+  override def clearDefaultSession(): Unit = companion.clearDefaultSession()
+
+  /** @inheritdoc */
+  override def getActiveSession: Option[SparkSession] = companion.getActiveSession
+
+  /** @inheritdoc */
+  override def getDefaultSession: Option[SparkSession] = companion.getDefaultSession
 }
 
 /**
- * Companion of a [[SparkSession]].
+ * Interface for a [[SparkSession]] Companion. The companion is responsible for building the
+ * session, and managing the active (thread local) and default (global) SparkSessions.
  */
 private[sql] abstract class SparkSessionCompanion {
+  private[sql] type Session <: SparkSession
+
+  /**
+   * Changes the SparkSession that will be returned in this thread and its children when
+   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
+   * a SparkSession with an isolated session, instead of the global (first created) context.
+   *
+   * @since 2.0.0
+   */
+  def setActiveSession(session: Session): Unit
+
+  /**
+   * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
+   * return the first created context instead of a thread-local override.
+   *
+   * @since 2.0.0
+   */
+  def clearActiveSession(): Unit
+
+  /**
+   * Sets the default SparkSession that is returned by the builder.
+   *
+   * @since 2.0.0
+   */
+  def setDefaultSession(session: Session): Unit
+
+  /**
+   * Clears the default SparkSession that is returned by the builder.
+   *
+   * @since 2.0.0
+   */
+  def clearDefaultSession(): Unit
+
+  /**
+   * Returns the active SparkSession for the current thread, returned by the builder.
+   *
+   * @note
+   *   Return None, when calling this function on executors
+   *
+   * @since 2.2.0
+   */
+  def getActiveSession: Option[Session]
+
+  /**
+   * Returns the default SparkSession that is returned by the builder.
+   *
+   * @note
+   *   Return None, when calling this function on executors
+   *
+   * @since 2.2.0
+   */
+  def getDefaultSession: Option[Session]
+
+  /**
+   * Returns the currently active SparkSession, otherwise the default one. If there is no default
+   * SparkSession, throws an exception.
+   *
+   * @since 2.4.0
+   */
+  def active: Session = {
+    getActiveSession.getOrElse(
+      getDefaultSession.getOrElse(
+        throw SparkException.internalError("No active or default Spark session found")))
+  }
 
   /**
    * Creates a [[SparkSessionBuilder]] for constructing a [[SparkSession]].
@@ -688,6 +784,83 @@ private[sql] abstract class SparkSessionCompanion {
    * @since 2.0.0
    */
   def builder(): SparkSessionBuilder
+}
+
+/**
+ * Abstract class for [[SparkSession]] companions. This implements active and default session
+ * management.
+ */
+private[sql] abstract class BaseSparkSessionCompanion extends SparkSessionCompanion {
+
+  /** The active SparkSession for the current thread. */
+  private val activeThreadSession = new InheritableThreadLocal[Session]
+
+  /** Reference to the root SparkSession. */
+  private val defaultSession = new AtomicReference[Session]
+
+  /** @inheritdoc */
+  def setActiveSession(session: Session): Unit = {
+    activeThreadSession.set(session)
+  }
+
+  /** @inheritdoc */
+  def clearActiveSession(): Unit = {
+    activeThreadSession.remove()
+  }
+
+  /** @inheritdoc */
+  def setDefaultSession(session: Session): Unit = {
+    defaultSession.set(session)
+  }
+
+  /** @inheritdoc */
+  def clearDefaultSession(): Unit = {
+    defaultSession.set(null.asInstanceOf[Session])
+  }
+
+  /** @inheritdoc */
+  def getActiveSession: Option[Session] = usableSession(activeThreadSession.get())
+
+  /** @inheritdoc */
+  def getDefaultSession: Option[Session] = usableSession(defaultSession.get())
+
+  private def usableSession(session: Session): Option[Session] = {
+    if ((session ne null) && canUseSession(session)) {
+      Some(session)
+    } else {
+      None
+    }
+  }
+
+  protected def canUseSession(session: Session): Boolean = session.isUsable
+
+  /**
+   * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
+   * they are not set yet or they are not usable.
+   */
+  protected def setDefaultAndActiveSession(session: Session): Unit = {
+    val currentDefault = defaultSession.getAcquire
+    if (currentDefault == null || !currentDefault.isUsable) {
+      // Update `defaultSession` if it is null or the contained session is not usable. There is a
+      // chance that the following `compareAndSet` fails if a new default session has just been set,
+      // but that does not matter since that event has happened after this method was invoked.
+      defaultSession.compareAndSet(currentDefault, session)
+    }
+    val active = getActiveSession
+    if (active.isEmpty || !active.get.isUsable) {
+      setActiveSession(session)
+    }
+  }
+
+  /**
+   * When the session is closed remove it from active and default.
+   */
+  private[sql] def onSessionClose(session: Session): Unit = {
+    defaultSession.compareAndSet(session, null.asInstanceOf[Session])
+    if (getActiveSession.contains(session)) {
+      clearActiveSession()
+    }
+  }
 }
 
 /**

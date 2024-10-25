@@ -140,7 +140,7 @@ case class AnalyzeColumnCommand(
     case DoubleType | FloatType => true
     case BooleanType => true
     case _: DatetimeType => true
-    case BinaryType | StringType => true
+    case BinaryType | _: StringType => true
     case _ => false
   }
 }

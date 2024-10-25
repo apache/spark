@@ -3118,7 +3118,7 @@ class SparkConnectPlanner(
             .newBuilder()
           exception_builder
             .setExceptionMessage(e.toString())
-            .setErrorClass(e.getErrorClass)
+            .setErrorClass(e.getCondition)
 
           val stackTrace = Option(ExceptionUtils.getStackTrace(e))
           stackTrace.foreach { s =>
@@ -3354,9 +3354,18 @@ class SparkConnectPlanner(
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     val target = Dataset
       .ofRows(session, transformRelation(checkpointCommand.getRelation))
-    val checkpointed = target.checkpoint(
-      eager = checkpointCommand.getEager,
-      reliableCheckpoint = !checkpointCommand.getLocal)
+    val checkpointed = if (checkpointCommand.getLocal) {
+      if (checkpointCommand.hasStorageLevel) {
+        target.localCheckpoint(
+          eager = checkpointCommand.getEager,
+          storageLevel =
+            StorageLevelProtoConverter.toStorageLevel(checkpointCommand.getStorageLevel))
+      } else {
+        target.localCheckpoint(eager = checkpointCommand.getEager)
+      }
+    } else {
+      target.checkpoint(eager = checkpointCommand.getEager)
+    }
 
     val dfId = UUID.randomUUID().toString
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
