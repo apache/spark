@@ -738,7 +738,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param e The dialect specific exception.
-   * @param errorClass The error class assigned in the case of an unclassified `e`
+   * @param condition The error condition assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`
    * @param description The error description
    * @param isRuntime Whether the exception is a runtime exception or not.
@@ -746,7 +746,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
@@ -759,7 +759,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param e The dialect specific exception.
    * @return `AnalysisException` or its sub-class.
    */
-  @deprecated("Please override the classifyException method with an error class", "4.0.0")
+  @deprecated("Please override the classifyException method with an error condition", "4.0.0")
   def classifyException(message: String, e: Throwable): AnalysisException = {
     new AnalysisException(
       errorClass = "FAILED_JDBC.UNCLASSIFIED",
@@ -850,18 +850,18 @@ trait NoLegacyJDBCError extends JdbcDialect {
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
     if (isRuntime) {
       new SparkRuntimeException(
-        errorClass = errorClass,
+        errorClass = condition,
         messageParameters = messageParameters,
         cause = e)
     } else {
       new AnalysisException(
-        errorClass = errorClass,
+        errorClass = condition,
         messageParameters = messageParameters,
         cause = Some(e))
     }
