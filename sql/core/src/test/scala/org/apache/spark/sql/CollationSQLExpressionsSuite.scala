@@ -2447,420 +2447,290 @@ class CollationSQLExpressionsSuite
     )
   }
 
+  // common method for subsequent tests verifying various SQL expressions with collations
+  private def testCollationSqlExpressionCommon(
+      query: String,
+      collation: String,
+      result: Seq[Row],
+      dataType: DataType): Unit = {
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
+      // check result correctness
+      checkAnswer(sql(query), result)
+      // check result row data type
+      assert(sql(query).schema.head.dataType == dataType)
+    }
+  }
+
   test("min_by supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT min_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("a")
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT min_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);"
+      val result = Seq(
+        Row("a")
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("max_by supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT max_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("b")
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT max_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);"
+      val result = Seq(
+        Row("b")
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array('a', 'b', 'c');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array('a', 'b', 'c');"
+      val result = Seq(
+        Row(Seq("a", "b", "c"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_agg supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_agg(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_agg(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);"
+      val result = Seq(
+        Row(Seq("a", "b", "c"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_contains supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_contains(array('a', 'b', 'c'), 'b');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(true)
-          )
-        )
-        // check result row data type
-        val dataType = BooleanType
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_contains(array('a', 'b', 'c'), 'b');"
+      val result = Seq(
+        Row(true)
+      )
+      val dataType = BooleanType
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("arrays_overlap supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT arrays_overlap(array('a', 'b', 'c'), array('c', 'd', 'e'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(true)
-          )
-        )
-        // check result row data type
-        val dataType = BooleanType
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT arrays_overlap(array('a', 'b', 'c'), array('c', 'd', 'e'));"
+      val result = Seq(
+        Row(true)
+      )
+      val dataType = BooleanType
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_insert supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_insert(array('a', 'b', 'c', 'd'), 5, 'e');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c", "d", "e"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), true)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_insert(array('a', 'b', 'c', 'd'), 5, 'e');"
+      val result = Seq(
+        Row(Seq("a", "b", "c", "d", "e"))
+      )
+      val dataType = ArrayType(StringType(collation), true)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_intersect supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_intersect(array('a', 'b', 'c'), array('b', 'c', 'd'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("b", "c"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_intersect(array('a', 'b', 'c'), array('b', 'c', 'd'));"
+      val result = Seq(
+        Row(Seq("b", "c"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_join supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_join(array('hello', 'world'), ' ');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("hello world")
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_join(array('hello', 'world'), ' ');"
+      val result = Seq(
+        Row("hello world")
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_position supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_position(array('a', 'b', 'c', 'c'), 'c');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(3)
-          )
-        )
-        // check result row data type
-        val dataType = LongType
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_position(array('a', 'b', 'c', 'c'), 'c');"
+      val result = Seq(
+        Row(3)
+      )
+      val dataType = LongType
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_size supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_size(array('a', 'b', 'c', 'c'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(4)
-          )
-        )
-        // check result row data type
-        val dataType = IntegerType
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_size(array('a', 'b', 'c', 'c'));"
+      val result = Seq(
+        Row(4)
+      )
+      val dataType = IntegerType
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_sort supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_sort(array('b', null, 'A'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("A", "b", null))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), true)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_sort(array('b', null, 'A'));"
+      val result = Seq(
+        Row(Seq("A", "b", null))
+      )
+      val dataType = ArrayType(StringType(collation), true)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_except supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_except(array('a', 'b', 'c'), array('c', 'd', 'e'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_except(array('a', 'b', 'c'), array('c', 'd', 'e'));"
+      val result = Seq(
+        Row(Seq("a", "b"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_union supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_union(array('a', 'b', 'c'), array('a', 'c', 'd'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c", "d"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_union(array('a', 'b', 'c'), array('a', 'c', 'd'));"
+      val result = Seq(
+        Row(Seq("a", "b", "c", "d"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_compact supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_compact(array('a', 'b', null, 'c'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_compact(array('a', 'b', null, 'c'));"
+      val result = Seq(
+        Row(Seq("a", "b", "c"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("arrays_zip supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT arrays_zip(array('a', 'b', 'c'), array(1, 2, 3));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq(Row("a", 1), Row("b", 2), Row("c", 3)))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StructType(
-          StructField("0", StringType(collation), true) ::
-            StructField("1", IntegerType, true) :: Nil
-        ), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT arrays_zip(array('a', 'b', 'c'), array(1, 2, 3));"
+      val result = Seq(
+        Row(Seq(Row("a", 1), Row("b", 2), Row("c", 3)))
+      )
+      val dataType = ArrayType(StructType(
+        StructField("0", StringType(collation), true) ::
+          StructField("1", IntegerType, true) :: Nil
+      ), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_min supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_min(array('a', 'b', null, 'c'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("a")
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_min(array('a', 'b', null, 'c'));"
+      val result = Seq(
+        Row("a")
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_max supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_max(array('a', 'b', null, 'c'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("c")
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_max(array('a', 'b', null, 'c'));"
+      val result = Seq(
+        Row("c")
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_append supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_append(array('b', 'd', 'c', 'a'), 'e');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("b", "d", "c", "a", "e"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), true)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_append(array('b', 'd', 'c', 'a'), 'e');"
+      val result = Seq(
+        Row(Seq("b", "d", "c", "a", "e"))
+      )
+      val dataType = ArrayType(StringType(collation), true)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_repeat supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_repeat('abc', 2);"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("abc", "abc"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_repeat('abc', 2);"
+      val result = Seq(
+        Row(Seq("abc", "abc"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_remove supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_remove(array('a', 'b', null, 'c'), 'b');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", null, "c"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), true)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_remove(array('a', 'b', null, 'c'), 'b');"
+      val result = Seq(
+        Row(Seq("a", null, "c"))
+      )
+      val dataType = ArrayType(StringType(collation), true)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_prepend supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_prepend(array('b', 'd', 'c', 'a'), 'd');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("d", "b", "d", "c", "a"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), true)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_prepend(array('b', 'd', 'c', 'a'), 'd');"
+      val result = Seq(
+        Row(Seq("d", "b", "d", "c", "a"))
+      )
+      val dataType = ArrayType(StringType(collation), true)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("array_distinct supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT array_distinct(array('a', 'b', 'c', null, 'c'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c", null))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), true)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT array_distinct(array('a', 'b', 'c', null, 'c'));"
+      val result = Seq(
+        Row(Seq("a", "b", "c", null))
+      )
+      val dataType = ArrayType(StringType(collation), true)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("collect_list supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT collect_list(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT collect_list(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);"
+      val result = Seq(
+        Row(Seq("a", "b", "c"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("collect_set does not support collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT collect_set(col) FROM VALUES ('a'), ('b'), ('a') AS tab(col);"
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT collect_set(col) FROM VALUES ('a'), ('b'), ('a') AS tab(col);"
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
         checkError(
           exception = intercept[AnalysisException] {
@@ -2877,64 +2747,46 @@ class CollationSQLExpressionsSuite
             start = 7,
             stop = 22))
       }
-    })
+    }
   }
 
   test("element_at supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT element_at(array('a', 'b', 'c'), 2);"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("b")
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT element_at(array('a', 'b', 'c'), 2);"
+      val result = Seq(
+        Row("b")
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("aggregate supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT aggregate(array('a', 'b', 'c'), '', (acc, x) -> concat(acc, x));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("abc")
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT aggregate(array('a', 'b', 'c'), '', (acc, x) -> concat(acc, x));"
+      val result = Seq(
+        Row("abc")
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("explode supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT explode(array('a', 'b'));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("a"),
-            Row("b")
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT explode(array('a', 'b'));"
+      val result = Seq(
+        Row("a"),
+        Row("b")
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("posexplode supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT posexplode(array('a', 'b'));"
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT posexplode(array('a', 'b'));"
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
         checkAnswer(
           sql(query),
@@ -2948,46 +2800,34 @@ class CollationSQLExpressionsSuite
         assert(sql(query).schema.head.dataType == IntegerType)
         assert(sql(query).schema(1).dataType == dataType)
       }
-    })
+    }
   }
 
   test("filter supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT filter(array('a', 'b', 'c'), x -> x < 'b');"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT filter(array('a', 'b', 'c'), x -> x < 'b');"
+      val result = Seq(
+        Row(Seq("a"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("flatten supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT flatten(array(array('a', 'b'), array('c', 'd')));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c", "d"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT flatten(array(array('a', 'b'), array('c', 'd')));"
+      val result = Seq(
+        Row(Seq("a", "b", "c", "d"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("inline supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT inline(array(struct(1, 'a'), struct(2, 'b')));"
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT inline(array(struct(1, 'a'), struct(2, 'b')));"
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
         checkAnswer(
           sql(query),
@@ -3001,325 +2841,229 @@ class CollationSQLExpressionsSuite
         assert(sql(query).schema.head.dataType == IntegerType)
         assert(sql(query).schema(1).dataType == dataType)
       }
-    })
+    }
   }
 
   test("shuffle supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT shuffle(array('a', 'b', 'c', 'd'));"
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT shuffle(array('a', 'b', 'c', 'd'));"
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
         // check result row data type
         val dataType = ArrayType(StringType(collation), false)
         assert(sql(query).schema.head.dataType == dataType)
       }
-    })
+    }
   }
 
   test("slice supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT slice(array('a', 'b', 'c', 'd'), 2, 2);"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("b", "c"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT slice(array('a', 'b', 'c', 'd'), 2, 2);"
+      val result = Seq(
+        Row(Seq("b", "c"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("sort_array supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT sort_array(array('b', 'd', null, 'c', 'a'), true);"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq(null, "a", "b", "c", "d"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), true)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT sort_array(array('b', 'd', null, 'c', 'a'), true);"
+      val result = Seq(
+        Row(Seq(null, "a", "b", "c", "d"))
+      )
+      val dataType = ArrayType(StringType(collation), true)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("zip_with supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT zip_with(array('a', 'b'), array('x', 'y'), (x, y) -> concat(x, y));"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("ax", "by"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(
-          StringType(collation),
-          containsNull = true
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT zip_with(array('a', 'b'), array('x', 'y'), (x, y) -> concat(x, y));"
+      val result = Seq(
+        Row(Seq("ax", "by"))
+      )
+      val dataType = ArrayType(
+        StringType(collation),
+        containsNull = true
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_contains_key supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_contains_key(map('a', 1, 'b', 2), 'a')"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(true)
-          )
-        )
-        // check result row data type
-        val dataType = BooleanType
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_contains_key(map('a', 1, 'b', 2), 'a')"
+      val result = Seq(
+        Row(true)
+      )
+      val dataType = BooleanType
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_from_arrays supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_from_arrays(array('a','b','c'), array(1,2,3))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Map("a" -> 1, "b" -> 2, "c" -> 3))
-          )
-        )
-        // check result row data type
-        val dataType = MapType(
-          StringType(collation),
-          IntegerType, false
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_from_arrays(array('a','b','c'), array(1,2,3))"
+      val result = Seq(
+        Row(Map("a" -> 1, "b" -> 2, "c" -> 3))
+      )
+      val dataType = MapType(
+        StringType(collation),
+        IntegerType, false
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_keys supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_keys(map('a', 1, 'b', 2))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(
-          StringType(collation), true
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_keys(map('a', 1, 'b', 2))"
+      val result = Seq(
+        Row(Seq("a", "b"))
+      )
+      val dataType = ArrayType(
+        StringType(collation), true
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_values supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_values(map(1, 'a', 2, 'b'))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(
-          StringType(collation), true
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_values(map(1, 'a', 2, 'b'))"
+      val result = Seq(
+        Row(Seq("a", "b"))
+      )
+      val dataType = ArrayType(
+        StringType(collation), true
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_entries supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_entries(map('a', 1, 'b', 2))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq(Row("a", 1), Row("b", 2)))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StructType(
-            StructField("key", StringType(collation), false) ::
-            StructField("value", IntegerType, false) :: Nil
-            ), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_entries(map('a', 1, 'b', 2))"
+      val result = Seq(
+        Row(Seq(Row("a", 1), Row("b", 2)))
+      )
+      val dataType = ArrayType(StructType(
+        StructField("key", StringType(collation), false) ::
+          StructField("value", IntegerType, false) :: Nil
+      ), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_from_entries supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_from_entries(array(struct(1, 'a'), struct(2, 'b')))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Map(1 -> "a", 2 -> "b"))
-          )
-        )
-        // check result row data type
-        val dataType = MapType(
-          IntegerType,
-          StringType(collation),
-          valueContainsNull = false
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_from_entries(array(struct(1, 'a'), struct(2, 'b')))"
+      val result = Seq(
+        Row(Map(1 -> "a", 2 -> "b"))
+      )
+      val dataType = MapType(
+        IntegerType,
+        StringType(collation),
+        valueContainsNull = false
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_concat supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_concat(map(1, 'a'), map(2, 'b'))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Map(1 -> "a", 2 -> "b"))
-          )
-        )
-        // check result row data type
-        val dataType = MapType(
-          IntegerType,
-          StringType(collation),
-          valueContainsNull = false
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_concat(map(1, 'a'), map(2, 'b'))"
+      val result = Seq(
+        Row(Map(1 -> "a", 2 -> "b"))
+      )
+      val dataType = MapType(
+        IntegerType,
+        StringType(collation),
+        valueContainsNull = false
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_filter supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_filter(map('a', 1, 'b', 2, 'c', 3), (k, v) -> k < 'c')"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Map("a" -> 1, "b" -> 2))
-          )
-        )
-        // check result row data type
-        val dataType = MapType(
-          StringType(collation),
-          IntegerType,
-          valueContainsNull = false
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_filter(map('a', 1, 'b', 2, 'c', 3), (k, v) -> k < 'c')"
+      val result = Seq(
+        Row(Map("a" -> 1, "b" -> 2))
+      )
+      val dataType = MapType(
+        StringType(collation),
+        IntegerType,
+        valueContainsNull = false
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("map_zip_with supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT map_zip_with(map(1, 'a'), map(1, 'x'), (k, v1, v2) -> concat(v1, v2))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Map(1 -> "ax"))
-          )
-        )
-        // check result row data type
-        val dataType = MapType(
-          IntegerType,
-          StringType(collation),
-          valueContainsNull = true
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT map_zip_with(map(1, 'a'), map(1, 'x'), (k, v1, v2) -> concat(v1, v2))"
+      val result = Seq(
+        Row(Map(1 -> "ax"))
+      )
+      val dataType = MapType(
+        IntegerType,
+        StringType(collation),
+        valueContainsNull = true
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("transform supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT transform(array('aa', 'bb', 'cc'), x -> substring(x, 2))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Seq("a", "b", "c"))
-          )
-        )
-        // check result row data type
-        val dataType = ArrayType(StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT transform(array('aa', 'bb', 'cc'), x -> substring(x, 2))"
+      val result = Seq(
+        Row(Seq("a", "b", "c"))
+      )
+      val dataType = ArrayType(StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("transform_values supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT transform_values(map_from_arrays(array(1, 2, 3)," +
-        s"array('aa', 'bb', 'cc')), (k, v) -> substring(v, 2))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Map(1 -> "a", 2 -> "b", 3 -> "c"))
-          )
-        )
-        // check result row data type
-        val dataType = MapType(IntegerType,
-          StringType(collation), false)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT transform_values(map_from_arrays(array(1, 2, 3)," +
+        "array('aa', 'bb', 'cc')), (k, v) -> substring(v, 2))"
+      val result = Seq(
+        Row(Map(1 -> "a", 2 -> "b", 3 -> "c"))
+      )
+      val dataType = MapType(IntegerType,
+        StringType(collation), false)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("transform_keys supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT transform_keys(map_from_arrays(array('aa', 'bb', 'cc')," +
-        s"array(1, 2, 3)), (k, v) -> substring(k, 2))"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row(Map("a" -> 1, "b" -> 2, "c" -> 3))
-          )
-        )
-        // check result row data type
-        val dataType = MapType(
-          StringType(collation), IntegerType, false
-        )
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT transform_keys(map_from_arrays(array('aa', 'bb', 'cc')," +
+        "array(1, 2, 3)), (k, v) -> substring(k, 2))"
+      val result = Seq(
+        Row(Map("a" -> 1, "b" -> 2, "c" -> 3))
+      )
+      val dataType = MapType(
+        StringType(collation), IntegerType, false
+      )
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("stack supports collation") {
-    testAdditionalCollations.foreach(collation => {
-      val query = s"SELECT stack(2, 'a', 'b', 'c')"
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-        checkAnswer(
-          sql(query),
-          Seq(
-            Row("a", "b"),
-            Row("c", null)
-          )
-        )
-        // check result row data type
-        val dataType = StringType(collation)
-        assert(sql(query).schema.head.dataType == dataType)
-      }
-    })
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT stack(2, 'a', 'b', 'c')"
+      val result = Seq(
+        Row("a", "b"),
+        Row("c", null)
+      )
+      val dataType = StringType(collation)
+      testCollationSqlExpressionCommon(query, collation, result, dataType)
+    }
   }
 
   test("Support HyperLogLogPlusPlus expression with collation") {
