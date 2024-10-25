@@ -2534,7 +2534,7 @@ class MinHashLSH(
     >>> model.approxSimilarityJoin(df, df2, 0.6, distCol="JaccardDistance").select(
     ...     col("datasetA.id").alias("idA"),
     ...     col("datasetB.id").alias("idB"),
-    ...     col("JaccardDistance")).show()
+    ...     col("JaccardDistance")).sort("idA").show()
     +---+---+---------------+
     |idA|idB|JaccardDistance|
     +---+---+---------------+
