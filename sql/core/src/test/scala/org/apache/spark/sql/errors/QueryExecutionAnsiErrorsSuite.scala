@@ -101,7 +101,9 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       },
       condition = "INVALID_FRACTION_OF_SECOND",
       sqlState = "22023",
-      parameters = Map.empty)
+      parameters = Map(
+        "secAndMicros" -> "60.66666666"
+      ))
   }
 
   test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {

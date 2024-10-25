@@ -2710,7 +2710,7 @@ case class MakeTimestamp(
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
           LocalDateTime.of(year, month, day, hour, min, 0, 0).plusMinutes(1)
         } else {
-          throw QueryExecutionErrors.invalidFractionOfSecondError()
+          throw QueryExecutionErrors.invalidFractionOfSecondError(secAndMicros)
         }
       } else {
         LocalDateTime.of(year, month, day, hour, min, seconds, nanos)

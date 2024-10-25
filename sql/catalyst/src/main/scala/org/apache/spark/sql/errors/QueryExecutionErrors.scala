@@ -257,10 +257,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def invalidFractionOfSecondError(): DateTimeException = {
+  def invalidFractionOfSecondError(secAndMicros: Decimal): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
-      messageParameters = Map.empty,
+      messageParameters = Map(
+        "secAndMicros" -> s"$secAndMicros"
+      ),
       context = Array.empty,
       summary = "")
   }
