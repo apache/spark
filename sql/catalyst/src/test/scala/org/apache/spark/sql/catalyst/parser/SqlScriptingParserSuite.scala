@@ -27,6 +27,15 @@ import org.apache.spark.sql.exceptions.SqlScriptingException
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
 
+  test("test test") {
+    val sqlScriptText = "select if(!x -> x = 2, 10, 20);"
+    val tree = parseScript(sqlScriptText)
+
+    val sqlScriptText2 = "select if(x -> x = 2, 10, 20);"
+    val tree2 = parseScript(sqlScriptText2)
+    assert(tree.collection.length == 1)
+  }
+
   test("single select") {
     val sqlScriptText = "SELECT 1;"
     val tree = parseScript(sqlScriptText)

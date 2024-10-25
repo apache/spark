@@ -46,7 +46,7 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
 
   override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def dataType: DataType = throw new QueryExecutionErrors.invalidLambdaFunctionCall()
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
