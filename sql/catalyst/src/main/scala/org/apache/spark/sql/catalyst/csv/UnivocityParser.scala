@@ -179,16 +179,16 @@ class UnivocityParser(
       dataType: DataType,
       nullable: Boolean = true): ValueConverter = dataType match {
     case _: ByteType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toByte)
+      nullSafeDatum(d, name, nullable, options)(_.trim.toByte)
 
     case _: ShortType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toShort)
+      nullSafeDatum(d, name, nullable, options)(_.trim.toShort)
 
     case _: IntegerType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toInt)
+      nullSafeDatum(d, name, nullable, options)(_.trim.toInt)
 
     case _: LongType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toLong)
+      nullSafeDatum(d, name, nullable, options)(_.trim.toLong)
 
     case _: FloatType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) {
@@ -207,11 +207,11 @@ class UnivocityParser(
       }
 
     case _: BooleanType => (d: String) =>
-      nullSafeDatum(d, name, nullable, options)(_.toBoolean)
+      nullSafeDatum(d, name, nullable, options)(_.trim.toBoolean)
 
     case dt: DecimalType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
-        Decimal(decimalParser(datum), dt.precision, dt.scale)
+        Decimal(decimalParser(datum.trim), dt.precision, dt.scale)
       }
 
     case _: DateType => (d: String) =>
