@@ -306,8 +306,8 @@ class PlanResolutionSuite extends AnalysisTest {
         exception = intercept[SparkUnsupportedOperationException] {
           parseAndResolve(query)
         },
-        condition = "_LEGACY_ERROR_TEMP_2067",
-        parameters = Map("transform" -> transform))
+        condition = "UNSUPPORTED_PARTITION_TRANSFORM",
+        parameters = Map("transform" -> toSQLId(transform)))
     }
   }
 
