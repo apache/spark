@@ -2599,7 +2599,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
       throw QueryCompilationErrors.trimCollationNotEnabledError()
     }
-    ctx.identifier.getText
+    ctx.qualifiedName.getText
   }
 
   /**
