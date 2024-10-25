@@ -1003,14 +1003,22 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       StringToMapTestCase("a:1,b:2,c:3", ",", ":", "UTF8_BINARY",
         Map("a" -> "1", "b" -> "2", "c" -> "3")),
+      StringToMapTestCase("a:1,b:2,c:3", ",", "[:]", "UTF8_BINARY",
+        Map("a" -> "1", "b" -> "2", "c" -> "3")),
       StringToMapTestCase("A-1xB-2xC-3", "X", "-", "UTF8_LCASE",
         Map("A" -> "1", "B" -> "2", "C" -> "3")),
-      StringToMapTestCase("1:ax2:bx3:c", "x", ":", "UNICODE",
-        Map("1" -> "a", "2" -> "b", "3" -> "c")),
-      StringToMapTestCase("1/AX2/BX3/C", "x", "/", "UNICODE_CI",
-        Map("1" -> "A", "2" -> "B", "3" -> "C"))
+      StringToMapTestCase("A-1xB-2xC-3", "[X]+", "-", "UTF8_LCASE",
+        Map("A" -> "1", "B" -> "2", "C" -> "3")),
+      StringToMapTestCase("A-1xB-2xC-3", "[X]+", "[-]+", "UTF8_LCASE",
+        Map("A" -> "1", "B" -> "2", "C" -> "3")),
+      StringToMapTestCase("AO1XBo2yCp3", "[xY]+", "[oP]{1,3}", "UTF8_LCASE",
+        Map("A" -> "1", "B" -> "2", "C" -> "3")),
+      StringToMapTestCase("AO1XBo2yCp3", "[Xy]+", "[Op]{1,3}", "UTF8_LCASE",
+        Map("A" -> "1", "B" -> "2", "C" -> "3")),
     )
     val unsupportedTestCases = Seq(
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE", null),
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_CI_AI", null),
       StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_AI", null),
       StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_RTRIM", null),
       StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_BINARY_RTRIM", null),
