@@ -1445,7 +1445,7 @@ public class CollationAwareUTF8String {
    * @return an array of substrings
    */
   public static UTF8String[] split(final UTF8String string, final UTF8String delimiter,
-                                      final int limit, final int collationId) {
+      final int limit, final int collationId) {
     CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
     assert collation.isUtf8BinaryType || collation.isUtf8LcaseType :
         "Unsupported collation type for split operation.";
@@ -1458,7 +1458,7 @@ public class CollationAwareUTF8String {
   }
 
   public static UTF8String[] lowercaseSplit(final UTF8String string, final UTF8String delimiter,
-                                               final int limit) {
+      final int limit) {
     if (delimiter.numBytes() == 0) return new UTF8String[] { string };
     if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
     Pattern pattern = Pattern.compile(delimiter.toString(),
