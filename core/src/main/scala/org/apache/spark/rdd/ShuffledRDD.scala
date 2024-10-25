@@ -75,8 +75,8 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     this
   }
 
+
   override def getDependencies: Seq[Dependency[_]] = {
-    // TODO(Holden): Reset a cleanup timer
     val serializer = userSpecifiedSerializer.getOrElse {
       val serializerManager = SparkEnv.get.serializerManager
       if (mapSideCombine) {
