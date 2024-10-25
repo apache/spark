@@ -21404,7 +21404,7 @@ def try_make_timestamp(
     timezone: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    ANSI compliant version of make_timestamp function.
+    ANSI-compliant version of make_timestamp function.
     Try to create timestamp from years, months, days, hours, mins, secs and timezone fields.
     The result data type is consistent with the value of configuration `spark.sql.timestampType`.
     The function returns NULL on invalid inputs.
@@ -21593,7 +21593,7 @@ def try_make_timestamp_ltz(
     timezone: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    ANSI compliant version of make_timestamp_ltz function.
+    ANSI-compliant version of make_timestamp_ltz function.
     Try to create the current timestamp with local time zone from years, months, days, hours, mins,
     secs and timezone fields.
     The function returns NULL on invalid inputs.
@@ -21758,7 +21758,7 @@ def try_make_timestamp_ntz(
     secs: "ColumnOrName",
 ) -> Column:
     """
-    ANSI compliant version of the make_timestamp_ntz function.
+    ANSI-compliant version of the make_timestamp_ntz function.
     Try to create local date-time from years, months, days, hours, mins, secs fields.
     The function returns NULL on invalid inputs.
 
