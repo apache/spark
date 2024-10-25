@@ -485,7 +485,7 @@ class MicroBatchExecution(
           OffsetSeqMetadata.setSessionConf(metadata, sparkSessionToRunBatches.sessionState.conf)
           execCtx.offsetSeqMetadata = OffsetSeqMetadata(
             metadata.batchWatermarkMs, metadata.batchTimestampMs, sparkSessionToRunBatches.conf)
-          watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
+          watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
           watermarkTracker.setWatermark(metadata.batchWatermarkMs)
         }
 
@@ -539,7 +539,7 @@ class MicroBatchExecution(
       case None => // We are starting this stream for the first time.
         logInfo(s"Starting new streaming query.")
         execCtx.batchId = 0
-        watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
+        watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf, logicalPlan)
     }
   }
 
