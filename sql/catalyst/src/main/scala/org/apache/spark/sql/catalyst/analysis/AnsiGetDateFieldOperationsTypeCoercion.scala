@@ -25,8 +25,10 @@ import org.apache.spark.sql.types.{AnyTimestampTypeExpression, DateType}
  * coerce children to [[DateType]], if necessary.
  */
 object AnsiGetDateFieldOperationsTypeCoercion {
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     case g: GetDateField if AnyTimestampTypeExpression.unapply(g.child) =>
       g.withNewChildren(Seq(Cast(g.child, DateType)))
+
+    case other => other
   }
 }

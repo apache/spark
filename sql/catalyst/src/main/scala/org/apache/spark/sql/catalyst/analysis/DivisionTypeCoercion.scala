@@ -25,12 +25,13 @@ import org.apache.spark.sql.types.{DecimalType, DoubleType, NullType, NumericTyp
  * children to [[DoubleType]].
  */
 object DivisionTypeCoercion {
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     // Decimal and Double remain the same
     case d: Divide if d.dataType == DoubleType => d
     case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
     case d @ Divide(left, right, _) if isNumericOrNull(left) && isNumericOrNull(right) =>
       d.copy(left = Cast(left, DoubleType), right = Cast(right, DoubleType))
+    case other => other
   }
 
   private def isNumericOrNull(ex: Expression): Boolean = {

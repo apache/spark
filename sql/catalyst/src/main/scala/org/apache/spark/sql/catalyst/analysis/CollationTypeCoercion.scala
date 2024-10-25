@@ -88,7 +88,7 @@ import org.apache.spark.sql.types.{MapType, StringType}
  * Type coercion helper that matches against expressions in order to apply collation type coercion.
  */
 object CollationTypeCoercion {
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     case ifExpr: If =>
       ifExpr.withNewChildren(
         ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue))
@@ -187,5 +187,7 @@ object CollationTypeCoercion {
         _: TryToNumber | _: StringToMap) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
+
+    case other => other
   }
 }

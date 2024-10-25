@@ -242,8 +242,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved if InTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        InTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => InTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -255,9 +254,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved
-          if FunctionArgumentTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        FunctionArgumentTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => FunctionArgumentTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -270,8 +267,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
       case e if !e.childrenResolved => e
-      case withChildrenResolved if DivisionTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        DivisionTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => DivisionTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -282,9 +278,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   object IntegralDivision extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
-      case withChildrenResolved
-          if IntegralDivisionTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        IntegralDivisionTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => IntegralDivisionTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -294,8 +288,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   object CaseWhenCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case c: CaseWhen if !c.childrenResolved => c
-      case withChildrenResolved if CaseWhenTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        CaseWhenTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => CaseWhenTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -305,8 +298,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   object IfCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case e if !e.childrenResolved => e
-      case withChildrenResolved if IfTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        IfTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => IfTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -316,8 +308,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   object StackCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case s: Stack if !s.childrenResolved => s
-      case withChildrenResolved if StackTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        StackTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => StackTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -331,8 +322,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
 
     override val transform: PartialFunction[Expression, Expression] = {
       case c: Concat if !c.childrenResolved => c
-      case withChildrenResolved if ConcatTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        ConcatTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => ConcatTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -343,9 +333,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   object MapZipWithCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case m: MapZipWith if m.arguments.exists(a => !a.resolved) => m
-      case withArgumentsResolved
-          if MapZipWithTypeCoercion.apply.isDefinedAt(withArgumentsResolved) =>
-        MapZipWithTypeCoercion.apply(withArgumentsResolved)
+      case withArgumentsResolved => MapZipWithTypeCoercion(withArgumentsResolved)
     }
   }
 
@@ -360,8 +348,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes if unresolved or not enough children
       case c: Elt if !c.childrenResolved => c
-      case withChildrenResolved if EltTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        EltTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => EltTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -372,8 +359,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved if ImplicitTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        ImplicitTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => ImplicitTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -383,8 +369,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
   object WindowFrameCoercion extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case s @ WindowSpecDefinition(_, Seq(order), _) if !order.resolved => s
-      case withOrderResolved if WindowFrameTypeCoercion.apply.isDefinedAt(withOrderResolved) =>
-        WindowFrameTypeCoercion.apply(withOrderResolved)
+      case withOrderResolved => WindowFrameTypeCoercion(withOrderResolved)
     }
   }
 
@@ -397,9 +382,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved
-          if StringLiteralTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        StringLiteralTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => StringLiteralTypeCoercion(withChildrenResolved)
     }
   }
 }

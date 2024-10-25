@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.NullType
  * that are of [[NullType]] to the expected column type.
  */
 object StackTypeCoercion {
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     case s @ Stack(children) if s.hasFoldableNumRows =>
       Stack(children.zipWithIndex.map {
         // The first child is the number of rows for stack.
@@ -34,5 +34,7 @@ object StackTypeCoercion {
           Literal.create(null, s.findDataType(index))
         case (e, _) => e
       })
+
+    case other => other
   }
 }

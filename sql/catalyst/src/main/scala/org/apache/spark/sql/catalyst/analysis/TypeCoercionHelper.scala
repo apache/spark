@@ -255,7 +255,7 @@ abstract class TypeCoercionHelper {
    * type coerce LHS and RHS to expected types.
    */
   object InTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
       case i @ InSubquery(lhs, l: ListQuery) if !i.resolved && lhs.length == l.plan.output.length =>
@@ -290,6 +290,8 @@ abstract class TypeCoercionHelper {
           case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
           case None => i
         }
+
+      case other => other
     }
   }
 
@@ -298,7 +300,7 @@ abstract class TypeCoercionHelper {
    * argument types to expected types.
    */
   object FunctionArgumentTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       case a @ CreateArray(children, _) if !haveSameType(children.map(_.dataType)) =>
         val types = children.map(_.dataType)
         findWiderCommonType(types) match {
@@ -396,6 +398,8 @@ abstract class TypeCoercionHelper {
       case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
         NaNvl(Cast(l, DoubleType), r)
       case NaNvl(l, r) if r.dataType == NullType => NaNvl(l, Cast(r, l.dataType))
+
+      case other => other
     }
   }
 
@@ -404,7 +408,7 @@ abstract class TypeCoercionHelper {
    * expression's children to expected types.
    */
   object ConcatTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       // Skip nodes if unresolved or empty children
       case c @ Concat(children) if children.isEmpty => c
       case c @ Concat(children)
@@ -414,6 +418,7 @@ abstract class TypeCoercionHelper {
           implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
         }
         c.copy(children = newChildren)
+      case other => other
     }
   }
 
@@ -422,7 +427,7 @@ abstract class TypeCoercionHelper {
    * key types of input maps to a common type.
    */
   object MapZipWithTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       // Lambda function isn't resolved when the rule is executed.
       case m @ MapZipWith(left, right, function)
           if m.arguments.forall(a => MapType.acceptsType(a.dataType)) &&
@@ -442,6 +447,7 @@ abstract class TypeCoercionHelper {
             MapZipWith(newLeft, newRight, function)
           case _ => m
         }
+      case other => other
     }
   }
 
@@ -450,7 +456,7 @@ abstract class TypeCoercionHelper {
    * expression's children to expected types.
    */
   object EltTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       case c @ Elt(children, _) if children.size < 2 => c
       case c @ Elt(children, _) =>
         val index = children.head
@@ -465,6 +471,7 @@ abstract class TypeCoercionHelper {
             children.tail
           }
         c.copy(children = newIndex +: newInputs)
+      case other => other
     }
   }
 
@@ -473,7 +480,7 @@ abstract class TypeCoercionHelper {
    * different branches to a common type.
    */
   object CaseWhenTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       case c: CaseWhen if !haveSameType(c.inputTypesForMerging) =>
         val maybeCommonType = findWiderCommonType(c.inputTypesForMerging)
         maybeCommonType
@@ -486,6 +493,8 @@ abstract class TypeCoercionHelper {
             CaseWhen(newBranches, newElseValue)
           }
           .getOrElse(c)
+
+      case other => other
     }
   }
 
@@ -494,7 +503,7 @@ abstract class TypeCoercionHelper {
    * different branches to a common type.
    */
   object IfTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       // Find tightest common type for If, if the true value and false value have different types.
       case i @ If(pred, left, right) if !haveSameType(i.inputTypesForMerging) =>
         findWiderTypeForTwo(left.dataType, right.dataType)
@@ -508,6 +517,7 @@ abstract class TypeCoercionHelper {
         If(Literal.create(null, BooleanType), left, right)
       case If(pred, left, right) if pred.dataType == NullType =>
         If(Cast(pred, BooleanType), left, right)
+      case other => other
     }
   }
 
@@ -516,7 +526,7 @@ abstract class TypeCoercionHelper {
    * input types to expected types.
    */
   object ImplicitTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       case b @ BinaryOperator(left, right)
           if canHandleTypeCoercion(left.dataType, right.dataType) =>
         findTightestCommonType(left.dataType, right.dataType)
@@ -571,6 +581,8 @@ abstract class TypeCoercionHelper {
 
         }
         udf.copy(children = children)
+
+      case other => other
     }
 
     private def canHandleTypeCoercion(leftType: DataType, rightType: DataType): Boolean = {
@@ -620,7 +632,7 @@ abstract class TypeCoercionHelper {
    * type coerce window boundaries to the type they operate upon.
    */
   object WindowFrameTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       case s @ WindowSpecDefinition(
             _,
             Seq(order),
@@ -633,6 +645,8 @@ abstract class TypeCoercionHelper {
             createBoundaryCast(upper, order.dataType)
           )
         )
+
+      case other => other
     }
 
     private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
@@ -652,7 +666,7 @@ abstract class TypeCoercionHelper {
    * children to expected types.
    */
   object DateTimeOperationsTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateAdd(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
@@ -671,6 +685,8 @@ abstract class TypeCoercionHelper {
         s.copy(left = newLeft, right = newRight)
 
       case t @ TimeAdd(StringTypeExpression(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+
+      case other => other
     }
   }
 
@@ -679,7 +695,7 @@ abstract class TypeCoercionHelper {
    * children to expected types.
    */
   object AnsiDateTimeOperationsTypeCoercion {
-    val apply: PartialFunction[Expression, Expression] = {
+    def apply(expression: Expression): Expression = expression match {
       case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(AnyTimestampTypeExpression(), _) =>
@@ -694,6 +710,8 @@ abstract class TypeCoercionHelper {
         val newLeft = castIfNotSameType(s.left, TimestampNTZType)
         val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)
+
+      case other => other
     }
   }
 }

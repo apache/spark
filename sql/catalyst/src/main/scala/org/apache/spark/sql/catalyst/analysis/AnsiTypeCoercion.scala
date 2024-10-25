@@ -230,9 +230,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved
-          if AnsiStringPromotionTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        AnsiStringPromotionTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => AnsiStringPromotionTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -248,9 +246,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case g if !g.childrenResolved => g
-      case withChildrenResolved
-          if AnsiGetDateFieldOperationsTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        AnsiGetDateFieldOperationsTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => AnsiGetDateFieldOperationsTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -258,9 +254,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved
-          if AnsiDateTimeOperationsTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        AnsiDateTimeOperationsTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => AnsiDateTimeOperationsTypeCoercion(withChildrenResolved)
     }
   }
 

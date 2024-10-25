@@ -52,7 +52,7 @@ import org.apache.spark.sql.types.{
  * a wider type when one of the children is a string.
  */
 object AnsiStringPromotionTypeCoercion {
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     case b @ BinaryOperator(left, right)
         if findWiderTypeForString(left.dataType, right.dataType).isDefined =>
       val promoteType = findWiderTypeForString(left.dataType, right.dataType).get
@@ -82,6 +82,8 @@ object AnsiStringPromotionTypeCoercion {
       t.copy(left = Cast(t.left, t.right.dataType))
     case t @ SubtractTimestamps(_, right @ StringTypeExpression(), _, _) =>
       t.copy(right = Cast(right, t.left.dataType))
+
+    case other => other
   }
 
   /** Promotes StringType to other data types. */

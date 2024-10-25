@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  * type coerce the second argument to [[IntegerType]], if necessary.
  */
 object StringLiteralTypeCoercion {
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     case DateAdd(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
       val days = try {
         Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
@@ -43,5 +43,6 @@ object StringLiteralTypeCoercion {
           throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_sub", e)
       }
       DateSub(l, Literal(days))
+    case other => other
   }
 }

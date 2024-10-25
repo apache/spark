@@ -45,7 +45,7 @@ import org.apache.spark.sql.types.{
  */
 object StringPromotionTypeCoercion {
 
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     case a @ BinaryArithmetic(left @ StringTypeExpression(), right)
         if !isIntervalType(right.dataType) =>
       a.withNewChildren(Seq(Cast(left, DoubleType), right))
@@ -64,6 +64,8 @@ object StringPromotionTypeCoercion {
         if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
       val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
       p.withNewChildren(Seq(castExpr(left, commonType), castExpr(right, commonType)))
+
+    case other => other
   }
 
   private def castExpr(expr: Expression, targetType: DataType): Expression = {

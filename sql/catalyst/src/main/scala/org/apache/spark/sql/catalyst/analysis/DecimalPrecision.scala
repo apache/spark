@@ -53,9 +53,7 @@ object DecimalPrecision extends TypeCoercionRule {
   override def transform: PartialFunction[Expression, Expression] = {
     // Skip nodes whose children have not been resolved yet
     case e if !e.childrenResolved => e
-    case withChildrenResolved
-        if DecimalPrecisionTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-      DecimalPrecisionTypeCoercion.apply(withChildrenResolved)
+    case withChildrenResolved => DecimalPrecisionTypeCoercion(withChildrenResolved)
   }
 
   import scala.math.max

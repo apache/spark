@@ -320,9 +320,7 @@ object TypeCoercion extends TypeCoercionBase {
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved
-          if StringPromotionTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        StringPromotionTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => StringPromotionTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -333,9 +331,7 @@ object TypeCoercion extends TypeCoercionBase {
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved
-          if BooleanEqualityTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        BooleanEqualityTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => BooleanEqualityTypeCoercion(withChildrenResolved)
     }
   }
 
@@ -343,12 +339,9 @@ object TypeCoercion extends TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
-      case withChildrenResolved
-          if DateTimeOperationsTypeCoercion.apply.isDefinedAt(withChildrenResolved) =>
-        DateTimeOperationsTypeCoercion.apply(withChildrenResolved)
+      case withChildrenResolved => DateTimeOperationsTypeCoercion(withChildrenResolved)
     }
   }
-
 }
 
 trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {

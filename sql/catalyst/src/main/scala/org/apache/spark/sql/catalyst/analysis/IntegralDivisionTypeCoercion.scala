@@ -25,9 +25,10 @@ import org.apache.spark.sql.types.{ByteType, IntegerType, LongType, ShortType}
  * children to [[LongType]].
  */
 object IntegralDivisionTypeCoercion {
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     case d @ IntegralDivide(left, right, _) =>
       d.copy(left = mayCastToLong(left), right = mayCastToLong(right))
+    case other => other
   }
 
   private def mayCastToLong(expr: Expression): Expression = expr.dataType match {

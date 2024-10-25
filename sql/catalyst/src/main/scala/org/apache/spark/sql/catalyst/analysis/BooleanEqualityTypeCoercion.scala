@@ -42,7 +42,7 @@ object BooleanEqualityTypeCoercion {
   private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
   private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
 
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = expression match {
     // Hive treats (true = 1) as true and (false = 0) as true,
     // all other cases are considered as false.
 
@@ -81,5 +81,7 @@ object BooleanEqualityTypeCoercion {
       EqualNullSafe(Cast(left, right.dataType), right)
     case EqualNullSafe(left @ NumericTypeExpression(), right @ BooleanTypeExpression()) =>
       EqualNullSafe(left, Cast(right, left.dataType))
+
+    case other => other
   }
 }

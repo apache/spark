@@ -141,10 +141,11 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
       }
   }
 
-  val apply: PartialFunction[Expression, Expression] = {
+  def apply(expression: Expression): Expression = {
     decimalAndDecimal()
       .orElse(integralAndDecimalLiteral)
       .orElse(nondecimalAndDecimal(conf.literalPickMinimumPrecision))
+      .lift(expression).getOrElse(expression)
   }
 
   private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
