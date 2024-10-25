@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
@@ -302,7 +302,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // global ExecutionContext has only 2 threads in Apache Spark CI
     // create own thread pool for four Futures used in this test
     val numThreads = 4
-    val fpool = ThreadUtils.newForkJoinPool("job-tags-test-thread-pool", numThreads)
+    val fpool = Executors.newFixedThreadPool(numThreads)
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     try {
