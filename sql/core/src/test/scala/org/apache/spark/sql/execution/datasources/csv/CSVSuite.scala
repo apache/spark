@@ -2306,7 +2306,7 @@ abstract class CSVSuite
 
   test("SPARK-25387: bad input should not cause NPE") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    val input = spark.createDataset(Seq("\u0001\u0000\u0001234"))
+    val input = spark.createDataset(Seq("\u0001\u0000\u0001234X"))
 
     checkAnswer(spark.read.schema(schema).csv(input), Row(null))
     checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
@@ -2316,16 +2316,16 @@ abstract class CSVSuite
   test("SPARK-31261: bad csv input with `columnNameCorruptRecord` should not cause NPE") {
     val schema = StructType(
       StructField("a", IntegerType) :: StructField("_corrupt_record", StringType) :: Nil)
-    val input = spark.createDataset(Seq("\u0001\u0000\u0001234"))
+    val input = spark.createDataset(Seq("\u0001\u0000\u0001234X"))
 
     checkAnswer(
       spark.read
         .option("columnNameOfCorruptRecord", "_corrupt_record")
         .schema(schema)
         .csv(input),
-      Row(null, "\u0001\u0000\u0001234"))
+      Row(null, "\u0001\u0000\u0001234X"))
     assert(spark.read.schema(schema).csv(input).collect().toSet ==
-      Set(Row(null, "\u0001\u0000\u0001234")))
+      Set(Row(null, "\u0001\u0000\u0001234X")))
   }
 
   test("field names of inferred schema shouldn't compare to the first row") {

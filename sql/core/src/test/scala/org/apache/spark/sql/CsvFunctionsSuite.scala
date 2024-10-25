@@ -486,7 +486,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-32968: bad csv input with csv pruning optimization") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
-        val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234")).toDF("csv")
+        val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234X")).toDF("csv")
           .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
 
         checkError(
