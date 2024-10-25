@@ -64,7 +64,11 @@ class ImplicitGroupingKeyRequest(_message.Message):
     SETIMPLICITKEY_FIELD_NUMBER: ClassVar[int]
     removeImplicitKey: RemoveImplicitKey
     setImplicitKey: SetImplicitKey
-    def __init__(self, setImplicitKey: Optional[Union[SetImplicitKey, Mapping]] = ..., removeImplicitKey: Optional[Union[RemoveImplicitKey, Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        setImplicitKey: Optional[Union[SetImplicitKey, Mapping]] = ...,
+        removeImplicitKey: Optional[Union[RemoveImplicitKey, Mapping]] = ...,
+    ) -> None: ...
 
 class IsFirstBatch(_message.Message):
     __slots__ = []
@@ -83,7 +87,15 @@ class Keys(_message.Message):
     def __init__(self, iteratorId: Optional[str] = ...) -> None: ...
 
 class ListStateCall(_message.Message):
-    __slots__ = ["appendList", "appendValue", "clear", "exists", "listStateGet", "listStatePut", "stateName"]
+    __slots__ = [
+        "appendList",
+        "appendValue",
+        "clear",
+        "exists",
+        "listStateGet",
+        "listStatePut",
+        "stateName",
+    ]
     APPENDLIST_FIELD_NUMBER: ClassVar[int]
     APPENDVALUE_FIELD_NUMBER: ClassVar[int]
     CLEAR_FIELD_NUMBER: ClassVar[int]
@@ -98,7 +110,16 @@ class ListStateCall(_message.Message):
     listStateGet: ListStateGet
     listStatePut: ListStatePut
     stateName: str
-    def __init__(self, stateName: Optional[str] = ..., exists: Optional[Union[Exists, Mapping]] = ..., listStateGet: Optional[Union[ListStateGet, Mapping]] = ..., listStatePut: Optional[Union[ListStatePut, Mapping]] = ..., appendValue: Optional[Union[AppendValue, Mapping]] = ..., appendList: Optional[Union[AppendList, Mapping]] = ..., clear: Optional[Union[Clear, Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        stateName: Optional[str] = ...,
+        exists: Optional[Union[Exists, Mapping]] = ...,
+        listStateGet: Optional[Union[ListStateGet, Mapping]] = ...,
+        listStatePut: Optional[Union[ListStatePut, Mapping]] = ...,
+        appendValue: Optional[Union[AppendValue, Mapping]] = ...,
+        appendList: Optional[Union[AppendList, Mapping]] = ...,
+        clear: Optional[Union[Clear, Mapping]] = ...,
+    ) -> None: ...
 
 class ListStateGet(_message.Message):
     __slots__ = ["iteratorId"]
@@ -111,7 +132,18 @@ class ListStatePut(_message.Message):
     def __init__(self) -> None: ...
 
 class MapStateCall(_message.Message):
-    __slots__ = ["clear", "containsKey", "exists", "getValue", "iterator", "keys", "removeKey", "stateName", "updateValue", "values"]
+    __slots__ = [
+        "clear",
+        "containsKey",
+        "exists",
+        "getValue",
+        "iterator",
+        "keys",
+        "removeKey",
+        "stateName",
+        "updateValue",
+        "values",
+    ]
     CLEAR_FIELD_NUMBER: ClassVar[int]
     CONTAINSKEY_FIELD_NUMBER: ClassVar[int]
     EXISTS_FIELD_NUMBER: ClassVar[int]
@@ -132,7 +164,19 @@ class MapStateCall(_message.Message):
     stateName: str
     updateValue: UpdateValue
     values: Values
-    def __init__(self, stateName: Optional[str] = ..., exists: Optional[Union[Exists, Mapping]] = ..., getValue: Optional[Union[GetValue, Mapping]] = ..., containsKey: Optional[Union[ContainsKey, Mapping]] = ..., updateValue: Optional[Union[UpdateValue, Mapping]] = ..., iterator: Optional[Union[Iterator, Mapping]] = ..., keys: Optional[Union[Keys, Mapping]] = ..., values: Optional[Union[Values, Mapping]] = ..., removeKey: Optional[Union[RemoveKey, Mapping]] = ..., clear: Optional[Union[Clear, Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        stateName: Optional[str] = ...,
+        exists: Optional[Union[Exists, Mapping]] = ...,
+        getValue: Optional[Union[GetValue, Mapping]] = ...,
+        containsKey: Optional[Union[ContainsKey, Mapping]] = ...,
+        updateValue: Optional[Union[UpdateValue, Mapping]] = ...,
+        iterator: Optional[Union[Iterator, Mapping]] = ...,
+        keys: Optional[Union[Keys, Mapping]] = ...,
+        values: Optional[Union[Values, Mapping]] = ...,
+        removeKey: Optional[Union[RemoveKey, Mapping]] = ...,
+        clear: Optional[Union[Clear, Mapping]] = ...,
+    ) -> None: ...
 
 class RemoveImplicitKey(_message.Message):
     __slots__ = []
@@ -166,10 +210,21 @@ class StateCallCommand(_message.Message):
     schema: str
     stateName: str
     ttl: TTLConfig
-    def __init__(self, stateName: Optional[str] = ..., schema: Optional[str] = ..., mapStateValueSchema: Optional[str] = ..., ttl: Optional[Union[TTLConfig, Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        stateName: Optional[str] = ...,
+        schema: Optional[str] = ...,
+        mapStateValueSchema: Optional[str] = ...,
+        ttl: Optional[Union[TTLConfig, Mapping]] = ...,
+    ) -> None: ...
 
 class StateRequest(_message.Message):
-    __slots__ = ["implicitGroupingKeyRequest", "stateVariableRequest", "statefulProcessorCall", "version"]
+    __slots__ = [
+        "implicitGroupingKeyRequest",
+        "stateVariableRequest",
+        "statefulProcessorCall",
+        "version",
+    ]
     IMPLICITGROUPINGKEYREQUEST_FIELD_NUMBER: ClassVar[int]
     STATEFULPROCESSORCALL_FIELD_NUMBER: ClassVar[int]
     STATEVARIABLEREQUEST_FIELD_NUMBER: ClassVar[int]
@@ -178,7 +233,13 @@ class StateRequest(_message.Message):
     stateVariableRequest: StateVariableRequest
     statefulProcessorCall: StatefulProcessorCall
     version: int
-    def __init__(self, version: Optional[int] = ..., statefulProcessorCall: Optional[Union[StatefulProcessorCall, Mapping]] = ..., stateVariableRequest: Optional[Union[StateVariableRequest, Mapping]] = ..., implicitGroupingKeyRequest: Optional[Union[ImplicitGroupingKeyRequest, Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        version: Optional[int] = ...,
+        statefulProcessorCall: Optional[Union[StatefulProcessorCall, Mapping]] = ...,
+        stateVariableRequest: Optional[Union[StateVariableRequest, Mapping]] = ...,
+        implicitGroupingKeyRequest: Optional[Union[ImplicitGroupingKeyRequest, Mapping]] = ...,
+    ) -> None: ...
 
 class StateResponse(_message.Message):
     __slots__ = ["errorMessage", "statusCode", "value"]
@@ -188,7 +249,12 @@ class StateResponse(_message.Message):
     errorMessage: str
     statusCode: int
     value: bytes
-    def __init__(self, statusCode: Optional[int] = ..., errorMessage: Optional[str] = ..., value: Optional[bytes] = ...) -> None: ...
+    def __init__(
+        self,
+        statusCode: Optional[int] = ...,
+        errorMessage: Optional[str] = ...,
+        value: Optional[bytes] = ...,
+    ) -> None: ...
 
 class StateVariableRequest(_message.Message):
     __slots__ = ["listStateCall", "mapStateCall", "valueStateCall"]
@@ -198,7 +264,12 @@ class StateVariableRequest(_message.Message):
     listStateCall: ListStateCall
     mapStateCall: MapStateCall
     valueStateCall: ValueStateCall
-    def __init__(self, valueStateCall: Optional[Union[ValueStateCall, Mapping]] = ..., listStateCall: Optional[Union[ListStateCall, Mapping]] = ..., mapStateCall: Optional[Union[MapStateCall, Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        valueStateCall: Optional[Union[ValueStateCall, Mapping]] = ...,
+        listStateCall: Optional[Union[ListStateCall, Mapping]] = ...,
+        mapStateCall: Optional[Union[MapStateCall, Mapping]] = ...,
+    ) -> None: ...
 
 class StatefulProcessorCall(_message.Message):
     __slots__ = ["getListState", "getMapState", "getValueState", "setHandleState", "utilsCall"]
@@ -212,7 +283,14 @@ class StatefulProcessorCall(_message.Message):
     getValueState: StateCallCommand
     setHandleState: SetHandleState
     utilsCall: UtilsCallCommand
-    def __init__(self, setHandleState: Optional[Union[SetHandleState, Mapping]] = ..., getValueState: Optional[Union[StateCallCommand, Mapping]] = ..., getListState: Optional[Union[StateCallCommand, Mapping]] = ..., getMapState: Optional[Union[StateCallCommand, Mapping]] = ..., utilsCall: Optional[Union[UtilsCallCommand, Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        setHandleState: Optional[Union[SetHandleState, Mapping]] = ...,
+        getValueState: Optional[Union[StateCallCommand, Mapping]] = ...,
+        getListState: Optional[Union[StateCallCommand, Mapping]] = ...,
+        getMapState: Optional[Union[StateCallCommand, Mapping]] = ...,
+        utilsCall: Optional[Union[UtilsCallCommand, Mapping]] = ...,
+    ) -> None: ...
 
 class TTLConfig(_message.Message):
     __slots__ = ["durationMs"]
@@ -246,7 +324,14 @@ class ValueStateCall(_message.Message):
     get: Get
     stateName: str
     valueStateUpdate: ValueStateUpdate
-    def __init__(self, stateName: Optional[str] = ..., exists: Optional[Union[Exists, Mapping]] = ..., get: Optional[Union[Get, Mapping]] = ..., valueStateUpdate: Optional[Union[ValueStateUpdate, Mapping]] = ..., clear: Optional[Union[Clear, Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        stateName: Optional[str] = ...,
+        exists: Optional[Union[Exists, Mapping]] = ...,
+        get: Optional[Union[Get, Mapping]] = ...,
+        valueStateUpdate: Optional[Union[ValueStateUpdate, Mapping]] = ...,
+        clear: Optional[Union[Clear, Mapping]] = ...,
+    ) -> None: ...
 
 class ValueStateUpdate(_message.Message):
     __slots__ = ["value"]

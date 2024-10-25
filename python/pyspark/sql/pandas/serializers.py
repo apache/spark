@@ -1220,20 +1220,25 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             This function flatten the columns of input rows and initial state rows and feed them into
             the data generator.
             """
+
             def flatten_columns(cur_batch, col_name):
                 state_column = cur_batch.column(cur_batch.schema.get_field_index(col_name))
-                state_field_names = [state_column.type[i].name for i in range(state_column.type.num_fields)]
-                state_field_arrays = [state_column.field(i) for i in range(state_column.type.num_fields)]
-                table_from_fields = pa.Table.from_arrays(state_field_arrays, names=state_field_names)
+                state_field_names = [
+                    state_column.type[i].name for i in range(state_column.type.num_fields)
+                ]
+                state_field_arrays = [
+                    state_column.field(i) for i in range(state_column.type.num_fields)
+                ]
+                table_from_fields = pa.Table.from_arrays(
+                    state_field_arrays, names=state_field_names
+                )
                 return table_from_fields
 
             for batch in batches:
-                flatten_state_table = flatten_columns(batch, 'inputData')
-                data_pandas = [
-                    self.arrow_to_pandas(c) for c in flatten_state_table.itercolumns()
-                ]
+                flatten_state_table = flatten_columns(batch, "inputData")
+                data_pandas = [self.arrow_to_pandas(c) for c in flatten_state_table.itercolumns()]
 
-                flatten_init_table = flatten_columns(batch, 'initState')
+                flatten_init_table = flatten_columns(batch, "initState")
                 init_data_pandas = [
                     self.arrow_to_pandas(c) for c in flatten_init_table.itercolumns()
                 ]

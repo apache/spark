@@ -154,7 +154,7 @@ class StatefulProcessorApiClient:
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
-            
+
     def get_map_state(
         self,
         state_name: str,
@@ -177,11 +177,11 @@ class StatefulProcessorApiClient:
             state_call_command.ttl.durationMs = ttl_duration_ms
         call = stateMessage.StatefulProcessorCall(getMapState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
-        
+
         self._send_proto_message(message.SerializeToString())
         response_message = self._receive_proto_message()
         status = response_message[0]
-        
+
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing map state: " f"{response_message[1]}")
@@ -203,7 +203,9 @@ class StatefulProcessorApiClient:
             return False
         else:
             # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(f"Error checking if it is first batch: " f"{response_message[1]}")
+            raise PySparkRuntimeError(
+                f"Error checking if it is first batch: " f"{response_message[1]}"
+            )
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message

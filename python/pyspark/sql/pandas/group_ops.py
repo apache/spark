@@ -367,7 +367,7 @@ class PandasGroupedOpsMixin:
         outputStructType: Union[StructType, str],
         outputMode: str,
         timeMode: str,
-        initialState: "GroupedData" = None
+        initialState: "GroupedData" = None,
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -518,7 +518,7 @@ class PandasGroupedOpsMixin:
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
-            initialStates: Iterator["PandasDataFrameLike"] = None
+            initialStates: Iterator["PandasDataFrameLike"] = None,
         ) -> Iterator["PandasDataFrameLike"]:
             """
             UDF for TWS operator with non-empty initial states. Possible input combinations
@@ -588,7 +588,7 @@ class PandasGroupedOpsMixin:
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             outputMode,
             timeMode,
-            initial_state_java_obj
+            initial_state_java_obj,
         )
         return DataFrame(jdf, self.session)
 

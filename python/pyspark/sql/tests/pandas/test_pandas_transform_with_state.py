@@ -368,9 +368,7 @@ class TransformWithStateInPandasTestsMixin:
         finally:
             input_dir.cleanup()
 
-    def _test_transform_with_state_init_state_in_pandas(
-            self, stateful_processor, check_results
-    ):
+    def _test_transform_with_state_init_state_in_pandas(self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         self._prepare_test_resource3(input_path)
@@ -389,9 +387,7 @@ class TransformWithStateInPandasTestsMixin:
         )
 
         data = [("0", 789), ("3", 987)]
-        initial_state = \
-            self.spark.createDataFrame(data, "id string, initVal int") \
-                .groupBy("id")
+        initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
 
         q = (
             df.groupBy("id")
@@ -400,7 +396,7 @@ class TransformWithStateInPandasTestsMixin:
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode="None",
-                initialState=initial_state
+                initialState=initial_state,
             )
             .writeStream.queryName("this_query")
             .foreachBatch(check_results)
@@ -433,7 +429,9 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="3", value=str(987 + 12)),
                 }
 
-        self._test_transform_with_state_init_state_in_pandas(SimpleStatefulProcessorWithInitialState(), check_results)
+        self._test_transform_with_state_init_state_in_pandas(
+            SimpleStatefulProcessorWithInitialState(), check_results
+        )
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
@@ -455,7 +453,7 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
         accumulated_value = existing_value
 
         for pdf in rows:
-            value = pdf['temperature'].astype(int).sum()
+            value = pdf["temperature"].astype(int).sum()
             accumulated_value += value
 
         self.value_state.update((accumulated_value,))
@@ -465,7 +463,7 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     def handleInitialState(self, key, initialState) -> None:
         init_val = initialState.at[0, "initVal"]
         self.value_state.update((init_val,))
-        assert(self.dict[key] == init_val)
+        assert self.dict[key] == init_val
 
     def close(self) -> None:
         pass
