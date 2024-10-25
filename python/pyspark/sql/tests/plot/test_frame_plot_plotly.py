@@ -465,7 +465,7 @@ class DataFramePlotPlotlyTestsMixin:
             errorClass="PLOT_INVALID_TYPE_COLUMN",
             messageParameters={
                 "col_name": "math_scor",
-                "valid_types": "NumericType, DateType, TimestampType",
+                "valid_types": "NumericType",
                 "col_type": "None",
             },
         )
@@ -478,7 +478,7 @@ class DataFramePlotPlotlyTestsMixin:
             errorClass="PLOT_INVALID_TYPE_COLUMN",
             messageParameters={
                 "col_name": "student",
-                "valid_types": "NumericType, DateType, TimestampType",
+                "valid_types": "NumericType",
                 "col_type": "StringType",
             },
         )

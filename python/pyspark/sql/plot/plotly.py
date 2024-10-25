@@ -25,7 +25,7 @@ from pyspark.sql.plot import (
     PySparkKdePlotBase,
     PySparkHistogramPlotBase,
 )
-from pyspark.sql.types import NumericType, DateType, TimestampType
+from pyspark.sql.types import NumericType
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -214,29 +214,28 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
 def process_column_param(column: Optional[Union[str, List[str]]], data: "DataFrame") -> List[str]:
     """
     Processes the provided column parameter for a DataFrame.
-    - If `column` is None, returns a list of numeric or datetime columns from the DataFrame.
+    - If `column` is None, returns a list of numeric columns from the DataFrame.
     - If `column` is a string, converts it to a list first.
     - If `column` is a list, it checks if all specified columns exist in the DataFrame
-      and are of valid types (NumericType, DateType, or TimestampType).
+      and are of NumericType.
     - Raises a PySparkTypeError if any column in the list is not present in the DataFrame
-      or has an invalid type.
+      or is not of NumericType.
     """
-    valid_types = (NumericType, DateType, TimestampType)
     if column is None:
         return [
-            field.name for field in data.schema.fields if isinstance(field.dataType, valid_types)
+            field.name for field in data.schema.fields if isinstance(field.dataType, NumericType)
         ]
     if isinstance(column, str):
         column = [column]
 
     for col in column:
         field = next((f for f in data.schema.fields if f.name == col), None)
-        if not field or not isinstance(field.dataType, valid_types):
+        if not field or not isinstance(field.dataType, NumericType):
             raise PySparkTypeError(
                 errorClass="PLOT_INVALID_TYPE_COLUMN",
                 messageParameters={
                     "col_name": col,
-                    "valid_types": ", ".join([t.__name__ for t in valid_types]),
+                    "valid_types": NumericType.__name__,
                     "col_type": field.dataType.__class__.__name__ if field else "None",
                 },
             )
