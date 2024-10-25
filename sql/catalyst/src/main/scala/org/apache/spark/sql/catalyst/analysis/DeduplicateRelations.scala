@@ -361,14 +361,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         if findAliases(projectList).size == projectList.size =>
         Nil
 
-      case oldVersion @ Aggregate(_, aggregateExpressions, _)
+      case oldVersion @ Aggregate(_, aggregateExpressions, _, _)
           if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
       // We don't search the child plan recursively for the same reason as the above Project.
-      case _ @ Aggregate(_, aggregateExpressions, _)
+      case _ @ Aggregate(_, aggregateExpressions, _, _)
         if findAliases(aggregateExpressions).size == aggregateExpressions.size =>
         Nil
 

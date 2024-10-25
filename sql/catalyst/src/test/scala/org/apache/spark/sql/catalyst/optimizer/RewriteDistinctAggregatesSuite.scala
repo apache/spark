@@ -31,7 +31,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   val testRelation2 = LocalRelation($"a".double, $"b".int, $"c".int, $"d".int, $"e".int)
 
   private def checkRewrite(rewrite: LogicalPlan): Unit = rewrite match {
-    case Aggregate(_, _, Aggregate(_, _, _: Expand)) =>
+    case Aggregate(_, _, Aggregate(_, _, _: Expand, _), _) =>
     case _ => fail(s"Plan is not rewritten:\n$rewrite")
   }
 
@@ -87,7 +87,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
     val rewrite = RewriteDistinctAggregates(input)
     rewrite match {
-      case Aggregate(_, _, LocalRelation(_, _, _)) =>
+      case Aggregate(_, _, LocalRelation(_, _, _), _) =>
       case _ => fail(s"Plan is not as expected:\n$rewrite")
     }
   }
@@ -104,7 +104,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
     val rewrite = RewriteDistinctAggregates(input)
     rewrite match {
-      case Aggregate(_, _, Aggregate(_, _, e: Expand)) =>
+      case Aggregate(_, _, Aggregate(_, _, e: Expand, _), _) =>
         assert(e.projections.size == 3)
       case _ => fail(s"Plan is not rewritten:\n$rewrite")
     }
