@@ -12271,8 +12271,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return DataFrame(internal)
 
-    foo = cast("DataFrame", None).sort_index().dropna()
-
     def keys(self) -> pd.Index:
         """
         Return alias for columns.
