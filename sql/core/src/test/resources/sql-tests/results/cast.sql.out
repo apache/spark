@@ -351,7 +351,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "condition" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval 3 month 1 hour"
   },
@@ -639,7 +639,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INTERVAL HOUR TO SECOND\"",
@@ -672,7 +672,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INTERVAL MONTH\"",
@@ -689,7 +689,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INTERVAL SECOND\"",
@@ -778,7 +778,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"INT\"",
@@ -795,7 +795,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"BIGINT\"",
@@ -868,7 +868,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+  "condition" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
   "sqlState" : "22003",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -1103,7 +1103,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"BINT\""
@@ -1125,7 +1125,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"SELECT\""
@@ -1147,7 +1147,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'::'",

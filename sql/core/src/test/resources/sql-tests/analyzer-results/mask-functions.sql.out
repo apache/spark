@@ -39,7 +39,7 @@ SELECT mask('AbCD123-@$#', 'Qa', 'qa', 'da', 'oa')
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "condition" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "upperChar",
@@ -405,7 +405,7 @@ SELECT mask(c1, replaceArg) from values('abcd-EFGH-8765-4321', 'a') as t(c1, rep
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"replaceArg\"",
@@ -428,7 +428,7 @@ SELECT mask(c1, replaceArg) from values('abcd-EFGH-8765-4321', 'ABC') as t(c1, r
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "condition" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputExpr" : "\"replaceArg\"",
@@ -451,7 +451,7 @@ SELECT mask(c1, replaceArg) from values('abcd-EFGH-8765-4321', 123) as t(c1, rep
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"replaceArg\"",
@@ -475,7 +475,7 @@ SELECT mask('abcd-EFGH-8765-4321', 'A', 'w', '')
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "condition" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "digitChar",
@@ -496,7 +496,7 @@ SELECT mask('abcd-EFGH-8765-4321', 'A', 'abc')
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
+  "condition" : "DATATYPE_MISMATCH.INPUT_SIZE_NOT_ONE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "lowerChar",

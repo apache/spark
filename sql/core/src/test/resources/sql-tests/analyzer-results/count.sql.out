@@ -181,7 +181,7 @@ SELECT count() FROM testData
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
@@ -223,7 +223,7 @@ SELECT count(testData.*) FROM testData
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "condition" : "_LEGACY_ERROR_TEMP_1021",
   "messageParameters" : {
     "targetString" : "testData"
   }

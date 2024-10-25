@@ -163,7 +163,7 @@ SELECT array(1), 2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -190,7 +190,7 @@ SELECT k, v FROM tab2
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "NUM_COLUMNS_MISMATCH",
+  "condition" : "NUM_COLUMNS_MISMATCH",
   "sqlState" : "42826",
   "messageParameters" : {
     "firstNumColumns" : "1",

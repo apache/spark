@@ -207,7 +207,7 @@ SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -231,7 +231,7 @@ SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -255,7 +255,7 @@ SELECT HEX(CAST(123S AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -279,7 +279,7 @@ SELECT HEX(CAST(-123S AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -303,7 +303,7 @@ SELECT HEX(CAST(123 AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -327,7 +327,7 @@ SELECT HEX(CAST(-123 AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -351,7 +351,7 @@ SELECT HEX(CAST(123L AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -375,7 +375,7 @@ SELECT HEX(CAST(-123L AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -432,7 +432,7 @@ SELECT CAST(interval 3 month 1 hour AS string)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0029",
+  "condition" : "_LEGACY_ERROR_TEMP_0029",
   "messageParameters" : {
     "literal" : "interval 3 month 1 hour"
   },
@@ -942,7 +942,7 @@ SELECT HEX((123 :: byte) :: binary)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "condition" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
     "config" : "\"spark.sql.ansi.enabled\"",
@@ -1066,7 +1066,7 @@ SELECT '2147483648' :: BINT
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"BINT\""
@@ -1086,7 +1086,7 @@ SELECT '2147483648' :: SELECT
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "condition" : "UNSUPPORTED_DATATYPE",
   "sqlState" : "0A000",
   "messageParameters" : {
     "typeName" : "\"SELECT\""
@@ -1106,7 +1106,7 @@ SELECT FALSE IS NOT NULL :: string
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'::'",

@@ -46,7 +46,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0045",
+  "condition" : "_LEGACY_ERROR_TEMP_0045",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -64,7 +64,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_CONF_VALUE.TIME_ZONE",
+  "condition" : "INVALID_CONF_VALUE.TIME_ZONE",
   "sqlState" : "22022",
   "messageParameters" : {
     "confName" : "spark.sql.session.timeZone",
@@ -80,7 +80,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "condition" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "3"
@@ -102,7 +102,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "condition" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "24"
@@ -124,7 +124,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "condition" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "19"
@@ -146,7 +146,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0045",
+  "condition" : "_LEGACY_ERROR_TEMP_0045",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -164,7 +164,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+  "condition" : "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
   "sqlState" : "22006",
   "messageParameters" : {
     "input" : "36000"

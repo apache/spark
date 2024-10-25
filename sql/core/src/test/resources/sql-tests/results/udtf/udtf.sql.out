@@ -145,7 +145,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "condition" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
   "sqlState" : "0A000",
   "messageParameters" : {
     "treeNode" : "LateralJoin lateral-subquery#x [], Inner\n:  +- Project [count#x, total#x, last#x]\n:     +- LateralJoin lateral-subquery#x [c#x], Inner\n:        :  +- SubqueryAlias __auto_generated_subquery_name_1\n:        :     +- Generate UDTFCountSumLast(outer(c#x))#x, false, [count#x, total#x, last#x]\n:        :        +- OneRowRelation\n:        +- SubqueryAlias __auto_generated_subquery_name_0\n:           +- Project [named_struct(partition_col, partition_col#x, input, input#x, partition_by_0, partition_by_0#x) AS c#x]\n:              +- Sort [partition_by_0#x ASC NULLS FIRST, input#x DESC NULLS LAST], false\n:                 +- RepartitionByExpression [partition_by_0#x]\n:                    +- Project [partition_col#x, input#x, partition_col#x AS partition_by_0#x]\n:                       +- SubqueryAlias t2\n:                          +- View (`t2`, [partition_col#x, input#x])\n:                             +- Project [cast(partition_col#x as int) AS partition_col#x, cast(input#x as int) AS input#x]\n:                                +- SubqueryAlias t\n:                                   +- LocalRelation [partition_col#x, input#x]\n+- SubqueryAlias t\n   +- LocalRelation [col#x]\n"
@@ -183,7 +183,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFWithSinglePartition",
@@ -207,7 +207,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFWithSinglePartition",
@@ -234,7 +234,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFWithSinglePartition",
@@ -267,7 +267,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFPartitionByOrderBy",
@@ -291,7 +291,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFPartitionByOrderBy",
@@ -318,7 +318,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INCOMPATIBLE_WITH_CALL",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFPartitionByOrderBy",
@@ -382,7 +382,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`unparsable`",
@@ -405,7 +405,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'UDTFInvalidSelectExprStringValue' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'select' field set to a value besides a list or tuple of 'SelectedColumn' objects. Please update the table function and then try the query again."
@@ -427,7 +427,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS",
+  "condition" : "UDTF_INVALID_REQUESTED_SELECTED_EXPRESSION_FROM_ANALYZE_METHOD_REQUIRES_ALIAS",
   "sqlState" : "42802",
   "messageParameters" : {
     "expression" : "(input + 1)"
@@ -449,7 +449,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD",
+  "condition" : "UDTF_INVALID_ALIAS_IN_REQUESTED_ORDERING_STRING_FROM_ANALYZE_METHOD",
   "sqlState" : "42802",
   "messageParameters" : {
     "aliasName" : "ASC"
@@ -471,7 +471,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'UDTFInvalidOrderByStringList' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'orderBy' field set to a value besides a list or tuple of 'OrderingColumn' objects. Please update the table function and then try the query again."
@@ -493,7 +493,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFInvalidPartitionByAndWithSinglePartition",
@@ -516,7 +516,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFInvalidPartitionByAndWithSinglePartition",
@@ -539,7 +539,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFInvalidPartitionByAndWithSinglePartition",
@@ -565,7 +565,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFInvalidPartitionByAndWithSinglePartition",
@@ -588,7 +588,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFInvalidOrderByWithoutPartitionBy",
@@ -611,7 +611,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFInvalidOrderByWithoutPartitionBy",
@@ -634,7 +634,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFInvalidOrderByWithoutPartitionBy",
@@ -660,7 +660,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
+  "condition" : "TABLE_VALUED_FUNCTION_REQUIRED_METADATA_INVALID",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "UDTFInvalidOrderByWithoutPartitionBy",
@@ -782,7 +782,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'UDTFForwardStateFromAnalyzeWithKwargs' because the function arguments did not match the expected signature of the static 'analyze' method (too many positional arguments). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
@@ -813,7 +813,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+  "condition" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
     "parameterName" : "`argument`",
@@ -836,7 +836,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'InvalidAnalyzeMethodWithSinglePartitionNoInputTable' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'withSinglePartition' field set to 'true', but the function call did not provide any table argument. Please update the query so that it provides a table argument, or else update the table function so that its 'analyze' method returns an 'AnalyzeResult' object with the 'withSinglePartition' field set to 'false', and then try the query again."
@@ -858,7 +858,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'InvalidAnalyzeMethodWithPartitionByNoInputTable' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'partitionBy' list set to non-empty, but the function call did not provide any table argument. Please update the query so that it provides a table argument, or else update the table function so that its 'analyze' method returns an 'AnalyzeResult' object with the 'partitionBy' list set to empty, and then try the query again."
@@ -880,7 +880,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'InvalidAnalyzeMethodReturnsNonStructTypeSchema' because the static 'analyze' method expects a result of type pyspark.sql.udtf.AnalyzeResult with a 'schema' field comprising a StructType, but the 'schema' field had the wrong type: <class 'int'>"
@@ -902,7 +902,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'InvalidAnalyzeMethodWithPartitionByListOfStrings' because the static 'analyze' method returned an 'AnalyzeResult' object with the 'partitionBy' field set to a value besides a list or tuple of 'PartitioningColumn' objects. Please update the table function and then try the query again."
@@ -942,7 +942,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function arguments did not match the expected signature of the static 'analyze' method (missing a required argument: 'input_table'). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
@@ -964,7 +964,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function arguments did not match the expected signature of the static 'analyze' method (too many positional arguments). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
@@ -986,7 +986,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function arguments did not match the expected signature of the static 'analyze' method (missing a required argument: 'input_table'). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
@@ -1008,7 +1008,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
+  "condition" : "TABLE_VALUED_FUNCTION_FAILED_TO_ANALYZE_IN_PYTHON",
   "sqlState" : "38000",
   "messageParameters" : {
     "msg" : "Failed to evaluate the user-defined table function 'UDTFWithSinglePartition' because the function arguments did not match the expected signature of the static 'analyze' method (multiple values for argument 'initial_count'). Please update the query so that this table function call provides arguments matching the expected signature, or else update the table function so that its static 'analyze' method accepts the provided arguments, and then try the query again."
@@ -1030,7 +1030,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+  "condition" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
     "parameterName" : "`initial_count`",
@@ -1053,7 +1053,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`unparsable`",
@@ -1103,7 +1103,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`unresolved_column`"

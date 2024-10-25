@@ -40,7 +40,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "3",
@@ -63,7 +63,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "1",
@@ -86,7 +86,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`a`",

@@ -79,7 +79,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"col\"",
@@ -106,7 +106,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "HLL_INVALID_LG_K",
+  "condition" : "HLL_INVALID_LG_K",
   "sqlState" : "22546",
   "messageParameters" : {
     "function" : "`hll_sketch_agg`",
@@ -125,7 +125,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "HLL_INVALID_LG_K",
+  "condition" : "HLL_INVALID_LG_K",
   "sqlState" : "22546",
   "messageParameters" : {
     "function" : "`hll_sketch_agg`",
@@ -151,7 +151,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "HLL_UNION_DIFFERENT_LG_K",
+  "condition" : "HLL_UNION_DIFFERENT_LG_K",
   "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`hll_union`",
@@ -173,7 +173,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "HLL_UNION_DIFFERENT_LG_K",
+  "condition" : "HLL_UNION_DIFFERENT_LG_K",
   "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`hll_union_agg`",
@@ -196,7 +196,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -222,7 +222,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "HLL_INVALID_INPUT_SKETCH_BUFFER",
+  "condition" : "HLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22546",
   "messageParameters" : {
     "function" : "`hll_sketch_estimate`"
@@ -237,7 +237,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "HLL_INVALID_INPUT_SKETCH_BUFFER",
+  "condition" : "HLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22546",
   "messageParameters" : {
     "function" : "`hll_union`"
@@ -253,7 +253,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "HLL_INVALID_INPUT_SKETCH_BUFFER",
+  "condition" : "HLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22546",
   "messageParameters" : {
     "function" : "`hll_union_agg`"

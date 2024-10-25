@@ -154,7 +154,7 @@ SELECT * FROM explode(collection => explode(array(1)))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "condition" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
@@ -174,7 +174,7 @@ SELECT * FROM explode(collection => explode(collection => array(1)))
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+  "condition" : "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "expression" : "\"explode(explode(array(1)))\""
@@ -202,7 +202,7 @@ SELECT * FROM explode(collection => TABLE(v))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"functiontablesubqueryargumentexpression()\"",
@@ -226,7 +226,7 @@ SELECT mask(lowerChar => 'q', 'AbCD123-@$#', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
+  "condition" : "UNEXPECTED_POSITIONAL_ARGUMENT",
   "sqlState" : "4274K",
   "messageParameters" : {
     "parameterName" : "`lowerChar`",
@@ -247,7 +247,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+  "condition" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
     "parameterName" : "`digitChar`",
@@ -268,7 +268,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
+  "condition" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
   "sqlState" : "4274K",
   "messageParameters" : {
     "parameterName" : "`str`",
@@ -289,7 +289,7 @@ SELECT mask(lowerChar => 'q', upperChar => 'Q', otherChar => 'o', digitChar => '
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRED_PARAMETER_NOT_FOUND",
+  "condition" : "REQUIRED_PARAMETER_NOT_FOUND",
   "sqlState" : "4274K",
   "messageParameters" : {
     "index" : "0",
@@ -311,7 +311,7 @@ SELECT mask('AbCD123-@$#', lowerChar => 'q', upperChar => 'Q', otherChar => 'o',
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRECOGNIZED_PARAMETER_NAME",
+  "condition" : "UNRECOGNIZED_PARAMETER_NAME",
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
@@ -333,7 +333,7 @@ SELECT encode(str => 'a', charset => 'utf-8')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NAMED_PARAMETERS_NOT_SUPPORTED",
+  "condition" : "NAMED_PARAMETERS_NOT_SUPPORTED",
   "sqlState" : "4274K",
   "messageParameters" : {
     "functionName" : "`encode`"
@@ -353,7 +353,7 @@ SELECT mask('AbCD123-@$#', 'Q', 'q', 'd', 'o', 'k')
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "condition" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "6",

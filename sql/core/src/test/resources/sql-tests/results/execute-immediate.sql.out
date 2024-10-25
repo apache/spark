@@ -389,7 +389,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'invalid_cast_error_expected'",
@@ -413,7 +413,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+  "condition" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
   "sqlState" : "07501",
   "messageParameters" : {
     "sqlString" : "INSERT INTO X VALUES (?)"
@@ -428,7 +428,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
+  "condition" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
     "searchPath" : "`system`.`session`",
@@ -451,7 +451,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "condition" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
   "sqlState" : "42613"
 }
 
@@ -463,7 +463,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "condition" : "ALL_PARAMETERS_MUST_BE_NAMED",
   "sqlState" : "07001",
   "messageParameters" : {
     "exprs" : "\"1\""
@@ -478,7 +478,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'SELCT'",
@@ -501,7 +501,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'SELCT'",
@@ -524,7 +524,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "condition" : "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "varType" : "\"INT\""
@@ -555,7 +555,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "condition" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "invalidExprSql" : "\"CONCAT(a, me1)\""
@@ -577,7 +577,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "condition" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "invalidExprSql" : "\"scalarsubquery()\""
@@ -599,7 +599,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'name1'",
@@ -623,7 +623,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -639,7 +639,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkException
 {
-  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "condition" : "ROW_SUBQUERY_TOO_MANY_ROWS",
   "sqlState" : "21000"
 }
 
@@ -651,7 +651,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "2",
@@ -667,7 +667,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "1",
@@ -683,7 +683,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+  "condition" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
   "sqlState" : "42701",
   "messageParameters" : {
     "aliases" : "`first`"
@@ -721,7 +721,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "condition" : "ALL_PARAMETERS_MUST_BE_NAMED",
   "sqlState" : "07001",
   "messageParameters" : {
     "exprs" : "\"p\""
@@ -736,7 +736,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "condition" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
     "nameList" : "`res_id`"
@@ -751,7 +751,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NESTED_EXECUTE_IMMEDIATE",
+  "condition" : "NESTED_EXECUTE_IMMEDIATE",
   "sqlState" : "07501",
   "messageParameters" : {
     "sqlString" : "EXECUTE IMMEDIATE 'SELECT ID FROM TBL_VIEW WHERE ID = ? USING 10'"
@@ -774,7 +774,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+  "condition" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
   "sqlState" : "22004",
   "messageParameters" : {
     "varName" : "`sql_string`"

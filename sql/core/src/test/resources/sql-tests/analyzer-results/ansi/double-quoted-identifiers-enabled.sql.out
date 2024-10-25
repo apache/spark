@@ -4,7 +4,7 @@ SELECT 1 FROM "not_exist"
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -24,7 +24,7 @@ USE SCHEMA "not_exist"
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 {
-  "errorClass" : "SCHEMA_NOT_FOUND",
+  "condition" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42704",
   "messageParameters" : {
     "schemaName" : "`spark_catalog`.`not_exist`"
@@ -37,7 +37,7 @@ ALTER TABLE "not_exist" ADD COLUMN not_exist int
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -57,7 +57,7 @@ ALTER TABLE not_exist ADD COLUMN "not_exist" int
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -77,7 +77,7 @@ SELECT 1 AS "not_exist" FROM not_exist
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -97,7 +97,7 @@ SELECT 1 FROM not_exist AS X("hello")
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -117,7 +117,7 @@ SELECT "not_exist"()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`not_exist`",
@@ -138,7 +138,7 @@ SELECT "not_exist".not_exist()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`not_exist`.`not_exist`",
@@ -159,7 +159,7 @@ SELECT 1 FROM `hello`
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`hello`"
@@ -179,7 +179,7 @@ USE SCHEMA `not_exist`
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 {
-  "errorClass" : "SCHEMA_NOT_FOUND",
+  "condition" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42704",
   "messageParameters" : {
     "schemaName" : "`spark_catalog`.`not_exist`"
@@ -192,7 +192,7 @@ ALTER TABLE `not_exist` ADD COLUMN not_exist int
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -212,7 +212,7 @@ ALTER TABLE not_exist ADD COLUMN `not_exist` int
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -232,7 +232,7 @@ SELECT 1 AS `not_exist` FROM `not_exist`
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -252,7 +252,7 @@ SELECT 1 FROM not_exist AS X(`hello`)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -272,7 +272,7 @@ SELECT `not_exist`()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`not_exist`",
@@ -293,7 +293,7 @@ SELECT `not_exist`.not_exist()
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`not_exist`.`not_exist`",
@@ -314,7 +314,7 @@ SELECT "hello"
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`hello`"
@@ -334,7 +334,7 @@ CREATE TEMPORARY VIEW v(c1 COMMENT "hello") AS SELECT 1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"hello\"'",
@@ -348,7 +348,7 @@ DROP VIEW v
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`spark_catalog`.`default`.`v`"
@@ -361,7 +361,7 @@ SELECT INTERVAL "1" YEAR
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"1\"'",

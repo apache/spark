@@ -363,7 +363,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 {
-  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "condition" : "PARTITIONS_NOT_FOUND",
   "sqlState" : "428FT",
   "messageParameters" : {
     "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
@@ -379,7 +379,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1232",
+  "condition" : "_LEGACY_ERROR_TEMP_1232",
   "messageParameters" : {
     "partitionColumnNames" : "c, d",
     "specKeys" : "c",
@@ -395,7 +395,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
+  "condition" : "INVALID_SQL_SYNTAX.EMPTY_PARTITION_VALUE",
   "sqlState" : "42000",
   "messageParameters" : {
     "partKey" : "`d`"
@@ -484,7 +484,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FORBIDDEN_OPERATION",
+  "condition" : "FORBIDDEN_OPERATION",
   "sqlState" : "42809",
   "messageParameters" : {
     "objectName" : "`temp_v`",
@@ -573,7 +573,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FORBIDDEN_OPERATION",
+  "condition" : "FORBIDDEN_OPERATION",
   "sqlState" : "42809",
   "messageParameters" : {
     "objectName" : "`v`",

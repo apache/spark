@@ -6,7 +6,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
@@ -32,7 +32,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
@@ -50,7 +50,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
@@ -68,7 +68,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
@@ -134,7 +134,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
@@ -152,7 +152,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
@@ -186,7 +186,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.PATTERN",
+  "condition" : "INVALID_PARAMETER_VALUE.PATTERN",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
@@ -203,7 +203,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
@@ -229,7 +229,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
@@ -247,7 +247,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
@@ -265,7 +265,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
@@ -331,7 +331,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
@@ -349,7 +349,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "condition" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
@@ -383,7 +383,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.PATTERN",
+  "condition" : "INVALID_PARAMETER_VALUE.PATTERN",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
@@ -408,7 +408,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "condition" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "-2",
@@ -433,7 +433,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "condition" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0",
@@ -722,7 +722,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.PATTERN",
+  "condition" : "INVALID_PARAMETER_VALUE.PATTERN",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_instr`",

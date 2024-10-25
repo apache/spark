@@ -173,7 +173,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       val e2 = intercept[HiveSQLException](exec(sql))
       assert(e2.getMessage ===
         """{
-          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "condition" : "DIVIDE_BY_ZERO",
           |  "sqlState" : "22012",
           |  "messageParameters" : {
           |    "config" : "\"spark.sql.ansi.enabled\""
@@ -191,7 +191,7 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
       val e3 = intercept[HiveSQLException](exec(sql))
       assert(e3.getMessage ===
         """{
-          |  "errorClass" : "DIVIDE_BY_ZERO",
+          |  "condition" : "DIVIDE_BY_ZERO",
           |  "messageTemplate" : "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error.",
           |  "sqlState" : "22012",
           |  "messageParameters" : {
