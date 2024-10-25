@@ -5016,7 +5016,6 @@
       "ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE" : {
         "message" : [
           "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
-
         ]
       },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
