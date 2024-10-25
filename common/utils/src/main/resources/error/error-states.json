@@ -7443,9 +7443,9 @@
     },
     "KD011": {
         "description": "external data source does not support DML operation",
-        "origin": "Databricks",
+        "origin": "Spark",
         "standard": "N",
-        "usedBy": ["Databricks"]
+        "usedBy": ["Spark"]
     },
     "P0000": {
         "description": "procedural logic error",
