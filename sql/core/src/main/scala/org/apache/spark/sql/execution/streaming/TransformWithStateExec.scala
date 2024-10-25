@@ -104,7 +104,8 @@ case class TransformWithStateExec(
    * @return a new instance of the driver processor handle
    */
   private def getDriverProcessorHandle(): DriverStatefulProcessorHandleImpl = {
-    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(timeMode, keyEncoder)
+    val driverProcessorHandle = new DriverStatefulProcessorHandleImpl(
+      timeMode, keyEncoder, initializeAvroEnc = useAvroEncoding)
     driverProcessorHandle.setHandleState(StatefulProcessorHandleState.PRE_INIT)
     statefulProcessor.setHandle(driverProcessorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -532,10 +533,11 @@ case class TransformWithStateExec(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator,
+        getColFamilySchemas()) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
-        case (partitionId, childDataIterator, initStateIterator) =>
+        case (partitionId, childDataIterator, initStateIterator, colFamilySchemas) =>
           if (isStreaming) {
             val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
               stateInfo.get.operatorId, partitionId)
@@ -552,26 +554,29 @@ case class TransformWithStateExec(
               hadoopConf = hadoopConfBroadcast.value.value
             )
 
-            processDataWithInitialState(store, childDataIterator, initStateIterator)
+            processDataWithInitialState(
+              store, childDataIterator, initStateIterator, colFamilySchemas)
           } else {
-            initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
-              processDataWithInitialState(store, childDataIterator, initStateIterator)
+            initNewStateStoreAndProcessData(
+              partitionId, hadoopConfBroadcast, getColFamilySchemas()) { (store, schemas) =>
+              processDataWithInitialState(store, childDataIterator, initStateIterator, schemas)
             }
           }
       }
     } else {
       if (isStreaming) {
-        child.execute().mapPartitionsWithStateStore[InternalRow](
+        child.execute().mapPartitionsWithStateStoreWithSchemas[InternalRow](
           getStateInfo,
           keyEncoder.schema,
           DUMMY_VALUE_ROW_SCHEMA,
           NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
-          useColumnFamilies = true
+          useColumnFamilies = true,
+          columnFamilySchemas = getColFamilySchemas()
         ) {
-          case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-            processData(store, singleIterator)
+          case (store: StateStore, singleIterator: Iterator[InternalRow], columnFamilySchemas) =>
+            processData(store, singleIterator, columnFamilySchemas)
         }
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
@@ -580,8 +585,9 @@ case class TransformWithStateExec(
           new SerializableConfiguration(session.sessionState.newHadoopConf()))
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
-            initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>
-              processData(store, iter)
+            initNewStateStoreAndProcessData(
+              i, hadoopConfBroadcast, getColFamilySchemas()) { (store, schemas) =>
+              processData(store, iter, schemas)
             }
           }
         )
@@ -595,8 +601,10 @@ case class TransformWithStateExec(
    */
   private def initNewStateStoreAndProcessData(
       partitionId: Int,
-      hadoopConfBroadcast: Broadcast[SerializableConfiguration])
-    (f: StateStore => CompletionIterator[InternalRow, Iterator[InternalRow]]):
+      hadoopConfBroadcast: Broadcast[SerializableConfiguration],
+      schemas: Map[String, StateStoreColFamilySchema])
+    (f: (StateStore, Map[String, StateStoreColFamilySchema]) =>
+      CompletionIterator[InternalRow, Iterator[InternalRow]]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
 
     val providerId = {
@@ -621,8 +629,8 @@ case class TransformWithStateExec(
       hadoopConf = hadoopConfBroadcast.value.value,
       useMultipleValuesPerKey = true)
 
-    val store = stateStoreProvider.getStore(0, None)
-    val outputIterator = f(store)
+    val store = stateStoreProvider.getStore(0)
+    val outputIterator = f(store, schemas)
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator.iterator, {
       stateStoreProvider.close()
       statefulProcessor.close()
@@ -633,13 +641,17 @@ case class TransformWithStateExec(
    * Process the data in the partition using the state store and the stateful processor.
    * @param store The state store to use
    * @param singleIterator The iterator of rows to process
+   * @param schemas The column family schemas used by this stateful processor
    * @return An iterator of rows that are the result of processing the input rows
    */
-  private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
+  private def processData(
+      store: StateStore,
+      singleIterator: Iterator[InternalRow],
+      schemas: Map[String, StateStoreColFamilySchema]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
-      isStreaming, batchTimestampMs, metrics)
+      isStreaming, batchTimestampMs, metrics, schemas)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -650,10 +662,11 @@ case class TransformWithStateExec(
   private def processDataWithInitialState(
       store: StateStore,
       childDataIterator: Iterator[InternalRow],
-      initStateIterator: Iterator[InternalRow]):
+      initStateIterator: Iterator[InternalRow],
+      schemas: Map[String, StateStoreColFamilySchema]):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
+      keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics, schemas)
     assert(processorHandle.getHandleState == StatefulProcessorHandleState.CREATED)
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
@@ -718,8 +731,7 @@ object TransformWithStateExec {
       queryRunId = UUID.randomUUID(),
       operatorId = 0,
       storeVersion = 0,
-      numPartitions = shufflePartitions,
-      stateStoreCkptIds = None
+      numPartitions = shufflePartitions
     )
 
     new TransformWithStateExec(

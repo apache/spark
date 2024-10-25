@@ -89,6 +89,49 @@ package object state {
         extraOptions,
         useMultipleValuesPerKey)
     }
+
+    /** Map each partition of an RDD along with data in a [[StateStore]] that passes the
+     * column family schemas to the storeUpdateFunction. Used to pass Avro encoders/decoders
+     * to executors */
+    def mapPartitionsWithStateStoreWithSchemas[U: ClassTag](
+        stateInfo: StatefulOperatorStateInfo,
+        keySchema: StructType,
+        valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        sessionState: SessionState,
+        storeCoordinator: Option[StateStoreCoordinatorRef],
+        useColumnFamilies: Boolean = false,
+        extraOptions: Map[String, String] = Map.empty,
+        useMultipleValuesPerKey: Boolean = false,
+        columnFamilySchemas: Map[String, StateStoreColFamilySchema] = Map.empty)(
+        storeUpdateFunction: (StateStore, Iterator[T], Map[String, StateStoreColFamilySchema]) => Iterator[U]): StateStoreRDD[T, U] = {
+
+      val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
+      val wrappedF = (store: StateStore, iter: Iterator[T]) => {
+        // Abort the state store in case of error
+        TaskContext.get().addTaskCompletionListener[Unit](_ => {
+          if (!store.hasCommitted) store.abort()
+        })
+        cleanedF(store, iter, columnFamilySchemas)
+      }
+
+      new StateStoreRDD(
+        dataRDD,
+        wrappedF,
+        stateInfo.checkpointLocation,
+        stateInfo.queryRunId,
+        stateInfo.operatorId,
+        stateInfo.storeVersion,
+        stateInfo.stateStoreCkptIds,
+        keySchema,
+        valueSchema,
+        keyStateEncoderSpec,
+        sessionState,
+        storeCoordinator,
+        useColumnFamilies,
+        extraOptions,
+        useMultipleValuesPerKey)
+    }
     // scalastyle:on
 
     /** Map each partition of an RDD along with data in a [[ReadStateStore]]. */

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
+import org.apache.spark.sql.execution.streaming.state.{AvroEncoderSpec, NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
 
 /**
@@ -44,11 +44,12 @@ class ValueStateImplWithTTL[S](
     valEncoder: Encoder[S],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
+    avroEnc: Option[AvroEncoderSpec],   // TODO: Add Avro Encoding support for TTL
     metrics: Map[String, SQLMetric] = Map.empty)
   extends SingleKeyTTLStateImpl(
     stateName, store, keyExprEnc, batchTimestampMs) with ValueState[S] {
 
-  private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
+  private val stateTypesEncoder = UnsafeRowTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
   private val ttlExpirationMs =
     StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)

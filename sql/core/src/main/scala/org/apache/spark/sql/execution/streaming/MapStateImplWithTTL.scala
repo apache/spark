@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
-import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.state.{AvroEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
 import org.apache.spark.util.NextIterator
 
@@ -49,12 +49,13 @@ class MapStateImplWithTTL[K, V](
     valEncoder: Encoder[V],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
+    avroEnc: Option[AvroEncoderSpec], // TODO: Add Avro Encoding support for TTL
     metrics: Map[String, SQLMetric] = Map.empty)
   extends CompositeKeyTTLStateImpl[K](stateName, store,
     keyExprEnc, userKeyEnc, batchTimestampMs)
   with MapState[K, V] with Logging {
 
-  private val stateTypesEncoder = new CompositeKeyStateEncoder(
+  private val stateTypesEncoder = new CompositeKeyUnsafeRowEncoder(
     keyExprEnc, userKeyEnc, valEncoder, stateName, hasTtl = true)
 
   private val ttlExpirationMs =

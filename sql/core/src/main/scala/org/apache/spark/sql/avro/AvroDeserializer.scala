@@ -52,7 +52,7 @@ private[sql] class AvroDeserializer(
     filters: StructFilters,
     useStableIdForUnionType: Boolean,
     stableIdPrefixForUnionType: String,
-    recursiveFieldMaxDepth: Int) {
+    recursiveFieldMaxDepth: Int) extends Serializable {
 
   def this(
       rootAvroType: Schema,
@@ -463,7 +463,7 @@ private[sql] class AvroDeserializer(
    * A base interface for updating values inside catalyst data structure like `InternalRow` and
    * `ArrayData`.
    */
-  sealed trait CatalystDataUpdater {
+  sealed trait CatalystDataUpdater extends Serializable {
     def set(ordinal: Int, value: Any): Unit
 
     def setNullAt(ordinal: Int): Unit = set(ordinal, null)

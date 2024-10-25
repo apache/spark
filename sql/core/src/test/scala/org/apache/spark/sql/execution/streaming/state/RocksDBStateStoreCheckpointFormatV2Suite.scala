@@ -122,6 +122,35 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     innerStore.merge(key, value, colFamilyName)
   }
 
+  override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def remove(key: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  override def get(key: Array[Byte], colFamilyName: String): Array[Byte] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def prefixScan(
+      prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
+    throw new UnsupportedOperationException
+  }
+
+  override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
+
   override def commit(): Long = innerStore.commit()
   override def metrics: StateStoreMetrics = innerStore.metrics
   override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {

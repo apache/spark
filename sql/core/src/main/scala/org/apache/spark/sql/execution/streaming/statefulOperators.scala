@@ -327,6 +327,9 @@ trait StateStoreWriter
     OperatorStateMetadataV1(operatorInfo, stateStoreInfo)
   }
 
+  lazy val useAvroEncoding: Boolean =
+    conf.getConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT) == "Avro"
+
   /** Set the operator level metrics */
   protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
     assert(numStateStoreInstances >= 1, s"invalid number of stores: $numStateStoreInstances")

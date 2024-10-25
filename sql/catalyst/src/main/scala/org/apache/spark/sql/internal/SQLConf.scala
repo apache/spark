@@ -2204,6 +2204,16 @@ object SQLConf {
       .intConf
       .createWithDefault(3)
 
+  val STREAMING_STATE_STORE_ENCODING_FORMAT =
+    buildConf("spark.sql.streaming.stateStore.encodingFormat")
+      .doc("The encoding format used for stateful operators to store information" +
+        "in the state store")
+      .version("4.0.0")
+      .stringConf
+      .checkValue(v => Set("UnsafeRow", "Avro").contains(v),
+        "Valid versions are 'UnsafeRow' and 'Avro'")
+      .createWithDefault("UnsafeRow")
+
   // The feature is still in development, so it is still internal.
   val STATE_STORE_CHECKPOINT_FORMAT_VERSION =
     buildConf("spark.sql.streaming.stateStore.checkpointFormatVersion")

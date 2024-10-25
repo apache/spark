@@ -78,4 +78,34 @@ class MemoryStateStore extends StateStore() {
   override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(id.partitionId, version + 1, None, None)
   }
+
+
+  override def put(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support bytearray operations")
+  }
+
+  override def remove(key: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support bytearray operations")
+  }
+
+  override def merge(key: Array[Byte], value: Array[Byte], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support bytearray operations")
+  }
+
+  override def get(key: Array[Byte], colFamilyName: String): Array[Byte] = {
+    throw new UnsupportedOperationException("Doesn't support bytearray operations")
+  }
+
+  override def valuesIterator(key: Array[Byte], colFamilyName: String): Iterator[Array[Byte]] = {
+    throw new UnsupportedOperationException("Doesn't support bytearray operations")
+  }
+
+  override def prefixScan(
+      prefixKey: Array[Byte], colFamilyName: String): Iterator[ByteArrayPair] = {
+    throw new UnsupportedOperationException("Doesn't support bytearray operations")
+  }
+
+  override def byteArrayIter(colFamilyName: String): Iterator[ByteArrayPair] = {
+    throw new UnsupportedOperationException("Doesn't support bytearray operations")
+  }
 }
