@@ -101,18 +101,14 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
             // Example:
             // In:  ... CASE WHEN a = b THEN c = d ... END
             // Out: ... CASE WHEN a = b THEN CASE WHEN c = d THEN 1 ELSE 0 END ... END = 1
+            val stringArray = e.children().grouped(2).flatMap {
+              case Array(whenExpression, thenExpression) =>
+                Array(inputToSQL(whenExpression), inputToIntSQL(thenExpression))
+              case Array(elseExpression) =>
+                Array(inputToIntSQL(elseExpression))
+            }.toArray
 
-            // grouped turns Array[Expression] to Array[Array[Expression]]
-            // with a len of max 2 (final one will have only one)
-            val stringArray = e.children().grouped(2).flatMap { arr =>
-              arr.dropRight(1).map(inputToSQL) :+
-                (arr.last match {
-                  case p: Predicate if p.name() != "ALWAYS_TRUE" && p.name() != "ALWAYS_FALSE" =>
-                    inputToCaseWhenSQL(p)
-                  case p => inputToSQL(p)
-                })
-            }
-            visitCaseWhen(stringArray.toArray) + " = 1"
+            visitCaseWhen(stringArray) + " = 1"
           case _ => super.build(expr)
         }
         case _ => super.build(expr)

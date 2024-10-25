@@ -42,6 +42,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
@@ -377,6 +378,17 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    def inputToCaseWhenSQL(input: Expression): String =
+      "CASE WHEN " + inputToSQL(input) + " THEN 1 ELSE 0 END"
+
+    def inputToIntSQL(expr: Expression): String = {
+      expr match {
+        case p: Predicate if p.name() != "ALWAYS_TRUE" && p.name() != "ALWAYS_FALSE" =>
+          inputToCaseWhenSQL(p)
+        case p => inputToSQL(p)
+      }
+    }
+
     override def visitLiteral(literal: Literal[_]): String = {
       Option(literal.value()).map(v =>
         compileValue(CatalystTypeConverters.convertToScala(v, literal.dataType())).toString)
