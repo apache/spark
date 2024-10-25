@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
@@ -86,15 +87,15 @@ class AlterTableSetSerdeSuite extends AlterTableSetSerdeSuiteBase with CommandSu
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t SET SERDE 'whatever'")
         },
-        condition = "_LEGACY_ERROR_TEMP_1248",
-        parameters = Map.empty)
+        condition = "UNSUPPORTED_FEATURE.ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE",
+        parameters = Map("tableName" -> toSQLId(t)))
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t SET SERDE 'org.apache.madoop' " +
             "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
         },
-        condition = "_LEGACY_ERROR_TEMP_1248",
-        parameters = Map.empty)
+        condition = "UNSUPPORTED_FEATURE.ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE",
+        parameters = Map("tableName" -> toSQLId(t)))
 
       // set serde properties only
       sql(s"ALTER TABLE $t SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
