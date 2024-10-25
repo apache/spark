@@ -91,7 +91,7 @@ object BuildCommons {
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
   val protoVersion = "4.28.3"
   // GRPC version used for Spark Connect.
-  val grpcVersion = "1.62.2"
+  val grpcVersion = "1.67.1"
 }
 
 object SparkBuild extends PomBuild {
