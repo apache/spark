@@ -694,17 +694,16 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Example 2: Interval divided by Integer.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(4).select(
-    ...     "*", sf.try_divide(sf.make_interval(sf.lit(1)), "id")
-    ... ).show()
-    +---+--------------------------------------------------+
-    | id|try_divide(make_interval(1, 0, 0, 0, 0, 0, 0), id)|
-    +---+--------------------------------------------------+
-    |  0|                                              NULL|
-    |  1|                                           1 years|
-    |  2|                                          6 months|
-    |  3|                                          4 months|
-    +---+--------------------------------------------------+
+    >>> df = spark.range(4).withColumn("interval", sf.make_interval(sf.lit(1)))
+    >>> df.select("*", sf.try_divide("interval", "id")).show()
+    +---+--------+------------------------+
+    | id|interval|try_divide(interval, id)|
+    +---+--------+------------------------+
+    |  0| 1 years|                    NULL|
+    |  1| 1 years|                 1 years|
+    |  2| 1 years|                6 months|
+    |  3| 1 years|                4 months|
+    +---+--------+------------------------+
 
     Example 3: Exception during division, resulting in NULL when ANSI mode is on
 
@@ -1855,15 +1854,15 @@ def product(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', sf.col('x') % 3)
-    >>> df.groupBy('mod3').agg(sf.product('x')).orderBy('mod3').show()
-    +----+----------+
-    |mod3|product(x)|
-    +----+----------+
-    |   0|     162.0|
-    |   1|      28.0|
-    |   2|      80.0|
-    +----+----------+
+    >>> df = spark.range(1, 10).withColumn('mod3', sf.col('id') % 3)
+    >>> df.groupBy('mod3').agg(sf.product('id')).orderBy('mod3').show()
+    +----+-----------+
+    |mod3|product(id)|
+    +----+-----------+
+    |   0|      162.0|
+    |   1|       28.0|
+    |   2|       80.0|
+    +----+-----------+
     """
     return _invoke_function_over_columns("product", col)
 
