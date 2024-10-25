@@ -21,10 +21,12 @@ import java.io.CharArrayWriter
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, FailureSafeParser, PermissiveMode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.expressions.xml.SchemaOfXmlEvaluator
+import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, PermissiveMode}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -149,7 +151,9 @@ case class XmlToStructs(
 case class SchemaOfXml(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -160,17 +164,6 @@ case class SchemaOfXml(
   override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
-
-  @transient
-  private lazy val xmlOptions = new XmlOptions(options, "UTC")
-
-  @transient
-  private lazy val xmlInferSchema = {
-    if (xmlOptions.parseMode == DropMalformedMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
-    }
-    new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
-  }
 
   @transient
   private lazy val xml = child.eval().asInstanceOf[UTF8String]
@@ -192,26 +185,21 @@ case class SchemaOfXml(
     }
   }
 
-  override def eval(v: InternalRow): Any = {
-    val dataType = xmlInferSchema.infer(xml.toString).get match {
-      case st: StructType =>
-        xmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
-      case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
-        xmlInferSchema
-          .canonicalizeType(at.elementType)
-          .map(ArrayType(_, containsNull = at.containsNull))
-          .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
-      case other: DataType =>
-        xmlInferSchema.canonicalizeType(other).getOrElse(SQLConf.get.defaultStringType)
-    }
-
-    UTF8String.fromString(dataType.sql)
-  }
-
   override def prettyName: String = "schema_of_xml"
 
   override protected def withNewChildInternal(newChild: Expression): SchemaOfXml =
     copy(child = newChild)
+
+  @transient
+  private lazy val evaluator: SchemaOfXmlEvaluator = SchemaOfXmlEvaluator(options)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[SchemaOfXmlEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType)
+  )
 }
 
 /**
