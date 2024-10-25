@@ -19,6 +19,7 @@ package org.apache.spark.status.api.v1
 import jakarta.ws.rs._
 import jakarta.ws.rs.core.MediaType
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.glassfish.jersey.CommonProperties
 import org.glassfish.jersey.server.ServerProperties
 import org.glassfish.jersey.servlet.ServletContainer
 
@@ -114,6 +115,8 @@ private[spark] object PrometheusResource {
     jerseyContext.setContextPath("/metrics")
     val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
     holder.setInitParameter(ServerProperties.PROVIDER_PACKAGES, "org.apache.spark.status.api.v1")
+    holder.setInitParameter(CommonProperties.PROVIDER_DEFAULT_DISABLE, "DATASOURCE")
+    holder.setInitParameter(ServerProperties.WADL_FEATURE_DISABLE, "true")
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext
