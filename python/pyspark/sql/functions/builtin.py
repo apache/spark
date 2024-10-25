@@ -806,19 +806,18 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Example 2: Interval multiplied by Integer.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(6).select(
-    ...     "*", sf.try_multiply(sf.make_interval(sf.lit(0), sf.lit(3)), "id")
-    ... ).show()
-    +---+----------------------------------------------------+
-    | id|try_multiply(make_interval(0, 3, 0, 0, 0, 0, 0), id)|
-    +---+----------------------------------------------------+
-    |  0|                                           0 seconds|
-    |  1|                                            3 months|
-    |  2|                                            6 months|
-    |  3|                                            9 months|
-    |  4|                                             1 years|
-    |  5|                                    1 years 3 months|
-    +---+----------------------------------------------------+
+    >>> df = spark.range(6).withColumn("interval", sf.make_interval(sf.col("id"), sf.lit(3)))
+    >>> df.select("*", sf.try_multiply("interval", "id")).show()
+    +---+----------------+--------------------------+
+    | id|        interval|try_multiply(interval, id)|
+    +---+----------------+--------------------------+
+    |  0|        3 months|                 0 seconds|
+    |  1|1 years 3 months|          1 years 3 months|
+    |  2|2 years 3 months|          4 years 6 months|
+    |  3|3 years 3 months|          9 years 9 months|
+    |  4|4 years 3 months|                  17 years|
+    |  5|5 years 3 months|         26 years 3 months|
+    +---+----------------+--------------------------+
 
     Example 3: Overflow results in NULL when ANSI mode is on
 
@@ -1007,20 +1006,35 @@ def abs(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: Compute the absolute value of a negative number
+    Example 1: Compute the absolute value of a long column
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, -1), (2, -2), (3, -3)], ["id", "value"])
+    >>> df = spark.createDataFrame([(-1,), (-2,), (-3,), (None,)], ["value"])
     >>> df.select("*", sf.abs(df.value)).show()
-    +---+-----+----------+
-    | id|value|abs(value)|
-    +---+-----+----------+
-    |  1|   -1|         1|
-    |  2|   -2|         2|
-    |  3|   -3|         3|
-    +---+-----+----------+
+    +-----+----------+
+    |value|abs(value)|
+    +-----+----------+
+    |   -1|         1|
+    |   -2|         2|
+    |   -3|         3|
+    | NULL|      NULL|
+    +-----+----------+
 
-    Example 2: Compute the absolute value of an expression
+    Example 2: Compute the absolute value of a double column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-1.5,), (-2.5,), (None,), (float("nan"),)], ["value"])
+    >>> df.select("*", sf.abs(df.value)).show()
+    +-----+----------+
+    |value|abs(value)|
+    +-----+----------+
+    | -1.5|       1.5|
+    | -2.5|       2.5|
+    | NULL|      NULL|
+    |  NaN|       NaN|
+    +-----+----------+
+
+    Example 3: Compute the absolute value of an expression
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, 1), (2, -2), (3, 3)], ["id", "value"])
@@ -1032,32 +1046,6 @@ def abs(col: "ColumnOrName") -> Column:
     |  2|   -2|                4|
     |  3|    3|                0|
     +---+-----+-----------------+
-
-    Example 3: Compute the absolute value of a column with null values
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, None), (2, -2), (3, None)], ["id", "value"])
-    >>> df.select("*", sf.abs(df.value)).show()
-    +---+-----+----------+
-    | id|value|abs(value)|
-    +---+-----+----------+
-    |  1| NULL|      NULL|
-    |  2|   -2|         2|
-    |  3| NULL|      NULL|
-    +---+-----+----------+
-
-    Example 4: Compute the absolute value of a column with double values
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, -1.5), (2, -2.5), (3, -3.5)], ["id", "value"])
-    >>> df.select("*", sf.abs(df.value)).show()
-    +---+-----+----------+
-    | id|value|abs(value)|
-    +---+-----+----------+
-    |  1| -1.5|       1.5|
-    |  2| -2.5|       2.5|
-    |  3| -3.5|       3.5|
-    +---+-----+----------+
     """
     return _invoke_function_over_columns("abs", col)
 
@@ -1739,12 +1727,13 @@ def median(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("Java", 2012, 22000), ("dotNET", 2012, 10000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(median("earnings")).show()
+    >>> df.groupby("course").agg(sf.median("earnings")).show()
     +------+----------------+
     |course|median(earnings)|
     +------+----------------+
@@ -1867,8 +1856,7 @@ def product(col: "ColumnOrName") -> Column:
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', sf.col('x') % 3)
-    >>> prods = df.groupBy('mod3').agg(sf.product('x'))
-    >>> prods.orderBy('mod3').show()
+    >>> df.groupBy('mod3').agg(sf.product('x')).orderBy('mod3').show()
     +----+----------+
     |mod3|product(x)|
     +----+----------+
