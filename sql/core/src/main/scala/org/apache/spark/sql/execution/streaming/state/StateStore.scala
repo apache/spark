@@ -41,6 +41,13 @@ import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
 
+sealed trait StateStoreEncoding
+
+object StateStoreEncoding {
+  case object UnsafeRow extends StateStoreEncoding
+  case object Avro extends StateStoreEncoding
+}
+
 /**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
  * `ReadStateStore` represents a specific version of state data, and such instances are created

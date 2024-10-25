@@ -328,7 +328,7 @@ trait StateStoreWriter
   }
 
   lazy val useAvroEncoding: Boolean =
-    conf.getConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT) == "Avro"
+    conf.getConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT) == StateStoreEncoding.Avro.toString
 
   /** Set the operator level metrics */
   protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
