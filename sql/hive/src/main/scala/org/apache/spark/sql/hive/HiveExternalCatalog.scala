@@ -391,7 +391,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           logInfo(message)
           saveTableIntoHive(table, ignoreIfExists)
         } catch {
-          case NonFatal(e) =>
+          case NonFatal(e) if !HiveUtils.causedByThrift(e) =>
             val warningMessage =
               log"Could not persist ${MDC(TABLE_NAME, table.identifier.quotedString)} in a Hive " +
                 log"compatible way. Persisting it into Hive metastore in Spark SQL specific format."

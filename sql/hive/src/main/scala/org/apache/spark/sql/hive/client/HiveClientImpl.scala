@@ -228,7 +228,7 @@ private[hive] class HiveClientImpl(
       try {
         return f
       } catch {
-        case e: Exception if causedByThrift(e) =>
+        case e: Exception if HiveUtils.causedByThrift(e) =>
           caughtException = e
           logWarning(
             log"HiveClient got thrift exception, destroying client and retrying " +
@@ -241,18 +241,6 @@ private[hive] class HiveClientImpl(
       logWarning("Deadline exceeded")
     }
     throw caughtException
-  }
-
-  private def causedByThrift(e: Throwable): Boolean = {
-    var target = e
-    while (target != null) {
-      val msg = target.getMessage()
-      if (msg != null && msg.matches("(?s).*(TApplication|TProtocol|TTransport)Exception.*")) {
-        return true
-      }
-      target = target.getCause()
-    }
-    false
   }
 
   private def client: Hive = {
