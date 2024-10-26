@@ -2451,12 +2451,21 @@ class CollationSQLExpressionsSuite
   private def testCollationSqlExpressionCommon(
       query: String,
       collation: String,
+      result: Row,
+      expectedType: DataType): Unit = {
+    testCollationSqlExpressionCommon(query, collation, Seq(result), Seq(expectedType))
+  }
+
+  // common method for subsequent tests verifying various SQL expressions with collations
+  private def testCollationSqlExpressionCommon(
+      query: String,
+      collation: String,
       result: Seq[Row],
       expectedTypes: Seq[DataType]): Unit = {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
       // check result correctness
       checkAnswer(sql(query), result)
-      // check result row data types
+      // check result rows data types
       for (i <- 0 until expectedTypes.length)
         assert(sql(query).schema(i).dataType == expectedTypes(i))
     }
@@ -2465,14 +2474,10 @@ class CollationSQLExpressionsSuite
   test("min_by supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT min_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);",
+        query = "SELECT min_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y)",
         collation,
-        result = Seq(
-          Row("a")
-        ),
-        expectedTypes = Seq(
-          StringType(collation)
-        )
+        result = Row("a"),
+        expectedType = StringType(collation)
       )
     }
   }
@@ -2480,14 +2485,10 @@ class CollationSQLExpressionsSuite
   test("max_by supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT max_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);",
+        query = "SELECT max_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y)",
         collation,
-        result = Seq(
-          Row("b")
-        ),
-        expectedTypes = Seq(
-          StringType(collation)
-        )
+        result = Row("b"),
+        expectedType = StringType(collation)
       )
     }
   }
@@ -2495,14 +2496,10 @@ class CollationSQLExpressionsSuite
   test("array supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array('a', 'b', 'c');",
+        query = "SELECT array('a', 'b', 'c')",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2510,14 +2507,10 @@ class CollationSQLExpressionsSuite
   test("array_agg supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_agg(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);",
+        query = "SELECT array_agg(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col)",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2525,14 +2518,10 @@ class CollationSQLExpressionsSuite
   test("array_contains supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_contains(array('a', 'b', 'c'), 'b');",
+        query = "SELECT array_contains(array('a', 'b', 'c'), 'b')",
         collation,
-        result = Seq(
-          Row(true)
-        ),
-        expectedTypes = Seq(
-          BooleanType
-        )
+        result = Row(true),
+        expectedType = BooleanType
       )
     }
   }
@@ -2540,14 +2529,10 @@ class CollationSQLExpressionsSuite
   test("arrays_overlap supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT arrays_overlap(array('a', 'b', 'c'), array('c', 'd', 'e'));",
+        query = "SELECT arrays_overlap(array('a', 'b', 'c'), array('c', 'd', 'e'))",
         collation,
-        result = Seq(
-          Row(true)
-        ),
-        expectedTypes = Seq(
-          BooleanType
-        )
+        result = Row(true),
+        expectedType = BooleanType
       )
     }
   }
@@ -2555,14 +2540,10 @@ class CollationSQLExpressionsSuite
   test("array_insert supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_insert(array('a', 'b', 'c', 'd'), 5, 'e');",
+        query = "SELECT array_insert(array('a', 'b', 'c', 'd'), 5, 'e')",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c", "d", "e"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), true)
-        )
+        result = Row(Seq("a", "b", "c", "d", "e")),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -2570,14 +2551,10 @@ class CollationSQLExpressionsSuite
   test("array_intersect supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_intersect(array('a', 'b', 'c'), array('b', 'c', 'd'));",
+        query = "SELECT array_intersect(array('a', 'b', 'c'), array('b', 'c', 'd'))",
         collation,
-        result = Seq(
-          Row(Seq("b", "c"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2585,14 +2562,10 @@ class CollationSQLExpressionsSuite
   test("array_join supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_join(array('hello', 'world'), ' ');",
+        query = "SELECT array_join(array('hello', 'world'), ' ')",
         collation,
-        result = Seq(
-          Row("hello world")
-        ),
-        expectedTypes = Seq(
-          StringType(collation)
-        )
+        result = Row("hello world"),
+        expectedType = StringType(collation)
       )
     }
   }
@@ -2600,14 +2573,10 @@ class CollationSQLExpressionsSuite
   test("array_position supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_position(array('a', 'b', 'c', 'c'), 'c');",
+        query = "SELECT array_position(array('a', 'b', 'c', 'c'), 'c')",
         collation,
-        result = Seq(
-          Row(3)
-        ),
-        expectedTypes = Seq(
-          LongType
-        )
+        result = Row(3),
+        expectedType = LongType
       )
     }
   }
@@ -2615,14 +2584,10 @@ class CollationSQLExpressionsSuite
   test("array_size supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_size(array('a', 'b', 'c', 'c'));",
+        query = "SELECT array_size(array('a', 'b', 'c', 'c'))",
         collation,
-        result = Seq(
-          Row(4)
-        ),
-        expectedTypes = Seq(
-          IntegerType
-        )
+        result = Row(4),
+        expectedType = IntegerType
       )
     }
   }
@@ -2630,14 +2595,10 @@ class CollationSQLExpressionsSuite
   test("array_sort supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_sort(array('b', null, 'A'));",
+        query = "SELECT array_sort(array('b', null, 'A'))",
         collation,
-        result = Seq(
-          Row(Seq("A", "b", null))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), true)
-        )
+        result = Row(Seq("A", "b", null)),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -2645,14 +2606,10 @@ class CollationSQLExpressionsSuite
   test("array_except supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_except(array('a', 'b', 'c'), array('c', 'd', 'e'));",
+        query = "SELECT array_except(array('a', 'b', 'c'), array('c', 'd', 'e'))",
         collation,
-        result = Seq(
-          Row(Seq("a", "b"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a", "b")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2660,14 +2617,10 @@ class CollationSQLExpressionsSuite
   test("array_union supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_union(array('a', 'b', 'c'), array('a', 'c', 'd'));",
+        query = "SELECT array_union(array('a', 'b', 'c'), array('a', 'c', 'd'))",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c", "d"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a", "b", "c", "d")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2675,14 +2628,10 @@ class CollationSQLExpressionsSuite
   test("array_compact supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_compact(array('a', 'b', null, 'c'));",
+        query = "SELECT array_compact(array('a', 'b', null, 'c'))",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2690,17 +2639,13 @@ class CollationSQLExpressionsSuite
   test("arrays_zip supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT arrays_zip(array('a', 'b', 'c'), array(1, 2, 3));",
+        query = "SELECT arrays_zip(array('a', 'b', 'c'), array(1, 2, 3))",
         collation,
-        result = Seq(
-          Row(Seq(Row("a", 1), Row("b", 2), Row("c", 3)))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StructType(
-            StructField("0", StringType(collation), true) ::
-              StructField("1", IntegerType, true) :: Nil
-          ), false)
-        )
+        result = Row(Seq(Row("a", 1), Row("b", 2), Row("c", 3))),
+        expectedType = ArrayType(StructType(
+          StructField("0", StringType(collation), true) ::
+            StructField("1", IntegerType, true) :: Nil
+        ), false)
       )
     }
   }
@@ -2708,14 +2653,10 @@ class CollationSQLExpressionsSuite
   test("array_min supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_min(array('a', 'b', null, 'c'));",
+        query = "SELECT array_min(array('a', 'b', null, 'c'))",
         collation,
-        result = Seq(
-          Row("a")
-        ),
-        expectedTypes = Seq(
-          StringType(collation)
-        )
+        result = Row("a"),
+        expectedType = StringType(collation)
       )
     }
   }
@@ -2723,14 +2664,10 @@ class CollationSQLExpressionsSuite
   test("array_max supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_max(array('a', 'b', null, 'c'));",
+        query = "SELECT array_max(array('a', 'b', null, 'c'))",
         collation,
-        result = Seq(
-          Row("c")
-        ),
-        expectedTypes = Seq(
-          StringType(collation)
-        )
+        result = Row("c"),
+        expectedType = StringType(collation)
       )
     }
   }
@@ -2738,14 +2675,10 @@ class CollationSQLExpressionsSuite
   test("array_append supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_append(array('b', 'd', 'c', 'a'), 'e');",
+        query = "SELECT array_append(array('b', 'd', 'c', 'a'), 'e')",
         collation,
-        result = Seq(
-          Row(Seq("b", "d", "c", "a", "e"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), true)
-        )
+        result = Row(Seq("b", "d", "c", "a", "e")),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -2753,14 +2686,10 @@ class CollationSQLExpressionsSuite
   test("array_repeat supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_repeat('abc', 2);",
+        query = "SELECT array_repeat('abc', 2)",
         collation,
-        result = Seq(
-          Row(Seq("abc", "abc"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("abc", "abc")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2768,14 +2697,10 @@ class CollationSQLExpressionsSuite
   test("array_remove supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_remove(array('a', 'b', null, 'c'), 'b');",
+        query = "SELECT array_remove(array('a', 'b', null, 'c'), 'b')",
         collation,
-        result = Seq(
-          Row(Seq("a", null, "c"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), true)
-        )
+        result = Row(Seq("a", null, "c")),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -2783,14 +2708,10 @@ class CollationSQLExpressionsSuite
   test("array_prepend supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_prepend(array('b', 'd', 'c', 'a'), 'd');",
+        query = "SELECT array_prepend(array('b', 'd', 'c', 'a'), 'd')",
         collation,
-        result = Seq(
-          Row(Seq("d", "b", "d", "c", "a"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), true)
-        )
+        result = Row(Seq("d", "b", "d", "c", "a")),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -2798,14 +2719,10 @@ class CollationSQLExpressionsSuite
   test("array_distinct supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT array_distinct(array('a', 'b', 'c', null, 'c'));",
+        query = "SELECT array_distinct(array('a', 'b', 'c', null, 'c'))",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c", null))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), true)
-        )
+        result = Row(Seq("a", "b", "c", null)),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -2813,14 +2730,10 @@ class CollationSQLExpressionsSuite
   test("collect_list supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT collect_list(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);",
+        query = "SELECT collect_list(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col)",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2850,14 +2763,10 @@ class CollationSQLExpressionsSuite
   test("element_at supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT element_at(array('a', 'b', 'c'), 2);",
+        query = "SELECT element_at(array('a', 'b', 'c'), 2)",
         collation,
-        result = Seq(
-          Row("b")
-        ),
-        expectedTypes = Seq(
-          StringType(collation)
-        )
+        result = Row("b"),
+        expectedType = StringType(collation)
       )
     }
   }
@@ -2865,14 +2774,10 @@ class CollationSQLExpressionsSuite
   test("aggregate supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT aggregate(array('a', 'b', 'c'), '', (acc, x) -> concat(acc, x));",
+        query = "SELECT aggregate(array('a', 'b', 'c'), '', (acc, x) -> concat(acc, x))",
         collation,
-        result = Seq(
-          Row("abc")
-        ),
-        expectedTypes = Seq(
-          StringType(collation)
-        )
+        result = Row("abc"),
+        expectedType = StringType(collation)
       )
     }
   }
@@ -2880,7 +2785,7 @@ class CollationSQLExpressionsSuite
   test("explode supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT explode(array('a', 'b'));",
+        query = "SELECT explode(array('a', 'b'))",
         collation,
         result = Seq(
           Row("a"),
@@ -2896,7 +2801,7 @@ class CollationSQLExpressionsSuite
   test("posexplode supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT posexplode(array('a', 'b'));",
+        query = "SELECT posexplode(array('a', 'b'))",
         collation,
         result = Seq(
           Row(0, "a"),
@@ -2913,14 +2818,10 @@ class CollationSQLExpressionsSuite
   test("filter supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT filter(array('a', 'b', 'c'), x -> x < 'b');",
+        query = "SELECT filter(array('a', 'b', 'c'), x -> x < 'b')",
         collation,
-        result = Seq(
-          Row(Seq("a"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2928,14 +2829,10 @@ class CollationSQLExpressionsSuite
   test("flatten supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT flatten(array(array('a', 'b'), array('c', 'd')));",
+        query = "SELECT flatten(array(array('a', 'b'), array('c', 'd')))",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c", "d"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a", "b", "c", "d")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2943,7 +2840,7 @@ class CollationSQLExpressionsSuite
   test("inline supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT inline(array(struct(1, 'a'), struct(2, 'b')));",
+        query = "SELECT inline(array(struct(1, 'a'), struct(2, 'b')))",
         collation,
         Seq(
           Row(1, "a"),
@@ -2971,14 +2868,10 @@ class CollationSQLExpressionsSuite
   test("slice supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT slice(array('a', 'b', 'c', 'd'), 2, 2);",
+        query = "SELECT slice(array('a', 'b', 'c', 'd'), 2, 2)",
         collation,
-        result = Seq(
-          Row(Seq("b", "c"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -2986,14 +2879,10 @@ class CollationSQLExpressionsSuite
   test("sort_array supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT sort_array(array('b', 'd', null, 'c', 'a'), true);",
+        query = "SELECT sort_array(array('b', 'd', null, 'c', 'a'), true)",
         collation,
-        result = Seq(
-          Row(Seq(null, "a", "b", "c", "d"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), true)
-        )
+        result = Row(Seq(null, "a", "b", "c", "d")),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -3001,16 +2890,12 @@ class CollationSQLExpressionsSuite
   test("zip_with supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
-        query = "SELECT zip_with(array('a', 'b'), array('x', 'y'), (x, y) -> concat(x, y));",
+        query = "SELECT zip_with(array('a', 'b'), array('x', 'y'), (x, y) -> concat(x, y))",
         collation,
-        result = Seq(
-          Row(Seq("ax", "by"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(
-            StringType(collation),
-            containsNull = true
-          )
+        result = Row(Seq("ax", "by")),
+        expectedType = ArrayType(
+          StringType(collation),
+          containsNull = true
         )
       )
     }
@@ -3021,12 +2906,8 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_contains_key(map('a', 1, 'b', 2), 'a')",
         collation,
-        result = Seq(
-          Row(true)
-        ),
-        expectedTypes = Seq(
-          BooleanType
-        )
+        result = Row(true),
+        expectedType = BooleanType
       )
     }
   }
@@ -3036,14 +2917,10 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_from_arrays(array('a','b','c'), array(1,2,3))",
         collation,
-        result = Seq(
-          Row(Map("a" -> 1, "b" -> 2, "c" -> 3))
-        ),
-        expectedTypes = Seq(
-          MapType(
-            StringType(collation),
-            IntegerType, false
-          )
+        result = Row(Map("a" -> 1, "b" -> 2, "c" -> 3)),
+        expectedType = MapType(
+          StringType(collation),
+          IntegerType, false
         )
       )
     }
@@ -3054,14 +2931,8 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_keys(map('a', 1, 'b', 2))",
         collation,
-        result = Seq(
-          Row(Seq("a", "b"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(
-            StringType(collation), true
-          )
-        )
+        result = Row(Seq("a", "b")),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -3071,14 +2942,8 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_values(map(1, 'a', 2, 'b'))",
         collation,
-        result = Seq(
-          Row(Seq("a", "b"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(
-            StringType(collation), true
-          )
-        )
+        result = Row(Seq("a", "b")),
+        expectedType = ArrayType(StringType(collation), true)
       )
     }
   }
@@ -3088,15 +2953,11 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_entries(map('a', 1, 'b', 2))",
         collation,
-        result = Seq(
-          Row(Seq(Row("a", 1), Row("b", 2)))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StructType(
-            StructField("key", StringType(collation), false) ::
-              StructField("value", IntegerType, false) :: Nil
-          ), false)
-        )
+        result = Row(Seq(Row("a", 1), Row("b", 2))),
+        expectedType = ArrayType(StructType(
+          StructField("key", StringType(collation), false) ::
+            StructField("value", IntegerType, false) :: Nil
+        ), false)
       )
     }
   }
@@ -3106,15 +2967,11 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_from_entries(array(struct(1, 'a'), struct(2, 'b')))",
         collation,
-        result = Seq(
-          Row(Map(1 -> "a", 2 -> "b"))
-        ),
-        expectedTypes = Seq(
-          MapType(
-            IntegerType,
-            StringType(collation),
-            valueContainsNull = false
-          )
+        result = Row(Map(1 -> "a", 2 -> "b")),
+        expectedType = MapType(
+          IntegerType,
+          StringType(collation),
+          valueContainsNull = false
         )
       )
     }
@@ -3125,15 +2982,11 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_concat(map(1, 'a'), map(2, 'b'))",
         collation,
-        result = Seq(
-          Row(Map(1 -> "a", 2 -> "b"))
-        ),
-        expectedTypes = Seq(
-          MapType(
-            IntegerType,
-            StringType(collation),
-            valueContainsNull = false
-          )
+        result = Row(Map(1 -> "a", 2 -> "b")),
+        expectedType = MapType(
+          IntegerType,
+          StringType(collation),
+          valueContainsNull = false
         )
       )
     }
@@ -3144,15 +2997,11 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_filter(map('a', 1, 'b', 2, 'c', 3), (k, v) -> k < 'c')",
         collation,
-        result = Seq(
-          Row(Map("a" -> 1, "b" -> 2))
-        ),
-        expectedTypes = Seq(
-          MapType(
-            StringType(collation),
-            IntegerType,
-            valueContainsNull = false
-          )
+        result = Row(Map("a" -> 1, "b" -> 2)),
+        expectedType = MapType(
+          StringType(collation),
+          IntegerType,
+          valueContainsNull = false
         )
       )
     }
@@ -3163,15 +3012,11 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT map_zip_with(map(1, 'a'), map(1, 'x'), (k, v1, v2) -> concat(v1, v2))",
         collation,
-        result = Seq(
-          Row(Map(1 -> "ax"))
-        ),
-        expectedTypes = Seq(
-          MapType(
-            IntegerType,
-            StringType(collation),
-            valueContainsNull = true
-          )
+        result = Row(Map(1 -> "ax")),
+        expectedType = MapType(
+          IntegerType,
+          StringType(collation),
+          valueContainsNull = true
         )
       )
     }
@@ -3182,12 +3027,8 @@ class CollationSQLExpressionsSuite
       testCollationSqlExpressionCommon(
         query = "SELECT transform(array('aa', 'bb', 'cc'), x -> substring(x, 2))",
         collation,
-        result = Seq(
-          Row(Seq("a", "b", "c"))
-        ),
-        expectedTypes = Seq(
-          ArrayType(StringType(collation), false)
-        )
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
     }
   }
@@ -3198,12 +3039,11 @@ class CollationSQLExpressionsSuite
         query = "SELECT transform_values(map_from_arrays(array(1, 2, 3)," +
           "array('aa', 'bb', 'cc')), (k, v) -> substring(v, 2))",
         collation,
-        result = Seq(
-          Row(Map(1 -> "a", 2 -> "b", 3 -> "c"))
-        ),
-        expectedTypes = Seq(
-          MapType(IntegerType,
-            StringType(collation), false)
+        result = Row(Map(1 -> "a", 2 -> "b", 3 -> "c")),
+        expectedType = MapType(
+          IntegerType,
+          StringType(collation),
+          false
         )
       )
     }
@@ -3215,13 +3055,11 @@ class CollationSQLExpressionsSuite
         query = "SELECT transform_keys(map_from_arrays(array('aa', 'bb', 'cc')," +
           "array(1, 2, 3)), (k, v) -> substring(k, 2))",
         collation,
-        result = Seq(
-          Row(Map("a" -> 1, "b" -> 2, "c" -> 3))
-        ),
-        expectedTypes = Seq(
-          MapType(
-            StringType(collation), IntegerType, false
-          )
+        result = Row(Map("a" -> 1, "b" -> 2, "c" -> 3)),
+        expectedType = MapType(
+          StringType(collation),
+          IntegerType,
+          false
         )
       )
     }
