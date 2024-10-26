@@ -22,7 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
-import java.util.{Locale, Properties}
+import java.util.{Locale, Properties, Timer, TimerTask}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
@@ -295,6 +295,8 @@ private[spark] class Executor(
 
   private val pollOnHeartbeat = if (METRICS_POLLING_INTERVAL_MS > 0) false else true
 
+  private val timer = new Timer()
+
   // Poller for the memory metrics. Visible for testing.
   private[executor] val metricsPoller = new ExecutorMetricsPoller(
     env.memoryManager,
@@ -559,9 +561,20 @@ private[spark] class Executor(
     override def run(): Unit = {
 
       // Classloader isolation
+      var maybeTask: Option[TimerTask] = None
       val isolatedSession = taskDescription.artifacts.state match {
         case Some(jobArtifactState) =>
-          isolatedSessionCache.get(jobArtifactState.uuid, () => newSessionState(jobArtifactState))
+          val state = isolatedSessionCache.get(
+            jobArtifactState.uuid, () => newSessionState(jobArtifactState))
+          maybeTask = Some(new TimerTask {
+            def run(): Unit = {
+              // Resets the expire time till the task ends.
+              val v = isolatedSessionCache.getIfPresent(jobArtifactState.uuid)
+              if (v != null) isolatedSessionCache.put(jobArtifactState.uuid, v)
+            }
+          })
+          maybeTask.foreach(timer.schedule(_, 60000L, 60000L))
+          state
         case _ => defaultSessionState
       }
 
@@ -862,6 +875,7 @@ private[spark] class Executor(
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
+        maybeTask.foreach(_.cancel)
         cleanMDCForTask(taskName, mdcProperties)
         runningTasks.remove(taskId)
         if (taskStarted) {
