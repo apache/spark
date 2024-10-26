@@ -67,12 +67,12 @@ public class ToJavaArrayUtils {
 
   // int
   // int non-nullable
-  public static int[] toIntArray(ArrayData arrayData) {
+  public static int[] toIntegerArray(ArrayData arrayData) {
     return arrayData.toIntArray();
   }
 
   // Integer nullable
-  public static Integer[] toBoxedIntArray(ArrayData arrayData) {
+  public static Integer[] toBoxedIntegerArray(ArrayData arrayData) {
     return (Integer[]) arrayData.toArray(IntegerType,
         ClassTag$.MODULE$.apply(java.lang.Integer.class));
   }
@@ -109,10 +109,5 @@ public class ToJavaArrayUtils {
   public static Double[] toBoxedDoubleArray(ArrayData arrayData) {
     return (Double[]) arrayData.toArray(DoubleType,
         ClassTag$.MODULE$.apply(java.lang.Double.class));
-  }
-
-  // Object
-  public static Object[] toObjectArray(ArrayData arrayData, DataType elementType) {
-    return arrayData.toObjectArray(elementType);
   }
 }

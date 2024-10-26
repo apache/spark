@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.reflect.{Array => JArray}
+
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
-import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * This expression converts data of `ArrayData` to an array of java type.
@@ -56,65 +59,45 @@ case class ToJavaArray(array: Expression)
   override def child: Expression = array
   override def prettyName: String = "to_java_array"
 
-  @transient lazy val elementType: DataType =
-    array.dataType.asInstanceOf[ArrayType].elementType
   private def resultArrayElementNullable: Boolean =
     array.dataType.asInstanceOf[ArrayType].containsNull
   private def isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
   private def canPerformFast: Boolean = isPrimitiveType && !resultArrayElementNullable
 
+  @transient lazy val elementType: DataType =
+    array.dataType.asInstanceOf[ArrayType].elementType
   @transient private lazy val elementObjectType = ObjectType(classOf[DataType])
-  @transient private lazy val dataTypeFunctionNameArgumentsInputTypes:
-    (DataType, String, Seq[Expression], Seq[AbstractDataType]) = {
+  @transient private lazy val elementCls: Class[_] = {
     if (canPerformFast) {
-      elementType match {
-        case BooleanType => (ObjectType(classOf[Array[Boolean]]), "toBooleanArray",
-          Seq(array), Seq(array.dataType))
-        case ByteType => (ObjectType(classOf[Array[Byte]]), "toByteArray",
-          Seq(array), Seq(array.dataType))
-        case ShortType => (ObjectType(classOf[Array[Short]]), "toShortArray",
-          Seq(array), Seq(array.dataType))
-        case IntegerType => (ObjectType(classOf[Array[Int]]), "toIntArray",
-          Seq(array), Seq(array.dataType))
-        case LongType => (ObjectType(classOf[Array[Long]]), "toLongArray",
-          Seq(array), Seq(array.dataType))
-        case FloatType => (ObjectType(classOf[Array[Float]]), "toFloatArray",
-          Seq(array), Seq(array.dataType))
-        case DoubleType => (ObjectType(classOf[Array[Double]]), "toDoubleArray",
-          Seq(array), Seq(array.dataType))
-      }
+      CodeGenerator.javaClass(elementType)
     } else if (isPrimitiveType) {
-      elementType match {
-        case BooleanType => (ObjectType(classOf[Array[java.lang.Boolean]]), "toBoxedBooleanArray",
-          Seq(array), Seq(array.dataType))
-        case ByteType => (ObjectType(classOf[Array[java.lang.Byte]]), "toBoxedByteArray",
-          Seq(array), Seq(array.dataType))
-        case ShortType => (ObjectType(classOf[Array[java.lang.Short]]), "toBoxedShortArray",
-          Seq(array), Seq(array.dataType))
-        case IntegerType => (ObjectType(classOf[Array[java.lang.Integer]]), "toBoxedIntArray",
-          Seq(array), Seq(array.dataType))
-        case LongType => (ObjectType(classOf[Array[java.lang.Long]]), "toBoxedLongArray",
-          Seq(array), Seq(array.dataType))
-        case FloatType => (ObjectType(classOf[Array[java.lang.Float]]), "toBoxedFloatArray",
-          Seq(array), Seq(array.dataType))
-        case DoubleType => (ObjectType(classOf[Array[java.lang.Double]]), "toBoxedDoubleArray",
-          Seq(array), Seq(array.dataType))
-      }
+      Utils.classForName(s"java.lang.${CodeGenerator.boxedType(elementType)}")
     } else {
-      (ObjectType(classOf[Array[Object]]), "toObjectArray",
-        Seq(array, Literal(elementType, elementObjectType)), Seq(array.dataType, elementObjectType))
+      classOf[Object]
     }
   }
+  @transient private lazy val returnCls = JArray.newInstance(elementCls, 0).getClass
 
-  override def dataType: DataType = dataTypeFunctionNameArgumentsInputTypes._1
+  override def dataType: DataType = ObjectType(returnCls)
 
   override def replacement: Expression = {
-    StaticInvoke(
-      classOf[ToJavaArrayUtils],
-      dataTypeFunctionNameArgumentsInputTypes._1,
-      dataTypeFunctionNameArgumentsInputTypes._2,
-      dataTypeFunctionNameArgumentsInputTypes._3,
-      dataTypeFunctionNameArgumentsInputTypes._4)
+    if (isPrimitiveType) {
+      val funcNamePrefix = if (resultArrayElementNullable) "toBoxed" else "to"
+      val funcName = s"$funcNamePrefix${CodeGenerator.boxedType(elementType)}Array"
+      StaticInvoke(
+        classOf[ToJavaArrayUtils],
+        dataType,
+        funcName,
+        Seq(array),
+        Seq(array.dataType))
+    } else {
+      Invoke(
+        array,
+        "toObjectArray",
+        dataType,
+        Seq(Literal(elementType, elementObjectType)),
+        Seq(elementObjectType))
+    }
   }
 
   override protected def withNewChildInternal(newChild: Expression): Expression =

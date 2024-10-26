@@ -118,13 +118,12 @@ public class ArrayExpressionUtils {
       int mid = (low + high) >>> 1;
       boolean midVal = data[mid];
 
-      int cmp = booleanComp.compare(midVal, value);
-      if (cmp < 0) {
-        low = mid + 1;
-      } else if (cmp > 0) {
-        high = mid - 1;
-      } else {
+      if (value == midVal) {
         return mid; // key found
+      } else if (value) {
+        low = mid + 1;
+      } else {
+        high = mid - 1;
       }
     }
 
