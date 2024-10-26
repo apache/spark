@@ -447,6 +447,9 @@ private[spark] class Executor(
         case NonFatal(e) =>
           logWarning("Unable to stop heartbeater", e)
       }
+      if (timer != null) {
+        timer.cancel()
+      }
       ShuffleBlockPusher.stop()
       if (threadPool != null) {
         threadPool.shutdown()
