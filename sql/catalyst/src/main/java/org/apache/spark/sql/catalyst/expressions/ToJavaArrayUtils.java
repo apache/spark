@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions;
 import scala.reflect.ClassTag$;
 
 import org.apache.spark.sql.catalyst.util.ArrayData;
-import org.apache.spark.sql.types.DataType;
 
 import static org.apache.spark.sql.types.DataTypes.BooleanType;
 import static org.apache.spark.sql.types.DataTypes.ByteType;
