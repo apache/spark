@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command.CreateTableCommand
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -598,7 +598,7 @@ class MetastoreDataSourcesSuite extends QueryTest
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: HadoopFsRelation, _, _, _) => // OK
+            case LogicalRelationWithTable(_: HadoopFsRelation, _) => // OK
             case _ =>
               fail(s"test_parquet_ctas should have be converted to ${classOf[HadoopFsRelation]}")
           }

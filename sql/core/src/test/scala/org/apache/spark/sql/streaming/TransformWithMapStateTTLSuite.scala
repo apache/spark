@@ -41,8 +41,7 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     for (row <- inputRows) {
@@ -55,7 +54,7 @@ class MapStateSingleKeyTTLProcessor(ttlConfig: TTLConfig)
     results.iterator
   }
 
-  def processRow(
+  private def processRow(
       row: InputEvent,
       mapState: MapStateImplWithTTL[String, Int]): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
@@ -119,8 +118,7 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
   override def handleInputRows(
       key: String,
       inputRows: Iterator[MapInputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[MapOutputEvent] = {
+      timerValues: TimerValues): Iterator[MapOutputEvent] = {
     var results = List[MapOutputEvent]()
 
     for (row <- inputRows) {
@@ -133,7 +131,7 @@ class MapStateTTLProcessor(ttlConfig: TTLConfig)
     results.iterator
   }
 
-  def processRow(
+  private def processRow(
       row: MapInputEvent,
       mapState: MapStateImplWithTTL[String, Int]): Iterator[MapOutputEvent] = {
     var results = List[MapOutputEvent]()

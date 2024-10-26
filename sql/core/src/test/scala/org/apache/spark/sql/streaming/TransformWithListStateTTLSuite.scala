@@ -41,8 +41,7 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-    expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     inputRows.foreach { row =>
@@ -55,7 +54,7 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
     results.iterator
   }
 
-  def processRow(
+  private def processRow(
       row: InputEvent,
       listState: ListStateImplWithTTL[Int]): Iterator[OutputEvent] = {
 
