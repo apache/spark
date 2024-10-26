@@ -1089,7 +1089,7 @@ public class CollationAwareUTF8String {
    * @param srcString the input string to be trimmed from both ends of the string
    * @param trimString the trim string characters to trim
    * @param collationId the collation ID to use for string trim
-   * @return the trimmed string (for UTF8_LCASE collation)
+   * @return the trimmed string (for UTF8_BINARY collation)
    */
   public static UTF8String binaryTrim(
       final UTF8String srcString,
@@ -1266,7 +1266,7 @@ public class CollationAwareUTF8String {
    * @param srcString the input string to be trimmed from the right end of the string
    * @param trimString the trim string characters to trim
    * @param collationId the collation ID to use for string trim
-   * @return the trimmed string (for UTF8_LCASE collation)
+   * @return the trimmed string (for UTF_BINARY collation)
    */
   public static UTF8String binaryTrimRight(
       final UTF8String srcString,

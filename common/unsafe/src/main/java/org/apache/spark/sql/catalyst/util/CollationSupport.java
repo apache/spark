@@ -560,9 +560,9 @@ public final class CollationSupport {
       return CollationAwareUTF8String.trim(srcString, trimString, collationId);
     }
     public static UTF8String execBinaryTrim(
-            final UTF8String srcString,
-            final UTF8String trimString,
-            final int collationId) {
+        final UTF8String srcString,
+        final UTF8String trimString,
+        final int collationId) {
       return CollationAwareUTF8String.binaryTrim(srcString, trimString, collationId);
     }
   }
