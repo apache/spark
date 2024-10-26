@@ -2276,24 +2276,37 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 table windowTestData
-|> window w as (partition by cte order by val)
+|> window w as (partition by cate order by val)
 |> select cate, sum(val) over w
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clauses" : "the WINDOW clause"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 67,
-    "fragment" : "window w as (partition by cte order by val)"
-  } ]
-}
+Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [cate#x], [val#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x]
+         +- SubqueryAlias windowtestdata
+            +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+table windowTestData
+|> window w1 as (partition by cate), w2 as (partition by val order by cate)
+|> select sum(val) over w1, first_value(cate) over w2
+-- !query analysis
+Project [sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (PARTITION BY val ORDER BY cate ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [val#x, cate#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (PARTITION BY val ORDER BY cate ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (PARTITION BY val ORDER BY cate ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [first_value(cate#x, false) windowspecdefinition(val#x, cate#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value(cate) OVER (PARTITION BY val ORDER BY cate ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [val#x], [cate#x ASC NULLS FIRST]
+      +- Window [sum(val#x) windowspecdefinition(cate#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL], [cate#x]
+         +- Project [val#x, cate#x]
+            +- SubqueryAlias windowtestdata
+               +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                     +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                        +- SubqueryAlias testData
+                           +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
 
 
 -- !query
@@ -2302,10 +2315,11 @@ table windowTestData
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
-  "sqlState" : "0A000",
+  "errorClass" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+  "sqlState" : "42000",
   "messageParameters" : {
-    "clauses" : "the WINDOW clause"
+    "clause1" : "WINDOW",
+    "clause2" : "LIMIT"
   },
   "queryContext" : [ {
     "objectType" : "",
