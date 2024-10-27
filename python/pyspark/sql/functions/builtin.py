@@ -220,6 +220,38 @@ def lit(col: Any) -> Column:
     |      false|     Yes|
     |      false|      No|
     +-----------+--------+
+
+    Example 5: Creating literal columns from Numpy scalar.
+
+    >>> from pyspark.sql import functions as sf
+    >>> import numpy as np # doctest: +SKIP
+    >>> spark.range(1).select(
+    ...     sf.lit(np.bool_(True)),
+    ...     sf.lit(np.int64(123)),
+    ...     sf.lit(np.float64(0.456)),
+    ...     sf.lit(np.str_("xyz"))
+    ... ).show() # doctest: +SKIP
+    +----+---+-----+---+
+    |true|123|0.456|xyz|
+    +----+---+-----+---+
+    |true|123|0.456|xyz|
+    +----+---+-----+---+
+
+    Example 6: Creating literal columns from Numpy ndarray.
+
+    >>> from pyspark.sql import functions as sf
+    >>> import numpy as np # doctest: +SKIP
+    >>> spark.range(1).select(
+    ...     sf.lit(np.array([True, False], np.bool_)),
+    ...     sf.lit(np.array([], np.int8)),
+    ...     sf.lit(np.array([1.5, 0.1], np.float64)),
+    ...     sf.lit(np.array(["a", "b", "c"], np.str_)),
+    ... ).show() # doctest: +SKIP
+    +------------------+-------+-----------------+--------------------+
+    |ARRAY(true, false)|ARRAY()|ARRAY(1.5D, 0.1D)|ARRAY('a', 'b', 'c')|
+    +------------------+-------+-----------------+--------------------+
+    |     [true, false]|     []|       [1.5, 0.1]|           [a, b, c]|
+    +------------------+-------+-----------------+--------------------+
     """
     if isinstance(col, Column):
         return col
@@ -272,7 +304,7 @@ def col(col: str) -> Column:
 
     Parameters
     ----------
-    col : str
+    col : column name
         the name for the column
 
     Returns
@@ -306,7 +338,7 @@ def asc(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Target column to sort by in the ascending order.
 
     Returns
@@ -318,9 +350,9 @@ def asc(col: "ColumnOrName") -> Column:
     --------
     Example 1: Sort DataFrame by 'id' column in ascending order.
 
-    >>> from pyspark.sql.functions import asc
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
-    >>> df.sort(asc("id")).show()
+    >>> df.sort(sf.asc("id")).show()
     +---+-----+
     | id|value|
     +---+-----+
@@ -331,9 +363,9 @@ def asc(col: "ColumnOrName") -> Column:
 
     Example 2: Use `asc` in `orderBy` function to sort the DataFrame.
 
-    >>> from pyspark.sql.functions import asc
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
-    >>> df.orderBy(asc("value")).show()
+    >>> df.orderBy(sf.asc("value")).show()
     +---+-----+
     | id|value|
     +---+-----+
@@ -344,11 +376,11 @@ def asc(col: "ColumnOrName") -> Column:
 
     Example 3: Combine `asc` with `desc` to sort by multiple columns.
 
-    >>> from pyspark.sql.functions import asc, desc
-    >>> df = spark.createDataFrame([(2, 'A', 4),
-    ...                             (1, 'B', 3),
-    ...                             (3, 'A', 2)], ['id', 'group', 'value'])
-    >>> df.sort(asc("group"), desc("value")).show()
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(2, 'A', 4), (1, 'B', 3), (3, 'A', 2)],
+    ...     ['id', 'group', 'value'])
+    >>> df.sort(sf.asc("group"), sf.desc("value")).show()
     +---+-----+-----+
     | id|group|value|
     +---+-----+-----+
@@ -385,7 +417,7 @@ def desc(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Target column to sort by in the descending order.
 
     Returns
@@ -397,9 +429,9 @@ def desc(col: "ColumnOrName") -> Column:
     --------
     Example 1: Sort DataFrame by 'id' column in descending order.
 
-    >>> from pyspark.sql.functions import desc
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
-    >>> df.sort(desc("id")).show()
+    >>> df.sort(sf.desc("id")).show()
     +---+-----+
     | id|value|
     +---+-----+
@@ -410,9 +442,9 @@ def desc(col: "ColumnOrName") -> Column:
 
     Example 2: Use `desc` in `orderBy` function to sort the DataFrame.
 
-    >>> from pyspark.sql.functions import desc
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(4, 'B'), (3, 'A'), (2, 'C')], ['id', 'value'])
-    >>> df.orderBy(desc("value")).show()
+    >>> df.orderBy(sf.desc("value")).show()
     +---+-----+
     | id|value|
     +---+-----+
@@ -423,11 +455,11 @@ def desc(col: "ColumnOrName") -> Column:
 
     Example 3: Combine `asc` with `desc` to sort by multiple columns.
 
-    >>> from pyspark.sql.functions import asc, desc
-    >>> df = spark.createDataFrame([(2, 'A', 4),
-    ...                             (1, 'B', 3),
-    ...                             (3, 'A', 2)], ['id', 'group', 'value'])
-    >>> df.sort(desc("group"), asc("value")).show()
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(2, 'A', 4), (1, 'B', 3), (3, 'A', 2)],
+    ...     ['id', 'group', 'value'])
+    >>> df.sort(sf.desc("group"), sf.asc("value")).show()
     +---+-----+-----+
     | id|group|value|
     +---+-----+-----+
@@ -463,7 +495,7 @@ def sqrt(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -473,13 +505,19 @@ def sqrt(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(sqrt(lit(4))).show()
-    +-------+
-    |SQRT(4)|
-    +-------+
-    |    2.0|
-    +-------+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (-1), (0), (1), (4), (NULL) AS TAB(value)"
+    ... ).select("*", sf.sqrt("value")).show()
+    +-----+-----------+
+    |value|SQRT(value)|
+    +-----+-----------+
+    |   -1|        NaN|
+    |    0|        0.0|
+    |    1|        1.0|
+    |    4|        2.0|
+    | NULL|       NULL|
+    +-----+-----------+
     """
     return _invoke_function_over_columns("sqrt", col)
 
@@ -494,8 +532,8 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    left : :class:`~pyspark.sql.Column` or str
-    right : :class:`~pyspark.sql.Column` or str
+    left : :class:`~pyspark.sql.Column` or column name
+    right : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
@@ -504,49 +542,49 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [(1982, 15), (1990, 2)], ["birth", "age"]
-    ... ).select(sf.try_add("birth", "age")).show()
-    +-------------------+
-    |try_add(birth, age)|
-    +-------------------+
-    |               1997|
-    |               1992|
-    +-------------------+
+    ... ).select("*", sf.try_add("birth", "age")).show()
+    +-----+---+-------------------+
+    |birth|age|try_add(birth, age)|
+    +-----+---+-------------------+
+    | 1982| 15|               1997|
+    | 1990|  2|               1992|
+    +-----+---+-------------------+
 
     Example 2: Date plus Integer.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
     ...     "SELECT * FROM VALUES (DATE('2015-09-30')) AS TAB(date)"
-    ... ).select(sf.try_add("date", sf.lit(1))).show()
-    +----------------+
-    |try_add(date, 1)|
-    +----------------+
-    |      2015-10-01|
-    +----------------+
+    ... ).select("*", sf.try_add("date", sf.lit(1))).show()
+    +----------+----------------+
+    |      date|try_add(date, 1)|
+    +----------+----------------+
+    |2015-09-30|      2015-10-01|
+    +----------+----------------+
 
     Example 3: Date plus Interval.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
-    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
-    ... ).select(sf.try_add("date", "i")).show()
-    +----------------+
-    |try_add(date, i)|
-    +----------------+
-    |      2016-09-30|
-    +----------------+
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, itvl)"
+    ... ).select("*", sf.try_add("date", "itvl")).show()
+    +----------+-----------------+-------------------+
+    |      date|             itvl|try_add(date, itvl)|
+    +----------+-----------------+-------------------+
+    |2015-09-30|INTERVAL '1' YEAR|         2016-09-30|
+    +----------+-----------------+-------------------+
 
     Example 4: Interval plus Interval.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
-    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
-    ... ).select(sf.try_add("i", "j")).show()
-    +-----------------+
-    |    try_add(i, j)|
-    +-----------------+
-    |INTERVAL '3' YEAR|
-    +-----------------+
+    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(itvl1, itvl2)"
+    ... ).select("*", sf.try_add("itvl1", "itvl2")).show()
+    +-----------------+-----------------+---------------------+
+    |            itvl1|            itvl2|try_add(itvl1, itvl2)|
+    +-----------------+-----------------+---------------------+
+    |INTERVAL '1' YEAR|INTERVAL '2' YEAR|    INTERVAL '3' YEAR|
+    +-----------------+-----------------+---------------------+
 
     Example 5: Overflow results in NULL when ANSI mode is on
 
@@ -554,8 +592,7 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
-    ...     df = spark.range(1)
-    ...     df.select(sf.try_add(sf.lit(sys.maxsize), sf.lit(sys.maxsize))).show()
+    ...     spark.range(1).select(sf.try_add(sf.lit(sys.maxsize), sf.lit(sys.maxsize))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
     +-------------------------------------------------+
@@ -576,7 +613,7 @@ def try_avg(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
@@ -633,9 +670,9 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    left : :class:`~pyspark.sql.Column` or str
+    left : :class:`~pyspark.sql.Column` or column name
         dividend
-    right : :class:`~pyspark.sql.Column` or str
+    right : :class:`~pyspark.sql.Column` or column name
         divisor
 
     Examples
@@ -645,29 +682,28 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [(6000, 15), (1990, 2), (1234, 0)], ["a", "b"]
-    ... ).select(sf.try_divide("a", "b")).show()
-    +----------------+
-    |try_divide(a, b)|
-    +----------------+
-    |           400.0|
-    |           995.0|
-    |            NULL|
-    +----------------+
+    ... ).select("*", sf.try_divide("a", "b")).show()
+    +----+---+----------------+
+    |   a|  b|try_divide(a, b)|
+    +----+---+----------------+
+    |6000| 15|           400.0|
+    |1990|  2|           995.0|
+    |1234|  0|            NULL|
+    +----+---+----------------+
 
     Example 2: Interval divided by Integer.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(4).select(
-    ...     sf.try_divide(sf.make_interval(sf.lit(1)), "id")
-    ... ).show()
-    +--------------------------------------------------+
-    |try_divide(make_interval(1, 0, 0, 0, 0, 0, 0), id)|
-    +--------------------------------------------------+
-    |                                              NULL|
-    |                                           1 years|
-    |                                          6 months|
-    |                                          4 months|
-    +--------------------------------------------------+
+    >>> df = spark.range(4).select(sf.make_interval(sf.lit(1)).alias("itvl"), "id")
+    >>> df.select("*", sf.try_divide("itvl", "id")).show()
+    +-------+---+--------------------+
+    |   itvl| id|try_divide(itvl, id)|
+    +-------+---+--------------------+
+    |1 years|  0|                NULL|
+    |1 years|  1|             1 years|
+    |1 years|  2|            6 months|
+    |1 years|  3|            4 months|
+    +-------+---+--------------------+
 
     Example 3: Exception during division, resulting in NULL when ANSI mode is on
 
@@ -675,8 +711,7 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
-    ...     df = spark.range(1)
-    ...     df.select(sf.try_divide(df.id, sf.lit(0))).show()
+    ...     spark.range(1).select(sf.try_divide("id", sf.lit(0))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
     +-----------------+
@@ -698,9 +733,9 @@ def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    left : :class:`~pyspark.sql.Column` or str
+    left : :class:`~pyspark.sql.Column` or column name
         dividend
-    right : :class:`~pyspark.sql.Column` or str
+    right : :class:`~pyspark.sql.Column` or column name
         divisor
 
     Examples
@@ -710,14 +745,14 @@ def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [(6000, 15), (3, 2), (1234, 0)], ["a", "b"]
-    ... ).select(sf.try_mod("a", "b")).show()
-    +-------------+
-    |try_mod(a, b)|
-    +-------------+
-    |            0|
-    |            1|
-    |         NULL|
-    +-------------+
+    ... ).select("*", sf.try_mod("a", "b")).show()
+    +----+---+-------------+
+    |   a|  b|try_mod(a, b)|
+    +----+---+-------------+
+    |6000| 15|            0|
+    |   3|  2|            1|
+    |1234|  0|         NULL|
+    +----+---+-------------+
 
     Example 2: Exception during division, resulting in NULL when ANSI mode is on
 
@@ -725,8 +760,7 @@ def try_mod(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
-    ...     df = spark.range(1)
-    ...     df.select(sf.try_mod(df.id, sf.lit(0))).show()
+    ...     spark.range(1).select(sf.try_mod("id", sf.lit(0))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
     +--------------+
@@ -748,9 +782,9 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    left : :class:`~pyspark.sql.Column` or str
+    left : :class:`~pyspark.sql.Column` or column name
         multiplicand
-    right : :class:`~pyspark.sql.Column` or str
+    right : :class:`~pyspark.sql.Column` or column name
         multiplier
 
     Examples
@@ -760,30 +794,29 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [(6000, 15), (1990, 2)], ["a", "b"]
-    ... ).select(sf.try_multiply("a", "b")).show()
-    +------------------+
-    |try_multiply(a, b)|
-    +------------------+
-    |             90000|
-    |              3980|
-    +------------------+
+    ... ).select("*", sf.try_multiply("a", "b")).show()
+    +----+---+------------------+
+    |   a|  b|try_multiply(a, b)|
+    +----+---+------------------+
+    |6000| 15|             90000|
+    |1990|  2|              3980|
+    +----+---+------------------+
 
     Example 2: Interval multiplied by Integer.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(6).select(
-    ...     sf.try_multiply(sf.make_interval(sf.lit(0), sf.lit(3)), "id")
-    ... ).show()
-    +----------------------------------------------------+
-    |try_multiply(make_interval(0, 3, 0, 0, 0, 0, 0), id)|
-    +----------------------------------------------------+
-    |                                           0 seconds|
-    |                                            3 months|
-    |                                            6 months|
-    |                                            9 months|
-    |                                             1 years|
-    |                                    1 years 3 months|
-    +----------------------------------------------------+
+    >>> df = spark.range(6).select(sf.make_interval(sf.col("id"), sf.lit(3)).alias("itvl"), "id")
+    >>> df.select("*", sf.try_multiply("itvl", "id")).show()
+    +----------------+---+----------------------+
+    |            itvl| id|try_multiply(itvl, id)|
+    +----------------+---+----------------------+
+    |        3 months|  0|             0 seconds|
+    |1 years 3 months|  1|      1 years 3 months|
+    |2 years 3 months|  2|      4 years 6 months|
+    |3 years 3 months|  3|      9 years 9 months|
+    |4 years 3 months|  4|              17 years|
+    |5 years 3 months|  5|     26 years 3 months|
+    +----------------+---+----------------------+
 
     Example 3: Overflow results in NULL when ANSI mode is on
 
@@ -791,8 +824,7 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
-    ...     df = spark.range(1)
-    ...     df.select(sf.try_multiply(sf.lit(sys.maxsize), sf.lit(sys.maxsize))).show()
+    ...     spark.range(1).select(sf.try_multiply(sf.lit(sys.maxsize), sf.lit(sys.maxsize))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
     +------------------------------------------------------+
@@ -814,8 +846,8 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    left : :class:`~pyspark.sql.Column` or str
-    right : :class:`~pyspark.sql.Column` or str
+    left : :class:`~pyspark.sql.Column` or column name
+    right : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
@@ -824,49 +856,49 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.createDataFrame(
     ...     [(1982, 15), (1990, 2)], ["birth", "age"]
-    ... ).select(sf.try_subtract("birth", "age")).show()
-    +------------------------+
-    |try_subtract(birth, age)|
-    +------------------------+
-    |                    1967|
-    |                    1988|
-    +------------------------+
+    ... ).select("*", sf.try_subtract("birth", "age")).show()
+    +-----+---+------------------------+
+    |birth|age|try_subtract(birth, age)|
+    +-----+---+------------------------+
+    | 1982| 15|                    1967|
+    | 1990|  2|                    1988|
+    +-----+---+------------------------+
 
     Example 2: Date minus Integer.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
     ...     "SELECT * FROM VALUES (DATE('2015-10-01')) AS TAB(date)"
-    ... ).select(sf.try_subtract("date", sf.lit(1))).show()
-    +---------------------+
-    |try_subtract(date, 1)|
-    +---------------------+
-    |           2015-09-30|
-    +---------------------+
+    ... ).select("*", sf.try_subtract("date", sf.lit(1))).show()
+    +----------+---------------------+
+    |      date|try_subtract(date, 1)|
+    +----------+---------------------+
+    |2015-10-01|           2015-09-30|
+    +----------+---------------------+
 
     Example 3: Date minus Interval.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
-    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
-    ... ).select(sf.try_subtract("date", "i")).show()
-    +---------------------+
-    |try_subtract(date, i)|
-    +---------------------+
-    |           2014-09-30|
-    +---------------------+
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, itvl)"
+    ... ).select("*", sf.try_subtract("date", "itvl")).show()
+    +----------+-----------------+------------------------+
+    |      date|             itvl|try_subtract(date, itvl)|
+    +----------+-----------------+------------------------+
+    |2015-09-30|INTERVAL '1' YEAR|              2014-09-30|
+    +----------+-----------------+------------------------+
 
     Example 4: Interval minus Interval.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
-    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
-    ... ).select(sf.try_subtract("i", "j")).show()
-    +------------------+
-    |try_subtract(i, j)|
-    +------------------+
-    |INTERVAL '-1' YEAR|
-    +------------------+
+    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(itvl1, itvl2)"
+    ... ).select("*", sf.try_subtract("itvl1", "itvl2")).show()
+    +-----------------+-----------------+--------------------------+
+    |            itvl1|            itvl2|try_subtract(itvl1, itvl2)|
+    +-----------------+-----------------+--------------------------+
+    |INTERVAL '1' YEAR|INTERVAL '2' YEAR|        INTERVAL '-1' YEAR|
+    +-----------------+-----------------+--------------------------+
 
     Example 5: Overflow results in NULL when ANSI mode is on
 
@@ -874,8 +906,7 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     >>> origin = spark.conf.get("spark.sql.ansi.enabled")
     >>> spark.conf.set("spark.sql.ansi.enabled", "true")
     >>> try:
-    ...     df = spark.range(1)
-    ...     df.select(sf.try_subtract(sf.lit(-sys.maxsize), sf.lit(sys.maxsize))).show()
+    ...     spark.range(1).select(sf.try_subtract(sf.lit(-sys.maxsize), sf.lit(sys.maxsize))).show()
     ... finally:
     ...     spark.conf.set("spark.sql.ansi.enabled", origin)
     +-------------------------------------------------------+
@@ -896,15 +927,14 @@ def try_sum(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
     Example 1: Calculating the sum of values in a column
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(10)
-    >>> df.select(sf.try_sum(df["id"])).show()
+    >>> spark.range(10).select(sf.try_sum("id")).show()
     +-----------+
     |try_sum(id)|
     +-----------+
@@ -965,7 +995,7 @@ def abs(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or expression to compute the absolute value on.
 
     Returns
@@ -975,57 +1005,46 @@ def abs(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: Compute the absolute value of a negative number
+    Example 1: Compute the absolute value of a long column
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, -1), (2, -2), (3, -3)], ["id", "value"])
-    >>> df.select(sf.abs(df.value)).show()
-    +----------+
-    |abs(value)|
-    +----------+
-    |         1|
-    |         2|
-    |         3|
-    +----------+
+    >>> df = spark.createDataFrame([(-1,), (-2,), (-3,), (None,)], ["value"])
+    >>> df.select("*", sf.abs(df.value)).show()
+    +-----+----------+
+    |value|abs(value)|
+    +-----+----------+
+    |   -1|         1|
+    |   -2|         2|
+    |   -3|         3|
+    | NULL|      NULL|
+    +-----+----------+
 
-    Example 2: Compute the absolute value of an expression
+    Example 2: Compute the absolute value of a double column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-1.5,), (-2.5,), (None,), (float("nan"),)], ["value"])
+    >>> df.select("*", sf.abs(df.value)).show()
+    +-----+----------+
+    |value|abs(value)|
+    +-----+----------+
+    | -1.5|       1.5|
+    | -2.5|       2.5|
+    | NULL|      NULL|
+    |  NaN|       NaN|
+    +-----+----------+
+
+    Example 3: Compute the absolute value of an expression
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, 1), (2, -2), (3, 3)], ["id", "value"])
-    >>> df.select(sf.abs(df.id - df.value)).show()
-    +-----------------+
-    |abs((id - value))|
-    +-----------------+
-    |                0|
-    |                4|
-    |                0|
-    +-----------------+
-
-    Example 3: Compute the absolute value of a column with null values
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, None), (2, -2), (3, None)], ["id", "value"])
-    >>> df.select(sf.abs(df.value)).show()
-    +----------+
-    |abs(value)|
-    +----------+
-    |      NULL|
-    |         2|
-    |      NULL|
-    +----------+
-
-    Example 4: Compute the absolute value of a column with double values
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(1, -1.5), (2, -2.5), (3, -3.5)], ["id", "value"])
-    >>> df.select(sf.abs(df.value)).show()
-    +----------+
-    |abs(value)|
-    +----------+
-    |       1.5|
-    |       2.5|
-    |       3.5|
-    +----------+
+    >>> df.select("*", sf.abs(df.id - df.value)).show()
+    +---+-----+-----------------+
+    | id|value|abs((id - value))|
+    +---+-----+-----------------+
+    |  1|    1|                0|
+    |  2|   -2|                4|
+    |  3|    3|                0|
+    +---+-----+-----------------+
     """
     return _invoke_function_over_columns("abs", col)
 
@@ -1042,7 +1061,7 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
     deterministic : bool, optional
         if there are multiple equally-frequent results then return the lowest (defaults to false).
@@ -1084,6 +1103,7 @@ def mode(col: "ColumnOrName", deterministic: bool = False) -> Column:
     +---------+
     |        0|
     +---------+
+
     >>> df.select(sf.mode("col", True)).show()
     +---------------------------------------+
     |mode() WITHIN GROUP (ORDER BY col DESC)|
@@ -1108,7 +1128,7 @@ def max(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column on which the maximum value is computed.
 
     Returns
@@ -1213,7 +1233,7 @@ def min(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column on which the minimum value is computed.
 
     Returns
@@ -1309,10 +1329,10 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The column representing the values to be returned. This could be the column instance
         or the column name as string.
-    ord : :class:`~pyspark.sql.Column` or str
+    ord : :class:`~pyspark.sql.Column` or column name
         The column that needs to be maximized. This could be the column instance
         or the column name as string.
 
@@ -1395,10 +1415,10 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The column representing the values that will be returned. This could be the column instance
         or the column name as string.
-    ord : :class:`~pyspark.sql.Column` or str
+    ord : :class:`~pyspark.sql.Column` or column name
         The column that needs to be minimized. This could be the column instance
         or the column name as string.
 
@@ -1474,7 +1494,7 @@ def count(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -1542,7 +1562,7 @@ def sum(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -1600,7 +1620,7 @@ def avg(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -1648,7 +1668,7 @@ def mean(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -1692,7 +1712,7 @@ def median(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -1706,12 +1726,13 @@ def median(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([
     ...     ("Java", 2012, 20000), ("dotNET", 2012, 5000),
     ...     ("Java", 2012, 22000), ("dotNET", 2012, 10000),
     ...     ("dotNET", 2013, 48000), ("Java", 2013, 30000)],
     ...     schema=("course", "year", "earnings"))
-    >>> df.groupby("course").agg(median("earnings")).show()
+    >>> df.groupby("course").agg(sf.median("earnings")).show()
     +------+----------------+
     |course|median(earnings)|
     +------+----------------+
@@ -1751,7 +1772,7 @@ def sum_distinct(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -1822,26 +1843,26 @@ def product(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : str, :class:`Column`
+    col : :class:`~pyspark.sql.Column` or column name
         column containing values to be multiplied together
 
     Returns
     -------
-    :class:`~pyspark.sql.Column`
+    :class:`~pyspark.sql.Column` or column name
         the column for computed results.
 
     Examples
     --------
-    >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
-    >>> prods = df.groupBy('mod3').agg(product('x').alias('product'))
-    >>> prods.orderBy('mod3').show()
-    +----+-------+
-    |mod3|product|
-    +----+-------+
-    |   0|  162.0|
-    |   1|   28.0|
-    |   2|   80.0|
-    +----+-------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT id % 3 AS mod3, id AS value FROM RANGE(10)")
+    >>> df.groupBy('mod3').agg(sf.product('value')).orderBy('mod3').show()
+    +----+--------------+
+    |mod3|product(value)|
+    +----+--------------+
+    |   0|           0.0|
+    |   1|          28.0|
+    |   2|          80.0|
+    +----+--------------+
     """
     return _invoke_function_over_columns("product", col)
 
@@ -1859,7 +1880,7 @@ def acos(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or expression to compute the inverse cosine on.
 
     Returns
@@ -1869,11 +1890,11 @@ def acos(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: Compute the inverse cosine of a column of numbers
+    Example 1: Compute the inverse cosine
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(-1.0,), (-0.5,), (0.0,), (0.5,), (1.0,)], ["value"])
-    >>> df.select("value", sf.acos("value")).show()
+    >>> df.select("*", sf.acos("value")).show()
     +-----+------------------+
     |value|       ACOS(value)|
     +-----+------------------+
@@ -1884,30 +1905,19 @@ def acos(col: "ColumnOrName") -> Column:
     |  1.0|               0.0|
     +-----+------------------+
 
-    Example 2: Compute the inverse cosine of a column with null values
+    Example 2: Compute the inverse cosine of invalid values
 
     >>> from pyspark.sql import functions as sf
-    >>> from pyspark.sql.types import StructType, StructField, IntegerType
-    >>> schema = StructType([StructField("value", IntegerType(), True)])
-    >>> df = spark.createDataFrame([(None,)], schema=schema)
-    >>> df.select(sf.acos(df.value)).show()
-    +-----------+
-    |ACOS(value)|
-    +-----------+
-    |       NULL|
-    +-----------+
-
-    Example 3: Compute the inverse cosine of a column with values outside the valid range
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(2,), (-2,)], ["value"])
-    >>> df.select(sf.acos(df.value)).show()
-    +-----------+
-    |ACOS(value)|
-    +-----------+
-    |        NaN|
-    |        NaN|
-    +-----------+
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (-2), (2), (NULL) AS TAB(value)"
+    ... ).select("*", sf.acos("value")).show()
+    +-----+-----------+
+    |value|ACOS(value)|
+    +-----+-----------+
+    |   -2|        NaN|
+    |    2|        NaN|
+    | NULL|       NULL|
+    +-----+-----------+
     """
     return _invoke_function_over_columns("acos", col)
 
@@ -1925,7 +1935,7 @@ def acosh(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or expression to compute the inverse hyperbolic cosine on.
 
     Returns
@@ -1935,11 +1945,11 @@ def acosh(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    Example 1: Compute the inverse hyperbolic cosine of a column of numbers
+    Example 1: Compute the inverse hyperbolic cosine
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,), (2,)], ["value"])
-    >>> df.select("value", sf.acosh(df.value)).show()
+    >>> df.select("*", sf.acosh(df.value)).show()
     +-----+------------------+
     |value|      ACOSH(value)|
     +-----+------------------+
@@ -1947,30 +1957,19 @@ def acosh(col: "ColumnOrName") -> Column:
     |    2|1.3169578969248...|
     +-----+------------------+
 
-    Example 2: Compute the inverse hyperbolic cosine of a column with null values
+    Example 2: Compute the inverse hyperbolic cosine of invalid values
 
     >>> from pyspark.sql import functions as sf
-    >>> from pyspark.sql.types import StructType, StructField, IntegerType
-    >>> schema = StructType([StructField("value", IntegerType(), True)])
-    >>> df = spark.createDataFrame([(None,)], schema=schema)
-    >>> df.select(sf.acosh(df.value)).show()
-    +------------+
-    |ACOSH(value)|
-    +------------+
-    |        NULL|
-    +------------+
-
-    Example 3: Compute the inverse hyperbolic cosine of a column with values less than 1
-
-    >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(0.5,), (-0.5,)], ["value"])
-    >>> df.select(sf.acosh(df.value)).show()
-    +------------+
-    |ACOSH(value)|
-    +------------+
-    |         NaN|
-    |         NaN|
-    +------------+
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (-0.5), (0.5), (NULL) AS TAB(value)"
+    ... ).select("*", sf.acosh("value")).show()
+    +-----+------------+
+    |value|ACOSH(value)|
+    +-----+------------+
+    | -0.5|         NaN|
+    |  0.5|         NaN|
+    | NULL|        NULL|
+    +-----+------------+
     """
     return _invoke_function_over_columns("acosh", col)
 
@@ -1987,7 +1986,7 @@ def asin(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -1997,14 +1996,32 @@ def asin(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(0,), (2,)])
-    >>> df.select(asin(df.schema.fieldNames()[0])).show()
-    +--------+
-    |ASIN(_1)|
-    +--------+
-    |     0.0|
-    |     NaN|
-    +--------+
+    Example 1: Compute the inverse sine
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-0.5,), (0.0,), (0.5,)], ["value"])
+    >>> df.select("*", sf.asin(df.value)).show()
+    +-----+-------------------+
+    |value|        ASIN(value)|
+    +-----+-------------------+
+    | -0.5|-0.5235987755982...|
+    |  0.0|                0.0|
+    |  0.5| 0.5235987755982...|
+    +-----+-------------------+
+
+    Example 2: Compute the inverse sine of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (-2), (2), (NULL) AS TAB(value)"
+    ... ).select("*", sf.asin("value")).show()
+    +-----+-----------+
+    |value|ASIN(value)|
+    +-----+-----------+
+    |   -2|        NaN|
+    |    2|        NaN|
+    | NULL|       NULL|
+    +-----+-----------+
     """
     return _invoke_function_over_columns("asin", col)
 
