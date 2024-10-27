@@ -566,25 +566,25 @@ def try_add(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
-    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
-    ... ).select("*", sf.try_add("date", "i")).show()
-    +----------+-----------------+----------------+
-    |      date|                i|try_add(date, i)|
-    +----------+-----------------+----------------+
-    |2015-09-30|INTERVAL '1' YEAR|      2016-09-30|
-    +----------+-----------------+----------------+
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, itvl)"
+    ... ).select("*", sf.try_add("date", "itvl")).show()
+    +----------+-----------------+-------------------+
+    |      date|             itvl|try_add(date, itvl)|
+    +----------+-----------------+-------------------+
+    |2015-09-30|INTERVAL '1' YEAR|         2016-09-30|
+    +----------+-----------------+-------------------+
 
     Example 4: Interval plus Interval.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
-    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
-    ... ).select("*", sf.try_add("i", "j")).show()
-    +-----------------+-----------------+-----------------+
-    |                i|                j|    try_add(i, j)|
-    +-----------------+-----------------+-----------------+
-    |INTERVAL '1' YEAR|INTERVAL '2' YEAR|INTERVAL '3' YEAR|
-    +-----------------+-----------------+-----------------+
+    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(itvl1, itvl2)"
+    ... ).select("*", sf.try_add("itvl1", "itvl2")).show()
+    +-----------------+-----------------+---------------------+
+    |            itvl1|            itvl2|try_add(itvl1, itvl2)|
+    +-----------------+-----------------+---------------------+
+    |INTERVAL '1' YEAR|INTERVAL '2' YEAR|    INTERVAL '3' YEAR|
+    +-----------------+-----------------+---------------------+
 
     Example 5: Overflow results in NULL when ANSI mode is on
 
@@ -694,16 +694,16 @@ def try_divide(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Example 2: Interval divided by Integer.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.range(4).withColumn("interval", sf.make_interval(sf.lit(1)))
-    >>> df.select("*", sf.try_divide("interval", "id")).show()
-    +---+--------+------------------------+
-    | id|interval|try_divide(interval, id)|
-    +---+--------+------------------------+
-    |  0| 1 years|                    NULL|
-    |  1| 1 years|                 1 years|
-    |  2| 1 years|                6 months|
-    |  3| 1 years|                4 months|
-    +---+--------+------------------------+
+    >>> df = spark.range(4).select(sf.make_interval(sf.lit(1)).alias("itvl"), "id")
+    >>> df.select("*", sf.try_divide("itvl", "id")).show()
+    +-------+---+--------------------+
+    |   itvl| id|try_divide(itvl, id)|
+    +-------+---+--------------------+
+    |1 years|  0|                NULL|
+    |1 years|  1|             1 years|
+    |1 years|  2|            6 months|
+    |1 years|  3|            4 months|
+    +-------+---+--------------------+
 
     Example 3: Exception during division, resulting in NULL when ANSI mode is on
 
@@ -805,18 +805,18 @@ def try_multiply(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     Example 2: Interval multiplied by Integer.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.range(6).withColumn("interval", sf.make_interval(sf.col("id"), sf.lit(3)))
-    >>> df.select("*", sf.try_multiply("interval", "id")).show()
-    +---+----------------+--------------------------+
-    | id|        interval|try_multiply(interval, id)|
-    +---+----------------+--------------------------+
-    |  0|        3 months|                 0 seconds|
-    |  1|1 years 3 months|          1 years 3 months|
-    |  2|2 years 3 months|          4 years 6 months|
-    |  3|3 years 3 months|          9 years 9 months|
-    |  4|4 years 3 months|                  17 years|
-    |  5|5 years 3 months|         26 years 3 months|
-    +---+----------------+--------------------------+
+    >>> df = spark.range(6).select(sf.make_interval(sf.col("id"), sf.lit(3)).alias("itvl"), "id")
+    >>> df.select("*", sf.try_multiply("itvl", "id")).show()
+    +----------------+---+----------------------+
+    |            itvl| id|try_multiply(itvl, id)|
+    +----------------+---+----------------------+
+    |        3 months|  0|             0 seconds|
+    |1 years 3 months|  1|      1 years 3 months|
+    |2 years 3 months|  2|      4 years 6 months|
+    |3 years 3 months|  3|      9 years 9 months|
+    |4 years 3 months|  4|              17 years|
+    |5 years 3 months|  5|     26 years 3 months|
+    +----------------+---+----------------------+
 
     Example 3: Overflow results in NULL when ANSI mode is on
 
@@ -880,25 +880,25 @@ def try_subtract(left: "ColumnOrName", right: "ColumnOrName") -> Column:
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
-    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, i)"
-    ... ).select("*", sf.try_subtract("date", "i")).show()
-    +----------+-----------------+---------------------+
-    |      date|                i|try_subtract(date, i)|
-    +----------+-----------------+---------------------+
-    |2015-09-30|INTERVAL '1' YEAR|           2014-09-30|
-    +----------+-----------------+---------------------+
+    ...     "SELECT * FROM VALUES (DATE('2015-09-30'), INTERVAL 1 YEAR) AS TAB(date, itvl)"
+    ... ).select("*", sf.try_subtract("date", "itvl")).show()
+    +----------+-----------------+------------------------+
+    |      date|             itvl|try_subtract(date, itvl)|
+    +----------+-----------------+------------------------+
+    |2015-09-30|INTERVAL '1' YEAR|              2014-09-30|
+    +----------+-----------------+------------------------+
 
     Example 4: Interval minus Interval.
 
     >>> import pyspark.sql.functions as sf
     >>> spark.sql(
-    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(i, j)"
-    ... ).select("*", sf.try_subtract("i", "j")).show()
-    +-----------------+-----------------+------------------+
-    |                i|                j|try_subtract(i, j)|
-    +-----------------+-----------------+------------------+
-    |INTERVAL '1' YEAR|INTERVAL '2' YEAR|INTERVAL '-1' YEAR|
-    +-----------------+-----------------+------------------+
+    ...     "SELECT * FROM VALUES (INTERVAL 1 YEAR, INTERVAL 2 YEAR) AS TAB(itvl1, itvl2)"
+    ... ).select("*", sf.try_subtract("itvl1", "itvl2")).show()
+    +-----------------+-----------------+--------------------------+
+    |            itvl1|            itvl2|try_subtract(itvl1, itvl2)|
+    +-----------------+-----------------+--------------------------+
+    |INTERVAL '1' YEAR|INTERVAL '2' YEAR|        INTERVAL '-1' YEAR|
+    +-----------------+-----------------+--------------------------+
 
     Example 5: Overflow results in NULL when ANSI mode is on
 
@@ -1854,15 +1854,15 @@ def product(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(1, 10).withColumn('mod3', sf.col('id') % 3)
-    >>> df.groupBy('mod3').agg(sf.product('id')).orderBy('mod3').show()
-    +----+-----------+
-    |mod3|product(id)|
-    +----+-----------+
-    |   0|      162.0|
-    |   1|       28.0|
-    |   2|       80.0|
-    +----+-----------+
+    >>> df = spark.sql("SELECT id % 3 AS mod3, id AS value FROM RANGE(10)")
+    >>> df.groupBy('mod3').agg(sf.product('value')).orderBy('mod3').show()
+    +----+--------------+
+    |mod3|product(value)|
+    +----+--------------+
+    |   0|           0.0|
+    |   1|          28.0|
+    |   2|          80.0|
+    +----+--------------+
     """
     return _invoke_function_over_columns("product", col)
 
