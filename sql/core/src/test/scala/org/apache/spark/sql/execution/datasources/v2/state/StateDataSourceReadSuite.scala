@@ -287,6 +287,44 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
         matchPVals = true)
     }
   }
+
+  test("ERROR: trying to specify state variable name along with " +
+    "readRegisteredTimers should fail") {
+    withTempDir { tempDir =>
+      val exc = intercept[StateDataSourceConflictOptions] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.STATE_VAR_NAME, "test")
+          .option(StateSourceOptions.READ_REGISTERED_TIMERS, true)
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_CONFLICT_OPTIONS", "42613",
+        Map("options" ->
+          s"['${
+            StateSourceOptions.READ_REGISTERED_TIMERS
+          }', '${StateSourceOptions.STATE_VAR_NAME}']"))
+    }
+  }
+
+  test("ERROR: trying to specify non boolean value for " +
+    "flattenCollectionTypes") {
+    withTempDir { tempDir =>
+      runDropDuplicatesQuery(tempDir.getAbsolutePath)
+
+      val exc = intercept[StateDataSourceInvalidOptionValue] {
+        spark.read.format("statestore")
+          // trick to bypass getting the last committed batch before validating operator ID
+          .option(StateSourceOptions.BATCH_ID, 0)
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, "test")
+          .load(tempDir.getAbsolutePath)
+      }
+      checkError(exc, "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE", Some("42616"),
+        Map("optionName" -> StateSourceOptions.FLATTEN_COLLECTION_TYPES,
+          "message" -> ".*"),
+        matchPVals = true)
+    }
+  }
 }
 
 /**
@@ -1099,7 +1137,7 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       val exc = intercept[StateStoreSnapshotPartitionNotFound] {
         stateDfError.show()
       }
-      assert(exc.getErrorClass === "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND")
+      assert(exc.getCondition === "CANNOT_LOAD_STATE_STORE.SNAPSHOT_PARTITION_ID_NOT_FOUND")
     }
   }
 

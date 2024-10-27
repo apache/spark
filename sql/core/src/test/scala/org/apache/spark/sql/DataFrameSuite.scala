@@ -29,7 +29,6 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.api.python.PythonSQLUtils.distributed_sequence_id
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -1117,7 +1116,7 @@ class DataFrameSuite extends QueryTest
           exception = intercept[org.apache.spark.sql.AnalysisException] {
             df(name)
           },
-          condition = "_LEGACY_ERROR_TEMP_1049",
+          condition = "INVALID_ATTRIBUTE_NAME_SYNTAX",
           parameters = Map("name" -> name))
       }
 
@@ -2318,7 +2317,7 @@ class DataFrameSuite extends QueryTest
 
   test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
     val ids = spark.range(10).repartition(5).select(
-      distributed_sequence_id().alias("default_index"), col("id"))
+      Column.internalFn("distributed_sequence_id").alias("default_index"), col("id"))
     assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)
     assert(ids.take(5).map(_.getLong(0)).toSet === Range(0, 5).toSet)
   }

@@ -258,18 +258,20 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   }
 
   test("malformed input to implicit cast") {
-    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
-    val call = "CALL cat.ns.sum('A', 2)"
-    checkError(
-      exception = intercept[SparkNumberFormatException](
-        sql(call)
-      ),
-      condition = "CAST_INVALID_INPUT",
-      parameters = Map(
-        "expression" -> toSQLValue("A"),
-        "sourceType" -> toSQLType("STRING"),
-        "targetType" -> toSQLType("INT")),
-      context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> true.toString) {
+      catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+      val call = "CALL cat.ns.sum('A', 2)"
+      checkError(
+        exception = intercept[SparkNumberFormatException](
+          sql(call)
+        ),
+        condition = "CAST_INVALID_INPUT",
+        parameters = Map(
+          "expression" -> toSQLValue("A"),
+          "sourceType" -> toSQLType("STRING"),
+          "targetType" -> toSQLType("INT")),
+        context = ExpectedContext(fragment = call, start = 0, stop = call.length - 1))
+    }
   }
 
   test("required parameters after optional") {

@@ -1273,7 +1273,7 @@ class DatasetSuite extends QueryTest
     // Just check the error class here to avoid flakiness due to different parameters.
     assert(intercept[SparkRuntimeException] {
       buildDataset(Row(Row("hello", null))).collect()
-    }.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+    }.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("SPARK-12478: top level null field") {
@@ -1416,7 +1416,7 @@ class DatasetSuite extends QueryTest
     val ex = intercept[SparkRuntimeException] {
       spark.createDataFrame(rdd, schema).collect()
     }
-    assert(ex.getErrorClass == "EXPRESSION_ENCODING_FAILED")
+    assert(ex.getCondition == "EXPRESSION_ENCODING_FAILED")
     assert(ex.getCause.getMessage.contains("The 1th field 'b' of input row cannot be null"))
   }
 
@@ -1612,7 +1612,7 @@ class DatasetSuite extends QueryTest
 
   test("Dataset should throw RuntimeException if top-level product input object is null") {
     val e = intercept[SparkRuntimeException](Seq(ClassData("a", 1), null).toDS())
-    assert(e.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+    assert(e.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("dropDuplicates") {
@@ -1847,6 +1847,26 @@ class DatasetSuite extends QueryTest
         checkAnswer(agg, ds.groupBy($"id" % 2).agg(count($"id")))
       }
     }
+  }
+
+  test("Dataset().localCheckpoint() lazy with StorageLevel") {
+    val df = spark.range(10).repartition($"id" % 2)
+    val checkpointedDf = df.localCheckpoint(eager = false, StorageLevel.DISK_ONLY)
+    val checkpointedPlan = checkpointedDf.queryExecution.analyzed
+    val rdd = checkpointedPlan.asInstanceOf[LogicalRDD].rdd
+    assert(rdd.getStorageLevel == StorageLevel.DISK_ONLY)
+    assert(!rdd.isCheckpointed)
+    checkpointedDf.collect()
+    assert(rdd.isCheckpointed)
+  }
+
+  test("Dataset().localCheckpoint() eager with StorageLevel") {
+    val df = spark.range(10).repartition($"id" % 2)
+    val checkpointedDf = df.localCheckpoint(eager = true, StorageLevel.DISK_ONLY)
+    val checkpointedPlan = checkpointedDf.queryExecution.analyzed
+    val rdd = checkpointedPlan.asInstanceOf[LogicalRDD].rdd
+    assert(rdd.isCheckpointed)
+    assert(rdd.getStorageLevel == StorageLevel.DISK_ONLY)
   }
 
   test("identity map for primitive arrays") {
@@ -2101,7 +2121,7 @@ class DatasetSuite extends QueryTest
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
     val exception = intercept[SparkRuntimeException](ds.as[(Int, Int)].collect())
-    assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+    assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {

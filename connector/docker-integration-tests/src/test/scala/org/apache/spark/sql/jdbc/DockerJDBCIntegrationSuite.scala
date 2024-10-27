@@ -115,7 +115,7 @@ abstract class DockerJDBCIntegrationSuite
   protected val startContainerTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
   protected val connectionTimeout: PatienceConfiguration.Timeout = {
-    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "5min")
+    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min")
     timeout(timeStringAsSeconds(timeoutStr).seconds)
   }
 

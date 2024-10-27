@@ -215,7 +215,7 @@ class HistogramPlotBase(NumericPlotBase):
 
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column):
-            index = SF.binary_search(F.lit(bins), value)
+            index = SF.array_binary_search(F.lit(bins), value)
             bucket = F.when(index >= 0, index).otherwise(-index - 2)
             unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (
@@ -479,7 +479,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
         "pie": TopNPlotBase().get_top_n,
         "bar": TopNPlotBase().get_top_n,
         "barh": TopNPlotBase().get_top_n,
-        "scatter": TopNPlotBase().get_top_n,
+        "scatter": SampledPlotBase().get_sampled,
         "area": SampledPlotBase().get_sampled,
         "line": SampledPlotBase().get_sampled,
     }
@@ -756,10 +756,10 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
         Parameters
         ----------
-        x : label or position, default DataFrame.index
-            Column to be used for categories.
-        y : label or position, default All numeric columns in dataframe
+        x : label or position, default All numeric columns in dataframe
             Columns to be plotted from the DataFrame.
+        y : label or position, default DataFrame.index
+            Column to be used for categories.
         **kwds
             Keyword arguments to pass on to
             :meth:`pyspark.pandas.DataFrame.plot` or :meth:`pyspark.pandas.Series.plot`.
@@ -769,6 +769,13 @@ class PandasOnSparkPlotAccessor(PandasObject):
         :class:`plotly.graph_objs.Figure`
             Return an custom object when ``backend!=plotly``.
             Return an ndarray when ``subplots=True`` (matplotlib-only).
+
+        Notes
+        -----
+        In Plotly and Matplotlib, the interpretation of `x` and `y` for `barh` plots differs.
+        In Plotly, `x` refers to the values and `y` refers to the categories.
+        In Matplotlib, `x` refers to the categories and `y` refers to the values.
+        Ensure correct axis labeling based on the backend used.
 
         See Also
         --------
@@ -850,14 +857,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
         Parameters
         ----------
-        **kwds : optional
-            Additional keyword arguments are documented in
+        **kwds : dict, optional
+            Extra arguments to `precision`: refer to a float that is used by
+            pandas-on-Spark to compute approximate statistics for building a
+            boxplot. The default value is 0.01. Use smaller values to get more
+            precise statistics. Additional keyword arguments are documented in
             :meth:`pyspark.pandas.Series.plot`.
-
-        precision: scalar, default = 0.01
-            This argument is used by pandas-on-Spark to compute approximate statistics
-            for building a boxplot. Use *smaller* values to get more precise
-            statistics (matplotlib-only).
 
         Returns
         -------

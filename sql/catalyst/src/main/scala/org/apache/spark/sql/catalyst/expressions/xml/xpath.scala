@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -42,7 +42,7 @@ abstract class XPathExtract
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeWithCollation, StringTypeWithCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!path.foldable) {
@@ -50,7 +50,7 @@ abstract class XPathExtract
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(StringTypeAnyCollation),
+          "inputType" -> toSQLType(StringTypeWithCollation),
           "inputExpr" -> toSQLExpr(path)
         )
       )

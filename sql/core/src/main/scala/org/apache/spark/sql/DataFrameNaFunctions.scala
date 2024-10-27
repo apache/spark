@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.types._
 
 /**
@@ -122,7 +121,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
         (attr.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType))) {
         replaceCol(attr, replacementMap)
       } else {
-        column(attr)
+        Column(attr)
       }
     }
     df.select(projections : _*)
@@ -131,7 +130,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
   protected def fillMap(values: Seq[(String, Any)]): DataFrame = {
     // Error handling
     val attrToValue = AttributeMap(values.map { case (colName, replaceValue) =>
-      // Check column name exists
+      // Check Column name exists
       val attr = df.resolve(colName) match {
         case a: Attribute => a
         case _ => throw QueryExecutionErrors.nestedFieldUnsupportedError(colName)
@@ -155,7 +154,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
         case v: jl.Integer => fillCol[Integer](attr, v)
         case v: jl.Boolean => fillCol[Boolean](attr, v.booleanValue())
         case v: String => fillCol[String](attr, v)
-      }.getOrElse(column(attr))
+      }.getOrElse(Column(attr))
     }
     df.select(projections : _*)
   }
@@ -165,7 +164,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
    * with `replacement`.
    */
   private def fillCol[T](attr: Attribute, replacement: T): Column = {
-    fillCol(attr.dataType, attr.name, column(attr), replacement)
+    fillCol(attr.dataType, attr.name, Column(attr), replacement)
   }
 
   /**
@@ -192,7 +191,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
     val branches = replacementMap.flatMap { case (source, target) =>
       Seq(Literal(source), buildExpr(target))
     }.toSeq
-    column(CaseKeyWhen(attr, branches :+ attr)).as(attr.name)
+    Column(CaseKeyWhen(attr, branches :+ attr)).as(attr.name)
   }
 
   private def convertToDouble(v: Any): Double = v match {
@@ -219,7 +218,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
     // Filtering condition:
     // only keep the row if it has at least `minNonNulls` non-null and non-NaN values.
     val predicate = AtLeastNNonNulls(minNonNulls.getOrElse(cols.size), cols)
-    df.filter(column(predicate))
+    df.filter(Column(predicate))
   }
 
   private[sql] def fillValue(value: Any, cols: Option[Seq[String]]): DataFrame = {
@@ -255,9 +254,9 @@ final class DataFrameNaFunctions private[sql](df: DataFrame)
       }
       // Only fill if the column is part of the cols list.
       if (typeMatches && cols.exists(_.semanticEquals(col))) {
-        fillCol(col.dataType, col.name, column(col), value)
+        fillCol(col.dataType, col.name, Column(col), value)
       } else {
-        column(col)
+        Column(col)
       }
     }
     df.select(projections : _*)

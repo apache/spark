@@ -71,6 +71,13 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluateWithMutableProjection(Uuid(seed2)))
     assert(evaluateWithUnsafeProjection(Uuid(seed1)) !==
       evaluateWithUnsafeProjection(Uuid(seed2)))
+
+    val seed3 = Literal.create(r.nextInt())
+    assert(evaluateWithoutCodegen(new Uuid(seed3)) === evaluateWithoutCodegen(new Uuid(seed3)))
+    assert(evaluateWithMutableProjection(new Uuid(seed3)) ===
+      evaluateWithMutableProjection(new Uuid(seed3)))
+    assert(evaluateWithUnsafeProjection(new Uuid(seed3)) ===
+      evaluateWithUnsafeProjection(new Uuid(seed3)))
   }
 
   test("PrintToStderr") {

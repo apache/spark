@@ -227,6 +227,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.canUseSession"),
 
       // SparkSession#implicits
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -265,6 +267,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.artifact.ArtifactManager"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactManager$SparkContextResourceType$"),
 
       // ColumnNode conversions
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -304,7 +308,13 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.DataFrameReader.validateJsonSchema"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.DataFrameReader.validateXmlSchema"))
+        "org.apache.spark.sql.DataFrameReader.validateXmlSchema"),
+
+      // Protected DataStreamReader methods...
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.DataStreamReader.validateJsonSchema"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.streaming.DataStreamReader.validateXmlSchema"))
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }

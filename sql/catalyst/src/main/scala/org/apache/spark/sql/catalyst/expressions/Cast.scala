@@ -150,6 +150,10 @@ object Cast extends QueryErrorsBase {
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
 
+    case (udt: UserDefinedType[_], toType) => canAnsiCast(udt.sqlType, toType)
+
+    case (fromType, udt: UserDefinedType[_]) => canAnsiCast(fromType, udt.sqlType)
+
     case _ => false
   }
 
@@ -266,6 +270,10 @@ object Cast extends QueryErrorsBase {
         }
 
     case (udt1: UserDefinedType[_], udt2: UserDefinedType[_]) if udt2.acceptsType(udt1) => true
+
+    case (udt: UserDefinedType[_], toType) => canCast(udt.sqlType, toType)
+
+    case (fromType, udt: UserDefinedType[_]) => canCast(fromType, udt.sqlType)
 
     case _ => false
   }
@@ -1123,33 +1131,42 @@ case class Cast(
         variant.VariantGet.cast(v, to, evalMode != EvalMode.TRY, timeZoneId, zoneId)
       })
     } else {
-      to match {
-        case dt if dt == from => identity[Any]
-        case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
-        case _: StringType => castToString(from)
-        case BinaryType => castToBinary(from)
-        case DateType => castToDate(from)
-        case decimal: DecimalType => castToDecimal(from, decimal)
-        case TimestampType => castToTimestamp(from)
-        case TimestampNTZType => castToTimestampNTZ(from)
-        case CalendarIntervalType => castToInterval(from)
-        case it: DayTimeIntervalType => castToDayTimeInterval(from, it)
-        case it: YearMonthIntervalType => castToYearMonthInterval(from, it)
-        case BooleanType => castToBoolean(from)
-        case ByteType => castToByte(from)
-        case ShortType => castToShort(from)
-        case IntegerType => castToInt(from)
-        case FloatType => castToFloat(from)
-        case LongType => castToLong(from)
-        case DoubleType => castToDouble(from)
-        case array: ArrayType =>
-          castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
-        case map: MapType => castMap(from.asInstanceOf[MapType], map)
-        case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
-        case udt: UserDefinedType[_] if udt.acceptsType(from) =>
-          identity[Any]
-        case _: UserDefinedType[_] =>
-          throw QueryExecutionErrors.cannotCastError(from, to)
+      from match {
+        // `castToString` has special handling for `UserDefinedType`
+        case udt: UserDefinedType[_] if !to.isInstanceOf[StringType] =>
+          castInternal(udt.sqlType, to)
+        case _ =>
+          to match {
+            case dt if dt == from => identity[Any]
+            case VariantType => input =>
+              variant.VariantExpressionEvalUtils.castToVariant(input, from)
+            case _: StringType => castToString(from)
+            case BinaryType => castToBinary(from)
+            case DateType => castToDate(from)
+            case decimal: DecimalType => castToDecimal(from, decimal)
+            case TimestampType => castToTimestamp(from)
+            case TimestampNTZType => castToTimestampNTZ(from)
+            case CalendarIntervalType => castToInterval(from)
+            case it: DayTimeIntervalType => castToDayTimeInterval(from, it)
+            case it: YearMonthIntervalType => castToYearMonthInterval(from, it)
+            case BooleanType => castToBoolean(from)
+            case ByteType => castToByte(from)
+            case ShortType => castToShort(from)
+            case IntegerType => castToInt(from)
+            case FloatType => castToFloat(from)
+            case LongType => castToLong(from)
+            case DoubleType => castToDouble(from)
+            case array: ArrayType =>
+              castArray(from.asInstanceOf[ArrayType].elementType, array.elementType)
+            case map: MapType => castMap(from.asInstanceOf[MapType], map)
+            case struct: StructType => castStruct(from.asInstanceOf[StructType], struct)
+            case udt: UserDefinedType[_] if udt.acceptsType(from) =>
+              identity[Any]
+            case udt: UserDefinedType[_] =>
+              castInternal(from, udt.sqlType)
+            case _ =>
+              throw QueryExecutionErrors.cannotCastError(from, to)
+          }
       }
     }
   }
@@ -1211,54 +1228,64 @@ case class Cast(
   private[this] def nullSafeCastFunction(
       from: DataType,
       to: DataType,
-      ctx: CodegenContext): CastFunction = to match {
+      ctx: CodegenContext): CastFunction = {
+    from match {
+      // `castToStringCode` has special handling for `UserDefinedType`
+      case udt: UserDefinedType[_] if !to.isInstanceOf[StringType] =>
+        nullSafeCastFunction(udt.sqlType, to, ctx)
+      case _ =>
+        to match {
 
-    case _ if from == NullType => (c, evPrim, evNull) => code"$evNull = true;"
-    case _ if to == from => (c, evPrim, evNull) => code"$evPrim = $c;"
-    case _ if from.isInstanceOf[VariantType] => (c, evPrim, evNull) =>
-      val tmp = ctx.freshVariable("tmp", classOf[Object])
-      val dataTypeArg = ctx.addReferenceObj("dataType", to)
-      val zoneStrArg = ctx.addReferenceObj("zoneStr", timeZoneId)
-      val zoneIdArg = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      val failOnError = evalMode != EvalMode.TRY
-      val cls = classOf[variant.VariantGet].getName
-      code"""
-        Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneStrArg, $zoneIdArg);
-        if ($tmp == null) {
-          $evNull = true;
-        } else {
-          $evPrim = (${CodeGenerator.boxedType(to)})$tmp;
+          case _ if from == NullType => (c, evPrim, evNull) => code"$evNull = true;"
+          case _ if to == from => (c, evPrim, evNull) => code"$evPrim = $c;"
+          case _ if from.isInstanceOf[VariantType] => (c, evPrim, evNull) =>
+            val tmp = ctx.freshVariable("tmp", classOf[Object])
+            val dataTypeArg = ctx.addReferenceObj("dataType", to)
+            val zoneStrArg = ctx.addReferenceObj("zoneStr", timeZoneId)
+            val zoneIdArg = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+            val failOnError = evalMode != EvalMode.TRY
+            val cls = classOf[variant.VariantGet].getName
+            code"""
+              Object $tmp = $cls.cast($c, $dataTypeArg, $failOnError, $zoneStrArg, $zoneIdArg);
+              if ($tmp == null) {
+                $evNull = true;
+              } else {
+                $evPrim = (${CodeGenerator.boxedType(to)})$tmp;
+              }
+            """
+          case VariantType =>
+            val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+            val fromArg = ctx.addReferenceObj("from", from)
+            (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
+          case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
+          case BinaryType => castToBinaryCode(from)
+          case DateType => castToDateCode(from, ctx)
+          case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
+          case TimestampType => castToTimestampCode(from, ctx)
+          case TimestampNTZType => castToTimestampNTZCode(from, ctx)
+          case CalendarIntervalType => castToIntervalCode(from)
+          case it: DayTimeIntervalType => castToDayTimeIntervalCode(from, it)
+          case it: YearMonthIntervalType => castToYearMonthIntervalCode(from, it)
+          case BooleanType => castToBooleanCode(from, ctx)
+          case ByteType => castToByteCode(from, ctx)
+          case ShortType => castToShortCode(from, ctx)
+          case IntegerType => castToIntCode(from, ctx)
+          case FloatType => castToFloatCode(from, ctx)
+          case LongType => castToLongCode(from, ctx)
+          case DoubleType => castToDoubleCode(from, ctx)
+
+          case array: ArrayType =>
+            castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
+          case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
+          case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
+          case udt: UserDefinedType[_] if udt.acceptsType(from) =>
+            (c, evPrim, evNull) => code"$evPrim = $c;"
+          case udt: UserDefinedType[_] =>
+            nullSafeCastFunction(from, udt.sqlType, ctx)
+          case _ =>
+            throw QueryExecutionErrors.cannotCastError(from, to)
         }
-      """
-    case VariantType =>
-      val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
-      val fromArg = ctx.addReferenceObj("from", from)
-      (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
-    case _: StringType => (c, evPrim, _) => castToStringCode(from, ctx).apply(c, evPrim)
-    case BinaryType => castToBinaryCode(from)
-    case DateType => castToDateCode(from, ctx)
-    case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
-    case TimestampType => castToTimestampCode(from, ctx)
-    case TimestampNTZType => castToTimestampNTZCode(from, ctx)
-    case CalendarIntervalType => castToIntervalCode(from)
-    case it: DayTimeIntervalType => castToDayTimeIntervalCode(from, it)
-    case it: YearMonthIntervalType => castToYearMonthIntervalCode(from, it)
-    case BooleanType => castToBooleanCode(from, ctx)
-    case ByteType => castToByteCode(from, ctx)
-    case ShortType => castToShortCode(from, ctx)
-    case IntegerType => castToIntCode(from, ctx)
-    case FloatType => castToFloatCode(from, ctx)
-    case LongType => castToLongCode(from, ctx)
-    case DoubleType => castToDoubleCode(from, ctx)
-
-    case array: ArrayType =>
-      castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
-    case map: MapType => castMapCode(from.asInstanceOf[MapType], map, ctx)
-    case struct: StructType => castStructCode(from.asInstanceOf[StructType], struct, ctx)
-    case udt: UserDefinedType[_] if udt.acceptsType(from) =>
-      (c, evPrim, evNull) => code"$evPrim = $c;"
-    case _: UserDefinedType[_] =>
-      throw QueryExecutionErrors.cannotCastError(from, to)
+    }
   }
 
   // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's

@@ -21,7 +21,6 @@ import unittest
 import os
 
 from pyspark.util import is_remote_only
-from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 from pyspark.testing.utils import SPARK_HOME
@@ -30,6 +29,7 @@ from pyspark.sql.functions import udf, assert_true, lit
 if should_test_connect:
     from pyspark.sql.connect.client.artifact import ArtifactManager
     from pyspark.sql.connect.client import DefaultChannelBuilder
+    from pyspark.errors.exceptions.connect import SparkConnectGrpcException
 
 
 class ArtifactTestsMixin:

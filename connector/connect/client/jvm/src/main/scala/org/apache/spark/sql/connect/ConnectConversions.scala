@@ -19,13 +19,15 @@ package org.apache.spark.sql.connect
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.connect.proto
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.ProtoColumnNode
 
 /**
  * Conversions from sql interfaces to the Connect specific implementation.
  *
- * This class is mainly used by the implementation. In the case of connect it should be extremely
- * rare that a developer needs these classes.
+ * This class is mainly used by the implementation. It is also meant to be used by extension
+ * developers.
  *
  * We provide both a trait and an object. The trait is useful in situations where an extension
  * developer needs to use these conversions in a project covering multiple Spark versions. They
@@ -46,6 +48,40 @@ trait ConnectConversions {
   implicit def castToImpl[K, V](
       kvds: api.KeyValueGroupedDataset[K, V]): KeyValueGroupedDataset[K, V] =
     kvds.asInstanceOf[KeyValueGroupedDataset[K, V]]
+
+  /**
+   * Create a [[Column]] from a [[proto.Expression]]
+   *
+   * This method is meant to be used by Connect plugins. We do not guarantee any compatibility
+   * between (minor) versions.
+   */
+  @DeveloperApi
+  def column(expr: proto.Expression): Column = {
+    Column(ProtoColumnNode(expr))
+  }
+
+  /**
+   * Create a [[Column]] using a function that manipulates an [[proto.Expression.Builder]].
+   *
+   * This method is meant to be used by Connect plugins. We do not guarantee any compatibility
+   * between (minor) versions.
+   */
+  @DeveloperApi
+  def column(f: proto.Expression.Builder => Unit): Column = {
+    val builder = proto.Expression.newBuilder()
+    f(builder)
+    column(builder.build())
+  }
+
+  /**
+   * Implicit helper that makes it easy to construct a Column from an Expression or an Expression
+   * builder. This allows developers to create a Column in the same way as in earlier versions of
+   * Spark (before 4.0).
+   */
+  @DeveloperApi
+  implicit class ColumnConstructorExt(val c: Column.type) {
+    def apply(e: proto.Expression): Column = column(e)
+  }
 }
 
 object ConnectConversions extends ConnectConversions

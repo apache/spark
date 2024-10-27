@@ -49,6 +49,13 @@ select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), (
 select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate utf8_lcase from values ('aaa'), ('bbb');
 select col1 collate utf8_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate utf8_lcase from values ('aaa'), ('bbb');
 
+-- set operations with conflicting collations
+select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate unicode_ci from values ('aaa'), ('bbb');
+select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate unicode_ci from values ('aaa'), ('bbb');
+select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union select col1 collate unicode_ci from values ('aaa'), ('bbb');
+select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate unicode_ci from values ('aaa'), ('bbb');
+select col1 collate utf8_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate unicode_ci from values ('aaa'), ('bbb');
+
 -- create table with struct field
 create table t1 (c1 struct<utf8_binary: string collate utf8_binary, utf8_lcase: string collate utf8_lcase>) USING PARQUET;
 
@@ -99,6 +106,7 @@ insert into t4 values('a:1,b:2,c:3', ',', ':');
 select str_to_map(text, pairDelim, keyValueDelim) from t4;
 select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyValueDelim collate utf8_binary) from t4;
 select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4;
+select str_to_map(text collate unicode_ai, pairDelim collate unicode_ai, keyValueDelim collate unicode_ai) from t4;
 
 drop table t4;
 
@@ -109,6 +117,8 @@ insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaaAaA');
 insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaaAaAaaAaaAaAaaAaaAaA');
 insert into t5 values ('bbAbaAbA', 'bbAbAAbA', 'a');
 insert into t5 values ('İo', 'İo', 'İo');
+insert into t5 values ('İo', 'İo', 'İo ');
+insert into t5 values ('İo', 'İo ', 'İo');
 insert into t5 values ('İo', 'İo', 'i̇o');
 insert into t5 values ('efd2', 'efd2', 'efd2');
 insert into t5 values ('Hello, world! Nice day.', 'Hello, world! Nice day.', 'Hello, world! Nice day.');
@@ -159,8 +169,10 @@ select split_part(s, utf8_binary, 1) from t5;
 select split_part(utf8_binary collate utf8_binary, s collate utf8_lcase, 1) from t5;
 select split_part(utf8_binary, utf8_lcase collate utf8_binary, 2) from t5;
 select split_part(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 2) from t5;
+select split_part(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 2) from t5;
 select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t5;
 select split_part(utf8_binary, 'a' collate utf8_lcase, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t5;
+select split_part(utf8_binary, 'a ' collate utf8_lcase_rtrim, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t5;
 
 -- Contains
 select contains(utf8_binary, utf8_lcase) from t5;
@@ -168,8 +180,10 @@ select contains(s, utf8_binary) from t5;
 select contains(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select contains(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select contains(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
+select contains(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
 select contains(utf8_binary, 'a'), contains(utf8_lcase, 'a') from t5;
 select contains(utf8_binary, 'AaAA' collate utf8_lcase), contains(utf8_lcase, 'AAa' collate utf8_binary) from t5;
+select contains(utf8_binary, 'AaAA ' collate utf8_lcase_rtrim), contains(utf8_lcase, 'AAa ' collate utf8_binary_rtrim) from t5;
 
 -- SubstringIndex
 select substring_index(utf8_binary, utf8_lcase, 2) from t5;
@@ -177,8 +191,10 @@ select substring_index(s, utf8_binary,1) from t5;
 select substring_index(utf8_binary collate utf8_binary, s collate utf8_lcase, 3) from t5;
 select substring_index(utf8_binary, utf8_lcase collate utf8_binary, 2) from t5;
 select substring_index(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 2) from t5;
+select substring_index(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 2) from t5;
 select substring_index(utf8_binary, 'a', 2), substring_index(utf8_lcase, 'a', 2) from t5;
 select substring_index(utf8_binary, 'AaAA' collate utf8_lcase, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5;
+select substring_index(utf8_binary, 'AaAA ' collate utf8_lcase_rtrim, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5;
 
 -- StringInStr
 select instr(utf8_binary, utf8_lcase) from t5;
@@ -186,6 +202,7 @@ select instr(s, utf8_binary) from t5;
 select instr(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select instr(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select instr(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
+select instr(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
 select instr(utf8_binary, 'a'), instr(utf8_lcase, 'a') from t5;
 select instr(utf8_binary, 'AaAA' collate utf8_lcase), instr(utf8_lcase, 'AAa' collate utf8_binary) from t5;
 
@@ -197,23 +214,27 @@ select find_in_set(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select find_in_set(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
 select find_in_set(utf8_binary, 'aaAaaAaA,i̇o'), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o') from t5;
 select find_in_set(utf8_binary, 'aaAaaAaA,i̇o' collate utf8_lcase), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate utf8_binary) from t5;
-
+select find_in_set(utf8_binary, 'aaAaaAaA,i̇o ' collate utf8_lcase_rtrim), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate utf8_binary) from t5;
 -- StartsWith
 select startswith(utf8_binary, utf8_lcase) from t5;
 select startswith(s, utf8_binary) from t5;
 select startswith(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select startswith(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select startswith(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
+select startswith(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
 select startswith(utf8_binary, 'aaAaaAaA'), startswith(utf8_lcase, 'aaAaaAaA') from t5;
 select startswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), startswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5;
+select startswith(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim), startswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5;
 
 -- StringTranslate
 select translate(utf8_lcase, utf8_lcase, '12345') from t5;
 select translate(utf8_binary, utf8_lcase, '12345') from t5;
 select translate(utf8_binary, 'aBc' collate utf8_lcase, '12345' collate utf8_binary) from t5;
 select translate(utf8_binary, 'SQL' collate utf8_lcase, '12345' collate utf8_lcase) from t5;
+select translate(utf8_binary, 'SQL' collate unicode_ai, '12345' collate unicode_ai) from t5;
 select translate(utf8_lcase, 'aaAaaAaA', '12345'), translate(utf8_binary, 'aaAaaAaA', '12345') from t5;
 select translate(utf8_lcase, 'aBc' collate utf8_binary, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5;
+select translate(utf8_lcase, 'aBc ' collate utf8_binary_rtrim, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5;
 
 -- Replace
 select replace(utf8_binary, utf8_lcase, 'abc') from t5;
@@ -221,8 +242,10 @@ select replace(s, utf8_binary, 'abc') from t5;
 select replace(utf8_binary collate utf8_binary, s collate utf8_lcase, 'abc') from t5;
 select replace(utf8_binary, utf8_lcase collate utf8_binary, 'abc') from t5;
 select replace(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 'abc') from t5;
+select replace(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 'abc') from t5;
 select replace(utf8_binary, 'aaAaaAaA', 'abc'), replace(utf8_lcase, 'aaAaaAaA', 'abc') from t5;
 select replace(utf8_binary, 'aaAaaAaA' collate utf8_lcase, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5;
+select replace(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5;
 
 -- EndsWith
 select endswith(utf8_binary, utf8_lcase) from t5;
@@ -230,8 +253,10 @@ select endswith(s, utf8_binary) from t5;
 select endswith(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select endswith(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select endswith(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
+select endswith(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
 select endswith(utf8_binary, 'aaAaaAaA'), endswith(utf8_lcase, 'aaAaaAaA') from t5;
 select endswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), endswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5;
+select endswith(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim), endswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5;
 
 -- StringRepeat
 select repeat(utf8_binary, 3), repeat(utf8_lcase, 2) from t5;
@@ -346,6 +371,7 @@ select rpad(s, 8, utf8_binary) from t5;
 select rpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t5;
 select rpad(utf8_binary, 8, utf8_lcase collate utf8_binary) from t5;
 select rpad(utf8_binary collate utf8_lcase, 8, utf8_lcase collate utf8_lcase) from t5;
+select lpad(utf8_binary collate utf8_binary_rtrim, 8, utf8_lcase collate utf8_binary_rtrim) from t5;
 select rpad(utf8_binary, 8, 'a'), rpad(utf8_lcase, 8, 'a') from t5;
 select rpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), rpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t5;
 
@@ -355,6 +381,7 @@ select lpad(s, 8, utf8_binary) from t5;
 select lpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t5;
 select lpad(utf8_binary, 8, utf8_lcase collate utf8_binary) from t5;
 select lpad(utf8_binary collate utf8_lcase, 8, utf8_lcase collate utf8_lcase) from t5;
+select lpad(utf8_binary collate utf8_binary_rtrim, 8, utf8_lcase collate utf8_binary_rtrim) from t5;
 select lpad(utf8_binary, 8, 'a'), lpad(utf8_lcase, 8, 'a') from t5;
 select lpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), lpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t5;
 
@@ -364,8 +391,10 @@ select locate(s, utf8_binary) from t5;
 select locate(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select locate(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select locate(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, 3) from t5;
+select locate(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 3) from t5;
 select locate(utf8_binary, 'a'), locate(utf8_lcase, 'a') from t5;
 select locate(utf8_binary, 'AaAA' collate utf8_lcase, 4), locate(utf8_lcase, 'AAa' collate utf8_binary, 4) from t5;
+select locate(utf8_binary, 'AaAA ' collate utf8_binary_rtrim, 4), locate(utf8_lcase, 'AAa ' collate utf8_binary, 4) from t5;
 
 -- StringTrim
 select TRIM(utf8_binary, utf8_lcase) from t5;
@@ -373,6 +402,8 @@ select TRIM(s, utf8_binary) from t5;
 select TRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select TRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select TRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
+select TRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
+select TRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5;
 select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5;
 select TRIM('ABc' collate utf8_lcase, utf8_binary), TRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
 -- StringTrimBoth
@@ -381,6 +412,8 @@ select BTRIM(s, utf8_binary) from t5;
 select BTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select BTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select BTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
+select BTRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
+select BTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5;
 select BTRIM('ABc', utf8_binary), BTRIM('ABc', utf8_lcase) from t5;
 select BTRIM('ABc' collate utf8_lcase, utf8_binary), BTRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
 -- StringTrimLeft
@@ -389,6 +422,8 @@ select LTRIM(s, utf8_binary) from t5;
 select LTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select LTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select LTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
+select LTRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
+select LTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5;
 select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t5;
 select LTRIM('ABc' collate utf8_lcase, utf8_binary), LTRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
 -- StringTrimRight
@@ -397,6 +432,8 @@ select RTRIM(s, utf8_binary) from t5;
 select RTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5;
 select RTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5;
 select RTRIM(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from t5;
+select RTRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t5;
+select RTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5;
 select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t5;
 select RTRIM('ABc' collate utf8_lcase, utf8_binary), RTRIM('AAa' collate utf8_binary, utf8_lcase) from t5;
 

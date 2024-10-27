@@ -173,14 +173,9 @@ object PartitioningUtils extends SQLConfHelper {
       //   "hdfs://host:9000/path"
       // TODO: Selective case sensitivity.
       val discoveredBasePaths = optDiscoveredBasePaths.flatten.map(_.toString.toLowerCase())
-      assert(
-        ignoreInvalidPartitionPaths || discoveredBasePaths.distinct.size == 1,
-        "Conflicting directory structures detected. Suspicious paths:\b" +
-          discoveredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
-          "If provided paths are partition directories, please set " +
-          "\"basePath\" in the options of the data source to specify the " +
-          "root directory of the table. If there are multiple root directories, " +
-          "please load them separately and then union them.")
+      if (!ignoreInvalidPartitionPaths && discoveredBasePaths.distinct.size != 1) {
+        throw QueryExecutionErrors.conflictingDirectoryStructuresError(discoveredBasePaths)
+      }
 
       val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues, caseSensitive)
 

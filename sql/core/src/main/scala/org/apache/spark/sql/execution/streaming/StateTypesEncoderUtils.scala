@@ -288,6 +288,9 @@ class TimerKeyEncoder(keyExprEnc: ExpressionEncoder[Any]) {
     .add("key", new StructType(keyExprEnc.schema.fields))
     .add("expiryTimestampMs", LongType, nullable = false)
 
+  val schemaForValueRow: StructType =
+    StructType(Array(StructField("__dummy__", NullType)))
+
   private val keySerializer = keyExprEnc.createSerializer()
   private val keyDeserializer = keyExprEnc.resolveAndBind().createDeserializer()
   private val prefixKeyProjection = UnsafeProjection.create(schemaForPrefixKey)

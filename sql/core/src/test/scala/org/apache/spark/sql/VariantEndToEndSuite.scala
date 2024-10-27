@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql
 
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.QueryTest.sameRows
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -28,6 +29,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.types.variant.VariantBuilder
+import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.VariantVal
 
 class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
@@ -37,8 +39,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     def check(input: String, output: String = null): Unit = {
       val df = Seq(input).toDF("v")
       val variantDF = df.select(to_json(parse_json(col("v"))))
+      val variantDF2 = df.select(to_json(from_json(col("v"), VariantType)))
       val expected = if (output != null) output else input
       checkAnswer(variantDF, Seq(Row(expected)))
+      checkAnswer(variantDF2, Seq(Row(expected)))
     }
 
     check("null")
@@ -336,6 +340,106 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
           val plan = df.queryExecution.executedPlan
           assert(plan.isInstanceOf[WholeStageCodegenExec] == (codegenMode == "CODEGEN_ONLY"))
         }
+      }
+    }
+  }
+
+  test("from_json(_, 'variant') with duplicate keys") {
+    val json: String = """{"a": 1, "b": 2, "c": "3", "a": 4}"""
+    withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "true") {
+      val df = Seq(json).toDF("j")
+        .selectExpr("from_json(j,'variant')")
+      val actual = df.collect().head(0).asInstanceOf[VariantVal]
+      val expectedValue: Array[Byte] = Array(objectHeader(false, 1, 1),
+        /* size */ 3,
+        /* id list */ 0, 1, 2,
+        /* offset list */ 4, 0, 2, 6,
+        /* field data */ primitiveHeader(INT1), 2, shortStrHeader(1), '3',
+        primitiveHeader(INT1), 4)
+      val expectedMetadata: Array[Byte] = Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c')
+      assert(actual === new VariantVal(expectedValue, expectedMetadata))
+    }
+    // Check whether the parse_json and from_json expressions throw the correct exception.
+    Seq("from_json(j, 'variant')", "parse_json(j)").foreach { expr =>
+      withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
+        val df = Seq(json).toDF("j").selectExpr(expr)
+        val exception = intercept[SparkException] {
+          df.collect()
+        }
+        checkError(
+          exception = exception,
+          condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+          parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
+        )
+        checkError(
+          exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+          condition = "VARIANT_DUPLICATE_KEY",
+          parameters = Map("key" -> "a")
+        )
+      }
+    }
+  }
+
+  test("SPARK-49985: Disable support for interval types in the variant spec") {
+    // Top level intervals
+    assert(intercept[AnalysisException] {
+      sql("select interval '1' month::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select interval '1' day::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // struct<interval>
+    assert(intercept[AnalysisException] {
+      sql("select named_struct('i', interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select named_struct('i', interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // struct<struct<interval>>
+    assert(intercept[AnalysisException] {
+      sql("select struct(named_struct('i', interval '1' month))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select struct(named_struct('i', interval '1' day))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // array<interval>
+    assert(intercept[AnalysisException] {
+      sql("select array(interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select array(interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // map<string, interval>
+    assert(intercept[AnalysisException] {
+      sql("select map('i', interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select map('i', interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // map<string, struct<interval>>
+    assert(intercept[AnalysisException] {
+      sql("select map('i', struct(interval '1' month))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select map('i', struct(interval '1' day))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    val tableName = "_v"
+    withTable(tableName) {
+      sql(s"create table $tableName (" +
+        s"i1 interval month," +
+        s"i2 interval day," +
+        s"i3 struct<i interval month>," +
+        s"i4 struct<i interval day>," +
+        s"i5 array<interval month>," +
+        s"i6 array<interval day>," +
+        s"i7 map<string, interval month>," +
+        s"i8 map<string, interval day>," +
+        s"i9 struct<i struct<i map<string, array<interval month>>>>," +
+        s"i10 struct<i struct<i map<string, array<interval day>>>>)")
+      (1 to 10).foreach { i =>
+        assert(intercept[AnalysisException] {
+          sql(s"select i$i::variant from $tableName")
+        }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
       }
     }
   }

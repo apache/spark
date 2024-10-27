@@ -48,7 +48,7 @@ import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
-import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteStatus, SessionStatus, SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationStarted}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteKey, ExecuteStatus, SessionStatus, SparkConnectAnalyzeHandler, SparkConnectService, SparkListenerConnectOperationStarted}
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.test.SharedSparkSession
@@ -926,7 +926,9 @@ class SparkConnectServiceSuite
           semaphoreStarted.release()
           val sessionHolder =
             SparkConnectService.getOrCreateIsolatedSession(e.userId, e.sessionId, None)
-          executeHolder = sessionHolder.executeHolder(e.operationId)
+          val executeKey =
+            ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, e.operationId)
+          executeHolder = SparkConnectService.executionManager.getExecuteHolder(executeKey)
         case _ =>
       }
     }

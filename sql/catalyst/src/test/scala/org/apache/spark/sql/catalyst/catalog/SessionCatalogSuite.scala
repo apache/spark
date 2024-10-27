@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{AliasIdentifier, FullQualifiedTableName, FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1883,7 +1883,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     conf.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
 
     withConfAndEmptyCatalog(conf) { catalog =>
-      val table = FullQualifiedTableName(
+      val table = QualifiedTableName(
         CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, "test")
 
       // First, make sure the test table is not cached.
@@ -1903,14 +1903,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   test("SPARK-34197: refreshTable should not invalidate the relation cache for temporary views") {
     withBasicCatalog { catalog =>
       createTempView(catalog, "tbl1", Range(1, 10, 1, 10), false)
-      val qualifiedName1 = FullQualifiedTableName(SESSION_CATALOG_NAME, "default", "tbl1")
+      val qualifiedName1 = QualifiedTableName(SESSION_CATALOG_NAME, "default", "tbl1")
       catalog.cacheTable(qualifiedName1, Range(1, 10, 1, 10))
       catalog.refreshTable(TableIdentifier("tbl1"))
       assert(catalog.getCachedTable(qualifiedName1) != null)
 
       createGlobalTempView(catalog, "tbl2", Range(2, 10, 1, 10), false)
       val qualifiedName2 =
-        FullQualifiedTableName(SESSION_CATALOG_NAME, catalog.globalTempDatabase, "tbl2")
+        QualifiedTableName(SESSION_CATALOG_NAME, catalog.globalTempDatabase, "tbl2")
       catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))
       catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempDatabase)))
       assert(catalog.getCachedTable(qualifiedName2) != null)

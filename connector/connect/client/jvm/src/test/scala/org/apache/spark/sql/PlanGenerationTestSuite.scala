@@ -37,6 +37,7 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -2688,6 +2689,14 @@ class PlanGenerationTestSuite
 
   functionTest("parse_url with key") {
     fn.parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url with key") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
   }
 
   functionTest("printf") {

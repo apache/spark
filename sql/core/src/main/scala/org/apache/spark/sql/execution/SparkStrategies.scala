@@ -269,8 +269,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
+        def canMerge(joinType: JoinType): Boolean = joinType match {
+          case LeftSingle => false
+          case _ => true
+        }
+
         def createSortMergeJoin() = {
-          if (RowOrdering.isOrderable(leftKeys)) {
+          if (canMerge(joinType) && RowOrdering.isOrderable(leftKeys)) {
             Some(Seq(joins.SortMergeJoinExec(
               leftKeys, rightKeys, joinType, nonEquiCond, planLater(left), planLater(right))))
           } else {
@@ -297,7 +302,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               // Build the smaller side unless the join requires a particular build side
               // (e.g. NO_BROADCAST_AND_REPLICATION hint)
-              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint)
+              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint, joinType)
               val buildSide = requiredBuildSide.getOrElse(getSmallerSide(left, right))
               Seq(joins.BroadcastNestedLoopJoinExec(
                 planLater(left), planLater(right), buildSide, joinType, j.condition))
@@ -390,7 +395,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               // This join could be very slow or OOM
               // Build the desired side unless the join requires a particular build side
               // (e.g. NO_BROADCAST_AND_REPLICATION hint)
-              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint)
+              val requiredBuildSide = getBroadcastNestedLoopJoinBuildSide(hint, joinType)
               val buildSide = requiredBuildSide.getOrElse(desiredBuildSide)
               Seq(joins.BroadcastNestedLoopJoinExec(
                 planLater(left), planLater(right), buildSide, joinType, condition))
@@ -420,8 +425,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
-      case EventTimeWatermark(columnName, delay, child) =>
-        EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
+      case EventTimeWatermark(nodeId, columnName, delay, child) =>
+        EventTimeWatermarkExec(nodeId, columnName, delay, planLater(child)) :: Nil
 
       case UpdateEventTimeWatermarkColumn(columnName, delay, child) =>
         // we expect watermarkDelay to be resolved before physical planning.

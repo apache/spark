@@ -56,8 +56,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.clear()
@@ -84,8 +83,7 @@ class RunningCountStatefulProcessorWithTTL
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.clear()
@@ -114,8 +112,7 @@ class RunningCountListStatefulProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     Iterator.empty
   }
 }
@@ -133,8 +130,7 @@ class RunningCountStatefulProcessorInt
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0) + 1
     if (count == 3) {
       _countState.clear()
@@ -148,37 +144,33 @@ class RunningCountStatefulProcessorInt
 
 // Class to verify stateful processor usage with adding processing time timers
 class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefulProcessor {
-  private def handleProcessingTimeBasedTimers(
-      key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _countState.clear()
-    Iterator((key, "-1"))
-  }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    if (currCount == 0 && (key == "a" || key == "c")) {
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
+        + 5000)
+    }
+
+    val count = currCount + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      if (currCount == 0 && (key == "a" || key == "c")) {
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
-          + 5000)
-      }
-
-      val count = currCount + 1
-      if (count == 3) {
-        _countState.clear()
-        Iterator.empty
-      } else {
-        _countState.update(count)
-        Iterator((key, count.toString))
-      }
-    }
+    _countState.clear()
+    Iterator((key, "-1"))
   }
 }
 
@@ -192,13 +184,6 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
       timeMode: TimeMode) : Unit = {
     super.init(outputMode, timeMode)
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
-  }
-
-  private def handleProcessingTimeBasedTimers(
-      key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _timerState.clear()
-    Iterator((key, "-1"))
   }
 
   protected def processUnexpiredRows(
@@ -225,50 +210,50 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    val count = currCount + inputRows.size
+    processUnexpiredRows(key, currCount, count, timerValues)
+    Iterator((key, count.toString))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      val count = currCount + inputRows.size
-      processUnexpiredRows(key, currCount, count, timerValues)
-      Iterator((key, count.toString))
-    }
+    _timerState.clear()
+    Iterator((key, "-1"))
   }
 }
 
 class RunningCountStatefulProcessorWithMultipleTimers
   extends RunningCountStatefulProcessor {
-  private def handleProcessingTimeBasedTimers(
+
+  override def handleInputRows(
       key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    val count = currCount + inputRows.size
+    _countState.update(count)
+    if (getHandle.listTimers().isEmpty) {
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 15000)
+      assert(getHandle.listTimers().size == 3)
+    }
+    Iterator.empty
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val currCount = _countState.getOption().getOrElse(0L)
     if (getHandle.listTimers().size == 1) {
       _countState.clear()
     }
     Iterator((key, currCount.toString))
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      val count = currCount + inputRows.size
-      _countState.update(count)
-      if (getHandle.listTimers().isEmpty) {
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 15000)
-        assert(getHandle.listTimers().size == 3)
-      }
-      Iterator.empty
-    }
   }
 }
 
@@ -302,18 +287,20 @@ class MaxEventTimeStatefulProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues): Iterator[(String, Int)] = {
+    val valuesSeq = inputRows.toSeq
+    val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
+      _maxEventTimeState.getOption().getOrElse(0L))
+    processUnexpiredRows(maxEventTimeSec)
+    Iterator((key, maxEventTimeSec.toInt))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
-    if (expiredTimerInfo.isValid()) {
-      _maxEventTimeState.clear()
-      Iterator((key, -1))
-    } else {
-      val valuesSeq = inputRows.toSeq
-      val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
-        _maxEventTimeState.getOption().getOrElse(0L))
-      processUnexpiredRows(maxEventTimeSec)
-      Iterator((key, maxEventTimeSec.toInt))
-    }
+    _maxEventTimeState.clear()
+    Iterator((key, -1))
   }
 }
 
@@ -333,8 +320,7 @@ class RunningCountMostRecentStatefulProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
@@ -363,8 +349,7 @@ class MostRecentStatefulProcessorWithDeletion
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
     var output = List[(String, String)]()
@@ -383,8 +368,7 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
     _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong)
     Iterator.empty
@@ -452,34 +436,35 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       override def handleInputRows(
           key: Long,
           inputRows: Iterator[Long],
-          timerValues: TimerValues,
-          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
+          timerValues: TimerValues): Iterator[Long] = {
         // Eagerly get/set a state variable
         _myValueState.get()
         _myValueState.update(1)
 
         // Create a timer (but only once) so that we can test timers have their implicit key set
         if (!hasSetTimer) {
-            getHandle.registerTimer(0)
-            hasSetTimer = true
+          getHandle.registerTimer(0)
+          hasSetTimer = true
         }
 
         // In both of these cases, we return a lazy iterator that gets/sets state variables.
         // This is to test that the stateful processor can handle lazy iterators.
-        //
+        inputRows.map { r =>
+          _myValueState.get()
+          _myValueState.update(r)
+          r
+        }
+      }
+
+      override def handleExpiredTimer(
+          key: Long,
+          timerValues: TimerValues,
+          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
         // The timer uses a Seq(42L) since when the timer fires, inputRows is empty.
-        if (expiredTimerInfo.isValid()) {
-          Seq(42L).iterator.map { r =>
-            _myValueState.get()
-            _myValueState.update(r)
-            r
-          }
-        } else {
-          inputRows.map { r =>
-            _myValueState.get()
-            _myValueState.update(r)
-            r
-          }
+        Seq(42L).iterator.map { r =>
+          _myValueState.get()
+          _myValueState.update(r)
+          r
         }
       }
     }
@@ -528,6 +513,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
         AddData(inputData, "a", "b"),
         CheckNewAnswer(("a", "2"), ("b", "1")),
@@ -536,6 +522,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
         CheckNewAnswer(("b", "2")),
         StopStream,
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        },
         StartStream(),
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
@@ -1623,7 +1613,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val batch1AnsDf = batch1Df.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value AS valueId")
+          "value.value AS valueId")
 
         checkAnswer(batch1AnsDf, Seq(Row("a", 2L)))
 
@@ -1636,7 +1626,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val batch3AnsDf = batch3Df.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value AS valueId")
+          "value.value AS valueId")
         checkAnswer(batch3AnsDf, Seq(Row("a", 1L)))
       }
     }
@@ -1731,7 +1721,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val countStateAnsDf = countStateDf.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value AS valueId")
+          "value.value AS valueId")
         checkAnswer(countStateAnsDf, Seq(Row("a", 5L)))
 
         val mostRecentDf = spark.read
@@ -1743,7 +1733,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
 
         val mostRecentAnsDf = mostRecentDf.selectExpr(
           "key.value AS groupingKey",
-          "single_value.value")
+          "value.value")
         checkAnswer(mostRecentAnsDf, Seq(Row("a", "str1")))
       }
     }

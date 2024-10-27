@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
@@ -104,8 +106,8 @@ private[connect] class ExecuteHolder(
       : mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]] =
     new mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]]()
 
-  /** For testing. Whether the async completion callback is called. */
-  @volatile private[connect] var completionCallbackCalled: Boolean = false
+  /** Indicates whether the cleanup method was called. */
+  private[connect] val completionCallbackCalled: AtomicBoolean = new AtomicBoolean(false)
 
   /**
    * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
@@ -227,16 +229,7 @@ private[connect] class ExecuteHolder(
   def close(): Unit = synchronized {
     if (closedTimeMs.isEmpty) {
       // interrupt execution, if still running.
-      runner.interrupt()
-      // Do not wait for the execution to finish, clean up resources immediately.
-      runner.processOnCompletion { _ =>
-        completionCallbackCalled = true
-        // The execution may not immediately get interrupted, clean up any remaining resources when
-        // it does.
-        responseObserver.removeAll()
-        // post closed to UI
-        eventsManager.postClosed()
-      }
+      val interrupted = runner.interrupt()
       // interrupt any attached grpcResponseSenders
       grpcResponseSenders.foreach(_.interrupt())
       // if there were still any grpcResponseSenders, register detach time
@@ -244,9 +237,23 @@ private[connect] class ExecuteHolder(
         lastAttachedRpcTimeMs = Some(System.currentTimeMillis())
         grpcResponseSenders.clear()
       }
-      // remove all cached responses from observer
-      responseObserver.removeAll()
+      if (!interrupted) {
+        cleanup()
+      }
       closedTimeMs = Some(System.currentTimeMillis())
+    }
+  }
+
+  /**
+   * A piece of code that is called only once when this execute holder is closed or the
+   * interrupted execution thread is terminated.
+   */
+  private[connect] def cleanup(): Unit = {
+    if (completionCallbackCalled.compareAndSet(false, true)) {
+      // Remove all cached responses from the observer.
+      responseObserver.removeAll()
+      // Post "closed" to UI.
+      eventsManager.postClosed()
     }
   }
 

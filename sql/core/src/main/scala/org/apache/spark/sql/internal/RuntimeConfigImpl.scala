@@ -21,7 +21,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.annotation.Stable
-import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.internal.config.{ConfigEntry, DEFAULT_PARALLELISM}
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
@@ -42,7 +42,7 @@ class RuntimeConfigImpl private[sql](val sqlConf: SQLConf = new SQLConf) extends
   }
 
   /** @inheritdoc */
-  @throws[NoSuchElementException]("if the key is not set")
+  @throws[NoSuchElementException]("if the key is not set and there is no default value")
   def get(key: String): String = {
     sqlConf.getConfString(key)
   }
@@ -84,7 +84,16 @@ class RuntimeConfigImpl private[sql](val sqlConf: SQLConf = new SQLConf) extends
     sqlConf.contains(key)
   }
 
-  private def requireNonStaticConf(key: String): Unit = {
+  private[sql] def requireNonStaticConf(key: String): Unit = {
+    // We documented `spark.default.parallelism` by SPARK-48773, however this config
+    // is actually a static config so now a spark.conf.set("spark.default.parallelism")
+    // will fail. Before SPARK-48773 it does not, then this becomes a behavior change.
+    // Technically the current behavior is correct, however it still forms a behavior change.
+    // To address the change, we need a check here and do not fail on default parallelism
+    // setting through spark session conf to maintain the same behavior.
+    if (key == DEFAULT_PARALLELISM.key) {
+      return
+    }
     if (SQLConf.isStaticConfigKey(key)) {
       throw QueryCompilationErrors.cannotModifyValueOfStaticConfigError(key)
     }

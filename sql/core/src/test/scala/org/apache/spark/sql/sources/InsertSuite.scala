@@ -956,7 +956,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       val msg = intercept[SparkRuntimeException] {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
       }
-      assert(msg.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+      assert(msg.getCondition == "NOT_NULL_ASSERT_VIOLATION")
     }
   }
 

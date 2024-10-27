@@ -22,7 +22,9 @@ import scala.reflect.runtime.universe.TypeTag
 import _root_.java.util
 
 import org.apache.spark.annotation.{DeveloperApi, Stable}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
 import org.apache.spark.sql.types.{Metadata, StructType}
@@ -312,7 +314,8 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.1.0
    */
-  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
+  def checkpoint(): Dataset[T] =
+    checkpoint(eager = true, reliableCheckpoint = true, storageLevel = None)
 
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
@@ -332,7 +335,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.1.0
    */
   def checkpoint(eager: Boolean): Dataset[T] =
-    checkpoint(eager = eager, reliableCheckpoint = true)
+    checkpoint(eager = eager, reliableCheckpoint = true, storageLevel = None)
 
   /**
    * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used
@@ -343,7 +346,8 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 2.3.0
    */
-  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
+  def localCheckpoint(): Dataset[T] =
+    checkpoint(eager = true, reliableCheckpoint = false, storageLevel = None)
 
   /**
    * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
@@ -363,7 +367,29 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.3.0
    */
   def localCheckpoint(eager: Boolean): Dataset[T] =
-    checkpoint(eager = eager, reliableCheckpoint = false)
+    checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = None)
+
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to
+   * truncate the logical plan of this Dataset, which is especially useful in iterative algorithms
+   * where the plan may grow exponentially. Local checkpoints are written to executor storage and
+   * despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @param eager
+   *   Whether to checkpoint this dataframe immediately
+   * @param storageLevel
+   *   StorageLevel with which to checkpoint the data.
+   * @note
+   *   When checkpoint is used with eager = false, the final data that is checkpointed after the
+   *   first action may be different from the data that was used during the job due to
+   *   non-determinism of the underlying operation and retries. If checkpoint is used to achieve
+   *   saving a deterministic snapshot of the data, eager = true should be used. Otherwise, it is
+   *   only deterministic after the first execution, after the checkpoint was finalized.
+   * @group basic
+   * @since 4.0.0
+   */
+  def localCheckpoint(eager: Boolean, storageLevel: StorageLevel): Dataset[T] =
+    checkpoint(eager = eager, reliableCheckpoint = false, storageLevel = Some(storageLevel))
 
   /**
    * Returns a checkpointed version of this Dataset.
@@ -373,8 +399,14 @@ abstract class Dataset[T] extends Serializable {
    * @param reliableCheckpoint
    *   Whether to create a reliable checkpoint saved to files inside the checkpoint directory. If
    *   false creates a local checkpoint using the caching subsystem
+   * @param storageLevel
+   *   Option. If defined, StorageLevel with which to checkpoint the data. Only with
+   *   reliableCheckpoint = false.
    */
-  protected def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T]
+  protected def checkpoint(
+      eager: Boolean,
+      reliableCheckpoint: Boolean,
+      storageLevel: Option[StorageLevel]): Dataset[T]
 
   /**
    * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time
@@ -1421,6 +1453,28 @@ abstract class Dataset[T] extends Serializable {
    * @since 1.6.0
    */
   def reduce(func: ReduceFunction[T]): T = reduce(ToScalaUDF(func))
+
+  /**
+   * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T]
+
+  /**
+   * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def groupByKey[K](
+      func: MapFunction[T, K],
+      encoder: Encoder[K]): KeyValueGroupedDataset[K, T] = {
+    groupByKey(ToScalaUDF(func))(encoder)
+  }
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns
@@ -2996,6 +3050,14 @@ abstract class Dataset[T] extends Serializable {
   def mergeInto(table: String, condition: Column): MergeIntoWriter[T]
 
   /**
+   * Interface for saving the content of the streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def writeStream: DataStreamWriter[T]
+
+  /**
    * Create a write configuration builder for v2 sources.
    *
    * This builder is used to configure and execute write operations. For example, to append to an
@@ -3068,4 +3130,34 @@ abstract class Dataset[T] extends Serializable {
    * @since 1.6.0
    */
   def write: DataFrameWriter[T]
+
+  /**
+   * Represents the content of the Dataset as an `RDD` of `T`.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @group basic
+   * @since 1.6.0
+   */
+  def rdd: RDD[T]
+
+  /**
+   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @group basic
+   * @since 1.6.0
+   */
+  def toJavaRDD: JavaRDD[T]
+
+  /**
+   * Returns the content of the Dataset as a `JavaRDD` of `T`s.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @group basic
+   * @since 1.6.0
+   */
+  def javaRDD: JavaRDD[T] = toJavaRDD
 }
