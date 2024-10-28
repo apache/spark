@@ -310,6 +310,21 @@ case class StaticInvoke(
 
     val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
+    val needTryCatch = method.getExceptionTypes.nonEmpty
+
+    def getFuncResult(resultVal: String, castType: String, callFunc: String): String =
+      if (needTryCatch) {
+        s"""
+          try {
+            $resultVal = ($castType) $callFunc;
+          } catch (Exception e) {
+            org.apache.spark.unsafe.Platform.throwException(e);
+          }
+        """
+      } else {
+        s"$resultVal = ($castType) $callFunc;"
+      }
+
     val callFunc = s"$objectName.$functionName($argString)"
 
     val prepareIsNull = if (nullable) {
@@ -322,14 +337,15 @@ case class StaticInvoke(
     val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = ($javaType) $callFunc;
+          ${getFuncResult(ev.value, javaType, callFunc)}
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
         val boxedJavaType = CodeGenerator.boxedType(dataType)
         s"""
-          $boxedJavaType $boxedResult = ($boxedJavaType) $callFunc;
+          $boxedJavaType $boxedResult = null;
+          ${getFuncResult(boxedResult, boxedJavaType, callFunc)}
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -337,7 +353,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = ($javaType) $callFunc;"
+      getFuncResult(ev.value, javaType, callFunc)
     }
 
     val code = code"""
