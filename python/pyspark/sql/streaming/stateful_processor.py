@@ -85,7 +85,7 @@ class TimerValues:
     """
 
     def __init__(
-            self, current_processing_time_in_ms: int = -1, current_watermark_in_ms: int = -1
+        self, current_processing_time_in_ms: int = -1, current_watermark_in_ms: int = -1
     ) -> None:
         self._current_processing_time_in_ms = current_processing_time_in_ms
         self._current_watermark_in_ms = current_watermark_in_ms
@@ -125,7 +125,6 @@ class ExpiredTimerInfo:
         Get the timestamp for expired timer, return timestamp in millisecond.
         """
         return self._expiry_time_in_ms
-
 
 
 class ListState:
