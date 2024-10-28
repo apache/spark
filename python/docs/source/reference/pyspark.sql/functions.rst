@@ -279,9 +279,6 @@ Date and Timestamp Functions
     make_timestamp
     make_timestamp_ltz
     make_timestamp_ntz
-    try_make_timestamp
-    try_make_timestamp_ltz
-    try_make_timestamp_ntz
     make_ym_interval
     minute
     month
@@ -304,6 +301,9 @@ Date and Timestamp Functions
     to_unix_timestamp
     to_utc_timestamp
     trunc
+    try_make_timestamp
+    try_make_timestamp_ltz
+    try_make_timestamp_ntz
     try_to_timestamp
     unix_date
     unix_micros

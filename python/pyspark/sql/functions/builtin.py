@@ -21413,22 +21413,22 @@ def try_make_timestamp(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str
+    years : :class:`~pyspark.sql.Column` or column name
         The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or str
+    months : :class:`~pyspark.sql.Column` or column name
         The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or str
+    days : :class:`~pyspark.sql.Column` or column name
         The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or str
+    hours : :class:`~pyspark.sql.Column` or column name
         The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or str
+    mins : :class:`~pyspark.sql.Column` or column name
         The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or str
+    secs : :class:`~pyspark.sql.Column` or column name
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
-    timezone : :class:`~pyspark.sql.Column` or str, optional
+    timezone : :class:`~pyspark.sql.Column` or column name, optional
         The time zone identifier. For example, CET, UTC and etc.
 
     Returns
@@ -21602,22 +21602,22 @@ def try_make_timestamp_ltz(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str
+    years : :class:`~pyspark.sql.Column` or column name
         The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or str
+    months : :class:`~pyspark.sql.Column` or column name
         The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or str
+    days : :class:`~pyspark.sql.Column` or column name
         The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or str
+    hours : :class:`~pyspark.sql.Column` or column name
         The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or str
+    mins : :class:`~pyspark.sql.Column` or column name
         The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or str
+    secs : :class:`~pyspark.sql.Column` or column name
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
-    timezone : :class:`~pyspark.sql.Column` or str, optional
+    timezone : :class:`~pyspark.sql.Column` or column name, optional
         The time zone identifier. For example, CET, UTC and etc.
 
     Returns
@@ -21766,17 +21766,17 @@ def try_make_timestamp_ntz(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str
+    years : :class:`~pyspark.sql.Column` or column name
         The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or str
+    months : :class:`~pyspark.sql.Column` or column name
         The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or str
+    days : :class:`~pyspark.sql.Column` or column name
         The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or str
+    hours : :class:`~pyspark.sql.Column` or column name
         The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or str
+    mins : :class:`~pyspark.sql.Column` or column name
         The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or str
+    secs : :class:`~pyspark.sql.Column` or column name
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
