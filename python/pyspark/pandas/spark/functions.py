@@ -79,6 +79,10 @@ def null_index(col: Column) -> Column:
     return _invoke_internal_function_over_columns("null_index", col)
 
 
+def distributed_id() -> Column:
+    return _invoke_internal_function_over_columns("distributed_id")
+
+
 def distributed_sequence_id() -> Column:
     return _invoke_internal_function_over_columns("distributed_sequence_id")
 

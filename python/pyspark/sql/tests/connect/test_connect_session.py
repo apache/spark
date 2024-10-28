@@ -27,17 +27,11 @@ from pyspark.errors import (
     RetriesExceeded,
 )
 from pyspark.sql import SparkSession as PySparkSession
-from pyspark.sql.connect.client.retries import RetryPolicy
 
 from pyspark.testing.connectutils import (
     should_test_connect,
     ReusedConnectTestCase,
     connect_requirement_message,
-)
-from pyspark.errors.exceptions.connect import (
-    AnalysisException,
-    SparkConnectException,
-    SparkUpgradeException,
 )
 
 if should_test_connect:
@@ -45,6 +39,12 @@ if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import DefaultChannelBuilder, ChannelBuilder
     from pyspark.sql.connect.client.core import Retrying, SparkConnectClient
+    from pyspark.sql.connect.client.retries import RetryPolicy
+    from pyspark.errors.exceptions.connect import (
+        AnalysisException,
+        SparkConnectException,
+        SparkUpgradeException,
+    )
 
 
 @unittest.skipIf(is_remote_only(), "Session creation different from local mode")
@@ -282,6 +282,7 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         session.stop()
 
 
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
@@ -303,31 +304,31 @@ class SparkConnectSessionWithOptionsTest(unittest.TestCase):
         self.assertEqual(self.spark.conf.get("integer"), "1")
 
 
-class TestError(grpc.RpcError, Exception):
-    def __init__(self, code: grpc.StatusCode):
-        self._code = code
+if should_test_connect:
 
-    def code(self):
-        return self._code
+    class TestError(grpc.RpcError, Exception):
+        def __init__(self, code: grpc.StatusCode):
+            self._code = code
 
+        def code(self):
+            return self._code
 
-class TestPolicy(RetryPolicy):
-    # Put a small value for initial backoff so that tests don't spend
-    # Time waiting
-    def __init__(self, initial_backoff=10, **kwargs):
-        super().__init__(initial_backoff=initial_backoff, **kwargs)
+    class TestPolicy(RetryPolicy):
+        # Put a small value for initial backoff so that tests don't spend
+        # Time waiting
+        def __init__(self, initial_backoff=10, **kwargs):
+            super().__init__(initial_backoff=initial_backoff, **kwargs)
 
-    def can_retry(self, exception: BaseException):
-        return isinstance(exception, TestError)
+        def can_retry(self, exception: BaseException):
+            return isinstance(exception, TestError)
 
+    class TestPolicySpecificError(TestPolicy):
+        def __init__(self, specific_code: grpc.StatusCode, **kwargs):
+            super().__init__(**kwargs)
+            self.specific_code = specific_code
 
-class TestPolicySpecificError(TestPolicy):
-    def __init__(self, specific_code: grpc.StatusCode, **kwargs):
-        super().__init__(**kwargs)
-        self.specific_code = specific_code
-
-    def can_retry(self, exception: BaseException):
-        return exception.code() == self.specific_code
+        def can_retry(self, exception: BaseException):
+            return exception.code() == self.specific_code
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

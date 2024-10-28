@@ -1901,7 +1901,8 @@ object functions {
    * @group string_funcs
    * @since 4.0.0
    */
-  def randstr(length: Column): Column = Column.fn("randstr", length)
+  def randstr(length: Column): Column =
+    randstr(length, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a string of the specified length whose characters are chosen uniformly at random from
@@ -3767,7 +3768,8 @@ object functions {
    * @group math_funcs
    * @since 4.0.0
    */
-  def uniform(min: Column, max: Column): Column = Column.fn("uniform", min, max)
+  def uniform(min: Column, max: Column): Column =
+    uniform(min, max, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) values with the
@@ -3912,6 +3914,44 @@ object functions {
     Column.fn("encode", value, lit(charset))
 
   /**
+   * Returns true if the input is a valid UTF-8 string, otherwise returns false.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def is_valid_utf8(str: Column): Column =
+    Column.fn("is_valid_utf8", str)
+
+  /**
+   * Returns a new string in which all invalid UTF-8 byte sequences, if any, are replaced by the
+   * Unicode replacement character (U+FFFD).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def make_valid_utf8(str: Column): Column =
+    Column.fn("make_valid_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or emits a
+   * SparkIllegalArgumentException exception otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def validate_utf8(str: Column): Column =
+    Column.fn("validate_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or NULL otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def try_validate_utf8(str: Column): Column =
+    Column.fn("try_validate_utf8", str)
+
+  /**
    * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places with
    * HALF_EVEN round mode, and returns the result as a string column.
    *
@@ -4035,8 +4075,7 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def lpad(str: Column, len: Int, pad: String): Column =
-    Column.fn("lpad", str, lit(len), lit(pad))
+  def lpad(str: Column, len: Int, pad: String): Column = lpad(str, lit(len), lit(pad))
 
   /**
    * Left-pad the binary column with pad to a byte length of len. If the binary column is longer
@@ -4045,8 +4084,16 @@ object functions {
    * @group string_funcs
    * @since 3.3.0
    */
-  def lpad(str: Column, len: Int, pad: Array[Byte]): Column =
-    Column.fn("lpad", str, lit(len), lit(pad))
+  def lpad(str: Column, len: Int, pad: Array[Byte]): Column = lpad(str, lit(len), lit(pad))
+
+  /**
+   * Left-pad the string column with pad to a length of len. If the string column is longer than
+   * len, the return value is shortened to len characters.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def lpad(str: Column, len: Column, pad: Column): Column = Column.fn("lpad", str, len, pad)
 
   /**
    * Trim the spaces from left end for the specified string value.
@@ -4223,8 +4270,7 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def rpad(str: Column, len: Int, pad: String): Column =
-    Column.fn("rpad", str, lit(len), lit(pad))
+  def rpad(str: Column, len: Int, pad: String): Column = rpad(str, lit(len), lit(pad))
 
   /**
    * Right-pad the binary column with pad to a byte length of len. If the binary column is longer
@@ -4233,8 +4279,16 @@ object functions {
    * @group string_funcs
    * @since 3.3.0
    */
-  def rpad(str: Column, len: Int, pad: Array[Byte]): Column =
-    Column.fn("rpad", str, lit(len), lit(pad))
+  def rpad(str: Column, len: Int, pad: Array[Byte]): Column = rpad(str, lit(len), lit(pad))
+
+  /**
+   * Right-pad the string column with pad to a length of len. If the string column is longer than
+   * len, the return value is shortened to len characters.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def rpad(str: Column, len: Column, pad: Column): Column = Column.fn("rpad", str, len, pad)
 
   /**
    * Repeats a string column n times, and returns it as a new string column.
@@ -4637,6 +4691,24 @@ object functions {
    * @since 3.5.0
    */
   def substr(str: Column, pos: Column): Column = Column.fn("substr", str, pos)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column, key: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract, key)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract)
 
   /**
    * Extracts a part from a URL.

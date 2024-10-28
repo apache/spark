@@ -861,12 +861,10 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1099",
+        condition = "PARSE_MODE_UNSUPPORTED",
         parameters = Map(
-          "funcName" -> "from_json",
-          "mode" -> "DROPMALFORMED",
-          "permissiveMode" -> "PERMISSIVE",
-          "failFastMode" -> "FAILFAST"))
+          "funcName" -> "`from_json`",
+          "mode" -> "DROPMALFORMED"))
     }
   }
 
