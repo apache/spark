@@ -23,6 +23,7 @@ from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     StructType,
+    TYPE_CHECKING,
     _parse_datatype_string,
     Row,
 )
