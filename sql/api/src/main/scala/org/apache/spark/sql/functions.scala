@@ -8138,10 +8138,9 @@ object functions {
     Column.fn("try_make_timestamp", years, months, days, hours, mins, secs, timezone)
 
   /**
-   * ANSI-compliant version of the make_timestamp function.
-   * Try to create a timestamp from years, months, days, hours, mins, and secs fields. The result
-   * data type is consistent with the value of configuration `spark.sql.timestampType`. The
-   * function returns NULL on invalid inputs.
+   * ANSI-compliant version of the make_timestamp function. Try to create a timestamp from years,
+   * months, days, hours, mins, and secs fields. The result data type is consistent with the value
+   * of configuration `spark.sql.timestampType`. The function returns NULL on invalid inputs.
    *
    * @group datetime_funcs
    * @since 4.0.0
@@ -8191,9 +8190,9 @@ object functions {
     Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs)
 
   /**
-   * ANSI-compliant version of the make_timestamp_ltz function.
-   * Try to create the current timestamp with local time zone from years, months, days, hours,
-   * mins, secs and timezone fields. The function returns NULL on invalid inputs.
+   * ANSI-compliant version of the make_timestamp_ltz function. Try to create the current
+   * timestamp with local time zone from years, months, days, hours, mins, secs and timezone
+   * fields. The function returns NULL on invalid inputs.
    *
    * @group datetime_funcs
    * @since 4.0.0
@@ -8242,9 +8241,9 @@ object functions {
     Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
-   * ANSI-compliant version of the make_timestamp_ntz function.
-   * Try to create a local date-time from years, months, days, hours, mins, secs fields. The
-   * function returns NULL on invalid inputs.
+   * ANSI-compliant version of the make_timestamp_ntz function. Try to create a local date-time
+   * from years, months, days, hours, mins, secs fields. The function returns NULL on invalid
+   * inputs.
    *
    * @group datetime_funcs
    * @since 4.0.0
