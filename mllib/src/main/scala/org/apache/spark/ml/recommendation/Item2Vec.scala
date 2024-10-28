@@ -409,7 +409,28 @@ object Item2VecModel extends MLReadable[Item2VecModel] {
   }
 }
 
-
+/**
+ * Item2Vec.
+ * (the paper is available at https://ceur-ws.org/Vol-1688/paper-13.pdf).
+ * This implementation is a skipgram version of word2vec with negative sampling.
+ * The key advantage of this implementation is the ability to train models of unlimited size.
+ * The implementation supports two strategies for generating positive pairs from a sequence:
+ * WINDOW and ITEM2VEC. The first one is a standard approach of generating pairs in a window,
+ * the second one allows to sample positive pairs from the whole sequence. The algorithm tries
+ * to find two factor matrices, left and right, such that the product of the vectors approximates
+ * the frequency of occurrence of the right item in the context of the left one.
+ *
+ * The general approach is iterative. During each iteration, both factor matrices are partitioned
+ * into `n` groups according to some hash function (the partitioning is different for each of the
+ * factor matrices). Item pairs are also partitioned according to the partitioning of the factor
+ * matrices. Then, at a fixed first partitioning, `n` subiterations are performed, at each of which
+ * the i-th cyclic shift of the second partitioning is processed. Thus, at each subiterations,
+ * `1/n` item pairs end up on the same executors as the factors for them. Then, on each executor,
+ * in-memory optimization is performed for the item pairs and factors on it.
+ * Negatives are sampled from the factors on the executor, according to the paper
+ * "Distributed negative sampling for word embeddings" available at
+ * https://ojs.aaai.org/index.php/AAAI/article/view/10931/10790.
+ */
 @Since("4.0.0")
 class Item2Vec(@Since("4.0.0") override val uid: String)
   extends Estimator[Item2VecModel] with Item2VecParams
