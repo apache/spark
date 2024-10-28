@@ -217,12 +217,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateRequest}
    */
   public static final class StateRequest extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.StateRequest)
       StateRequestOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use StateRequest.newBuilder() to construct.
-    private StateRequest(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private StateRequest(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private StateRequest() {
@@ -246,7 +246,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -553,39 +553,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequest parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -605,7 +605,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -613,7 +613,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateRequest}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.StateRequest)
         org.apache.spark.sql.execution.streaming.state.StateMessage.StateRequestOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -622,7 +622,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -635,7 +635,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -1407,12 +1407,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateResponse}
    */
   public static final class StateResponse extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.StateResponse)
       StateResponseOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use StateResponse.newBuilder() to construct.
-    private StateResponse(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private StateResponse(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private StateResponse() {
@@ -1438,7 +1438,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -1522,8 +1522,8 @@ public final class StateMessage {
       if (statusCode_ != 0) {
         output.writeInt32(1, statusCode_);
       }
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(errorMessage_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 2, errorMessage_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(errorMessage_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 2, errorMessage_);
       }
       if (!value_.isEmpty()) {
         output.writeBytes(3, value_);
@@ -1541,8 +1541,8 @@ public final class StateMessage {
         size += com.google.protobuf.CodedOutputStream
           .computeInt32Size(1, statusCode_);
       }
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(errorMessage_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, errorMessage_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(errorMessage_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(2, errorMessage_);
       }
       if (!value_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
@@ -1625,39 +1625,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponse parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -1677,7 +1677,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -1685,7 +1685,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateResponse}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.StateResponse)
         org.apache.spark.sql.execution.streaming.state.StateMessage.StateResponseOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -1694,7 +1694,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -1707,7 +1707,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -2153,12 +2153,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StatefulProcessorCall}
    */
   public static final class StatefulProcessorCall extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.StatefulProcessorCall)
       StatefulProcessorCallOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use StatefulProcessorCall.newBuilder() to construct.
-    private StatefulProcessorCall(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private StatefulProcessorCall(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private StatefulProcessorCall() {
@@ -2182,7 +2182,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -2563,39 +2563,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCall parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -2615,7 +2615,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -2623,7 +2623,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StatefulProcessorCall}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.StatefulProcessorCall)
         org.apache.spark.sql.execution.streaming.state.StateMessage.StatefulProcessorCallOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -2632,7 +2632,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -2645,7 +2645,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -3724,12 +3724,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateVariableRequest}
    */
   public static final class StateVariableRequest extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.StateVariableRequest)
       StateVariableRequestOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use StateVariableRequest.newBuilder() to construct.
-    private StateVariableRequest(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private StateVariableRequest(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private StateVariableRequest() {
@@ -3753,7 +3753,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -4038,39 +4038,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequest parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -4090,7 +4090,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -4098,7 +4098,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateVariableRequest}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.StateVariableRequest)
         org.apache.spark.sql.execution.streaming.state.StateMessage.StateVariableRequestOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -4107,7 +4107,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -4120,7 +4120,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -4858,12 +4858,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest}
    */
   public static final class ImplicitGroupingKeyRequest extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest)
       ImplicitGroupingKeyRequestOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use ImplicitGroupingKeyRequest.newBuilder() to construct.
-    private ImplicitGroupingKeyRequest(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private ImplicitGroupingKeyRequest(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private ImplicitGroupingKeyRequest() {
@@ -4887,7 +4887,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -5124,39 +5124,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequest parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -5176,7 +5176,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -5184,7 +5184,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ImplicitGroupingKeyRequest)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ImplicitGroupingKeyRequestOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -5193,7 +5193,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -5206,7 +5206,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -5800,12 +5800,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateCallCommand}
    */
   public static final class StateCallCommand extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.StateCallCommand)
       StateCallCommandOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use StateCallCommand.newBuilder() to construct.
-    private StateCallCommand(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private StateCallCommand(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private StateCallCommand() {
@@ -5832,7 +5832,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -5993,14 +5993,14 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(stateName_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, stateName_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(stateName_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, stateName_);
       }
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(schema_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 2, schema_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(schema_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 2, schema_);
       }
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(mapStateValueSchema_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 3, mapStateValueSchema_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(mapStateValueSchema_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 3, mapStateValueSchema_);
       }
       if (ttl_ != null) {
         output.writeMessage(4, getTtl());
@@ -6014,14 +6014,14 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(stateName_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, stateName_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(stateName_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, stateName_);
       }
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(schema_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, schema_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(schema_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(2, schema_);
       }
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(mapStateValueSchema_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(3, mapStateValueSchema_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(mapStateValueSchema_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(3, mapStateValueSchema_);
       }
       if (ttl_ != null) {
         size += com.google.protobuf.CodedOutputStream
@@ -6113,39 +6113,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommand parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -6165,7 +6165,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -6173,7 +6173,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.StateCallCommand}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.StateCallCommand)
         org.apache.spark.sql.execution.streaming.state.StateMessage.StateCallCommandOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -6182,7 +6182,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -6195,7 +6195,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -6867,12 +6867,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ValueStateCall}
    */
   public static final class ValueStateCall extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ValueStateCall)
       ValueStateCallOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use ValueStateCall.newBuilder() to construct.
-    private ValueStateCall(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private ValueStateCall(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private ValueStateCall() {
@@ -6897,7 +6897,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -7125,8 +7125,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(stateName_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, stateName_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(stateName_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, stateName_);
       }
       if (methodCase_ == 2) {
         output.writeMessage(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.Exists) method_);
@@ -7149,8 +7149,8 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(stateName_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, stateName_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(stateName_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, stateName_);
       }
       if (methodCase_ == 2) {
         size += com.google.protobuf.CodedOutputStream
@@ -7278,39 +7278,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCall parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -7330,7 +7330,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -7338,7 +7338,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ValueStateCall}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ValueStateCall)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateCallOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -7347,7 +7347,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -7360,7 +7360,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -8421,12 +8421,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListStateCall}
    */
   public static final class ListStateCall extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ListStateCall)
       ListStateCallOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use ListStateCall.newBuilder() to construct.
-    private ListStateCall(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private ListStateCall(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private ListStateCall() {
@@ -8451,7 +8451,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -8745,8 +8745,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(stateName_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, stateName_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(stateName_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, stateName_);
       }
       if (methodCase_ == 2) {
         output.writeMessage(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.Exists) method_);
@@ -8775,8 +8775,8 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(stateName_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, stateName_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(stateName_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, stateName_);
       }
       if (methodCase_ == 2) {
         size += com.google.protobuf.CodedOutputStream
@@ -8928,39 +8928,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCall parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -8980,7 +8980,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -8988,7 +8988,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListStateCall}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ListStateCall)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateCallOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -8997,7 +8997,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -9010,7 +9010,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -10442,12 +10442,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.MapStateCall}
    */
   public static final class MapStateCall extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.MapStateCall)
       MapStateCallOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use MapStateCall.newBuilder() to construct.
-    private MapStateCall(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private MapStateCall(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private MapStateCall() {
@@ -10472,7 +10472,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -10865,8 +10865,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(stateName_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, stateName_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(stateName_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, stateName_);
       }
       if (methodCase_ == 2) {
         output.writeMessage(2, (org.apache.spark.sql.execution.streaming.state.StateMessage.Exists) method_);
@@ -10904,8 +10904,8 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(stateName_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, stateName_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(stateName_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, stateName_);
       }
       if (methodCase_ == 2) {
         size += com.google.protobuf.CodedOutputStream
@@ -11093,39 +11093,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.MapStateCall parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.MapStateCall parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.MapStateCall parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.MapStateCall parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.MapStateCall parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.MapStateCall parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -11145,7 +11145,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -11153,7 +11153,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.MapStateCall}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.MapStateCall)
         org.apache.spark.sql.execution.streaming.state.StateMessage.MapStateCallOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -11162,7 +11162,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -11175,7 +11175,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -12953,12 +12953,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.SetImplicitKey}
    */
   public static final class SetImplicitKey extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.SetImplicitKey)
       SetImplicitKeyOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use SetImplicitKey.newBuilder() to construct.
-    private SetImplicitKey(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private SetImplicitKey(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private SetImplicitKey() {
@@ -12983,7 +12983,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -13100,39 +13100,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKey parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -13152,7 +13152,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -13160,7 +13160,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.SetImplicitKey}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.SetImplicitKey)
         org.apache.spark.sql.execution.streaming.state.StateMessage.SetImplicitKeyOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -13169,7 +13169,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -13182,7 +13182,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -13421,12 +13421,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey}
    */
   public static final class RemoveImplicitKey extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey)
       RemoveImplicitKeyOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use RemoveImplicitKey.newBuilder() to construct.
-    private RemoveImplicitKey(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private RemoveImplicitKey(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private RemoveImplicitKey() {
@@ -13450,7 +13450,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -13545,39 +13545,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKey parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -13597,7 +13597,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -13605,7 +13605,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.RemoveImplicitKey)
         org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveImplicitKeyOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -13614,7 +13614,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -13627,7 +13627,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -13821,12 +13821,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Exists}
    */
   public static final class Exists extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.Exists)
       ExistsOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use Exists.newBuilder() to construct.
-    private Exists(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private Exists(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private Exists() {
@@ -13850,7 +13850,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Exists_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -13945,39 +13945,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Exists parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Exists parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Exists parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Exists parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Exists parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Exists parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -13997,7 +13997,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -14005,7 +14005,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Exists}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.Exists)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ExistsOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -14014,7 +14014,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Exists_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -14027,7 +14027,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -14221,12 +14221,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Get}
    */
   public static final class Get extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.Get)
       GetOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use Get.newBuilder() to construct.
-    private Get(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private Get(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private Get() {
@@ -14250,7 +14250,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Get_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -14345,39 +14345,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Get parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Get parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Get parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Get parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Get parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Get parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -14397,7 +14397,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -14405,7 +14405,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Get}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.Get)
         org.apache.spark.sql.execution.streaming.state.StateMessage.GetOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -14414,7 +14414,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Get_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -14427,7 +14427,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -14627,12 +14627,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ValueStateUpdate}
    */
   public static final class ValueStateUpdate extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ValueStateUpdate)
       ValueStateUpdateOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use ValueStateUpdate.newBuilder() to construct.
-    private ValueStateUpdate(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private ValueStateUpdate(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private ValueStateUpdate() {
@@ -14657,7 +14657,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -14774,39 +14774,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdate parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -14826,7 +14826,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -14834,7 +14834,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ValueStateUpdate}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ValueStateUpdate)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ValueStateUpdateOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -14843,7 +14843,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -14856,7 +14856,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -15095,12 +15095,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Clear}
    */
   public static final class Clear extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.Clear)
       ClearOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use Clear.newBuilder() to construct.
-    private Clear(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private Clear(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private Clear() {
@@ -15124,7 +15124,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Clear_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -15219,39 +15219,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Clear parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Clear parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Clear parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Clear parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Clear parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Clear parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -15271,7 +15271,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -15279,7 +15279,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Clear}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.Clear)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ClearOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -15288,7 +15288,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Clear_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -15301,7 +15301,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -15507,12 +15507,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListStateGet}
    */
   public static final class ListStateGet extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ListStateGet)
       ListStateGetOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use ListStateGet.newBuilder() to construct.
-    private ListStateGet(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private ListStateGet(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private ListStateGet() {
@@ -15537,7 +15537,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -15596,8 +15596,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, iteratorId_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(iteratorId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, iteratorId_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -15608,8 +15608,8 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, iteratorId_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(iteratorId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, iteratorId_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -15680,39 +15680,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateGet parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateGet parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateGet parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateGet parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateGet parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateGet parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -15732,7 +15732,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -15740,7 +15740,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListStateGet}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ListStateGet)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ListStateGetOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -15749,7 +15749,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -15762,7 +15762,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -16044,12 +16044,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListStatePut}
    */
   public static final class ListStatePut extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ListStatePut)
       ListStatePutOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use ListStatePut.newBuilder() to construct.
-    private ListStatePut(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private ListStatePut(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private ListStatePut() {
@@ -16073,7 +16073,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -16168,39 +16168,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePut parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -16220,7 +16220,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -16228,7 +16228,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ListStatePut}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ListStatePut)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ListStatePutOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -16237,7 +16237,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -16250,7 +16250,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -16450,12 +16450,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.AppendValue}
    */
   public static final class AppendValue extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.AppendValue)
       AppendValueOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use AppendValue.newBuilder() to construct.
-    private AppendValue(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private AppendValue(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private AppendValue() {
@@ -16480,7 +16480,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -16597,39 +16597,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValue parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -16649,7 +16649,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -16657,7 +16657,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.AppendValue}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.AppendValue)
         org.apache.spark.sql.execution.streaming.state.StateMessage.AppendValueOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -16666,7 +16666,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -16679,7 +16679,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -16918,12 +16918,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.AppendList}
    */
   public static final class AppendList extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.AppendList)
       AppendListOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use AppendList.newBuilder() to construct.
-    private AppendList(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private AppendList(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private AppendList() {
@@ -16947,7 +16947,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -17042,39 +17042,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.AppendList parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -17094,7 +17094,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -17102,7 +17102,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.AppendList}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.AppendList)
         org.apache.spark.sql.execution.streaming.state.StateMessage.AppendListOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -17111,7 +17111,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -17124,7 +17124,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -17324,12 +17324,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.GetValue}
    */
   public static final class GetValue extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.GetValue)
       GetValueOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use GetValue.newBuilder() to construct.
-    private GetValue(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private GetValue(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private GetValue() {
@@ -17354,7 +17354,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -17471,39 +17471,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.GetValue parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -17523,7 +17523,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -17531,7 +17531,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.GetValue}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.GetValue)
         org.apache.spark.sql.execution.streaming.state.StateMessage.GetValueOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -17540,7 +17540,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -17553,7 +17553,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -17798,12 +17798,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ContainsKey}
    */
   public static final class ContainsKey extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.ContainsKey)
       ContainsKeyOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use ContainsKey.newBuilder() to construct.
-    private ContainsKey(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private ContainsKey(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private ContainsKey() {
@@ -17828,7 +17828,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -17945,39 +17945,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKey parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -17997,7 +17997,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -18005,7 +18005,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.ContainsKey}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.ContainsKey)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ContainsKeyOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -18014,7 +18014,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -18027,7 +18027,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -18278,12 +18278,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.UpdateValue}
    */
   public static final class UpdateValue extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.UpdateValue)
       UpdateValueOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use UpdateValue.newBuilder() to construct.
-    private UpdateValue(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private UpdateValue(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private UpdateValue() {
@@ -18309,7 +18309,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -18448,39 +18448,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValue parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -18500,7 +18500,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -18508,7 +18508,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.UpdateValue}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.UpdateValue)
         org.apache.spark.sql.execution.streaming.state.StateMessage.UpdateValueOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -18517,7 +18517,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -18530,7 +18530,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -18826,12 +18826,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Iterator}
    */
   public static final class Iterator extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.Iterator)
       IteratorOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use Iterator.newBuilder() to construct.
-    private Iterator(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private Iterator(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private Iterator() {
@@ -18856,7 +18856,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -18915,8 +18915,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, iteratorId_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(iteratorId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, iteratorId_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -18927,8 +18927,8 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, iteratorId_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(iteratorId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, iteratorId_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -18999,39 +18999,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Iterator parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -19051,7 +19051,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -19059,7 +19059,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Iterator}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.Iterator)
         org.apache.spark.sql.execution.streaming.state.StateMessage.IteratorOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -19068,7 +19068,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -19081,7 +19081,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -19375,12 +19375,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Keys}
    */
   public static final class Keys extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.Keys)
       KeysOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use Keys.newBuilder() to construct.
-    private Keys(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private Keys(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private Keys() {
@@ -19405,7 +19405,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Keys_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -19464,8 +19464,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, iteratorId_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(iteratorId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, iteratorId_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -19476,8 +19476,8 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, iteratorId_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(iteratorId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, iteratorId_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -19548,39 +19548,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Keys parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Keys parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Keys parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Keys parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Keys parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Keys parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -19600,7 +19600,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -19608,7 +19608,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Keys}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.Keys)
         org.apache.spark.sql.execution.streaming.state.StateMessage.KeysOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -19617,7 +19617,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Keys_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -19630,7 +19630,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -19924,12 +19924,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Values}
    */
   public static final class Values extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.Values)
       ValuesOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use Values.newBuilder() to construct.
-    private Values(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private Values(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private Values() {
@@ -19954,7 +19954,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Values_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -20013,8 +20013,8 @@ public final class StateMessage {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 1, iteratorId_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(iteratorId_)) {
+        com.google.protobuf.GeneratedMessage.writeString(output, 1, iteratorId_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -20025,8 +20025,8 @@ public final class StateMessage {
       if (size != -1) return size;
 
       size = 0;
-      if (!com.google.protobuf.GeneratedMessageV3.isStringEmpty(iteratorId_)) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, iteratorId_);
+      if (!com.google.protobuf.GeneratedMessage.isStringEmpty(iteratorId_)) {
+        size += com.google.protobuf.GeneratedMessage.computeStringSize(1, iteratorId_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSize = size;
@@ -20097,39 +20097,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Values parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Values parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Values parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Values parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Values parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.Values parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -20149,7 +20149,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -20157,7 +20157,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.Values}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.Values)
         org.apache.spark.sql.execution.streaming.state.StateMessage.ValuesOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -20166,7 +20166,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_Values_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -20179,7 +20179,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -20467,12 +20467,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RemoveKey}
    */
   public static final class RemoveKey extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.RemoveKey)
       RemoveKeyOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use RemoveKey.newBuilder() to construct.
-    private RemoveKey(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private RemoveKey(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private RemoveKey() {
@@ -20497,7 +20497,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -20614,39 +20614,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKey parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -20666,7 +20666,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -20674,7 +20674,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.RemoveKey}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.RemoveKey)
         org.apache.spark.sql.execution.streaming.state.StateMessage.RemoveKeyOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -20683,7 +20683,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -20696,7 +20696,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -20946,12 +20946,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.SetHandleState}
    */
   public static final class SetHandleState extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.SetHandleState)
       SetHandleStateOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use SetHandleState.newBuilder() to construct.
-    private SetHandleState(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private SetHandleState(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private SetHandleState() {
@@ -20976,7 +20976,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -21100,39 +21100,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleState parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -21152,7 +21152,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -21160,7 +21160,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.SetHandleState}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.SetHandleState)
         org.apache.spark.sql.execution.streaming.state.StateMessage.SetHandleStateOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -21169,7 +21169,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -21182,7 +21182,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -21447,12 +21447,12 @@ public final class StateMessage {
    * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.TTLConfig}
    */
   public static final class TTLConfig extends
-      com.google.protobuf.GeneratedMessageV3 implements
+      com.google.protobuf.GeneratedMessage implements
       // @@protoc_insertion_point(message_implements:org.apache.spark.sql.execution.streaming.state.TTLConfig)
       TTLConfigOrBuilder {
   private static final long serialVersionUID = 0L;
     // Use TTLConfig.newBuilder() to construct.
-    private TTLConfig(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    private TTLConfig(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
       super(builder);
     }
     private TTLConfig() {
@@ -21476,7 +21476,7 @@ public final class StateMessage {
     }
 
     @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
         internalGetFieldAccessorTable() {
       return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
@@ -21593,39 +21593,39 @@ public final class StateMessage {
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.TTLConfig parseFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.TTLConfig parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.TTLConfig parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.TTLConfig parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.TTLConfig parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input);
     }
     public static org.apache.spark.sql.execution.streaming.state.StateMessage.TTLConfig parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
+      return com.google.protobuf.GeneratedMessage
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
 
@@ -21645,7 +21645,7 @@ public final class StateMessage {
 
     @java.lang.Override
     protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
       Builder builder = new Builder(parent);
       return builder;
     }
@@ -21653,7 +21653,7 @@ public final class StateMessage {
      * Protobuf type {@code org.apache.spark.sql.execution.streaming.state.TTLConfig}
      */
     public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        com.google.protobuf.GeneratedMessage.Builder<Builder> implements
         // @@protoc_insertion_point(builder_implements:org.apache.spark.sql.execution.streaming.state.TTLConfig)
         org.apache.spark.sql.execution.streaming.state.StateMessage.TTLConfigOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
@@ -21662,7 +21662,7 @@ public final class StateMessage {
       }
 
       @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
           internalGetFieldAccessorTable() {
         return org.apache.spark.sql.execution.streaming.state.StateMessage.internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
@@ -21675,7 +21675,7 @@ public final class StateMessage {
       }
 
       private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
         super(parent);
 
       }
@@ -21906,142 +21906,142 @@ public final class StateMessage {
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_Exists_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_Get_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_Get_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_Clear_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_Keys_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_Keys_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_Values_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_Values_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_descriptor;
   private static final 
-    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_fieldAccessorTable;
 
   public static com.google.protobuf.Descriptors.FileDescriptor
@@ -22159,169 +22159,169 @@ public final class StateMessage {
     internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_descriptor =
       getDescriptor().getMessageTypes().get(0);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateRequest_descriptor,
         new java.lang.String[] { "Version", "StatefulProcessorCall", "StateVariableRequest", "ImplicitGroupingKeyRequest", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_descriptor =
       getDescriptor().getMessageTypes().get(1);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateResponse_descriptor,
         new java.lang.String[] { "StatusCode", "ErrorMessage", "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor =
       getDescriptor().getMessageTypes().get(2);
     internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StatefulProcessorCall_descriptor,
         new java.lang.String[] { "SetHandleState", "GetValueState", "GetListState", "GetMapState", "DeleteIfExists", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_descriptor =
       getDescriptor().getMessageTypes().get(3);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateVariableRequest_descriptor,
         new java.lang.String[] { "ValueStateCall", "ListStateCall", "MapStateCall", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor =
       getDescriptor().getMessageTypes().get(4);
     internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ImplicitGroupingKeyRequest_descriptor,
         new java.lang.String[] { "SetImplicitKey", "RemoveImplicitKey", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor =
       getDescriptor().getMessageTypes().get(5);
     internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_StateCallCommand_descriptor,
         new java.lang.String[] { "StateName", "Schema", "MapStateValueSchema", "Ttl", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor =
       getDescriptor().getMessageTypes().get(6);
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateCall_descriptor,
         new java.lang.String[] { "StateName", "Exists", "Get", "ValueStateUpdate", "Clear", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_descriptor =
       getDescriptor().getMessageTypes().get(7);
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ListStateCall_descriptor,
         new java.lang.String[] { "StateName", "Exists", "ListStateGet", "ListStatePut", "AppendValue", "AppendList", "Clear", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_descriptor =
       getDescriptor().getMessageTypes().get(8);
     internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_MapStateCall_descriptor,
         new java.lang.String[] { "StateName", "Exists", "GetValue", "ContainsKey", "UpdateValue", "Iterator", "Keys", "Values", "RemoveKey", "Clear", "Method", });
     internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor =
       getDescriptor().getMessageTypes().get(9);
     internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_SetImplicitKey_descriptor,
         new java.lang.String[] { "Key", });
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor =
       getDescriptor().getMessageTypes().get(10);
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_RemoveImplicitKey_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor =
       getDescriptor().getMessageTypes().get(11);
     internal_static_org_apache_spark_sql_execution_streaming_state_Exists_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Exists_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_Get_descriptor =
       getDescriptor().getMessageTypes().get(12);
     internal_static_org_apache_spark_sql_execution_streaming_state_Get_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Get_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_descriptor =
       getDescriptor().getMessageTypes().get(13);
     internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ValueStateUpdate_descriptor,
         new java.lang.String[] { "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor =
       getDescriptor().getMessageTypes().get(14);
     internal_static_org_apache_spark_sql_execution_streaming_state_Clear_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Clear_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_descriptor =
       getDescriptor().getMessageTypes().get(15);
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ListStateGet_descriptor,
         new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_descriptor =
       getDescriptor().getMessageTypes().get(16);
     internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ListStatePut_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_descriptor =
       getDescriptor().getMessageTypes().get(17);
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_AppendValue_descriptor,
         new java.lang.String[] { "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_descriptor =
       getDescriptor().getMessageTypes().get(18);
     internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_AppendList_descriptor,
         new java.lang.String[] { });
     internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_descriptor =
       getDescriptor().getMessageTypes().get(19);
     internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_GetValue_descriptor,
         new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_descriptor =
       getDescriptor().getMessageTypes().get(20);
     internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_ContainsKey_descriptor,
         new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_descriptor =
       getDescriptor().getMessageTypes().get(21);
     internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_UpdateValue_descriptor,
         new java.lang.String[] { "UserKey", "Value", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_descriptor =
       getDescriptor().getMessageTypes().get(22);
     internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Iterator_descriptor,
         new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Keys_descriptor =
       getDescriptor().getMessageTypes().get(23);
     internal_static_org_apache_spark_sql_execution_streaming_state_Keys_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Keys_descriptor,
         new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_Values_descriptor =
       getDescriptor().getMessageTypes().get(24);
     internal_static_org_apache_spark_sql_execution_streaming_state_Values_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_Values_descriptor,
         new java.lang.String[] { "IteratorId", });
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_descriptor =
       getDescriptor().getMessageTypes().get(25);
     internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_RemoveKey_descriptor,
         new java.lang.String[] { "UserKey", });
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor =
       getDescriptor().getMessageTypes().get(26);
     internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_SetHandleState_descriptor,
         new java.lang.String[] { "State", });
     internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_descriptor =
       getDescriptor().getMessageTypes().get(27);
     internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_fieldAccessorTable = new
-      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+      com.google.protobuf.GeneratedMessage.FieldAccessorTable(
         internal_static_org_apache_spark_sql_execution_streaming_state_TTLConfig_descriptor,
         new java.lang.String[] { "DurationMs", });
   }
