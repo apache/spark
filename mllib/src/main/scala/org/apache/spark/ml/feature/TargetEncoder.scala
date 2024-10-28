@@ -77,13 +77,21 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
 
   final def getSmoothing: Double = $(smoothing)
 
-  private[feature] lazy val inputFeatures = if (isSet(inputCol)) Array($(inputCol))
-  else if (isSet(inputCols)) $(inputCols)
-  else Array.empty[String]
+  private[feature] lazy val inputFeatures = if (isSet(inputCol)) {
+                                            Array($(inputCol))
+                                          } else if (isSet(inputCols)) {
+                                            $(inputCols)
+                                          } else {
+                                            Array.empty[String]
+                                          }
 
-  private[feature] lazy val outputFeatures = if (isSet(outputCol)) Array($(outputCol))
-  else if (isSet(outputCols)) $(outputCols)
-  else inputFeatures.map{field: String => s"${field}_indexed"}
+  private[feature] lazy val outputFeatures = if (isSet(outputCol)) {
+                                            Array($(outputCol))
+                                          } else if (isSet(outputCols)) {
+                                            $(outputCols)
+                                          } else {
+                                            inputFeatures.map{field: String => s"${field}_indexed"}
+                                          }
 
   private[feature] def validateSchema(
                                        schema: StructType,
@@ -192,48 +200,52 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
         Array.fill(inputFeatures.length) {
           Map.empty[Option[Double], (Double, Double)]
         })(
+
         (agg, row: Row) => if (!row.isNullAt(inputFeatures.length)) {
           val label = row.getDouble(inputFeatures.length)
-          inputFeatures.indices.map {
-            feature => {
-              val category: Option[Double] = {
-                if (row.isNullAt(feature)) None // null category
-                else {
-                  val value = row.getDouble(feature)
-                  if (value < 0.0 || value != value.toInt) throw new SparkException(
-                    s"Values from column ${inputFeatures(feature)} must be indices, " +
-                      s"but got $value.")
-                  else Some(value) // non-null category
+          if (!label.equals(Double.NaN)) {
+            inputFeatures.indices.map {
+              feature => {
+                val category: Option[Double] = {
+                  if (row.isNullAt(feature)) None // null category
+                  else {
+                    val value = row.getDouble(feature)
+                    if (value < 0.0 || value != value.toInt) throw new SparkException(
+                      s"Values from column ${inputFeatures(feature)} must be indices, " +
+                        s"but got $value.")
+                    else Some(value) // non-null category
+                  }
+                }
+                val (class_count, class_stat) = agg(feature).getOrElse(category, (0.0, 0.0))
+                val (global_count, global_stat) =
+                  agg(feature).getOrElse(TargetEncoder.UNSEEN_CATEGORY, (0.0, 0.0))
+                $(targetType) match {
+                  case TargetEncoder.TARGET_BINARY => // counting
+                    if (label == 1.0) {
+                      // positive => increment both counters for current & unseen categories
+                      agg(feature) +
+                        (category -> (1 + class_count, 1 + class_stat)) +
+                        (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count, 1 + global_stat))
+                    } else if (label == 0.0) {
+                      // negative => increment only global counter for current & unseen categories
+                      agg(feature) +
+                        (category -> (1 + class_count, class_stat)) +
+                        (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count, global_stat))
+                    } else throw new SparkException(
+                      s"Values from column ${getLabelCol} must be binary (0,1) but got $label.")
+                  case TargetEncoder.TARGET_CONTINUOUS => // incremental mean
+                    // increment counter and iterate on mean for current & unseen categories
+                    agg(feature) +
+                      (category -> (1 + class_count,
+                        class_stat + ((label - class_stat) / (1 + class_count)))) +
+                      (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count,
+                        global_stat + ((label - global_stat) / (1 + global_count))))
                 }
               }
-              val (class_count, class_stat) = agg(feature).getOrElse(category, (0.0, 0.0))
-              val (global_count, global_stat) =
-                agg(feature).getOrElse(TargetEncoder.UNSEEN_CATEGORY, (0.0, 0.0))
-              $(targetType) match {
-                case TargetEncoder.TARGET_BINARY => // counting
-                  if (label == 1.0) {
-                    // positive => increment both counters for current & unseen categories
-                    agg(feature) +
-                      (category -> (1 + class_count, 1 + class_stat)) +
-                      (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count, 1 + global_stat))
-                  } else if (label == 0.0) {
-                    // negative => increment only global counter for current & unseen categories
-                    agg(feature) +
-                      (category -> (1 + class_count, class_stat)) +
-                      (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count, global_stat))
-                  } else throw new SparkException(
-                    s"Values from column ${getLabelCol} must be binary (0,1) but got $label.")
-                case TargetEncoder.TARGET_CONTINUOUS => // incremental mean
-                  // increment counter and iterate on mean for current & unseen categories
-                  agg(feature) +
-                    (category -> (1 + class_count,
-                      class_stat + ((label - class_stat) / (1 + class_count)))) +
-                    (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count,
-                      global_stat + ((label - global_stat) / (1 + global_count))))
-              }
-            }
-          }.toArray
+            }.toArray
+          } else agg  // ignore NaN-labeled observations
         } else agg,  // ignore null-labeled observations
+
         (agg1, agg2) => inputFeatures.indices.map {
           feature => {
             val categories = agg1(feature).keySet ++ agg2(feature).keySet

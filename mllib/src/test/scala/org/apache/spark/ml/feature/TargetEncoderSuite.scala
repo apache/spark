@@ -33,6 +33,8 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
   @transient var data_binary: Seq[Row] = _
   @transient var data_continuous: Seq[Row] = _
   @transient var schema: StructType = _
+  @transient var expected_stats_binary: Array[Map[Option[Double], (Double, Double)]] = _
+  @transient var expected_stats_continuous: Array[Map[Option[Double], (Double, Double)]] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -59,7 +61,6 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
       Row(0.toShort, 3, 7.0, 70.0, 40.0, 50.0, 70.0, 42.5, 50.0, 60.0),
       Row(1.toShort, 4, 8.0, 80.0, 50.0, 50.0, 80.0, 50.0, 50.0, 65.0),
       Row(2.toShort, 3, 9.0, 90.0, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0))
-    // scalastyle:on
 
     schema = StructType(Array(
       StructField("input1", ShortType, nullable = true),
@@ -72,6 +73,17 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
       StructField("smoothing1", DoubleType),
       StructField("smoothing2", DoubleType),
       StructField("smoothing3", DoubleType)))
+
+    expected_stats_binary = Array(
+      Map(Some(0.0) -> (3.0, 1.0), Some(1.0) -> (3.0, 2.0), Some(2.0) -> (3.0, 1.0), Some(-1.0) -> (9.0, 4.0)),
+      Map(Some(3.0) -> (5.0, 0.0), Some(4.0) -> (4.0, 4.0), Some(-1.0) -> (9.0, 4.0)),
+      HashMap(Some(5.0) -> (3.0, 1.0), Some(6.0) -> (3.0, 2.0), Some(7.0) -> (1.0, 0.0), Some(8.0) -> (1.0, 1.0), Some(9.0) -> (1.0, 0.0), Some(-1.0) -> (9.0, 4.0)))
+
+    expected_stats_continuous = Array(
+      Map(Some(0.0) -> (3.0, 40.0), Some(1.0) -> (3.0, 50.0), Some(2.0) -> (3.0, 60.0), Some(-1.0) -> (9.0, 50.0)),
+      Map(Some(3.0) -> (5.0, 50.0), Some(4.0) -> (4.0, 50.0), Some(-1.0) -> (9.0, 50.0)),
+      HashMap(Some(5.0) -> (3.0, 20.0), Some(6.0) -> (3.0, 50.0), Some(7.0) -> (1.0, 70.0), Some(8.0) -> (1.0, 80.0), Some(9.0) -> (1.0, 90.0), Some(-1.0) -> (9.0, 50.0)))
+    // scalastyle:on
   }
 
   test("params") {
@@ -90,14 +102,7 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df)
 
-    val expected_stats = Array(
-      Map(Some(0.0) -> (3.0, 1.0), Some(1.0) -> (3.0, 2.0), Some(2.0) -> (3.0, 1.0),
-        Some(-1.0) -> (9.0, 4.0)),
-      Map(Some(3.0) -> (5.0, 0.0), Some(4.0) -> (4.0, 4.0), Some(-1.0) -> (9.0, 4.0)),
-      HashMap(Some(5.0) -> (3.0, 1.0), Some(6.0) -> (3.0, 2.0), Some(7.0) -> (1.0, 0.0),
-        Some(8.0) -> (1.0, 1.0), Some(9.0) -> (1.0, 0.0), Some(-1.0) -> (9.0, 4.0)))
-
-    model.stats.zip(expected_stats).foreach{
+    model.stats.zip(expected_stats_binary).foreach{
       case (actual, expected) => assert(actual.equals(expected))
     }
 
@@ -149,14 +154,7 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df)
 
-    val expected_stats = Array(
-      Map(Some(0.0) -> (3.0, 40.0), Some(1.0) -> (3.0, 50.0), Some(2.0) -> (3.0, 60.0),
-        Some(-1.0) -> (9.0, 50.0)),
-      Map(Some(3.0) -> (5.0, 50.0), Some(4.0) -> (4.0, 50.0), Some(-1.0) -> (9.0, 50.0)),
-      HashMap(Some(5.0) -> (3.0, 20.0), Some(6.0) -> (3.0, 50.0), Some(7.0) -> (1.0, 70.0),
-        Some(8.0) -> (1.0, 80.0), Some(9.0) -> (1.0, 90.0), Some(-1.0) -> (9.0, 50.0)))
-
-    model.stats.zip(expected_stats).foreach{
+    model.stats.zip(expected_stats_continuous).foreach{
       case (actual, expected) => assert(actual.equals(expected))
     }
 
@@ -320,11 +318,9 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
     val model = encoder.fit(df_null)
 
     val expected_stats = Array(
-      Map(Some(0.0) -> (3.0, 40.0), Some(1.0) -> (3.0, 50.0), Some(2.0) -> (3.0, 60.0),
-        Some(-1.0) -> (9.0, 50.0)),
-      Map(Some(3.0) -> (5.0, 50.0), Some(4.0) -> (4.0, 50.0), Some(-1.0) -> (9.0, 50.0)),
-      HashMap(Some(5.0) -> (3.0, 20.0), Some(6.0) -> (3.0, 50.0), Some(7.0) -> (1.0, 70.0),
-        Some(8.0) -> (1.0, 80.0), None -> (1.0, 90.0), Some(-1.0) -> (9.0, 50.0)))
+      expected_stats_continuous(0),
+      expected_stats_continuous(1),
+      expected_stats_continuous(2) - Some(9.0) + (None -> (1.0, 90.0)))
 
     model.stats.zip(expected_stats).foreach{
       case (actual, expected) => assert(actual.equals(expected))
@@ -391,12 +387,14 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
   }
 
-  test("TargetEncoder - null label") {
+  test("TargetEncoder - invalid label") {
 
-    val data_nolabel = Row(2.toShort, 3, 5.0, null, 60.0, 50.0, 90.0, 57.5, 50.0, 70.0)
+    val data_null = Row(2.toShort, 3, 5.0, null, 160.0, 150.0, 190.0, 57.5, 50.0, 70.0)
+    val data_nan = Row(1.toShort, 2, 6.0, Double.NaN, 160.0, 150.0, 190.0, 57.5, 50.0, 70.0)
 
     val df_nolabel = spark
-      .createDataFrame(sc.parallelize(data_continuous :+ data_nolabel), schema)
+      .createDataFrame(sc.parallelize(
+        data_continuous :+ data_null :+ data_nan), schema)
 
     val encoder = new TargetEncoder()
       .setLabelCol("label")
@@ -406,14 +404,7 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
 
     val model = encoder.fit(df_nolabel)
 
-    val expected_stats = Array(
-      Map(Some(0.0) -> (3.0, 40.0), Some(1.0) -> (3.0, 50.0), Some(2.0) -> (3.0, 60.0),
-        Some(-1.0) -> (9.0, 50.0)),
-      Map(Some(3.0) -> (5.0, 50.0), Some(4.0) -> (4.0, 50.0), Some(-1.0) -> (9.0, 50.0)),
-      HashMap(Some(5.0) -> (3.0, 20.0), Some(6.0) -> (3.0, 50.0), Some(7.0) -> (1.0, 70.0),
-        Some(8.0) -> (1.0, 80.0), Some(9.0) -> (1.0, 90.0), Some(-1.0) -> (9.0, 50.0)))
-
-    model.stats.zip(expected_stats).foreach{
+    model.stats.zip(expected_stats_continuous).foreach{
       case (actual, expected) => assert(actual.equals(expected))
     }
 
