@@ -192,10 +192,10 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "1777777777777777777777")
     ).foreach { case (numExpr, fromBase, toBase, expected) =>
       checkEvaluation(
-       Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), failOnError = false), expected)
+       Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = false), expected)
       checkExceptionInExpression[SparkArithmeticException](
-        Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), failOnError = true),
-        "Overflow in function conv(). Use 'try_conv' to tolerate overflow and return NULL instead.")
+        Conv(Literal(numExpr), Literal(fromBase), Literal(toBase), ansiEnabled = true),
+        "Overflow in function conv()")
     }
   }
 

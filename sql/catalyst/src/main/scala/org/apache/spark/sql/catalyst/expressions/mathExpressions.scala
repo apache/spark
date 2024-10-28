@@ -440,14 +440,14 @@ case class Conv(
     numExpr: Expression,
     fromBaseExpr: Expression,
     toBaseExpr: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression
     with ImplicitCastInputTypes
     with NullIntolerant
     with SupportQueryContext {
 
   def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
-    this(numExpr, fromBaseExpr, toBaseExpr, failOnError = SQLConf.get.ansiEnabled)
+    this(numExpr, fromBaseExpr, toBaseExpr, ansiEnabled = SQLConf.get.ansiEnabled)
 
   override def first: Expression = numExpr
   override def second: Expression = fromBaseExpr
@@ -462,16 +462,16 @@ case class Conv(
       num.asInstanceOf[UTF8String].trim().getBytes,
       fromBase.asInstanceOf[Int],
       toBase.asInstanceOf[Int],
-      failOnError,
+      ansiEnabled,
       getContextOrNull())
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val numconv = NumberConverter.getClass.getName.stripSuffix("$")
-    val context = getContextOrNullCode(ctx, failOnError)
+    val context = getContextOrNullCode(ctx, ansiEnabled)
     nullSafeCodeGen(ctx, ev, (num, from, to) =>
       s"""
-       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to, $failOnError, $context);
+       ${ev.value} = $numconv.convert($num.trim().getBytes(), $from, $to, $ansiEnabled, $context);
        if (${ev.value} == null) {
          ${ev.isNull} = true;
        }
@@ -483,7 +483,7 @@ case class Conv(
       newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
     copy(numExpr = newFirst, fromBaseExpr = newSecond, toBaseExpr = newThird)
 
-  override def initQueryContext(): Option[QueryContext] = if (failOnError) {
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
     Some(origin.context)
   } else {
     None
