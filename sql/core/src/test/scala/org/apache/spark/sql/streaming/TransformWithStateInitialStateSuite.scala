@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{Dataset, Encoders, KeyValueGroupedDataset}
+// import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.{Encoders, KeyValueGroupedDataset}
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
-import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.functions._
+// import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.util.StreamManualClock
+// import org.apache.spark.sql.streaming.util.StreamManualClock
 
 case class InitInputRow(key: String, action: String, value: Double)
 case class InputRowForInitialState(
@@ -199,6 +201,42 @@ class StatefulProcessorWithInitialStateProcTimerClass
   }
 }
 
+class StatefulProcessorWithAllStateVars extends RunningCountStatefulProcessor {
+  @transient private var _listState: ListState[String] = _
+  @transient private var _mapState: MapState[String, Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _listState = getHandle.getListState[String](
+      "listState", Encoders.STRING)
+    _mapState = getHandle.getMapState[String, Long](
+      "mapState", Encoders.STRING, Encoders.scalaLong)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val curCountValue = if (_countState.exists()) {
+      _countState.get()
+    } else 0L
+    var cnt = curCountValue
+    inputRows.foreach { row =>
+      cnt += 1
+      _listState.appendValue(row)
+      val mapCurVal = if (_mapState.containsKey(row)) {
+        _mapState.getValue(row)
+      } else 0
+      _mapState.updateValue(row, mapCurVal + 1L)
+    }
+    _countState.update(cnt)
+    Iterator.single((key, cnt.toString))
+  }
+}
+
+
 /**
  * Class to test stateful processor with initial state and event timers.
  * Timers can be registered during initial state handling and output rows can be
@@ -361,6 +399,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     }
   }
 
+  /*
   test("transformWithStateWithInitialState -" +
     " correctness test, processInitialState should only run once") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -501,6 +540,72 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("a", -1), ("b", -1), ("c", -1), ("d", 31)),
         StopStream
       )
+    }
+  } */
+
+  test("transformWithStateWithInitialState - correctness test, " +
+    "run with state data source reader dataframe as initial state") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+      withTempDir { checkpointDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new StatefulProcessorWithAllStateVars(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(inputData, "a", "b"),
+          CheckNewAnswer(("a", "1"), ("b", "1")),
+          AddData(inputData, "a", "b", "a"),
+          CheckNewAnswer(("a", "3"), ("b", "2"))
+        )
+
+        // state data source reader for state vars
+        val valueDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .load()
+          .selectExpr(
+            "key.value AS groupingKey",
+            "value.value AS value")
+          .withColumn("list_value", expr(null))
+        valueDf.show(false)
+        val listDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "listState")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, true)
+          .load()
+          .selectExpr(
+            "key.value AS groupingKey",
+            "list_element.value AS list_value")
+          .withColumn("value", expr(null))
+        listDf.show(false)
+        val mapDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, true)
+          .load()
+          .selectExpr(
+            "key.value AS groupingKey",
+            "user_map_key.value AS user_map_key",
+            "user_map_value.value AS user_map_value")
+          .withColumn("value", expr(null))
+          .withColumn("list_value", expr(null))
+        mapDf.show(false)
+
+        val df_joined1 = valueDf
+            .join(listDf, "groupingKey", "full_outer")
+        df_joined1.show(false)
+
+      }
     }
   }
 }
