@@ -101,7 +101,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
       // Sleep for a random time before global sync.
-      Thread.sleep(Random.nextInt(1000))
+      Thread.sleep(Random.nextInt(500))
       context.barrier()
       val time1 = System.currentTimeMillis()
       // Sleep for a random time before global sync.

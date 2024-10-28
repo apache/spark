@@ -2688,7 +2688,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val df = sql("SELECT SUM(2147483647 + DEPT) FROM h2.test.employee")
         checkAggregateRemoved(df, ansiMode)
         val expectedPlanFragment = if (ansiMode) {
-          "PushedAggregates: [SUM(2147483647 + DEPT)], " +
+          "PushedAggregates: [SUM(DEPT + 2147483647)], " +
             "PushedFilters: [], " +
             "PushedGroupByExpressions: []"
         } else {

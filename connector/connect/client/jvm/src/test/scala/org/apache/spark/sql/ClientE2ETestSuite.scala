@@ -95,7 +95,7 @@ class ClientE2ETestSuite
             .collect()
         }
         assert(
-          ex.getErrorClass ===
+          ex.getCondition ===
             "INCONSISTENT_BEHAVIOR_CROSS_VERSION.PARSE_DATETIME_BY_NEW_PARSER")
         assert(
           ex.getMessageParameters.asScala == Map(
@@ -122,12 +122,12 @@ class ClientE2ETestSuite
         Seq("1").toDS().withColumn("udf_val", throwException($"value")).collect()
       }
 
-      assert(ex.getErrorClass != null)
+      assert(ex.getCondition != null)
       assert(!ex.getMessageParameters.isEmpty)
       assert(ex.getCause.isInstanceOf[SparkException])
 
       val cause = ex.getCause.asInstanceOf[SparkException]
-      assert(cause.getErrorClass == null)
+      assert(cause.getCondition == null)
       assert(cause.getMessageParameters.isEmpty)
       assert(cause.getMessage.contains("test" * 10000))
     }
@@ -141,7 +141,7 @@ class ClientE2ETestSuite
         val ex = intercept[AnalysisException] {
           spark.sql("select x").collect()
         }
-        assert(ex.getErrorClass != null)
+        assert(ex.getCondition != null)
         assert(!ex.messageParameters.isEmpty)
         assert(ex.getSqlState != null)
         assert(!ex.isInternalError)
@@ -169,14 +169,14 @@ class ClientE2ETestSuite
     val ex = intercept[NoSuchNamespaceException] {
       spark.sql("use database123")
     }
-    assert(ex.getErrorClass != null)
+    assert(ex.getCondition != null)
   }
 
   test("table not found for spark.catalog.getTable") {
     val ex = intercept[AnalysisException] {
       spark.catalog.getTable("test_table")
     }
-    assert(ex.getErrorClass != null)
+    assert(ex.getCondition != null)
   }
 
   test("throw NamespaceAlreadyExistsException") {
@@ -185,7 +185,7 @@ class ClientE2ETestSuite
       val ex = intercept[NamespaceAlreadyExistsException] {
         spark.sql("create database test_db")
       }
-      assert(ex.getErrorClass != null)
+      assert(ex.getCondition != null)
     } finally {
       spark.sql("drop database test_db")
     }
@@ -197,7 +197,7 @@ class ClientE2ETestSuite
       val ex = intercept[TempTableAlreadyExistsException] {
         spark.sql("create temporary view test_view as select 1")
       }
-      assert(ex.getErrorClass != null)
+      assert(ex.getCondition != null)
     } finally {
       spark.sql("drop view test_view")
     }
@@ -209,7 +209,7 @@ class ClientE2ETestSuite
       val ex = intercept[TableAlreadyExistsException] {
         spark.sql(s"create table testcat.test_table (id int)")
       }
-      assert(ex.getErrorClass != null)
+      assert(ex.getCondition != null)
     }
   }
 
@@ -217,7 +217,7 @@ class ClientE2ETestSuite
     val ex = intercept[ParseException] {
       spark.sql("selet 1").collect()
     }
-    assert(ex.getErrorClass != null)
+    assert(ex.getCondition != null)
     assert(!ex.messageParameters.isEmpty)
     assert(ex.getSqlState != null)
     assert(!ex.isInternalError)

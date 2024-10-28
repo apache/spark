@@ -40,6 +40,7 @@ jobs:
     env:
       SPARK_TESTING: 1 # Reduce some noise in the logs
       RELEASE_VERSION: 'In-Progress'
+    if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v4

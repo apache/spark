@@ -47,8 +47,6 @@ private[rest] class CreateSubmissionRequest extends SubmitRestProtocolRequest {
     super.doValidate()
     assert(sparkProperties != null, "No Spark properties set!")
     assertFieldIsSet(appResource, "appResource")
-    assertFieldIsSet(appArgs, "appArgs")
-    assertFieldIsSet(environmentVariables, "environmentVariables")
     assertPropertyIsSet("spark.app.name")
     assertPropertyIsBoolean(config.DRIVER_SUPERVISE.key)
     assertPropertyIsNumeric(config.DRIVER_CORES.key)

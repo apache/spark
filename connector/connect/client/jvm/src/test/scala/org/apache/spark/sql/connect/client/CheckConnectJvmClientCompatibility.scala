@@ -227,6 +227,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.canUseSession"),
 
       // SparkSession#implicits
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -265,6 +267,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.artifact.ArtifactManager"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactManager$SparkContextResourceType$"),
 
       // ColumnNode conversions
       ProblemFilters.exclude[DirectMissingMethodProblem](

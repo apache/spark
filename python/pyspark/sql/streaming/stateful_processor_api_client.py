@@ -131,7 +131,9 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
 
-    def get_list_state(self, state_name: str, schema: Union[StructType, str]) -> None:
+    def get_list_state(
+        self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
+    ) -> None:
         import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
@@ -140,6 +142,8 @@ class StatefulProcessorApiClient:
         state_call_command = stateMessage.StateCallCommand()
         state_call_command.stateName = state_name
         state_call_command.schema = schema.json()
+        if ttl_duration_ms is not None:
+            state_call_command.ttl.durationMs = ttl_duration_ms
         call = stateMessage.StatefulProcessorCall(getListState=state_call_command)
         message = stateMessage.StateRequest(statefulProcessorCall=call)
 
@@ -149,6 +153,36 @@ class StatefulProcessorApiClient:
         if status != 0:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing value state: " f"{response_message[1]}")
+
+    def get_map_state(
+        self,
+        state_name: str,
+        user_key_schema: Union[StructType, str],
+        value_schema: Union[StructType, str],
+        ttl_duration_ms: Optional[int],
+    ) -> None:
+        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+
+        if isinstance(user_key_schema, str):
+            user_key_schema = cast(StructType, _parse_datatype_string(user_key_schema))
+        if isinstance(value_schema, str):
+            value_schema = cast(StructType, _parse_datatype_string(value_schema))
+
+        state_call_command = stateMessage.StateCallCommand()
+        state_call_command.stateName = state_name
+        state_call_command.schema = user_key_schema.json()
+        state_call_command.mapStateValueSchema = value_schema.json()
+        if ttl_duration_ms is not None:
+            state_call_command.ttl.durationMs = ttl_duration_ms
+        call = stateMessage.StatefulProcessorCall(getMapState=state_call_command)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error initializing map state: " f"{response_message[1]}")
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message

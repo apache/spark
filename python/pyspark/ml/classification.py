@@ -699,7 +699,7 @@ class LinearSVC(
     >>> model_path = temp_path + "/svm_model"
     >>> model.save(model_path)
     >>> model2 = LinearSVCModel.load(model_path)
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> bool(model.coefficients[0] == model2.coefficients[0])
     True
     >>> model.intercept == model2.intercept
     True
@@ -1210,7 +1210,7 @@ class LogisticRegression(
     >>> model_path = temp_path + "/lr_model"
     >>> blorModel.save(model_path)
     >>> model2 = LogisticRegressionModel.load(model_path)
-    >>> blorModel.coefficients[0] == model2.coefficients[0]
+    >>> bool(blorModel.coefficients[0] == model2.coefficients[0])
     True
     >>> blorModel.intercept == model2.intercept
     True
@@ -2038,9 +2038,9 @@ class RandomForestClassifier(
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
-    >>> numpy.argmax(result.probability)
+    >>> int(numpy.argmax(result.probability))
     0
-    >>> numpy.argmax(result.newRawPrediction)
+    >>> int(numpy.argmax(result.newRawPrediction))
     0
     >>> result.leafId
     DenseVector([0.0, 0.0, 0.0])

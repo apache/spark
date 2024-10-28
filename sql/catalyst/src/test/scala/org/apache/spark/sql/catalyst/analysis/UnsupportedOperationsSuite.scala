@@ -1133,7 +1133,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         }
       }
       if (!condition.isEmpty) {
-        assert(e.getErrorClass == condition)
+        assert(e.getCondition == condition)
       }
     }
   }

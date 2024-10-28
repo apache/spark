@@ -105,6 +105,14 @@ object CollationTypeCasts extends TypeCoercionRule {
       val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
       levenshtein.withNewChildren(Seq(newLeft, newRight) ++ threshold)
 
+    case getMap @ GetMapValue(child, key) if getMap.keyType != key.dataType =>
+      key match {
+        case Literal(_, _: StringType) =>
+          GetMapValue(child, Cast(key, getMap.keyType))
+        case _ =>
+          getMap
+      }
+
     case otherExpr @ (
       _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
       _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
@@ -175,7 +183,7 @@ object CollationTypeCasts extends TypeCoercionRule {
       case size if size > 1 =>
         throw QueryCompilationErrors
           .explicitCollationMismatchError(
-            explicitTypes.map(t => StringType(t).typeName)
+            explicitTypes.map(t => StringType(t))
           )
       // Only implicit or default collations present
       case 0 =>
@@ -191,7 +199,9 @@ object CollationTypeCasts extends TypeCoercionRule {
           .distinct
 
         if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError()
+          throw QueryCompilationErrors.implicitCollationMismatchError(
+            implicitTypes.map(t => StringType(t))
+          )
         }
         else {
           implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
