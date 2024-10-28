@@ -33,10 +33,6 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
     assert(exception.getCondition === errorClass)
   }
 
-  private def assertCollation(df: => DataFrame, collation: String): Unit = {
-    checkAnswer(df, Seq(Row(collation)))
-  }
-
   private def assertExplicitMismatch(df: => DataFrame): Unit =
     assertThrowsError(df, "COLLATION_MISMATCH.EXPLICIT")
 
@@ -122,11 +118,42 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
   }
 
   test("subqueries have implicit collation strength") {
-    // TODO:
-  }
+    withTable("t") {
+      sql(s"CREATE TABLE t (c STRING COLLATE UTF8_LCASE) USING $dataSource")
 
-  test("literals collation strength") {
+      sql(s"SELECT (SELECT 'text' COLLATE UTF8_BINARY) || c collate UTF8_BINARY from t")
+      assertImplicitMismatch(
+        sql(s"SELECT (SELECT 'text' COLLATE UTF8_BINARY) || c from t"))
+    }
 
+    // Simple subquery with explicit collation
+    checkAnswer(
+      sql(s"SELECT COLLATION((SELECT 'text' COLLATE UTF8_BINARY) || 'suffix')"),
+      Row("UTF8_BINARY")
+    )
+
+    checkAnswer(
+      sql(s"SELECT COLLATION((SELECT 'text' COLLATE UTF8_LCASE) || 'suffix')"),
+      Row("UTF8_LCASE")
+    )
+
+    // Nested subquery should retain the collation of the deepest expression
+    checkAnswer(
+      sql(s"SELECT COLLATION((SELECT (SELECT 'inner' COLLATE UTF8_LCASE) || 'outer'))"),
+      Row("UTF8_LCASE")
+    )
+
+    checkAnswer(
+      sql(s"SELECT COLLATION((SELECT (SELECT 'inner' COLLATE UTF8_BINARY) || 'outer'))"),
+      Row("UTF8_BINARY")
+    )
+
+    // Subqueries with mixed collations should follow collation precedence rules
+    checkAnswer(
+      sql(s"SELECT COLLATION((SELECT 'string1' COLLATE UTF8_LCASE || " +
+        s"(SELECT 'string2' COLLATE UTF8_BINARY)))"),
+      Row("UTF8_LCASE")
+    )
   }
 
   test("struct test") {
@@ -138,8 +165,8 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
            |  c2 STRUCT<col1: STRUCT<col1: STRING COLLATE UNICODE_CI>>)
            |USING $dataSource
            |""".stripMargin)
-      sql(s"INSERT INTO $tableName VALUES (named_struct('col1', 'a', 'col2', 'b'), named_struct('col1', named_struct('col1', 'c')))")
-//      sql(s"INSERT INTO $tableName VALUES (named_struct('col1', 'a', 'col2', 'b'))")
+      sql(s"INSERT INTO $tableName VALUES (named_struct('col1', 'a', 'col2', 'b')," +
+        s"named_struct('col1', named_struct('col1', 'c')))")
 
       checkAnswer(
         sql(s"SELECT COLLATION(c2.col1.col1 || 'a') FROM $tableName"),
@@ -148,6 +175,31 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
       checkAnswer(
         sql(s"SELECT COLLATION(c1.col1 || 'a') FROM $tableName"),
         Seq(Row("UNICODE_CI")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1.col1 || 'a' collate UNICODE) FROM $tableName"),
+        Seq(Row("UNICODE")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(struct('a').col1 || 'a' collate UNICODE) FROM $tableName"),
+        Seq(Row("UNICODE")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(struct('a' collate UNICODE).col1 || 'a') FROM $tableName"),
+        Seq(Row("UNICODE")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(struct('a').col1 collate UNICODE || 'a' collate UNICODE) " +
+          s"FROM $tableName"),
+        Seq(Row("UNICODE")))
+
+      assertExplicitMismatch(
+        sql(s"SELECT COLLATION(struct('a').col1 collate UNICODE || 'a' collate UTF8_LCASE) " +
+          s"FROM $tableName"))
+
+      assertExplicitMismatch(
+        sql(s"SELECT COLLATION(struct('a' collate UNICODE).col1 || 'a' collate UTF8_LCASE) " +
+          s"FROM $tableName"))
     }
   }
 
@@ -172,7 +224,8 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
       )
 
       checkAnswer(
-        sql(s"SELECT collation(element_at(array('a', 'b' collate utf8_lcase), 1) || c1) from $tableName"),
+        sql(s"SELECT collation(element_at(array('a', 'b' collate utf8_lcase), 1) || c1)" +
+          s"from $tableName"),
         Seq(Row("UTF8_LCASE")))
 
       checkAnswer(
@@ -181,7 +234,8 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
       )
 
       checkAnswer(
-        sql(s"SELECT collation(element_at(array_append(c2, 'd' collate utf8_lcase), 1)) FROM $tableName"),
+        sql(s"SELECT collation(element_at(array_append(c2, 'd' collate utf8_lcase), 1))" +
+          s"FROM $tableName"),
         Seq(Row("UTF8_LCASE"))
       )
     }
@@ -220,7 +274,11 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST(c1 AS STRING)) FROM $tableName"),
         Seq(Row("UNICODE")))
-    }
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1 || SUBSTRING(CAST(c1 AS STRING), 0, 1)) FROM $tableName"),
+        Seq(Row("UNICODE")))
+      }
   }
 
   test("access collated map via literal") {

@@ -20,30 +20,22 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
+import org.apache.spark.sql.util.SchemaUtils
 
-private[spark] sealed trait CollationStrength {
-  def strength: Int
-}
-private[spark] object CollationStrength {
-  case object Explicit extends CollationStrength {
-    override def strength: Int = 2
-  }
-  case object Implicit extends CollationStrength {
-    override def strength: Int = 1
-  }
-  case object Default extends CollationStrength {
-    override def strength: Int = 0
-  }
+private sealed trait CollationStrength {}
+
+private object CollationStrength {
+  case object Explicit extends CollationStrength {}
+  case object Implicit extends CollationStrength {}
+  case object Default extends CollationStrength {}
 }
 
-private[spark] case class CollationContext(
-                                            dataType: DataType,
-                                            strength: CollationStrength) {}
+private case class CollationContext(dataType: DataType, strength: CollationStrength) {}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
@@ -193,23 +185,27 @@ object CollationTypeCasts extends TypeCoercionRule {
   }
 
   private def findLeastCommonStringType(expressions: Seq[Expression]): Option[StringType] = {
-    if (!expressions.exists(e => hasStringType(e.dataType))) {
+    if (!expressions.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
       return None
     }
 
     expressions.foldLeft(findCollationStrength(expressions.head)) {
       case (Some(left), expr) =>
-        findCollationStrength(expr).map(right => collationPrecedenceWinner(left, right))
+        findCollationStrength(expr).flatMap { right =>
+          collationPrecedenceWinner(left, right)
+        }
       case (None, _) => return None
-    }.collect { case CollationContext(dt, _) => extractStringType(dt).get}
+    }.flatMap {
+      case CollationContext(dt, _) => extractStringType(dt)
+    }
   }
 
   private def findCollationStrength(expr: Expression): Option[CollationContext] = expr match {
     case _ if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
       None
 
-    case coll: Collate =>
-      Some(CollationContext(coll.dataType, Explicit))
+    case collate: Collate =>
+      Some(CollationContext(collate.dataType, Explicit))
 
     case _: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference =>
       Some(CollationContext(expr.dataType, Implicit))
@@ -217,52 +213,60 @@ object CollationTypeCasts extends TypeCoercionRule {
     case _: Literal =>
       Some(CollationContext(expr.dataType, Default))
 
-    case extract: ExtractValue => extract match {
-      case g: GetStructField =>
-        findCollationStrength(g.child).map(cc => CollationContext(g.dataType, cc.strength))
+    case extract: ExtractValue =>
+      findCollationStrength(extract.child)
+        .map(cc => CollationContext(extract.dataType, cc.strength))
 
-      case g: GetMapValue =>
-        findCollationStrength(g.child).map(cc => CollationContext(g.dataType, cc.strength))
-
-      case g: GetArrayItem =>
-        findCollationStrength(g.child).map(cc => CollationContext(g.dataType, cc.strength))
-
-      case a: GetArrayStructFields =>
-        findCollationStrength(a.child).map(cc => CollationContext(a.dataType, cc.strength))
-    }
+    case _ if expr.children.isEmpty =>
+      Some(CollationContext(expr.dataType, Default))
 
     case _ =>
       expr.children
         .flatMap(findCollationStrength)
-        .reduceOption(collationPrecedenceWinner)
+        .foldLeft(Option.empty[CollationContext]) {
+          case (Some(left), right) =>
+            collationPrecedenceWinner(left, right)
+          case (None, right) =>
+            Some(right)
+        }
   }
 
   private def collationPrecedenceWinner(
     left: CollationContext,
-    right: CollationContext): CollationContext = {
+    right: CollationContext): Option[CollationContext] = {
 
-    val leftStringType = extractStringType(left.dataType).get
-    val rightStringType = extractStringType(right.dataType).get
+    val (leftStringType, rightStringType) =
+      (extractStringType(left.dataType), extractStringType(right.dataType)) match {
+        case (None, None) =>
+          return None
+        case (Some(_), None) =>
+          return Some(left)
+        case (None, Some(_)) =>
+          return Some(right)
+        case (Some(l), Some(r)) =>
+          (l, r)
+      }
+
     (left.strength, right.strength) match {
-      case (Explicit, Explicit) if leftStringType !=  rightStringType =>
+      case (Explicit, Explicit) if leftStringType != rightStringType =>
         throw QueryCompilationErrors.explicitCollationMismatchError(
           Seq(leftStringType, rightStringType))
 
       case (Explicit, _) | (_, Explicit) =>
-        if (left.strength == Explicit) left else right
+        if (left.strength == Explicit) Some(left) else Some(right)
 
       case (Implicit, Implicit) if leftStringType != rightStringType =>
         throw QueryCompilationErrors.implicitCollationMismatchError(
           Seq(leftStringType, rightStringType))
 
       case (Implicit, _) | (_, Implicit) =>
-        if (left.strength == Implicit) left else right
+        if (left.strength == Implicit) Some(left) else Some(right)
 
       case (Default, Default) if leftStringType != rightStringType =>
-        CollationContext(SQLConf.get.defaultStringType, Default)
+        Some(CollationContext(SQLConf.get.defaultStringType, Default))
 
       case _ =>
-        left
+        Some(left)
     }
   }
 }

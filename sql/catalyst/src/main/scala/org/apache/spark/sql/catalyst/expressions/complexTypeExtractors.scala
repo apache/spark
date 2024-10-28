@@ -92,6 +92,7 @@ object ExtractValue {
 
 trait ExtractValue extends Expression with NullIntolerant {
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
+  val child: Expression
 }
 
 /**
