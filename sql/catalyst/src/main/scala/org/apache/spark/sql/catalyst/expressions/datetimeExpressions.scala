@@ -2781,7 +2781,7 @@ case class MakeTimestamp(
             ldt = java.time.LocalDateTime.of(
               $year, $month, $day, $hour, $min, 0, 0).plusMinutes(1);
           } else {
-            throw QueryExecutionErrors.invalidFractionOfSecondError();
+            throw QueryExecutionErrors.invalidFractionOfSecondError($secAndNanos);
           }
         } else {
           ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
