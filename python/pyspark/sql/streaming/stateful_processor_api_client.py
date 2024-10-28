@@ -17,7 +17,7 @@
 from enum import Enum
 import os
 import socket
-from typing import Any, List, Union, Optional, cast, Tuple, Iterator
+from typing import Any, Dict, List, Union, Optional, cast, Tuple, Iterator
 
 from pyspark.serializers import write_int, read_int, UTF8Deserializer
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
@@ -31,6 +31,9 @@ from pyspark.sql.utils import has_numpy
 from pyspark.serializers import CPickleSerializer
 from pyspark.errors import PySparkRuntimeError
 import uuid
+
+if TYPE_CHECKING:
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 __all__ = ["StatefulProcessorApiClient", "StatefulProcessorHandleState"]
 
