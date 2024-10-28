@@ -137,27 +137,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwo))
   }
 
-  /** Promotes StringType to other data types. */
-  @scala.annotation.tailrec
-  private def findWiderTypeForString(dt1: DataType, dt2: DataType): Option[DataType] = {
-    (dt1, dt2) match {
-      case (_: StringType, _: IntegralType) => Some(LongType)
-      case (_: StringType, _: FractionalType) => Some(DoubleType)
-      case (st: StringType, NullType) => Some(st)
-      // If a binary operation contains interval type and string, we can't decide which
-      // interval type the string should be promoted as. There are many possible interval
-      // types, such as year interval, month interval, day interval, hour interval, etc.
-      case (_: StringType, _: AnsiIntervalType) => None
-      // [SPARK-50060] If a binary operation contains two collated string types with different
-      // collation IDs, we can't decide which collation ID the result should have.
-      case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => None
-      case (_: StringType, a: AtomicType) => Some(a)
-      case (other, st: StringType) if !other.isInstanceOf[StringType] =>
-        findWiderTypeForString(st, other)
-      case _ => None
-    }
-  }
-
   override def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) =>
       r match {
