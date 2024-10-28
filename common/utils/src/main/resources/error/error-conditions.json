@@ -3477,6 +3477,12 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
+    "message" : [
+      "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
+    ],
+    "sqlState" : "3F000"
+  },
   "MISSING_GROUP_BY" : {
     "message" : [
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
@@ -5019,6 +5025,11 @@
           "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
         ]
       },
+      "ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE" : {
+        "message" : [
+          "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -6152,11 +6163,6 @@
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1125" : {
-    "message" : [
-      "Database from v1 session catalog is not specified."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1126" : {
     "message" : [
       "Nested databases are not supported by v1 session catalog: <catalog>."
@@ -6542,11 +6548,6 @@
   "_LEGACY_ERROR_TEMP_1247" : {
     "message" : [
       "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1248" : {
-    "message" : [
-      "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
     ]
   },
   "_LEGACY_ERROR_TEMP_1250" : {

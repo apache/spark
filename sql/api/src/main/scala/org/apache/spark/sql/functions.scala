@@ -4075,8 +4075,7 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def lpad(str: Column, len: Int, pad: String): Column =
-    Column.fn("lpad", str, lit(len), lit(pad))
+  def lpad(str: Column, len: Int, pad: String): Column = lpad(str, lit(len), lit(pad))
 
   /**
    * Left-pad the binary column with pad to a byte length of len. If the binary column is longer
@@ -4085,8 +4084,16 @@ object functions {
    * @group string_funcs
    * @since 3.3.0
    */
-  def lpad(str: Column, len: Int, pad: Array[Byte]): Column =
-    Column.fn("lpad", str, lit(len), lit(pad))
+  def lpad(str: Column, len: Int, pad: Array[Byte]): Column = lpad(str, lit(len), lit(pad))
+
+  /**
+   * Left-pad the string column with pad to a length of len. If the string column is longer than
+   * len, the return value is shortened to len characters.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def lpad(str: Column, len: Column, pad: Column): Column = Column.fn("lpad", str, len, pad)
 
   /**
    * Trim the spaces from left end for the specified string value.
@@ -4263,8 +4270,7 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def rpad(str: Column, len: Int, pad: String): Column =
-    Column.fn("rpad", str, lit(len), lit(pad))
+  def rpad(str: Column, len: Int, pad: String): Column = rpad(str, lit(len), lit(pad))
 
   /**
    * Right-pad the binary column with pad to a byte length of len. If the binary column is longer
@@ -4273,8 +4279,16 @@ object functions {
    * @group string_funcs
    * @since 3.3.0
    */
-  def rpad(str: Column, len: Int, pad: Array[Byte]): Column =
-    Column.fn("rpad", str, lit(len), lit(pad))
+  def rpad(str: Column, len: Int, pad: Array[Byte]): Column = rpad(str, lit(len), lit(pad))
+
+  /**
+   * Right-pad the string column with pad to a length of len. If the string column is longer than
+   * len, the return value is shortened to len characters.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def rpad(str: Column, len: Column, pad: Column): Column = Column.fn("rpad", str, len, pad)
 
   /**
    * Repeats a string column n times, and returns it as a new string column.
