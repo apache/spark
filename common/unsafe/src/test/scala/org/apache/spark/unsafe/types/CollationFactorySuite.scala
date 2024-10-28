@@ -88,7 +88,14 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("utf8_binary", "UTF8_BINARY"),
       ("UtF8_LcasE", "UTF8_LCASE"),
       ("unicode", "UNICODE"),
-      ("UnICoDe_cs_aI", "UNICODE_AI")
+      ("UnICoDe_cs_aI", "UNICODE_AI"),
+      // Fully qualified names.
+      ("system.builtin.unicode", "UNICODE"),
+      ("system.builtin.unicode_as_cs", "UNICODE"),
+      ("SYSTEM.builtin.unicode_ci_as", "UNICODE_CI"),
+      ("system.builtin.UNICODE_AI", "UNICODE_AI"),
+      ("system.BUILTIN.unicode_ci_ai", "UNICODE_CI_AI"),
+      ("SYSTEM.BUILTIN.sr_AI", "sr_AI")
     ).foreach{
       case (name, normalized) =>
         val col = fetchCollation(name)

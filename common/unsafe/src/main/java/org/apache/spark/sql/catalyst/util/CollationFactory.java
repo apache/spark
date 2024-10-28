@@ -1188,7 +1188,7 @@ public final class CollationFactory {
       // Currently only predefined collations are supported.
       if (numDots != 2 || !CollationFactory.CATALOG.equalsIgnoreCase(nameParts[0]) ||
           !CollationFactory.SCHEMA.equalsIgnoreCase(nameParts[1])) {
-        throw CollationFactory.Collation.CollationSpec.collationInvalidNameException(collationName);
+        throw CollationFactory.Collation.CollationSpec.collationInvalidNameException(nameParts[nameParts.length - 1]);
       }
       return Collation.CollationSpec.collationNameToId(nameParts[2]);
     }
