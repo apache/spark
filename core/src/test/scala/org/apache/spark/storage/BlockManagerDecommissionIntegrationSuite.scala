@@ -381,7 +381,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val shuffleBlockUpdates = new ConcurrentLinkedQueue[BlockId]()
     val execToDecommission = sc.getExecutorIds().head
-    val decommissionedExecutorLocalDir = sc.parallelize(1 to 10, 100).flatMap {  _ =>
+    val decommissionedExecutorLocalDir = sc.parallelize(1 to 100, 10).flatMap {  _ =>
       if (SparkEnv.get.executorId == execToDecommission) {
         SparkEnv.get.blockManager.getLocalDiskDirs
       } else {
