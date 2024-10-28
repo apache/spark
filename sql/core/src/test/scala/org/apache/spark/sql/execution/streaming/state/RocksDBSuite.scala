@@ -1683,6 +1683,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withDB(remoteDir, conf = conf) { db =>
       for (version <- 0 to 1) {
         db.load(version)
+        assert(db.rocksDBFileMapping.currentVersion === version)
         db.put(version.toString, version.toString)
         db.commit()
       }
@@ -2284,6 +2285,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       fileMapping: RocksDBFileMapping): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
+    // This would have been done in load, but we're not sure the test called load before saving.
     fileMapping.currentVersion = version - 1
     val (dfsFileSuffix, immutableFileMapping) = fileMapping.createSnapshotFileMapping(
       fileManager, checkpointDir, version)
@@ -2303,6 +2305,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       expectedFiles: Seq[(String, Int)],
       expectedNumKeys: Int,
       fileMapping: RocksDBFileMapping): Unit = {
+    // Normally, this would be done in rocksdb.load(), but since we are directly
+    // using the file manager, lets update the file mapping current version.
+    // This is important to correctly know files that can be reused for this version.
+    fileMapping.currentVersion = version
     val metadata = fileManager.loadCheckpointFromDfs(version,
       verificationDir, fileMapping)
     val filesAndLengths =
