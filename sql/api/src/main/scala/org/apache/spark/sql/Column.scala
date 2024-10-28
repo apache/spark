@@ -1383,14 +1383,18 @@ class Column(val node: ColumnNode) extends Logging {
   def over(): Column = over(Window.spec)
 
   /**
-   * TODO: Add documentation
-   * @return
+   * Marks this column reference as an outer reference for subqueries.
+   *
+   * @group subquery
+   * @since 4.0.0
    */
   def outer(): Column = withOrigin {
     node match {
       case attr: UnresolvedAttribute if !attr.isMetadataColumn =>
         Column(LazyOuterReference(attr.nameParts, attr.planId))
-      // TODO: other cases
+      case _ =>
+        throw new IllegalArgumentException(
+          "Only unresolved attributes can be used as outer references")
     }
   }
 }

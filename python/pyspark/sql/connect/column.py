@@ -30,7 +30,12 @@ from typing import (
 )
 
 from pyspark.sql.column import Column as ParentColumn
-from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
+from pyspark.errors import (
+    PySparkTypeError,
+    PySparkAttributeError,
+    PySparkValueError,
+    PySparkNotImplementedError,
+)
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import enum_to_value
 
@@ -456,7 +461,10 @@ class Column(ParentColumn):
 
     def outer(self) -> ParentColumn:
         # TODO(SPARK-50134): Implement this method
-        raise NotImplementedError("This method is not implemented yet")
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "outer()"},
+        )
 
     def isin(self, *cols: Any) -> ParentColumn:
         if len(cols) == 1 and isinstance(cols[0], (list, set)):

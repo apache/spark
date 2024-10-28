@@ -47,6 +47,20 @@ class SubqueryTestsMixin:
             ["c", "d"],
         )
 
+    def test_unanalyzable_expression(self):
+        sub = self.spark.range(1).where(sf.col("id") == sf.col("id").outer())
+
+        with self.assertRaises(AnalysisException) as pe:
+            sub.schema
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNANALYZABLE_EXPRESSION",
+            messageParameters={"expr": '"outer(id)"'},
+            query_context_type=QueryContextType.DataFrame,
+            fragment="outer",
+        )
+
     def test_simple_uncorrelated_scalar_subquery(self):
         assertDataFrameEqual(
             self.spark.range(1).select(self.spark.range(1).select(sf.lit(1)).scalar().alias("b")),

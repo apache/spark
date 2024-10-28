@@ -1039,4 +1039,7 @@ case class LazyOuterReference(
   override def newInstance(): NamedExpression = LazyOuterReference(nameParts)
 
   override def nodePatternsInternal(): Seq[TreePattern] = Seq(LAZY_OUTER_REFERENCE)
+
+  override def prettyName: String = "outer"
+  override def sql: String = s"$prettyName($name)"
 }

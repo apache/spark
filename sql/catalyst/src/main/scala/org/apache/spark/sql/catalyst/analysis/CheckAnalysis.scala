@@ -457,6 +457,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
 
+          case l: LazyAnalysisExpression =>
+            l.failAnalysis(
+              errorClass = "UNANALYZABLE_EXPRESSION",
+              messageParameters = Map("expr" -> toSQLExpr(l)))
+
           case _ =>
         })
 

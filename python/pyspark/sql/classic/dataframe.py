@@ -42,6 +42,7 @@ from pyspark import _NoValue
 from pyspark.resource import ResourceProfile
 from pyspark._globals import _NoValueType
 from pyspark.errors import (
+    AnalysisException,
     PySparkTypeError,
     PySparkValueError,
     PySparkIndexError,
@@ -218,6 +219,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 self._schema = cast(
                     StructType, _parse_datatype_json_string(self._jdf.schema().json())
                 )
+            except AnalysisException as e:
+                raise e
             except Exception as e:
                 raise PySparkValueError(
                     errorClass="CANNOT_PARSE_DATATYPE",

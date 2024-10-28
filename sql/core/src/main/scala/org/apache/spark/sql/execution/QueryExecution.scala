@@ -90,12 +90,6 @@ class QueryExecution(
   }
 
   private val lazyAnalyzed = LazyTry {
-    if (isLazyAnalysis) {
-      // TODO: Use the error class.
-      throw new SparkException(
-        "QueryExecution cannot execute lazy analysis plans. " +
-          "Please use the SQLExecution API to execute this query.")
-    }
     val plan = executePhase(QueryPlanningTracker.ANALYSIS) {
       // We can't clone `logical` here, which will reset the `_analyzed` flag.
       sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
