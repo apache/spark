@@ -382,11 +382,17 @@ private case class PostgresDialect()
       case Types.ARRAY =>
         val tableName = rsmd.getTableName(columnIdx)
         val columnName = rsmd.getColumnName(columnIdx)
+        /*
+         Spark does not support different dimensionality per row, therefore we retrieve the
+         dimensionality of any row from Postgres. This might fail later on as Postgres allows
+         different dimensions per row for arrays.
+         */
+
         val query = s"SELECT array_ndims($columnName) FROM $tableName LIMIT 1"
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
-              if (rs.next()) metadata.putLong("arrayDimension", Math.max(rs.getLong(1), 1))
+              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
             }
           }
         } catch {
