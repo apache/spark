@@ -3353,9 +3353,10 @@ object SQLConf {
     buildConf("spark.sql.execution.pandas.convertToArrowArraySafely")
       .internal()
       .doc("When true, Arrow will perform safe type conversion when converting " +
-        "Pandas.Series to Arrow array during serialization. Arrow will raise errors " +
-        "when detecting unsafe type conversion like overflow. When false, disabling Arrow's type " +
-        "check and do type conversions anyway. This config only works for Arrow 0.11.0+.")
+        "Pandas.Series to Arrow array during serialization, and when casting Arrow tables to " +
+        "create DataFrames. Arrow will raise errors when detecting unsafe type conversion like " +
+        "overflow. When false, disabling Arrow's type check and do type conversions anyway. This " +
+        "config only works for Arrow 0.11.0+.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)

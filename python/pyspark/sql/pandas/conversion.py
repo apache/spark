@@ -785,8 +785,9 @@ class SparkConversionMixin:
         if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
+        safecheck = self._jconf.arrowSafeTypeConversion()
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
-            to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True)
+            to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True), safe=safecheck
         )
 
         # Chunk the Arrow Table into RecordBatches
