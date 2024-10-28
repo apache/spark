@@ -426,7 +426,8 @@ abstract class ProgressContext(
       if (Utils.isTesting) {
         // do not fall back to the legacy approach for testing - we want to proactively address
         // any issues with the new approach
-        sumRows(sourceToInputRowsTuples)
+        throw new IllegalStateException("Cannot find the nodes for streams " +
+          s"${sources.diff(capturedSources)}, failing query... (This is only for testing.)")
       } else {
         // falling back to the legacy approach to avoid any regression
         val inputRows = legacyExtractSourceToNumInputRows(lastExecution)
