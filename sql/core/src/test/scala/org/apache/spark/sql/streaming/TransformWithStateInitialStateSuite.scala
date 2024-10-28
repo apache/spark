@@ -17,19 +17,25 @@
 
 package org.apache.spark.sql.streaming
 
-// import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{Encoders, KeyValueGroupedDataset}
+import org.apache.spark.sql.{Dataset, Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
-import org.apache.spark.sql.functions._
-// import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
-// import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.util.StreamManualClock
 
 case class InitInputRow(key: String, action: String, value: Double)
 case class InputRowForInitialState(
     key: String, value: Double, entries: List[Double], mapping: Map[Double, Int])
+
+case class UnionInitialStateRow(
+    groupingKey: String,
+    value: Option[Long],
+    listValue: Option[Long],
+    userMapKey: Option[String],
+    userMapValue: Option[Long]
+)
 
 abstract class StatefulProcessorWithInitialStateTestClass[V]
     extends StatefulProcessorWithInitialState[
@@ -85,6 +91,30 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
       }
     }
     output.iterator
+  }
+}
+
+/**
+ * Stateful processor that will take a union dataframe output from state data source reader
+ */
+class InitialStatefulProcessorWithStateDataSource
+  extends StatefulProcessorWithInitialStateTestClass[UnionInitialStateRow] {
+  override def handleInitialState(
+    key: String, initialState: UnionInitialStateRow, timerValues: TimerValues): Unit = {
+    val stateVar = {
+      if (initialState.value.isDefined) "value"
+      else if (initialState.listValue.isDefined) "list"
+      else if (initialState.userMapKey.isDefined) "map"
+      else "invalid"
+    }
+    stateVar match {
+      case "value" => _valState.update(initialState.value.get.toDouble)
+      case "list" => _listState.appendValue(initialState.listValue.get.toDouble)
+      case "map" =>
+        _mapState.updateValue(
+        (initialState.userMapKey.get.charAt(0) - 'a').toDouble,
+        initialState.userMapValue.get.toInt)
+    }
   }
 }
 
@@ -201,16 +231,19 @@ class StatefulProcessorWithInitialStateProcTimerClass
   }
 }
 
+/**
+ * Class that updates all state variables.
+ */
 class StatefulProcessorWithAllStateVars extends RunningCountStatefulProcessor {
-  @transient private var _listState: ListState[String] = _
+  @transient private var _listState: ListState[Long] = _
   @transient private var _mapState: MapState[String, Long] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
-    _listState = getHandle.getListState[String](
-      "listState", Encoders.STRING)
+    _listState = getHandle.getListState[Long](
+      "listState", Encoders.scalaLong)
     _mapState = getHandle.getMapState[String, Long](
       "mapState", Encoders.STRING, Encoders.scalaLong)
   }
@@ -225,7 +258,7 @@ class StatefulProcessorWithAllStateVars extends RunningCountStatefulProcessor {
     var cnt = curCountValue
     inputRows.foreach { row =>
       cnt += 1
-      _listState.appendValue(row)
+      _listState.appendValue(cnt)
       val mapCurVal = if (_mapState.containsKey(row)) {
         _mapState.getValue(row)
       } else 0
@@ -399,7 +432,6 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     }
   }
 
-  /*
   test("transformWithStateWithInitialState -" +
     " correctness test, processInitialState should only run once") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -435,37 +467,6 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
 
     val df = result.toDF()
     checkAnswer(df, Seq(("k1", "getOption", 37.0)).toDF())
-  }
-
-  test("transformWithStateWithInitialState - " +
-    "cannot re-initialize state during initial state handling") {
-    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-      classOf[RocksDBStateStoreProvider].getName) {
-      val initDf = Seq(("init_1", 40.0), ("init_2", 100.0), ("init_1", 50.0)).toDS()
-        .groupByKey(x => x._1).mapValues(x => x)
-      val inputData = MemoryStream[InitInputRow]
-      val query = inputData.toDS()
-        .groupByKey(x => x.key)
-        .transformWithState(new AccumulateStatefulProcessorWithInitState(),
-          TimeMode.None(),
-          OutputMode.Append(),
-          initDf)
-
-      testStream(query, OutputMode.Update())(
-        AddData(inputData, InitInputRow("k1", "add", 50.0)),
-        Execute { q =>
-          val e = intercept[Exception] {
-            q.processAllAvailable()
-          }
-          checkError(
-            exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
-            condition = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
-            sqlState = Some("42802"),
-            parameters = Map("groupingKey" -> "init_1")
-          )
-        }
-      )
-    }
   }
 
   test("transformWithStateWithInitialState - streaming with processing time timer, " +
@@ -541,7 +542,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         StopStream
       )
     }
-  } */
+  }
 
   test("transformWithStateWithInitialState - correctness test, " +
     "run with state data source reader dataframe as initial state") {
@@ -572,10 +573,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
           .option(StateSourceOptions.STATE_VAR_NAME, "countState")
           .load()
           .selectExpr(
-            "key.value AS groupingKey",
-            "value.value AS value")
-          .withColumn("list_value", expr(null))
-        valueDf.show(false)
+            "key.value AS groupingKey", "value.value AS value")
         val listDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
@@ -583,10 +581,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
           .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, true)
           .load()
           .selectExpr(
-            "key.value AS groupingKey",
-            "list_element.value AS list_value")
-          .withColumn("value", expr(null))
-        listDf.show(false)
+            "key.value AS groupingKey", "list_element.value AS listValue")
         val mapDf = spark.read
           .format("statestore")
           .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
@@ -595,16 +590,37 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
           .load()
           .selectExpr(
             "key.value AS groupingKey",
-            "user_map_key.value AS user_map_key",
-            "user_map_value.value AS user_map_value")
-          .withColumn("value", expr(null))
-          .withColumn("list_value", expr(null))
-        mapDf.show(false)
+            "user_map_key.value AS userMapKey",
+            "user_map_value.value AS userMapValue")
 
-        val df_joined1 = valueDf
-            .join(listDf, "groupingKey", "full_outer")
-        df_joined1.show(false)
+        // create a df where each row contains all value, list, map state rows
+        // fill the missing column with null
+        val df_joined = valueDf.unionByName(listDf, true)
+          .unionByName(mapDf, true)
 
+        val inputData2 = MemoryStream[InitInputRow]
+        val kvDataSet = inputData2.toDS().groupByKey(x => x.key)
+        val initStateDf = df_joined.as[UnionInitialStateRow].groupByKey(x => x.groupingKey)
+        val query = kvDataSet.transformWithState(new InitialStatefulProcessorWithStateDataSource(),
+          TimeMode.None(), OutputMode.Append(), initStateDf)
+
+        testStream(query, OutputMode.Update())(
+          // check initial state is updated for state vars
+          AddData(inputData2, InitInputRow("a", "getOption", 0.0)),
+          AddData(inputData2, InitInputRow("a", "getList", 0.0)),
+          AddData(inputData2, InitInputRow("a", "getCount", 0.0)),
+          CheckNewAnswer(("a", "getCount", 3.0),
+            ("a", "getList", 1.0), ("a", "getList", 2.0), ("a", "getList", 3.0),
+            ("a", "getOption", 3.0)),
+          // check we can make updates on state vars after first batch
+          AddData(inputData2, InitInputRow("b", "update", 37.0)),
+          AddData(inputData2, InitInputRow("b", "clearList", 0.0)),
+          AddData(inputData2, InitInputRow("b", "incCount", 1.0)),
+          AddData(inputData2, InitInputRow("b", "getOption", 0.0)),
+          AddData(inputData2, InitInputRow("b", "getList", 0.0)),
+          AddData(inputData2, InitInputRow("b", "getCount", 1.0)),
+          CheckNewAnswer(("b", "getCount", 3.0), ("b", "getOption", 37.0))
+        )
       }
     }
   }
