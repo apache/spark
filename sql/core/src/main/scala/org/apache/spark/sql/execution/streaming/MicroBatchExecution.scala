@@ -787,7 +787,8 @@ class MicroBatchExecution(
           }
           Project(aliases, finalDataPlanWithStream)
         }.getOrElse {
-          LocalRelation(output, isStreaming = true).withStream(source)
+          // Don't track the source node which is known to produce zero rows.
+          LocalRelation(output, isStreaming = true)
         }
 
       // For v2 sources.
@@ -796,7 +797,8 @@ class MicroBatchExecution(
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
         }.getOrElse {
-          LocalRelation(r.output, isStreaming = true).withStream(r.stream)
+          // Don't track the source node which is known to produce zero rows.
+          LocalRelation(r.output, isStreaming = true)
         }
     }
     execCtx.newData = mutableNewData.toMap
