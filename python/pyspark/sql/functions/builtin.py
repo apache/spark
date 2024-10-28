@@ -12556,7 +12556,11 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
 
 
 @_try_remote_functions
-def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
+def lpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
     """
     Left-pad the string column to width `len` with `pad`.
 
@@ -12567,12 +12571,19 @@ def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    len : int
+    len : :class:`~pyspark.sql.Column` or int
         length of the final string.
-    pad : str
+
+        .. versionchanged:: 4.0.0
+             `pattern` now accepts column.
+
+    pad : :class:`~pyspark.sql.Column` or literal string
         chars to prepend.
+
+        .. versionchanged:: 4.0.0
+             `pattern` now accepts column.
 
     Returns
     -------
@@ -12581,17 +12592,41 @@ def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('abcd',)], ['s',])
-    >>> df.select(lpad(df.s, 6, '#').alias('s')).collect()
-    [Row(s='##abcd')]
-    """
-    from pyspark.sql.classic.column import _to_java_column
+    Example 1: Pad with a literal string
 
-    return _invoke_function("lpad", _to_java_column(col), _enum_to_value(len), _enum_to_value(pad))
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('abcd',), ('xyz',), ('12',)], ['s',])
+    >>> df.select("*", sf.lpad(df.s, 6, '#')).show()
+    +----+-------------+
+    |   s|lpad(s, 6, #)|
+    +----+-------------+
+    |abcd|       ##abcd|
+    | xyz|       ###xyz|
+    |  12|       ####12|
+    +----+-------------+
+
+    Example 2: Pad with a bytes column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('abcd',), ('xyz',), ('12',)], ['s',])
+    >>> df.select("*", sf.lpad(df.s, 6, sf.lit(b"\x75\x76"))).show()
+    +----+-------------------+
+    |   s|lpad(s, 6, X'7576')|
+    +----+-------------------+
+    |abcd|             uvabcd|
+    | xyz|             uvuxyz|
+    |  12|             uvuv12|
+    +----+-------------------+
+    """
+    return _invoke_function_over_columns("lpad", col, lit(len), lit(pad))
 
 
 @_try_remote_functions
-def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
+def rpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
     """
     Right-pad the string column to width `len` with `pad`.
 
@@ -12604,10 +12639,17 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         target column to work on.
-    len : int
+    len : :class:`~pyspark.sql.Column` or int
         length of the final string.
-    pad : str
-        chars to append.
+
+        .. versionchanged:: 4.0.0
+             `pattern` now accepts column.
+
+    pad : :class:`~pyspark.sql.Column` or literal string
+        chars to prepend.
+
+        .. versionchanged:: 4.0.0
+             `pattern` now accepts column.
 
     Returns
     -------
@@ -12616,13 +12658,33 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('abcd',)], ['s',])
-    >>> df.select(rpad(df.s, 6, '#').alias('s')).collect()
-    [Row(s='abcd##')]
-    """
-    from pyspark.sql.classic.column import _to_java_column
+    Example 1: Pad with a literal string
 
-    return _invoke_function("rpad", _to_java_column(col), _enum_to_value(len), _enum_to_value(pad))
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('abcd',), ('xyz',), ('12',)], ['s',])
+    >>> df.select("*", sf.rpad(df.s, 6, '#')).show()
+    +----+-------------+
+    |   s|rpad(s, 6, #)|
+    +----+-------------+
+    |abcd|       abcd##|
+    | xyz|       xyz###|
+    |  12|       12####|
+    +----+-------------+
+
+    Example 2: Pad with a bytes column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('abcd',), ('xyz',), ('12',)], ['s',])
+    >>> df.select("*", sf.rpad(df.s, 6, sf.lit(b"\x75\x76"))).show()
+    +----+-------------------+
+    |   s|rpad(s, 6, X'7576')|
+    +----+-------------------+
+    |abcd|             abcduv|
+    | xyz|             xyzuvu|
+    |  12|             12uvuv|
+    +----+-------------------+
+    """
+    return _invoke_function_over_columns("rpad", col, lit(len), lit(pad))
 
 
 @_try_remote_functions
