@@ -2570,15 +2570,23 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
 locate.__doc__ = pysparkfuncs.locate.__doc__
 
 
-def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
-    return _invoke_function("lpad", _to_col(col), lit(len), lit(pad))
+def lpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
+    return _invoke_function_over_columns("lpad", col, lit(len), lit(pad))
 
 
 lpad.__doc__ = pysparkfuncs.lpad.__doc__
 
 
-def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
-    return _invoke_function("rpad", _to_col(col), lit(len), lit(pad))
+def rpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
+    return _invoke_function_over_columns("rpad", col, lit(len), lit(pad))
 
 
 rpad.__doc__ = pysparkfuncs.rpad.__doc__
