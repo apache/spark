@@ -2038,7 +2038,7 @@ def asinh(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -2048,13 +2048,31 @@ def asinh(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(asinh(col("id"))).show()
-    +---------+
-    |ASINH(id)|
-    +---------+
-    |      0.0|
-    +---------+
+    Example 1: Compute the inverse hyperbolic sine
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-0.5,), (0.0,), (0.5,)], ["value"])
+    >>> df.select("*", sf.asinh(df.value)).show()
+    +-----+--------------------+
+    |value|        ASINH(value)|
+    +-----+--------------------+
+    | -0.5|-0.48121182505960...|
+    |  0.0|                 0.0|
+    |  0.5| 0.48121182505960...|
+    +-----+--------------------+
+
+    Example 2: Compute the inverse hyperbolic sine of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.asinh("value")).show()
+    +-----+------------+
+    |value|ASINH(value)|
+    +-----+------------+
+    |  NaN|         NaN|
+    | NULL|        NULL|
+    +-----+------------+
     """
     return _invoke_function_over_columns("asinh", col)
 
@@ -2071,7 +2089,7 @@ def atan(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -2081,13 +2099,31 @@ def atan(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(atan(df.id)).show()
-    +--------+
-    |ATAN(id)|
-    +--------+
-    |     0.0|
-    +--------+
+    Example 1: Compute the inverse tangent
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-0.5,), (0.0,), (0.5,)], ["value"])
+    >>> df.select("*", sf.atan(df.value)).show()
+    +-----+-------------------+
+    |value|        ATAN(value)|
+    +-----+-------------------+
+    | -0.5|-0.4636476090008...|
+    |  0.0|                0.0|
+    |  0.5| 0.4636476090008...|
+    +-----+-------------------+
+
+    Example 2: Compute the inverse tangent of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.atan("value")).show()
+    +-----+-----------+
+    |value|ATAN(value)|
+    +-----+-----------+
+    |  NaN|        NaN|
+    | NULL|       NULL|
+    +-----+-----------+
     """
     return _invoke_function_over_columns("atan", col)
 
@@ -2104,7 +2140,7 @@ def atanh(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -2114,14 +2150,33 @@ def atanh(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(0,), (2,)], schema=["numbers"])
-    >>> df.select(atanh(df["numbers"])).show()
-    +--------------+
-    |ATANH(numbers)|
-    +--------------+
-    |           0.0|
-    |           NaN|
-    +--------------+
+    Example 1: Compute the inverse hyperbolic tangent
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-0.5,), (0.0,), (0.5,)], ["value"])
+    >>> df.select("*", sf.atanh(df.value)).show()
+    +-----+-------------------+
+    |value|       ATANH(value)|
+    +-----+-------------------+
+    | -0.5|-0.5493061443340...|
+    |  0.0|                0.0|
+    |  0.5| 0.5493061443340...|
+    +-----+-------------------+
+
+    Example 2: Compute the inverse hyperbolic tangent of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (-2), (2), (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.atanh("value")).show()
+    +-----+------------+
+    |value|ATANH(value)|
+    +-----+------------+
+    | -2.0|         NaN|
+    |  2.0|         NaN|
+    |  NaN|         NaN|
+    | NULL|        NULL|
+    +-----+------------+
     """
     return _invoke_function_over_columns("atanh", col)
 
@@ -2138,7 +2193,7 @@ def cbrt(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -2148,13 +2203,31 @@ def cbrt(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(cbrt(lit(27))).show()
-    +--------+
-    |CBRT(27)|
-    +--------+
-    |     3.0|
-    +--------+
+    Example 1: Compute the cube-root
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-8,), (0,), (8,)], ["value"])
+    >>> df.select("*", sf.cbrt(df.value)).show()
+    +-----+-----------+
+    |value|CBRT(value)|
+    +-----+-----------+
+    |   -8|       -2.0|
+    |    0|        0.0|
+    |    8|        2.0|
+    +-----+-----------+
+
+    Example 2: Compute the cube-root of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.cbrt("value")).show()
+    +-----+-----------+
+    |value|CBRT(value)|
+    +-----+-----------+
+    |  NaN|        NaN|
+    | NULL|       NULL|
+    +-----+-----------+
     """
     return _invoke_function_over_columns("cbrt", col)
 
@@ -2171,7 +2244,7 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the ceiling on.
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
@@ -2225,7 +2298,7 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the ceiling on.
     scale : :class:`~pyspark.sql.Column` or int
         An optional parameter to control the rounding behavior.
@@ -2279,7 +2352,7 @@ def cos(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         angle in radians
 
     Returns
@@ -2289,13 +2362,32 @@ def cos(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Compute the cosine
+
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.cos(sf.pi())).show()
-    +---------+
-    |COS(PI())|
-    +---------+
-    |     -1.0|
-    +---------+
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (PI()), (PI() / 4), (PI() / 16) AS TAB(value)"
+    ... ).select("*", sf.cos("value")).show()
+    +-------------------+------------------+
+    |              value|        COS(value)|
+    +-------------------+------------------+
+    |  3.141592653589...|              -1.0|
+    | 0.7853981633974...|0.7071067811865...|
+    |0.19634954084936...|0.9807852804032...|
+    +-------------------+------------------+
+
+    Example 2: Compute the cosine of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.cos("value")).show()
+    +-----+----------+
+    |value|COS(value)|
+    +-----+----------+
+    |  NaN|       NaN|
+    | NULL|      NULL|
+    +-----+----------+
     """
     return _invoke_function_over_columns("cos", col)
 
@@ -2312,7 +2404,7 @@ def cosh(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         hyperbolic angle
 
     Returns
@@ -2322,9 +2414,31 @@ def cosh(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(cosh(lit(1))).first()
-    Row(COSH(1)=1.54308...)
+    Example 1: Compute the cosine
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-1,), (0,), (1,)], ["value"])
+    >>> df.select("*", sf.cosh(df.value)).show()
+    +-----+-----------------+
+    |value|      COSH(value)|
+    +-----+-----------------+
+    |   -1|1.543080634815...|
+    |    0|              1.0|
+    |    1|1.543080634815...|
+    +-----+-----------------+
+
+    Example 2: Compute the cosine of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.cosh("value")).show()
+    +-----+-----------+
+    |value|COSH(value)|
+    +-----+-----------+
+    |  NaN|        NaN|
+    | NULL|       NULL|
+    +-----+-----------+
     """
     return _invoke_function_over_columns("cosh", col)
 
@@ -2341,7 +2455,7 @@ def cot(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         angle in radians.
 
     Returns
@@ -2351,13 +2465,32 @@ def cot(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Compute the cotangent
+
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.cot(sf.pi() / 4)).show()
-    +------------------+
-    |   COT((PI() / 4))|
-    +------------------+
-    |1.0000000000000...|
-    +------------------+
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (PI() / 4), (PI() / 16) AS TAB(value)"
+    ... ).select("*", sf.cot("value")).show()
+    +-------------------+------------------+
+    |              value|        COT(value)|
+    +-------------------+------------------+
+    | 0.7853981633974...|1.0000000000000...|
+    |0.19634954084936...| 5.027339492125...|
+    +-------------------+------------------+
+
+    Example 2: Compute the cotangent of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (0.0), (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.cot("value")).show()
+    +-----+----------+
+    |value|COT(value)|
+    +-----+----------+
+    |  0.0|  Infinity|
+    |  NaN|       NaN|
+    | NULL|      NULL|
+    +-----+----------+
     """
     return _invoke_function_over_columns("cot", col)
 
@@ -2374,7 +2507,7 @@ def csc(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         angle in radians.
 
     Returns
@@ -2384,13 +2517,32 @@ def csc(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Compute the cosecant
+
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.csc(sf.pi() / 2)).show()
-    +---------------+
-    |CSC((PI() / 2))|
-    +---------------+
-    |            1.0|
-    +---------------+
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (PI() / 2), (PI() / 4) AS TAB(value)"
+    ... ).select("*", sf.csc("value")).show()
+    +------------------+------------------+
+    |             value|        CSC(value)|
+    +------------------+------------------+
+    |1.5707963267948...|               1.0|
+    |0.7853981633974...|1.4142135623730...|
+    +------------------+------------------+
+
+    Example 2: Compute the cosecant of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (0.0), (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.csc("value")).show()
+    +-----+----------+
+    |value|CSC(value)|
+    +-----+----------+
+    |  0.0|  Infinity|
+    |  NaN|       NaN|
+    | NULL|      NULL|
+    +-----+----------+
     """
     return _invoke_function_over_columns("csc", col)
 
@@ -2403,7 +2555,8 @@ def e() -> Column:
 
     Examples
     --------
-    >>> spark.range(1).select(e()).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.e()).show()
     +-----------------+
     |              E()|
     +-----------------+
@@ -2425,7 +2578,7 @@ def exp(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to calculate exponential for.
 
     Returns
@@ -2435,13 +2588,33 @@ def exp(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(exp(lit(0))).show()
-    +------+
-    |EXP(0)|
-    +------+
-    |   1.0|
-    +------+
+    Example 1: Compute the exponential
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT id AS value FROM RANGE(5)")
+    >>> df.select("*", sf.exp(df.value)).show()
+    +-----+------------------+
+    |value|        EXP(value)|
+    +-----+------------------+
+    |    0|               1.0|
+    |    1|2.7182818284590...|
+    |    2|  7.38905609893...|
+    |    3|20.085536923187...|
+    |    4|54.598150033144...|
+    +-----+------------------+
+
+    Example 2: Compute the exponential of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.exp("value")).show()
+    +-----+----------+
+    |value|EXP(value)|
+    +-----+----------+
+    |  NaN|       NaN|
+    | NULL|      NULL|
+    +-----+----------+
     """
     return _invoke_function_over_columns("exp", col)
 
@@ -2458,7 +2631,7 @@ def expm1(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to calculate exponential for.
 
     Returns
@@ -2468,9 +2641,33 @@ def expm1(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(expm1(lit(1))).first()
-    Row(EXPM1(1)=1.71828...)
+    Example 1: Compute the exponential minus one
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql("SELECT id AS value FROM RANGE(5)")
+    >>> df.select("*", sf.expm1(df.value)).show()
+    +-----+------------------+
+    |value|      EXPM1(value)|
+    +-----+------------------+
+    |    0|               0.0|
+    |    1| 1.718281828459...|
+    |    2|  6.38905609893...|
+    |    3|19.085536923187...|
+    |    4|53.598150033144...|
+    +-----+------------------+
+
+    Example 2: Compute the exponential minus one of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.expm1("value")).show()
+    +-----+------------+
+    |value|EXPM1(value)|
+    +-----+------------+
+    |  NaN|         NaN|
+    | NULL|        NULL|
+    +-----+------------+
     """
     return _invoke_function_over_columns("expm1", col)
 
@@ -2487,7 +2684,7 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the floor on.
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
@@ -2542,7 +2739,7 @@ def log(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to calculate natural logarithm for.
 
     Returns
@@ -2552,6 +2749,8 @@ def log(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Compute the natural logarithm of E
+
     >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.log(sf.e())).show()
     +-------+
@@ -2559,6 +2758,21 @@ def log(col: "ColumnOrName") -> Column:
     +-------+
     |    1.0|
     +-------+
+
+    Example 2: Compute the natural logarithm of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (-1), (0), (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.log("value")).show()
+    +-----+---------+
+    |value|ln(value)|
+    +-----+---------+
+    | -1.0|     NULL|
+    |  0.0|     NULL|
+    |  NaN|      NaN|
+    | NULL|     NULL|
+    +-----+---------+
     """
     return _invoke_function_over_columns("log", col)
 
@@ -2575,7 +2789,7 @@ def log10(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to calculate logarithm for.
 
     Returns
@@ -2585,13 +2799,33 @@ def log10(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(log10(lit(100))).show()
-    +----------+
-    |LOG10(100)|
-    +----------+
-    |       2.0|
-    +----------+
+    Example 1: Compute the logarithm in Base 10
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1,), (10,), (100,)], ["value"])
+    >>> df.select("*", sf.log10(df.value)).show()
+    +-----+------------+
+    |value|LOG10(value)|
+    +-----+------------+
+    |    1|         0.0|
+    |   10|         1.0|
+    |  100|         2.0|
+    +-----+------------+
+
+    Example 2: Compute the logarithm in Base 10 of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (-1), (0), (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.log10("value")).show()
+    +-----+------------+
+    |value|LOG10(value)|
+    +-----+------------+
+    | -1.0|        NULL|
+    |  0.0|        NULL|
+    |  NaN|         NaN|
+    | NULL|        NULL|
+    +-----+------------+
     """
     return _invoke_function_over_columns("log10", col)
 
@@ -2599,7 +2833,7 @@ def log10(col: "ColumnOrName") -> Column:
 @_try_remote_functions
 def log1p(col: "ColumnOrName") -> Column:
     """
-    Computes the natural logarithm of the "given value plus one".
+    Computes the natural logarithm of the given value plus one.
 
     .. versionadded:: 1.4.0
 
@@ -2608,7 +2842,7 @@ def log1p(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to calculate natural logarithm for.
 
     Returns
@@ -2647,7 +2881,7 @@ def negative(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to calculate negative value for.
 
     Returns
@@ -2658,14 +2892,15 @@ def negative(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(3).select(sf.negative("id")).show()
-    +------------+
-    |negative(id)|
-    +------------+
-    |           0|
-    |          -1|
-    |          -2|
-    +------------+
+    >>> df = spark.createDataFrame([(-1,), (0,), (1,)], ["value"])
+    >>> df.select("*", sf.negative(df.value)).show()
+    +-----+---------------+
+    |value|negative(value)|
+    +-----+---------------+
+    |   -1|              1|
+    |    0|              0|
+    |    1|             -1|
+    +-----+---------------+
     """
     return _invoke_function_over_columns("negative", col)
 
@@ -2681,7 +2916,8 @@ def pi() -> Column:
 
     Examples
     --------
-    >>> spark.range(1).select(pi()).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.pi()).show()
     +-----------------+
     |             PI()|
     +-----------------+
@@ -2700,7 +2936,7 @@ def positive(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input value column.
 
     Returns
@@ -2710,15 +2946,16 @@ def positive(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(-1,), (0,), (1,)], ['v'])
-    >>> df.select(positive("v").alias("p")).show()
-    +---+
-    |  p|
-    +---+
-    | -1|
-    |  0|
-    |  1|
-    +---+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(-1,), (0,), (1,)], ["value"])
+    >>> df.select("*", sf.positive(df.value)).show()
+    +-----+---------+
+    |value|(+ value)|
+    +-----+---------+
+    |   -1|       -1|
+    |    0|        0|
+    |    1|        1|
+    +-----+---------+
     """
     return _invoke_function_over_columns("positive", col)
 
@@ -2736,7 +2973,7 @@ def rint(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -2746,15 +2983,15 @@ def rint(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(rint(lit(10.6))).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.rint(sf.lit(10.6))).show()
     +----------+
     |rint(10.6)|
     +----------+
     |      11.0|
     +----------+
 
-    >>> df.select(rint(lit(10.3))).show()
+    >>> spark.range(1).select(sf.rint(sf.lit(10.3))).show()
     +----------+
     |rint(10.3)|
     +----------+
@@ -2776,7 +3013,7 @@ def sec(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Angle in radians
 
     Returns
@@ -2786,9 +3023,31 @@ def sec(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(sec(lit(1.5))).first()
-    Row(SEC(1.5)=14.13683...)
+    Example 1: Compute the secant
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (PI() / 4), (PI() / 16) AS TAB(value)"
+    ... ).select("*", sf.sec("value")).show()
+    +-------------------+------------------+
+    |              value|        SEC(value)|
+    +-------------------+------------------+
+    | 0.7853981633974...| 1.414213562373...|
+    |0.19634954084936...|1.0195911582083...|
+    +-------------------+------------------+
+
+    Example 2: Compute the secant of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.sec("value")).show()
+    +-----+----------+
+    |value|SEC(value)|
+    +-----+----------+
+    |  NaN|       NaN|
+    | NULL|      NULL|
+    +-----+----------+
     """
     return _invoke_function_over_columns("sec", col)
 
@@ -2805,7 +3064,7 @@ def signum(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -2818,13 +3077,15 @@ def signum(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(
     ...     sf.signum(sf.lit(-5)),
-    ...     sf.signum(sf.lit(6))
+    ...     sf.signum(sf.lit(6)),
+    ...     sf.signum(sf.lit(float('nan'))),
+    ...     sf.signum(sf.lit(None))
     ... ).show()
-    +----------+---------+
-    |SIGNUM(-5)|SIGNUM(6)|
-    +----------+---------+
-    |      -1.0|      1.0|
-    +----------+---------+
+    +----------+---------+-----------+------------+
+    |SIGNUM(-5)|SIGNUM(6)|SIGNUM(NaN)|SIGNUM(NULL)|
+    +----------+---------+-----------+------------+
+    |      -1.0|      1.0|        NaN|        NULL|
+    +----------+---------+-----------+------------+
     """
     return _invoke_function_over_columns("signum", col)
 
@@ -2841,7 +3102,7 @@ def sign(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -2854,13 +3115,15 @@ def sign(col: "ColumnOrName") -> Column:
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(
     ...     sf.sign(sf.lit(-5)),
-    ...     sf.sign(sf.lit(6))
+    ...     sf.sign(sf.lit(6)),
+    ...     sf.sign(sf.lit(float('nan'))),
+    ...     sf.sign(sf.lit(None))
     ... ).show()
-    +--------+-------+
-    |sign(-5)|sign(6)|
-    +--------+-------+
-    |    -1.0|    1.0|
-    +--------+-------+
+    +--------+-------+---------+----------+
+    |sign(-5)|sign(6)|sign(NaN)|sign(NULL)|
+    +--------+-------+---------+----------+
+    |    -1.0|    1.0|      NaN|      NULL|
+    +--------+-------+---------+----------+
     """
     return _invoke_function_over_columns("sign", col)
 
@@ -2877,7 +3140,7 @@ def sin(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -2887,13 +3150,32 @@ def sin(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Compute the sine
+
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.sin(sf.pi() / 2)).show()
-    +---------------+
-    |SIN((PI() / 2))|
-    +---------------+
-    |            1.0|
-    +---------------+
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (0.0), (PI() / 2), (PI() / 4) AS TAB(value)"
+    ... ).select("*", sf.sin("value")).show()
+    +------------------+------------------+
+    |             value|        SIN(value)|
+    +------------------+------------------+
+    |               0.0|               0.0|
+    |1.5707963267948...|               1.0|
+    |0.7853981633974...|0.7071067811865...|
+    +------------------+------------------+
+
+    Example 2: Compute the sine of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.sin("value")).show()
+    +-----+----------+
+    |value|SIN(value)|
+    +-----+----------+
+    |  NaN|       NaN|
+    | NULL|      NULL|
+    +-----+----------+
     """
     return _invoke_function_over_columns("sin", col)
 
@@ -2910,7 +3192,7 @@ def sinh(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         hyperbolic angle.
 
     Returns
@@ -2921,9 +3203,31 @@ def sinh(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(sinh(lit(1.1))).first()
-    Row(SINH(1.1)=1.33564...)
+    Example 1: Compute the hyperbolic sine
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(-1,), (0,), (1,)], ["value"])
+    >>> df.select("*", sf.sinh(df.value)).show()
+    +-----+-------------------+
+    |value|        SINH(value)|
+    +-----+-------------------+
+    |   -1|-1.1752011936438...|
+    |    0|                0.0|
+    |    1| 1.1752011936438...|
+    +-----+-------------------+
+
+    Example 2: Compute the hyperbolic sine of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.sinh("value")).show()
+    +-----+-----------+
+    |value|SINH(value)|
+    +-----+-----------+
+    |  NaN|        NaN|
+    | NULL|       NULL|
+    +-----+-----------+
     """
     return _invoke_function_over_columns("sinh", col)
 
@@ -2940,7 +3244,7 @@ def tan(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         angle in radians
 
     Returns
@@ -2950,13 +3254,32 @@ def tan(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Compute the tangent
+
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.tan(sf.pi() / 4)).show()
-    +------------------+
-    |   TAN((PI() / 4))|
-    +------------------+
-    |0.9999999999999...|
-    +------------------+
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (0.0), (PI() / 4), (PI() / 6) AS TAB(value)"
+    ... ).select("*", sf.tan("value")).show()
+    +------------------+------------------+
+    |             value|        TAN(value)|
+    +------------------+------------------+
+    |               0.0|               0.0|
+    |0.7853981633974...|0.9999999999999...|
+    |0.5235987755982...|0.5773502691896...|
+    +------------------+------------------+
+
+    Example 2: Compute the tangent of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.tan("value")).show()
+    +-----+----------+
+    |value|TAN(value)|
+    +-----+----------+
+    |  NaN|       NaN|
+    | NULL|      NULL|
+    +-----+----------+
     """
     return _invoke_function_over_columns("tan", col)
 
@@ -2973,7 +3296,7 @@ def tanh(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         hyperbolic angle
 
     Returns
@@ -2984,13 +3307,31 @@ def tanh(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    Example 1: Compute the hyperbolic tangent sine
+
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.tanh(sf.pi() / 2)).show()
-    +------------------+
-    |  TANH((PI() / 2))|
-    +------------------+
-    |0.9171523356672744|
-    +------------------+
+    >>> df = spark.createDataFrame([(-1,), (0,), (1,)], ["value"])
+    >>> df.select("*", sf.tanh(df.value)).show()
+    +-----+-------------------+
+    |value|        TANH(value)|
+    +-----+-------------------+
+    |   -1|-0.7615941559557...|
+    |    0|                0.0|
+    |    1| 0.7615941559557...|
+    +-----+-------------------+
+
+    Example 2: Compute the hyperbolic tangent of invalid values
+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (FLOAT('NAN')), (NULL) AS TAB(value)"
+    ... ).select("*", sf.tanh("value")).show()
+    +-----+-----------+
+    |value|TANH(value)|
+    +-----+-----------+
+    |  NaN|        NaN|
+    | NULL|       NULL|
+    +-----+-----------+
     """
     return _invoke_function_over_columns("tanh", col)
 
@@ -5090,7 +5431,7 @@ def degrees(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         angle in radians
 
     Returns
@@ -5101,12 +5442,17 @@ def degrees(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.degrees(sf.pi())).show()
-    +-------------+
-    |DEGREES(PI())|
-    +-------------+
-    |        180.0|
-    +-------------+
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (0.0), (PI()), (PI() / 2), (PI() / 4) AS TAB(value)"
+    ... ).select("*", sf.degrees("value")).show()
+    +------------------+--------------+
+    |             value|DEGREES(value)|
+    +------------------+--------------+
+    |               0.0|           0.0|
+    | 3.141592653589...|         180.0|
+    |1.5707963267948...|          90.0|
+    |0.7853981633974...|          45.0|
+    +------------------+--------------+
     """
     return _invoke_function_over_columns("degrees", col)
 
@@ -5124,7 +5470,7 @@ def radians(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         angle in degrees
 
     Returns
@@ -5134,9 +5480,18 @@ def radians(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(radians(lit(180))).first()
-    Row(RADIANS(180)=3.14159...)
+    >>> from pyspark.sql import functions as sf
+    >>> spark.sql(
+    ...     "SELECT * FROM VALUES (180), (90), (45), (0) AS TAB(value)"
+    ... ).select("*", sf.radians("value")).show()
+    +-----+------------------+
+    |value|    RADIANS(value)|
+    +-----+------------------+
+    |  180| 3.141592653589...|
+    |   90|1.5707963267948...|
+    |   45|0.7853981633974...|
+    |    0|               0.0|
+    +-----+------------------+
     """
     return _invoke_function_over_columns("radians", col)
 
