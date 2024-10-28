@@ -220,6 +220,10 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST(c1 AS STRING)) FROM $tableName"),
         Seq(Row("UNICODE")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1 || SUBSTRING(CAST(c1 AS STRING), 0, 1)) FROM $tableName"),
+        Seq(Row("UNICODE")))
     }
   }
 
