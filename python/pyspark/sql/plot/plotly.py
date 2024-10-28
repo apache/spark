@@ -15,10 +15,17 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Any
+import inspect
+from typing import TYPE_CHECKING, Any, List, Optional, Union
 
-from pyspark.errors import PySparkValueError
-from pyspark.sql.plot import PySparkPlotAccessor, PySparkBoxPlotBase, PySparkKdePlotBase
+from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql.plot import (
+    PySparkPlotAccessor,
+    PySparkBoxPlotBase,
+    PySparkKdePlotBase,
+    PySparkHistogramPlotBase,
+)
+from pyspark.sql.types import NumericType
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -34,6 +41,8 @@ def plot_pyspark(data: "DataFrame", kind: str, **kwargs: Any) -> "Figure":
         return plot_box(data, **kwargs)
     if kind == "kde" or kind == "density":
         return plot_kde(data, **kwargs)
+    if kind == "hist":
+        return plot_histogram(data, **kwargs)
 
     return plotly.plot(PySparkPlotAccessor.plot_data_map[kind](data), kind, **kwargs)
 
@@ -59,9 +68,7 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
     whis = kwargs.pop("whis", 1.5)
     # 'precision' is pyspark specific to control precision for approx_percentile
     precision = kwargs.pop("precision", 0.01)
-    colnames = kwargs.pop("column", None)
-    if isinstance(colnames, str):
-        colnames = [colnames]
+    colnames = process_column_param(kwargs.pop("column", None), data)
 
     # Plotly options
     boxpoints = kwargs.pop("boxpoints", "suspectedoutliers")
@@ -134,9 +141,7 @@ def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
         kwargs["color"] = "names"
 
     bw_method = kwargs.pop("bw_method", None)
-    colnames = kwargs.pop("column", None)
-    if isinstance(colnames, str):
-        colnames = [colnames]
+    colnames = process_column_param(kwargs.pop("column", None), data)
     ind = PySparkKdePlotBase.get_ind(data.select(*colnames), kwargs.pop("ind", None))
 
     kde_cols = [
@@ -163,3 +168,75 @@ def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
     fig = express.line(pdf, x="index", y="Density", **kwargs)
     fig["layout"]["xaxis"]["title"] = None
     return fig
+
+
+def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
+    import plotly.graph_objs as go
+
+    bins = kwargs.get("bins", 10)
+    colnames = process_column_param(kwargs.pop("column", None), data)
+    numeric_data = data.select(*colnames)
+    bins = PySparkHistogramPlotBase.get_bins(numeric_data, bins)
+    assert len(bins) > 2, "the number of buckets must be higher than 2."
+    output_series = PySparkHistogramPlotBase.compute_hist(numeric_data, bins)
+    prev = float("%.9f" % bins[0])  # to make it prettier, truncate.
+    text_bins = []
+    for b in bins[1:]:
+        norm_b = float("%.9f" % b)
+        text_bins.append("[%s, %s)" % (prev, norm_b))
+        prev = norm_b
+    text_bins[-1] = text_bins[-1][:-1] + "]"  # replace ) to ] for the last bucket.
+
+    bins = 0.5 * (bins[:-1] + bins[1:])
+    output_series = list(output_series)
+    bars = []
+    for series in output_series:
+        bars.append(
+            go.Bar(
+                x=bins,
+                y=series,
+                name=series.name,
+                text=text_bins,
+                hovertemplate=("variable=" + str(series.name) + "<br>value=%{text}<br>count=%{y}"),
+            )
+        )
+
+    layout_keys = inspect.signature(go.Layout).parameters.keys()
+    layout_kwargs = {k: v for k, v in kwargs.items() if k in layout_keys}
+
+    fig = go.Figure(data=bars, layout=go.Layout(**layout_kwargs))
+    fig["layout"]["barmode"] = "stack"
+    fig["layout"]["xaxis"]["title"] = "value"
+    fig["layout"]["yaxis"]["title"] = "count"
+    return fig
+
+
+def process_column_param(column: Optional[Union[str, List[str]]], data: "DataFrame") -> List[str]:
+    """
+    Processes the provided column parameter for a DataFrame.
+    - If `column` is None, returns a list of numeric columns from the DataFrame.
+    - If `column` is a string, converts it to a list first.
+    - If `column` is a list, it checks if all specified columns exist in the DataFrame
+      and are of NumericType.
+    - Raises a PySparkTypeError if any column in the list is not present in the DataFrame
+      or is not of NumericType.
+    """
+    if column is None:
+        return [
+            field.name for field in data.schema.fields if isinstance(field.dataType, NumericType)
+        ]
+    if isinstance(column, str):
+        column = [column]
+
+    for col in column:
+        field = next((f for f in data.schema.fields if f.name == col), None)
+        if not field or not isinstance(field.dataType, NumericType):
+            raise PySparkTypeError(
+                errorClass="PLOT_INVALID_TYPE_COLUMN",
+                messageParameters={
+                    "col_name": col,
+                    "valid_types": NumericType.__name__,
+                    "col_type": field.dataType.__class__.__name__ if field else "None",
+                },
+            )
+    return column

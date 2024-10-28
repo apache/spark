@@ -47,37 +47,34 @@ if should_test_connect:
     from pyspark.ml.connect.tuning import CrossValidator, CrossValidatorModel
     from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 
+    class HasInducedError(Params):
+        def __init__(self):
+            super(HasInducedError, self).__init__()
+            self.inducedError = Param(
+                self, "inducedError", "Uniformly-distributed error added to feature"
+            )
 
-class HasInducedError(Params):
-    def __init__(self):
-        super(HasInducedError, self).__init__()
-        self.inducedError = Param(
-            self, "inducedError", "Uniformly-distributed error added to feature"
-        )
+        def getInducedError(self):
+            return self.getOrDefault(self.inducedError)
 
-    def getInducedError(self):
-        return self.getOrDefault(self.inducedError)
+    class InducedErrorModel(Model, HasInducedError):
+        def __init__(self):
+            super(InducedErrorModel, self).__init__()
 
+        def _transform(self, dataset):
+            return dataset.withColumn(
+                "prediction", dataset.feature + (rand(0) * self.getInducedError())
+            )
 
-class InducedErrorModel(Model, HasInducedError):
-    def __init__(self):
-        super(InducedErrorModel, self).__init__()
+    class InducedErrorEstimator(Estimator, HasInducedError):
+        def __init__(self, inducedError=1.0):
+            super(InducedErrorEstimator, self).__init__()
+            self._set(inducedError=inducedError)
 
-    def _transform(self, dataset):
-        return dataset.withColumn(
-            "prediction", dataset.feature + (rand(0) * self.getInducedError())
-        )
-
-
-class InducedErrorEstimator(Estimator, HasInducedError):
-    def __init__(self, inducedError=1.0):
-        super(InducedErrorEstimator, self).__init__()
-        self._set(inducedError=inducedError)
-
-    def _fit(self, dataset):
-        model = InducedErrorModel()
-        self._copyValues(model)
-        return model
+        def _fit(self, dataset):
+            model = InducedErrorModel()
+            self._copyValues(model)
+            return model
 
 
 class CrossValidatorTestsMixin:

@@ -39,8 +39,7 @@ class TestListStateProcessor
   override def handleInputRows(
       key: String,
       rows: Iterator[InputRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
 
     var output = List[(String, String)]()
 
@@ -97,8 +96,7 @@ class ToggleSaveAndEmitProcessor
   override def handleInputRows(
       key: String,
       rows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
+      timerValues: TimerValues): Iterator[String] = {
     val valueStateOption = _valueState.getOption()
 
     if (valueStateOption.isEmpty || !valueStateOption.get) {
