@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LOCAL_RELATION, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -61,11 +62,20 @@ case class LocalRelation(
     output: Seq[Attribute],
     data: Seq[InternalRow] = Nil,
     // Indicates whether this relation has data from a streaming source.
-    override val isStreaming: Boolean = false)
-  extends LeafNode with analysis.MultiInstanceRelation {
+    override val isStreaming: Boolean = false,
+    @transient stream: Option[SparkDataStream] = None)
+  extends LeafNode
+  with StreamSourceAwareLogicalPlan
+  with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.
   require(output.forall(_.resolved), "Unresolved attributes found when constructing LocalRelation.")
+
+  override def withStream(stream: SparkDataStream): LocalRelation = {
+    copy(stream = Some(stream))
+  }
+
+  override def getStream: Option[SparkDataStream] = stream
 
   /**
    * Returns an identical copy of this relation with new exprIds for all attributes.  Different
