@@ -581,11 +581,11 @@ class TransformWithStateInPandasStateServer(
   }
 
   private def initializeStateVariable(
-                                       stateName: String,
-                                       schemaString: String,
-                                       stateType: StateVariableType.StateVariableType,
-                                       ttlDurationMs: Option[Int],
-                                       mapStateValueSchemaString: String = null): Unit = {
+      stateName: String,
+      schemaString: String,
+      stateType: StateVariableType.StateVariableType,
+      ttlDurationMs: Option[Int],
+      mapStateValueSchemaString: String = null): Unit = {
     val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
     stateType match {
