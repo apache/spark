@@ -966,6 +966,12 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkRepartition("TABLE t |> DISTRIBUTE BY x |> WHERE x = 1")
       checkRepartition("TABLE t |> CLUSTER BY x |> TABLESAMPLE (100 PERCENT)")
       checkRepartition("TABLE t |> SORT BY x DISTRIBUTE BY x")
+      // Aggregation
+      def checkAggregate(query: String): Unit = check(query, Seq(AGGREGATE))
+      checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a)")
+      checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a) AS result GROUP BY b")
+      checkAggregate("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
+      checkAggregate("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b")
     }
   }
 }
