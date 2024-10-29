@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 class SparkPlanner(val session: SparkSession, val experimentalMethods: ExperimentalMethods)
   extends SparkStrategies with SQLConfHelper {
 
-  def numPartitions: Int = conf.numShufflePartitions
+  def numPartitions: Int = session.sessionState.conf.numShufflePartitions
 
   override def strategies: Seq[Strategy] =
     experimentalMethods.extraStrategies ++

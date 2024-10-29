@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelati
 case class PlanAdaptiveDynamicPruningFilters(
     rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.dynamicPartitionPruningEnabled) {
+    if (!rootPlan.context.session.sessionState.conf.dynamicPartitionPruningEnabled) {
       return plan
     }
 
@@ -47,8 +47,8 @@ case class PlanAdaptiveDynamicPruningFilters(
         // plan a broadcast exchange of the build side of the join
         val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
 
-        val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
-          find(rootPlan) {
+        val canReuseExchange = rootPlan.context.session.sessionState.conf.exchangeReuseEnabled &&
+          buildKeys.nonEmpty && find(rootPlan) {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(exchange)
             case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>

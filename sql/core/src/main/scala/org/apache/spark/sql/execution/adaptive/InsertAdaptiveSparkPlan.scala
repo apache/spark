@@ -47,12 +47,12 @@ case class InsertAdaptiveSparkPlan(
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
-    case _ if !conf.adaptiveExecutionEnabled => plan
+    case _ if !adaptiveExecutionContext.session.sessionState.conf.adaptiveExecutionEnabled => plan
     case _: ExecutedCommandExec => plan
     case _: CommandResultExec => plan
     case c: V2CommandExec => c.withNewChildren(c.children.map(apply))
-    case c: DataWritingCommandExec
-        if !c.cmd.isInstanceOf[V1WriteCommand] || !conf.plannedWriteEnabled =>
+    case c: DataWritingCommandExec if !c.cmd.isInstanceOf[V1WriteCommand] ||
+      !adaptiveExecutionContext.session.sessionState.conf.plannedWriteEnabled =>
       c.copy(child = apply(c.child))
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
@@ -94,7 +94,8 @@ case class InsertAdaptiveSparkPlan(
   //   - The query contains `InMemoryTableScanExec` that is AQE-ed.
   //   - The query contains sub-query.
   private def shouldApplyAQE(plan: SparkPlan, isSubquery: Boolean): Boolean = {
-    conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
+    adaptiveExecutionContext.session.sessionState.conf.getConf(
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
       plan.exists {
         case _: Exchange => true
         case p if !p.requiredChildDistribution.forall(_ == UnspecifiedDistribution) => true

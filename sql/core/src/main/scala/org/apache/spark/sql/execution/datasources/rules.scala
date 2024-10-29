@@ -75,7 +75,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   }
 
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
-    conf.runSQLonFile && u.multipartIdentifier.size == 2
+    sparkSession.sessionState.conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
   private def resolveDataSource(unresolved: UnresolvedRelation): DataSource = {

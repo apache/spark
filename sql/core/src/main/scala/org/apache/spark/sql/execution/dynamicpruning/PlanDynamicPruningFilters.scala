@@ -45,7 +45,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.dynamicPartitionPruningEnabled) {
+    if (!sparkSession.sessionState.conf.dynamicPartitionPruningEnabled) {
       return plan
     }
 
@@ -56,8 +56,8 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
           sparkSession, sparkSession.sessionState.planner, buildPlan)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
-        val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
-          plan.exists {
+        val canReuseExchange = sparkSession.sessionState.conf.exchangeReuseEnabled &&
+          buildKeys.nonEmpty && plan.exists {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(sparkPlan)
             case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>

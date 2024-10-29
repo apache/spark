@@ -122,7 +122,8 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
     val partitionCols = relation.partitionCols
     // For partitioned tables, the partition directory may be outside of the table directory.
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
-    val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
+    val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled &&
+      partitionCols.isEmpty) {
       try {
         val hadoopConf = session.sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
@@ -131,10 +132,10 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       } catch {
         case e: IOException =>
           logWarning("Failed to get table size from HDFS.", e)
-          conf.defaultSizeInBytes
+          session.sessionState.conf.defaultSizeInBytes
       }
     } else {
-      conf.defaultSizeInBytes
+      session.sessionState.conf.defaultSizeInBytes
     }
 
     val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))
