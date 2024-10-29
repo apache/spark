@@ -74,7 +74,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
         condition = "PARTITIONS_NOT_FOUND",
         parameters = Map(
           "partitionList" -> "`abcd`",
-          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`dateTable`")
+          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`datetable`")
       )
     }
   }

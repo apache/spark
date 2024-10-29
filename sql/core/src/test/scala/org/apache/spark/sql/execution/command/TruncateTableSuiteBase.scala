@@ -111,7 +111,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         condition = "PARTITIONS_NOT_FOUND",
         parameters = Map(
           "partitionList" -> "`unknown`",
-          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`partTable`")
+          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`parttable`")
       )
     }
   }
