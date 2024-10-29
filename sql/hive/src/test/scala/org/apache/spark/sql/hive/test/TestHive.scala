@@ -631,7 +631,7 @@ private[hive] object TestHiveContext {
     Map(
       // Fewer shuffle partitions to speed up testing.
       SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-      "spark.session.isolate.artifacts" -> "false"
+      SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key -> "false"
     )
 
   def makeWarehouseDir(): File = {

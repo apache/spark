@@ -25,6 +25,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
@@ -35,8 +36,8 @@ class ArtifactManagerSuite extends SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     val conf = super.sparkConf
     conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
-    conf.set("spark.repl.isolate.artifacts", "true")
-    conf.set("spark.session.isolate.artifacts", "true")
+    conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, true)
+    conf.set(SQLConf.ARTIFACTS_REPL_CLASS_ISOLATION_ENABLED, true)
   }
 
   private val artifactPath = new File("src/test/resources/artifact-tests").toPath

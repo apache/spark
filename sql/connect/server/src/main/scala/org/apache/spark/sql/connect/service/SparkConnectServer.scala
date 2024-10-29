@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{HOST, PORT}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The Spark Connect server
@@ -30,8 +31,8 @@ object SparkConnectServer extends Logging {
     logInfo("Starting Spark session.")
     val session = SparkSession
       .builder()
-      .config("spark.repl.isolate.artifacts", "true")
-      .config("spark.session.isolate.artifacts", "true")
+      .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, true)
+      .config(SQLConf.ARTIFACTS_REPL_CLASS_ISOLATION_ENABLED.key, true)
       .getOrCreate()
     try {
       try {

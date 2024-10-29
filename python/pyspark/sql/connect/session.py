@@ -1030,8 +1030,8 @@ class SparkSession:
             # Configurations to be set if unset.
             default_conf = {
                 "spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin",
-                "spark.repl.isolate.artifacts": "true",
-                "spark.session.isolate.artifacts": "true",
+                "spark.sql.artifact.repl.class.isolation.enabled": "true",
+                "spark.sql.artifact.isolation.enabled": "true",
             }
 
             if "SPARK_TESTING" in os.environ:

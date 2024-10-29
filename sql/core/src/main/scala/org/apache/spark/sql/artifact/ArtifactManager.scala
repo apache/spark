@@ -75,9 +75,9 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
 
   private lazy val sessionIsolated =
-    session.conf.get("spark.session.isolate.artifacts", "true") == "true"
+    session.sessionState.conf.getConf(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED)
   private lazy val replIsolated =
-    session.conf.get("spark.repl.isolate.artifacts", "false") == "true"
+    session.sessionState.conf.getConf(SQLConf.ARTIFACTS_REPL_CLASS_ISOLATION_ENABLED)
 
   protected[sql] lazy val state: JobArtifactState = {
     (sessionIsolated, replIsolated) match {
@@ -89,11 +89,17 @@ class ArtifactManager(session: SparkSession) extends Logging {
     }
   }
 
-  private val shouldApplyClassLoader = new AtomicBoolean(false)
+  /**
+   * Whether the [[withResources]] method should change the classloader of the current thread.
+   * This must be set to `true` iff any class or JAR is added to this artifact manager.
+   */
+  protected val shouldApplyClassLoader = new AtomicBoolean(false)
 
   private var initialContextResourcesCopied = false
 
   private def withClassLoaderIfNeeded[T](f: => T): T = {
+    // We should not consider `sessionIsolated` because classes are always added to the
+    // session-specific directory.
     val log = s" classloader for session ${session.sessionUUID} because " +
       s"replIsolated=$replIsolated and shouldApplyClassLoader=${shouldApplyClassLoader.get()}."
     if (replIsolated || shouldApplyClassLoader.get()) {
