@@ -423,20 +423,14 @@ abstract class ProgressContext(
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
       sumRows(sourceToInputRowsTuples)
     } else {
-      if (Utils.isTesting) {
-        // do not fall back to the legacy approach for testing - we want to proactively address
-        // any issues with the new approach
-        throw new IllegalStateException("Cannot find the nodes for streams " +
-          s"${sources.diff(capturedSources)}, failing query... (This is only for testing.)")
+      // Falling back to the legacy approach to avoid any regression.
+      val inputRows = legacyExtractSourceToNumInputRows(lastExecution)
+      // If the legacy approach fails to extract the input rows, we just pick the new approach
+      // as it is more likely that the source nodes have been pruned in valid reason.
+      if (inputRows.isEmpty) {
+        sumRows(sourceToInputRowsTuples)
       } else {
-        // falling back to the legacy approach to avoid any regression
-        val inputRows = legacyExtractSourceToNumInputRows(lastExecution)
-        // If the legacy approach fails to extract the input rows, we just pick the new approach
-        if (inputRows.isEmpty) {
-          sumRows(sourceToInputRowsTuples)
-        } else {
-          inputRows
-        }
+        inputRows
       }
     }
   }
