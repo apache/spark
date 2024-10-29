@@ -112,14 +112,11 @@ class InitialStatefulProcessorWithStateDataSource
     val stateVar = {
       if (initialState.value.isDefined) {
         "value"
-      }
-      else if (initialState.listValue.isDefined) {
+      } else if (initialState.listValue.isDefined) {
         "list"
-      }
-      else if (initialState.userMapKey.isDefined) {
+      } else if (initialState.userMapKey.isDefined) {
         "map"
-      }
-      else {
+      } else {
         "invalid"
       }
     }
@@ -143,10 +140,13 @@ class InitialStatefulProcessorWithUnflattenStateDataSource
   override def handleInitialState(
       key: String, initialState: UnionUnflattenInitialStateRow, timerValues: TimerValues): Unit = {
     val stateVar = {
-      if (initialState.value.isDefined) "value"
-      else if (initialState.listValue.isDefined) "list"
-      else if (initialState.mapValue.isDefined) "map"
-      else "invalid"
+      if (initialState.value.isDefined) {
+        "value"
+      } else if (initialState.listValue.isDefined) {
+        "list"
+      } else if (initialState.mapValue.isDefined) {
+        "map"
+      } else "invalid"
     }
     stateVar match {
       case "value" => _valState.update(initialState.value.get.toDouble)
