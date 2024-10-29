@@ -59,6 +59,7 @@ jobs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
+      image_docs_url_link: ${{ steps.infra-image-link-images.outputs.image_docs_url_link }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -143,6 +144,16 @@ jobs:
         IMG_NAME="apache-spark-ci-image-docs:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_docs_url=$IMG_URL" >> $GITHUB_OUTPUT
+    - name: Link the docker images
+      id: infra-image-link-images
+      run: |
+        # Set the image URL for job "docs"
+        # Should delete the link and directly use image_docs_url after SPARK 3.x EOL
+        if [[ "${{ inputs.branch }}" == 'branch-3.5' ]]; then
+          echo "image_docs_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
+        else
+          echo "image_docs_url_link=${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}" >> $GITHUB_OUTPUT
+        fi
 
   # Build: build Spark and run the tests for specified modules.
   build:
@@ -797,7 +808,7 @@ jobs:
       PYSPARK_PYTHON: python3.9
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
-      image: ${{ needs.precondition.outputs.image_docs_url }}
+      image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
