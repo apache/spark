@@ -271,7 +271,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       spark.table("l").groupBy(
         $"a",
         spark.table("r").where($"a".outer() === $"c").select(sum($"d")).scalar().as("sum_d")
-      ).agg(Map.empty),
+      ).agg(Map.empty[String, String]),
       sql("select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2")
     )
   }
@@ -285,7 +285,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
           spark.table("l").groupBy(
             $"a",
             spark.table("vr").where($"a".outer() === $"c").select(sum($"d")).scalar().as("sum_d")
-          ).agg(Map.empty),
+          ).agg(Map.empty[String, String]),
           sql("select a, (select sum(d) from vr where a = c) sum_d from l l1 group by 1, 2")
         )
       }
