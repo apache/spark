@@ -207,6 +207,131 @@ Intersect false
 
 
 -- !query
+select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate unicode_ci from values ('aaa'), ('bbb')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING COLLATE UNICODE_CI\"",
+    "dataType2" : "\"STRING COLLATE UTF8_LCASE\"",
+    "hint" : "",
+    "operator" : "EXCEPT",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 162,
+    "fragment" : "select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except select col1 collate unicode_ci from values ('aaa'), ('bbb')"
+  } ]
+}
+
+
+-- !query
+select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate unicode_ci from values ('aaa'), ('bbb')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING COLLATE UNICODE_CI\"",
+    "dataType2" : "\"STRING COLLATE UTF8_LCASE\"",
+    "hint" : "",
+    "operator" : "EXCEPT ALL",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 166,
+    "fragment" : "select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') except all select col1 collate unicode_ci from values ('aaa'), ('bbb')"
+  } ]
+}
+
+
+-- !query
+select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union select col1 collate unicode_ci from values ('aaa'), ('bbb')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING COLLATE UNICODE_CI\"",
+    "dataType2" : "\"STRING COLLATE UTF8_LCASE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 161,
+    "fragment" : "select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union select col1 collate unicode_ci from values ('aaa'), ('bbb')"
+  } ]
+}
+
+
+-- !query
+select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate unicode_ci from values ('aaa'), ('bbb')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING COLLATE UNICODE_CI\"",
+    "dataType2" : "\"STRING COLLATE UTF8_LCASE\"",
+    "hint" : "",
+    "operator" : "UNION",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 165,
+    "fragment" : "select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') union all select col1 collate unicode_ci from values ('aaa'), ('bbb')"
+  } ]
+}
+
+
+-- !query
+select col1 collate utf8_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate unicode_ci from values ('aaa'), ('bbb')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "sqlState" : "42825",
+  "messageParameters" : {
+    "columnOrdinalNumber" : "first",
+    "dataType1" : "\"STRING COLLATE UNICODE_CI\"",
+    "dataType2" : "\"STRING COLLATE UTF8_LCASE\"",
+    "hint" : "",
+    "operator" : "INTERSECT",
+    "tableOrdinalNumber" : "second"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 156,
+    "fragment" : "select col1 collate utf8_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), ('ZZZ') intersect select col1 collate unicode_ci from values ('aaa'), ('bbb')"
+  } ]
+}
+
+
+-- !query
 create table t1 (c1 struct<utf8_binary: string collate utf8_binary, utf8_lcase: string collate utf8_lcase>) USING PARQUET
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`t1`, false
@@ -518,6 +643,22 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 
 -- !query
 insert into t5 values ('İo', 'İo', 'İo')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
++- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+insert into t5 values ('İo', 'İo', 'İo ')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
++- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+insert into t5 values ('İo', 'İo ', 'İo')
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t5], Append, `spark_catalog`.`default`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t5), [s, utf8_binary, utf8_lcase]
 +- Project [cast(col1#x as string) AS s#x, cast(col2#x as string) AS utf8_binary#x, cast(col3#x as string collate UTF8_LCASE) AS utf8_lcase#x]
@@ -897,6 +1038,14 @@ Project [split_part(cast(utf8_binary#x as string collate UTF8_LCASE), collate(a,
 
 
 -- !query
+select split_part(utf8_binary, 'a ' collate utf8_lcase_rtrim, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t5
+-- !query analysis
+Project [split_part(cast(utf8_binary#x as string collate UTF8_LCASE_RTRIM), collate(a , utf8_lcase_rtrim), 3) AS split_part(utf8_binary, collate(a , utf8_lcase_rtrim), 3)#x, split_part(cast(utf8_lcase#x as string), collate(a, utf8_binary), 3) AS split_part(utf8_lcase, collate(a, utf8_binary), 3)#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select contains(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -987,6 +1136,14 @@ Project [Contains(cast(utf8_binary#x as string collate UTF8_LCASE), collate(AaAA
 
 
 -- !query
+select contains(utf8_binary, 'AaAA ' collate utf8_lcase_rtrim), contains(utf8_lcase, 'AAa ' collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [Contains(cast(utf8_binary#x as string collate UTF8_LCASE_RTRIM), collate(AaAA , utf8_lcase_rtrim)) AS contains(utf8_binary, collate(AaAA , utf8_lcase_rtrim))#x, Contains(cast(utf8_lcase#x as string collate UTF8_BINARY_RTRIM), collate(AAa , utf8_binary_rtrim)) AS contains(utf8_lcase, collate(AAa , utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select substring_index(utf8_binary, utf8_lcase, 2) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -1072,6 +1229,14 @@ Project [substring_index(utf8_binary#x, a, 2) AS substring_index(utf8_binary, a,
 select substring_index(utf8_binary, 'AaAA' collate utf8_lcase, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5
 -- !query analysis
 Project [substring_index(cast(utf8_binary#x as string collate UTF8_LCASE), collate(AaAA, utf8_lcase), 2) AS substring_index(utf8_binary, collate(AaAA, utf8_lcase), 2)#x, substring_index(cast(utf8_lcase#x as string), collate(AAa, utf8_binary), 2) AS substring_index(utf8_lcase, collate(AAa, utf8_binary), 2)#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
+select substring_index(utf8_binary, 'AaAA ' collate utf8_lcase_rtrim, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5
+-- !query analysis
+Project [substring_index(cast(utf8_binary#x as string collate UTF8_LCASE_RTRIM), collate(AaAA , utf8_lcase_rtrim), 2) AS substring_index(utf8_binary, collate(AaAA , utf8_lcase_rtrim), 2)#x, substring_index(cast(utf8_lcase#x as string), collate(AAa, utf8_binary), 2) AS substring_index(utf8_lcase, collate(AAa, utf8_binary), 2)#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -1233,6 +1398,14 @@ Project [find_in_set(cast(utf8_binary#x as string collate UTF8_LCASE), collate(a
 
 
 -- !query
+select find_in_set(utf8_binary, 'aaAaaAaA,i̇o ' collate utf8_lcase_rtrim), find_in_set(utf8_lcase, 'aaAaaAaA,i̇o' collate utf8_binary) from t5
+-- !query analysis
+Project [find_in_set(cast(utf8_binary#x as string collate UTF8_LCASE_RTRIM), collate(aaAaaAaA,i̇o , utf8_lcase_rtrim)) AS find_in_set(utf8_binary, collate(aaAaaAaA,i̇o , utf8_lcase_rtrim))#x, find_in_set(cast(utf8_lcase#x as string), collate(aaAaaAaA,i̇o, utf8_binary)) AS find_in_set(utf8_lcase, collate(aaAaaAaA,i̇o, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select startswith(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -1323,6 +1496,14 @@ Project [StartsWith(cast(utf8_binary#x as string collate UTF8_LCASE), collate(aa
 
 
 -- !query
+select startswith(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim), startswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5
+-- !query analysis
+Project [StartsWith(cast(utf8_binary#x as string collate UTF8_LCASE_RTRIM), collate(aaAaaAaA , utf8_lcase_rtrim)) AS startswith(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim))#x, StartsWith(cast(utf8_lcase#x as string), collate(aaAaaAaA, utf8_binary)) AS startswith(utf8_lcase, collate(aaAaaAaA, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select translate(utf8_lcase, utf8_lcase, '12345') from t5
 -- !query analysis
 Project [translate(utf8_lcase#x, utf8_lcase#x, cast(12345 as string collate UTF8_LCASE)) AS translate(utf8_lcase, utf8_lcase, 12345)#x]
@@ -1400,6 +1581,14 @@ Project [translate(utf8_lcase#x, cast(aaAaaAaA as string collate UTF8_LCASE), ca
 select translate(utf8_lcase, 'aBc' collate utf8_binary, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
 -- !query analysis
 Project [translate(cast(utf8_lcase#x as string), collate(aBc, utf8_binary), 12345) AS translate(utf8_lcase, collate(aBc, utf8_binary), 12345)#x, translate(cast(utf8_binary#x as string collate UTF8_LCASE), collate(aBc, utf8_lcase), cast(12345 as string collate UTF8_LCASE)) AS translate(utf8_binary, collate(aBc, utf8_lcase), 12345)#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
+select translate(utf8_lcase, 'aBc ' collate utf8_binary_rtrim, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
+-- !query analysis
+Project [translate(cast(utf8_lcase#x as string collate UTF8_BINARY_RTRIM), collate(aBc , utf8_binary_rtrim), cast(12345 as string collate UTF8_BINARY_RTRIM)) AS translate(utf8_lcase, collate(aBc , utf8_binary_rtrim), 12345)#x, translate(cast(utf8_binary#x as string collate UTF8_LCASE), collate(aBc, utf8_lcase), cast(12345 as string collate UTF8_LCASE)) AS translate(utf8_binary, collate(aBc, utf8_lcase), 12345)#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -1495,6 +1684,14 @@ Project [replace(cast(utf8_binary#x as string collate UTF8_LCASE), collate(aaAaa
 
 
 -- !query
+select replace(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
+-- !query analysis
+Project [replace(cast(utf8_binary#x as string collate UTF8_LCASE_RTRIM), collate(aaAaaAaA , utf8_lcase_rtrim), cast(abc as string collate UTF8_LCASE_RTRIM)) AS replace(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim), abc)#x, replace(cast(utf8_lcase#x as string), collate(aaAaaAaA, utf8_binary), abc) AS replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc)#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select endswith(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -1580,6 +1777,14 @@ Project [EndsWith(utf8_binary#x, aaAaaAaA) AS endswith(utf8_binary, aaAaaAaA)#x,
 select endswith(utf8_binary, 'aaAaaAaA' collate utf8_lcase), endswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5
 -- !query analysis
 Project [EndsWith(cast(utf8_binary#x as string collate UTF8_LCASE), collate(aaAaaAaA, utf8_lcase)) AS endswith(utf8_binary, collate(aaAaaAaA, utf8_lcase))#x, EndsWith(cast(utf8_lcase#x as string), collate(aaAaaAaA, utf8_binary)) AS endswith(utf8_lcase, collate(aaAaaAaA, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
+select endswith(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim), endswith(utf8_lcase, 'aaAaaAaA' collate utf8_binary) from t5
+-- !query analysis
+Project [EndsWith(cast(utf8_binary#x as string collate UTF8_LCASE_RTRIM), collate(aaAaaAaA , utf8_lcase_rtrim)) AS endswith(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim))#x, EndsWith(cast(utf8_lcase#x as string), collate(aaAaaAaA, utf8_binary)) AS endswith(utf8_lcase, collate(aaAaaAaA, utf8_binary))#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -2175,6 +2380,14 @@ Project [rpad(collate(utf8_binary#x, utf8_lcase), 8, collate(utf8_lcase#x, utf8_
 
 
 -- !query
+select lpad(utf8_binary collate utf8_binary_rtrim, 8, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [lpad(collate(utf8_binary#x, utf8_binary_rtrim), 8, collate(utf8_lcase#x, utf8_binary_rtrim)) AS lpad(collate(utf8_binary, utf8_binary_rtrim), 8, collate(utf8_lcase, utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select rpad(utf8_binary, 8, 'a'), rpad(utf8_lcase, 8, 'a') from t5
 -- !query analysis
 Project [rpad(utf8_binary#x, 8, a) AS rpad(utf8_binary, 8, a)#x, rpad(utf8_lcase#x, 8, cast(a as string collate UTF8_LCASE)) AS rpad(utf8_lcase, 8, a)#x]
@@ -2236,6 +2449,14 @@ Project [lpad(utf8_binary#x, 8, collate(utf8_lcase#x, utf8_binary)) AS lpad(utf8
 select lpad(utf8_binary collate utf8_lcase, 8, utf8_lcase collate utf8_lcase) from t5
 -- !query analysis
 Project [lpad(collate(utf8_binary#x, utf8_lcase), 8, collate(utf8_lcase#x, utf8_lcase)) AS lpad(collate(utf8_binary, utf8_lcase), 8, collate(utf8_lcase, utf8_lcase))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
+select lpad(utf8_binary collate utf8_binary_rtrim, 8, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [lpad(collate(utf8_binary#x, utf8_binary_rtrim), 8, collate(utf8_lcase#x, utf8_binary_rtrim)) AS lpad(collate(utf8_binary, utf8_binary_rtrim), 8, collate(utf8_lcase, utf8_binary_rtrim))#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -2347,6 +2568,14 @@ Project [locate(cast(utf8_binary#x as string collate UTF8_LCASE), collate(AaAA, 
 
 
 -- !query
+select locate(utf8_binary, 'AaAA ' collate utf8_binary_rtrim, 4), locate(utf8_lcase, 'AAa ' collate utf8_binary, 4) from t5
+-- !query analysis
+Project [locate(cast(utf8_binary#x as string collate UTF8_BINARY_RTRIM), collate(AaAA , utf8_binary_rtrim), 4) AS locate(utf8_binary, collate(AaAA , utf8_binary_rtrim), 4)#x, locate(cast(utf8_lcase#x as string), collate(AAa , utf8_binary), 4) AS locate(utf8_lcase, collate(AAa , utf8_binary), 4)#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select TRIM(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -2418,6 +2647,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "TRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai)"
   } ]
 }
+
+
+-- !query
+select TRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [trim(collate(utf8_lcase#x, utf8_binary_rtrim), Some(collate(utf8_binary#x, utf8_binary_rtrim))) AS TRIM(BOTH collate(utf8_binary, utf8_binary_rtrim) FROM collate(utf8_lcase, utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
 
 -- !query
@@ -2511,6 +2748,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select BTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [btrim(collate(utf8_binary#x, utf8_binary_rtrim), collate(utf8_lcase#x, utf8_binary_rtrim)) AS btrim(collate(utf8_binary, utf8_binary_rtrim), collate(utf8_lcase, utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select BTRIM('ABc', utf8_binary), BTRIM('ABc', utf8_lcase) from t5
 -- !query analysis
 Project [btrim(ABc, utf8_binary#x) AS btrim(ABc, utf8_binary)#x, btrim(ABc, utf8_lcase#x) AS btrim(ABc, utf8_lcase)#x]
@@ -2601,6 +2846,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+select LTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [ltrim(collate(utf8_lcase#x, utf8_binary_rtrim), Some(collate(utf8_binary#x, utf8_binary_rtrim))) AS TRIM(LEADING collate(utf8_binary, utf8_binary_rtrim) FROM collate(utf8_lcase, utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t5
 -- !query analysis
 Project [ltrim(utf8_binary#x, Some(ABc)) AS TRIM(LEADING ABc FROM utf8_binary)#x, ltrim(utf8_lcase#x, Some(cast(ABc as string collate UTF8_LCASE))) AS TRIM(LEADING ABc FROM utf8_lcase)#x]
@@ -2688,6 +2941,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "RTRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai)"
   } ]
 }
+
+
+-- !query
+select RTRIM(utf8_binary collate utf8_binary_rtrim, utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [rtrim(collate(utf8_lcase#x, utf8_binary_rtrim), Some(collate(utf8_binary#x, utf8_binary_rtrim))) AS TRIM(TRAILING collate(utf8_binary, utf8_binary_rtrim) FROM collate(utf8_lcase, utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
 
 -- !query
