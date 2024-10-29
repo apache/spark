@@ -324,6 +324,27 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
       }
   }
 
+  test("str fns without params have default strength") {
+    val tableName = "str_fns_tbl"
+    val columnCollation = "UNICODE"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (c1 STRING COLLATE $columnCollation) USING $dataSource")
+      sql(s"INSERT INTO $tableName VALUES ('a')")
+
+      checkAnswer(
+        sql(s"SELECT COLLATION('a' collate utf8_lcase || current_database()) FROM $tableName"),
+        Seq(Row("UTF8_LCASE")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1 || current_database()) FROM $tableName"),
+        Seq(Row(columnCollation)))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION('a' || current_database()) FROM $tableName"),
+        Seq(Row("UTF8_BINARY")))
+    }
+  }
+
   test("access collated map via literal") {
     val tableName = "map_with_lit"
 
