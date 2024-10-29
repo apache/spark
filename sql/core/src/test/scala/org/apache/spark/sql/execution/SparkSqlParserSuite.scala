@@ -252,7 +252,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "RESET spark.sql.key1 key2"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -262,7 +262,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "RESET spark.  sql.key1 key2"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql2,
@@ -272,7 +272,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "RESET spark.sql.key1 key2 key3"
     checkError(
       exception = parseException(sql3),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql3,
@@ -282,7 +282,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "RESET spark:   sql:key"
     checkError(
       exception = parseException(sql4),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
@@ -292,7 +292,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql5 = "RESET spark   .sql.key"
     checkError(
       exception = parseException(sql5),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql5,
@@ -302,7 +302,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql6 = "RESET spark :  sql:key"
     checkError(
       exception = parseException(sql6),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
@@ -312,7 +312,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql7 = "RESET spark.sql:   key"
     checkError(
       exception = parseException(sql7),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql7,
@@ -322,7 +322,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql8 = "RESET spark.sql   .key"
     checkError(
       exception = parseException(sql8),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql8,
@@ -332,7 +332,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql9 = "RESET spark.sql :  key"
     checkError(
       exception = parseException(sql9),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql9,
