@@ -231,6 +231,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
     new SparkUnsupportedOperationException("TUPLE_SIZE_EXCEEDS_LIMIT")
   }
 
+  def emptyTupleNotSupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("TUPLE_IS_EMPTY")
+  }
+
   def invalidAgnosticEncoderError(encoder: AnyRef): Throwable = {
     new SparkRuntimeException(
       errorClass = "INVALID_AGNOSTIC_ENCODER",

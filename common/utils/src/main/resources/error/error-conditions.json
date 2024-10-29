@@ -4628,6 +4628,12 @@
     ],
     "sqlState" : "42K09"
   },
+  "TUPLE_IS_EMPTY" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, empty tuple is not supported."
+    ],
+    "sqlState" : "22004"
+  },
   "TUPLE_SIZE_EXCEEDS_LIMIT" : {
     "message" : [
       "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."

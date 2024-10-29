@@ -522,6 +522,17 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       parameters = Map.empty)
   }
 
+  test("throw exception for empty tuple") {
+    val encoders = Seq.empty[Encoder[Int]]
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        Encoders.tupleEncoder(encoders: _*)
+      },
+      condition = "TUPLE_IS_EMPTY",
+      parameters = Map.empty)
+  }
+
   test("throw exception for unexpected serializer") {
     val schema = new StructType()
       .add("key", StringType)
