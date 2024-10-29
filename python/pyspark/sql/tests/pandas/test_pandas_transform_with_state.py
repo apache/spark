@@ -195,6 +195,10 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
+        # Verify custom metrics. We created 2 value states in this test case and deleted 1 of them.
+        self.assertEqual(q.lastProgress.stateOperators[0].customMetrics["numValueStateVars"], 2)
+        self.assertEqual(q.lastProgress.stateOperators[0].customMetrics["numDeletedStateVars"], 1)
+
         q.stop()
 
         self._prepare_test_resource2(input_path)
