@@ -18,8 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
