@@ -146,7 +146,9 @@ class InitialStatefulProcessorWithUnflattenStateDataSource
         "list"
       } else if (initialState.mapValue.isDefined) {
         "map"
-      } else "invalid"
+      } else {
+        "invalid"
+      }
     }
     stateVar match {
       case "value" => _valState.update(initialState.value.get.toDouble)
