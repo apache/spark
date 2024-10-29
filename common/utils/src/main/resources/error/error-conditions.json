@@ -1091,12 +1091,6 @@
     ],
     "sqlState" : "KD010"
   },
-  "DATA_SOURCE_UNSUPPORTED_DML_OPERATION" : {
-    "message" : [
-      "Data source '<provider>' does not support requested operation: <operation>"
-    ],
-    "sqlState" : "KD011"
-  },
   "DATA_SOURCE_NOT_EXIST" : {
     "message" : [
       "Data source '<provider>' not found. Please make sure the data source is registered."
@@ -1116,6 +1110,12 @@
       "Expected schema: <expectedSchema>"
     ],
     "sqlState" : "42K03"
+  },
+  "DATA_SOURCE_UNSUPPORTED_DML_OPERATION" : {
+    "message" : [
+      "Data source '<provider>' does not support requested operation: <operation>"
+    ],
+    "sqlState" : "KD011"
   },
   "DATETIME_OVERFLOW" : {
     "message" : [
