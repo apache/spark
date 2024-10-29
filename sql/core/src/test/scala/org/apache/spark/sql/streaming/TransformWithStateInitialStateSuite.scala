@@ -110,10 +110,18 @@ class InitialStatefulProcessorWithStateDataSource
   override def handleInitialState(
     key: String, initialState: UnionInitialStateRow, timerValues: TimerValues): Unit = {
     val stateVar = {
-      if (initialState.value.isDefined) "value"
-      else if (initialState.listValue.isDefined) "list"
-      else if (initialState.userMapKey.isDefined) "map"
-      else "invalid"
+      if (initialState.value.isDefined) {
+        "value"
+      }
+      else if (initialState.listValue.isDefined) {
+        "list"
+      }
+      else if (initialState.userMapKey.isDefined) {
+        "map"
+      }
+      else {
+        "invalid"
+      }
     }
     stateVar match {
       case "value" => _valState.update(initialState.value.get.toDouble)
@@ -633,10 +641,9 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         s"as initial state with flatten option set to $flattenOption, initial state rows are " +
         s"${samePartition}coming from the same shuffle partition number with current query") {
         withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
-          SQLConf.SHUFFLE_PARTITIONS.key ->
-            TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+          classOf[RocksDBStateStoreProvider].getName) {
           withTempDir { checkpointDir =>
+            SQLConf.get.setConfString(SQLConf.SHUFFLE_PARTITIONS.key, partitions._1)
             val inputData = MemoryStream[String]
             val result = inputData.toDS()
               .groupByKey(x => x)
@@ -676,6 +683,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
 
             // create a df where each row contains all value, list, map state rows
             // fill the missing column with null
+            SQLConf.get.setConfString(SQLConf.SHUFFLE_PARTITIONS.key, partitions._2)
             val inputData2 = MemoryStream[InitInputRow]
             val query = startQuery(valueDf, listDf, mapDf, inputData2)
 
