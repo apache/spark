@@ -21749,6 +21749,108 @@ def make_timestamp(
 
 
 @_try_remote_functions
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Try to create timestamp from years, months, days, hours, mins, secs and timezone fields.
+    The result data type is consistent with the value of configuration `spark.sql.timestampType`.
+    The function returns NULL on invalid inputs.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    years : :class:`~pyspark.sql.Column` or column name
+        The year to represent, from 1 to 9999
+    months : :class:`~pyspark.sql.Column` or column name
+        The month-of-year to represent, from 1 (January) to 12 (December)
+    days : :class:`~pyspark.sql.Column` or column name
+        The day-of-month to represent, from 1 to 31
+    hours : :class:`~pyspark.sql.Column` or column name
+        The hour-of-day to represent, from 0 to 23
+    mins : :class:`~pyspark.sql.Column` or column name
+        The minute-of-hour to represent, from 0 to 59
+    secs : :class:`~pyspark.sql.Column` or column name
+        The second-of-minute and its micro-fraction to represent, from 0 to 60.
+        The value can be either an integer like 13 , or a fraction like 13.123.
+        If the sec argument equals to 60, the seconds field is set
+        to 0 and 1 minute is added to the final timestamp.
+    timezone : :class:`~pyspark.sql.Column` or column name, optional
+        The time zone identifier. For example, CET, UTC and etc.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains a timestamp or NULL in case of an error.
+
+    Examples
+    --------
+
+    Example 1: Make timestamp from years, months, days, hours, mins and secs.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(sf.try_make_timestamp(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
+    ... ).show(truncate=False)
+    +----------------------------------------------------+
+    |try_make_timestamp(year, month, day, hour, min, sec)|
+    +----------------------------------------------------+
+    |2014-12-27 21:30:45.887                             |
+    +----------------------------------------------------+
+
+    Example 2: Make timestamp without timezone.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(sf.try_make_timestamp(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ... ).show(truncate=False)
+    +----------------------------------------------------+
+    |try_make_timestamp(year, month, day, hour, min, sec)|
+    +----------------------------------------------------+
+    |2014-12-28 06:30:45.887                             |
+    +----------------------------------------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+
+    Example 3: Make timestamp with invalid input.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 13, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(sf.try_make_timestamp(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ... ).show(truncate=False)
+    +----------------------------------------------------+
+    |try_make_timestamp(year, month, day, hour, min, sec)|
+    +----------------------------------------------------+
+    |NULL                                                |
+    +----------------------------------------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "try_make_timestamp", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "try_make_timestamp", years, months, days, hours, mins, secs
+        )
+
+
+@_try_remote_functions
 def make_timestamp_ltz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -21835,6 +21937,108 @@ def make_timestamp_ltz(
 
 
 @_try_remote_functions
+def try_make_timestamp_ltz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    """
+    Try to create the current timestamp with local time zone from years, months, days, hours, mins,
+    secs and timezone fields.
+    The function returns NULL on invalid inputs.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    years : :class:`~pyspark.sql.Column` or column name
+        The year to represent, from 1 to 9999
+    months : :class:`~pyspark.sql.Column` or column name
+        The month-of-year to represent, from 1 (January) to 12 (December)
+    days : :class:`~pyspark.sql.Column` or column name
+        The day-of-month to represent, from 1 to 31
+    hours : :class:`~pyspark.sql.Column` or column name
+        The hour-of-day to represent, from 0 to 23
+    mins : :class:`~pyspark.sql.Column` or column name
+        The minute-of-hour to represent, from 0 to 59
+    secs : :class:`~pyspark.sql.Column` or column name
+        The second-of-minute and its micro-fraction to represent, from 0 to 60.
+        The value can be either an integer like 13 , or a fraction like 13.123.
+        If the sec argument equals to 60, the seconds field is set
+        to 0 and 1 minute is added to the final timestamp.
+    timezone : :class:`~pyspark.sql.Column` or column name, optional
+        The time zone identifier. For example, CET, UTC and etc.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains a current timestamp, or NULL in case of an error.
+
+    Examples
+    --------
+
+    Example 1: Make the current timestamp from years, months, days, hours, mins and secs.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(sf.try_make_timestamp_ltz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
+    ... ).show(truncate=False)
+    +------------------------------------------------------------------+
+    |try_make_timestamp_ltz(year, month, day, hour, min, sec, timezone)|
+    +------------------------------------------------------------------+
+    |2014-12-27 21:30:45.887                                           |
+    +------------------------------------------------------------------+
+
+    Example 2: Make the current timestamp without timezone.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(sf.try_make_timestamp_ltz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ... ).show(truncate=False)
+    +--------------------------------------------------------+
+    |try_make_timestamp_ltz(year, month, day, hour, min, sec)|
+    +--------------------------------------------------------+
+    |2014-12-28 06:30:45.887                                 |
+    +--------------------------------------------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+
+    Example 3: Make the current timestamp with invalid input.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 13, 28, 6, 30, 45.887, 'CET']],
+    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
+    >>> df.select(sf.try_make_timestamp_ltz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ... ).show(truncate=False)
+    +--------------------------------------------------------+
+    |try_make_timestamp_ltz(year, month, day, hour, min, sec)|
+    +--------------------------------------------------------+
+    |NULL                                                    |
+    +--------------------------------------------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ltz", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ltz", years, months, days, hours, mins, secs
+        )
+
+
+@_try_remote_functions
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -21894,6 +22098,84 @@ def make_timestamp_ntz(
     """
     return _invoke_function_over_columns(
         "make_timestamp_ntz", years, months, days, hours, mins, secs
+    )
+
+
+@_try_remote_functions
+def try_make_timestamp_ntz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+) -> Column:
+    """
+    Try to create local date-time from years, months, days, hours, mins, secs fields.
+    The function returns NULL on invalid inputs.
+
+    .. versionadded:: 4.0.0
+
+    Parameters
+    ----------
+    years : :class:`~pyspark.sql.Column` or column name
+        The year to represent, from 1 to 9999
+    months : :class:`~pyspark.sql.Column` or column name
+        The month-of-year to represent, from 1 (January) to 12 (December)
+    days : :class:`~pyspark.sql.Column` or column name
+        The day-of-month to represent, from 1 to 31
+    hours : :class:`~pyspark.sql.Column` or column name
+        The hour-of-day to represent, from 0 to 23
+    mins : :class:`~pyspark.sql.Column` or column name
+        The minute-of-hour to represent, from 0 to 59
+    secs : :class:`~pyspark.sql.Column` or column name
+        The second-of-minute and its micro-fraction to represent, from 0 to 60.
+        The value can be either an integer like 13 , or a fraction like 13.123.
+        If the sec argument equals to 60, the seconds field is set
+        to 0 and 1 minute is added to the final timestamp.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        A new column that contains a local date-time, or NULL in case of an error.
+
+    Examples
+    --------
+
+    Example 1: Make local date-time from years, months, days, hours, mins, secs.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
+    ...     ["year", "month", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_timestamp_ntz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ... ).show(truncate=False)
+    +--------------------------------------------------------+
+    |try_make_timestamp_ntz(year, month, day, hour, min, sec)|
+    +--------------------------------------------------------+
+    |2014-12-28 06:30:45.887                                 |
+    +--------------------------------------------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+
+    Example 2: Make local date-time with invalid input
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+    >>> df = spark.createDataFrame([[2014, 13, 28, 6, 30, 45.887]],
+    ...     ["year", "month", "day", "hour", "min", "sec"])
+    >>> df.select(sf.try_make_timestamp_ntz(
+    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ... ).show(truncate=False)
+    +--------------------------------------------------------+
+    |try_make_timestamp_ntz(year, month, day, hour, min, sec)|
+    +--------------------------------------------------------+
+    |NULL                                                    |
+    +--------------------------------------------------------+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    return _invoke_function_over_columns(
+        "try_make_timestamp_ntz", years, months, days, hours, mins, secs
     )
 
 
