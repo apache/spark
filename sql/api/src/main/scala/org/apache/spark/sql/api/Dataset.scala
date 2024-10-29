@@ -1699,11 +1699,11 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.
    *
-   * The `scalar()` method is useful for extracting a `Column` object that represents a scalar value
-   * from a DataFrame, especially when the DataFrame results from an aggregation or
-   * single-value computation. This returned `Column` can then be used directly in `select` clauses
-   * or as predicates in filters on the outer DataFrame, enabling dynamic data filtering and
-   * calculations based on scalar values.
+   * The `scalar()` method is useful for extracting a `Column` object that represents a scalar
+   * value from a DataFrame, especially when the DataFrame results from an aggregation or
+   * single-value computation. This returned `Column` can then be used directly in `select`
+   * clauses or as predicates in filters on the outer DataFrame, enabling dynamic data filtering
+   * and calculations based on scalar values.
    *
    * @group subquery
    * @since 4.0.0
