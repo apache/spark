@@ -115,11 +115,11 @@ case object StringType extends StringType(0) {
 }
 
 /**
- * String type which result from a strongly typed string declaration
- * `STRING COLLATE ...`, and not just implicit `STRING`.
+ * String type which result from a strongly typed string declaration `STRING COLLATE ...`, and not
+ * just implicit `STRING`.
  */
-private[spark] class StronglyTypedStringType private(collationId: Int)
-  extends StringType(collationId) {}
+private[spark] class StronglyTypedStringType private (collationId: Int)
+    extends StringType(collationId) {}
 
 private[spark] object StronglyTypedStringType {
   def apply(id: Int): StronglyTypedStringType = {

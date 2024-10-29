@@ -25,9 +25,9 @@ import org.apache.spark.sql.types.{DataType, StringType, StronglyTypedStringType
 
 /**
  * Resolves default string types in DDL commands. For DML commands, the default string type is
- * determined by the session's default string type. For DDL, the default string type is
- * the default type of the object (table -> schema -> catalog).
- * However, this is not implemented yet. So, we will just use UTF8_BINARY for now.
+ * determined by the session's default string type. For DDL, the default string type is the
+ * default type of the object (table -> schema -> catalog). However, this is not implemented yet.
+ * So, we will just use UTF8_BINARY for now.
  */
 object ResolveDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {

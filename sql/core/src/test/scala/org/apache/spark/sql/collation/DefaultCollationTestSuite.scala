@@ -147,9 +147,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
            |""".stripMargin)
 
       checkAnswer(sql(s"SELECT COLLATION(c1.col1) FROM $tableName"), Seq(Row("UTF8_BINARY")))
-      checkAnswer(
-        sql(s"SELECT COLLATION(c2['a']) FROM $tableName"),
-        Seq(Row("UTF8_BINARY")))
+      checkAnswer(sql(s"SELECT COLLATION(c2['a']) FROM $tableName"), Seq(Row("UTF8_BINARY")))
       checkAnswer(sql(s"SELECT COLLATION(c3[0]) FROM $tableName"), Seq(Row("UTF8_BINARY")))
     }
   }
@@ -164,9 +162,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
            |SELECT 'b' = 'B' AS c1
            |""".stripMargin)
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableName"),
-        Seq(Row(false)))
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(false)))
     }
 
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
@@ -177,9 +173,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
              |SELECT 'b' = 'B' AS c1
              |""".stripMargin)
 
-      checkAnswer(
-        sql(s"SELECT * FROM $tableName"),
-        Seq(Row(false), Row(false)))
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(false), Row(false)))
     }
   }
 
@@ -212,26 +206,18 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
         assertTableColumnCollation(viewName, "c2", "UNICODE_CI")
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION(c1), COLLATION('a') FROM $viewName"),
-          Row("UTF8_BINARY", sessionCollation)
-        )
+          Row("UTF8_BINARY", sessionCollation))
 
         // filter should use session collation
-        checkAnswer(
-          sql(s"SELECT COUNT(*) FROM $viewName WHERE 'a' = 'A'"),
-          Row(2)
-        )
+        checkAnswer(sql(s"SELECT COUNT(*) FROM $viewName WHERE 'a' = 'A'"), Row(2))
 
         // filter should use column collation
-        checkAnswer(
-          sql(s"SELECT COUNT(*) FROM $viewName WHERE c1 = 'A'"),
-          Row(1)
-        )
+        checkAnswer(sql(s"SELECT COUNT(*) FROM $viewName WHERE c1 = 'A'"), Row(1))
 
         // literal with explicit collation wins
         checkAnswer(
           sql(s"SELECT COUNT(*) FROM $viewName WHERE c1 = 'A' collate UNICODE_CI"),
-          Row(2)
-        )
+          Row(2))
 
         // two implicit collations -> errors out
         assertThrowsImplicitMismatch(sql(s"SELECT c1 = substring('A', 0, 1) FROM $viewName"))
@@ -241,14 +227,10 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
         assertTableColumnCollation(viewName, "c2", "UNICODE_CI")
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION(c1), COLLATION('a') FROM $viewName"),
-          Row("UNICODE_CI", sessionCollation)
-        )
+          Row("UNICODE_CI", sessionCollation))
 
         // after alter both rows should be returned
-        checkAnswer(
-          sql(s"SELECT COUNT(*) FROM $viewName WHERE c1 = 'A'"),
-          Row(2)
-        )
+        checkAnswer(sql(s"SELECT COUNT(*) FROM $viewName WHERE c1 = 'A'"), Row(2))
       }
     }
   }
@@ -269,8 +251,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $viewTableName")
 
         assertThrowsImplicitMismatch(
-          sql(s"SELECT * FROM $viewName JOIN $joinTableName ON $viewName.c1 = $joinTableName.c1")
-        )
+          sql(s"SELECT * FROM $viewName JOIN $joinTableName ON $viewName.c1 = $joinTableName.c1"))
 
         checkAnswer(
           sql(s"""
@@ -278,8 +259,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
                |FROM $viewName JOIN $joinTableName
                |ON $viewName.c1 = $joinTableName.c1 COLLATE UNICODE_CI
                |""".stripMargin),
-          Row("UNICODE_CI", "UTF8_LCASE")
-        )
+          Row("UNICODE_CI", "UTF8_LCASE"))
       }
     }
   }
@@ -322,9 +302,7 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   test("cast is aware of session collation") {
     val sessionCollation = "UTF8_LCASE"
     withSessionCollation(sessionCollation) {
-      checkAnswer(
-        sql("SELECT COLLATION(cast('a' as STRING))"),
-        Seq(Row(sessionCollation)))
+      checkAnswer(sql("SELECT COLLATION(cast('a' as STRING))"), Seq(Row(sessionCollation)))
 
       checkAnswer(
         sql("SELECT COLLATION(cast(map('a', 'b') as MAP<STRING, STRING>)['a'])"),
