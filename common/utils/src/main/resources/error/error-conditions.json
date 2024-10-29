@@ -5400,7 +5400,7 @@
   },
   "UNSUPPORTED_PARTITION_TRANSFORM" : {
     "message" : [
-      "Unsupported partition transform: <transform>. Ensure that the transform expression is valid."
+      "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
     ],
     "sqlState" : "0A000"
   },
