@@ -70,6 +70,24 @@ Project [a#x, (b#x + c#x) AS (b + c)#x]
 
 
 -- !query
+select b + 0 from t1 where a = 5
+-- !query analysis
+Project [(b#x + 0) AS (b + 0)#x]
++- Filter (a#x = 5)
+   +- SubqueryAlias spark_catalog.default.t1
+      +- Relation spark_catalog.default.t1[a#x,b#x,c#x] parquet
+
+
+-- !query
+select -100 + b + 100 from t1 where a = 5
+-- !query analysis
+Project [((-100 + b#x) + 100) AS ((-100 + b) + 100)#x]
++- Filter (a#x = 5)
+   +- SubqueryAlias spark_catalog.default.t1
+      +- Relation spark_catalog.default.t1[a#x,b#x,c#x] parquet
+
+
+-- !query
 select a+10, b*0 from t1
 -- !query analysis
 Project [(a#x + 10) AS (a + 10)#x, (b#x * 0) AS (b * 0)#x]

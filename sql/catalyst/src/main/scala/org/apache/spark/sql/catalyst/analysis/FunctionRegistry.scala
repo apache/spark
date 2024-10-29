@@ -615,6 +615,7 @@ object FunctionRegistry {
     expression[UrlEncode]("url_encode"),
     expression[UrlDecode]("url_decode"),
     expression[ParseUrl]("parse_url"),
+    expression[TryParseUrl]("try_parse_url"),
 
     // datetime functions
     expression[AddMonths]("add_months"),
@@ -664,10 +665,15 @@ object FunctionRegistry {
     expression[WindowTime]("window_time"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[TryMakeTimestamp]("try_make_timestamp"),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
     expressionBuilder("make_timestamp_ltz", MakeTimestampLTZExpressionBuilder, setAlias = true),
+    expressionBuilder(
+      "try_make_timestamp_ntz", TryMakeTimestampNTZExpressionBuilder, setAlias = true),
+    expressionBuilder(
+      "try_make_timestamp_ltz", TryMakeTimestampLTZExpressionBuilder, setAlias = true),
     expression[MakeInterval]("make_interval"),
     expression[MakeDTInterval]("make_dt_interval"),
     expression[MakeYMInterval]("make_ym_interval"),
@@ -895,9 +901,20 @@ object FunctionRegistry {
   /** Registry for internal functions used by Connect and the Column API. */
   private[sql] val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
 
-  private def registerInternalExpression[T <: Expression : ClassTag](name: String): Unit = {
-    val (info, builder) = FunctionRegistryBase.build(name, None)
-    internal.internalRegisterFunction(FunctionIdentifier(name), info, builder)
+  private def registerInternalExpression[T <: Expression : ClassTag](
+      name: String,
+      setAlias: Boolean = false): Unit = {
+    val (info, builder) = FunctionRegistryBase.build[T](name, None)
+    val newBuilder = if (setAlias) {
+      (expressions: Seq[Expression]) => {
+        val expr = builder(expressions)
+        expr.setTagValue(FUNC_ALIAS, name)
+        expr
+      }
+    } else {
+      builder
+    }
+    internal.internalRegisterFunction(FunctionIdentifier(name), info, newBuilder)
   }
 
   registerInternalExpression[Product]("product")
@@ -911,6 +928,7 @@ object FunctionRegistry {
   registerInternalExpression[Days]("days")
   registerInternalExpression[Hours]("hours")
   registerInternalExpression[UnwrapUDT]("unwrap_udt")
+  registerInternalExpression[MonotonicallyIncreasingID]("distributed_id", setAlias = true)
   registerInternalExpression[DistributedSequenceID]("distributed_sequence_id")
   registerInternalExpression[PandasProduct]("pandas_product")
   registerInternalExpression[PandasStddev]("pandas_stddev")

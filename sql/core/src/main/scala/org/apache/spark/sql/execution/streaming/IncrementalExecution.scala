@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.{Map => MutableMap}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.{Logging, MDC}
@@ -45,6 +47,9 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
+ * @param currentStateStoreCkptId checkpoint ID for the latest committed version. It is
+ *                                  operatorID -> array of checkpointIDs. Array index n
+ *                                  represents checkpoint ID for the nth shuffle partition.
  */
 class IncrementalExecution(
     sparkSession: SparkSession,
@@ -57,7 +62,9 @@ class IncrementalExecution(
     val prevOffsetSeqMetadata: Option[OffsetSeqMetadata],
     val offsetSeqMetadata: OffsetSeqMetadata,
     val watermarkPropagator: WatermarkPropagator,
-    val isFirstBatch: Boolean)
+    val isFirstBatch: Boolean,
+    val currentStateStoreCkptId:
+      MutableMap[Long, Array[Array[String]]] = MutableMap[Long, Array[Array[String]]]())
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.
@@ -126,12 +133,17 @@ class IncrementalExecution(
 
   /** Get the state info of the next stateful operator */
   private def nextStatefulOperationStateInfo(): StatefulOperatorStateInfo = {
-    StatefulOperatorStateInfo(
+    val operatorId = statefulOperatorId.getAndIncrement()
+    // TODO When state store checkpoint format V2 is used, after state store checkpoint ID is
+    // stored to the commit logs, we should assert the ID is not empty if it is not batch 0
+    val ret = StatefulOperatorStateInfo(
       checkpointLocation,
       runId,
-      statefulOperatorId.getAndIncrement(),
+      operatorId,
       currentBatchId,
-      numStateStores)
+      numStateStores,
+      currentStateStoreCkptId.get(operatorId))
+    ret
   }
 
   sealed trait SparkPlanPartialRule {

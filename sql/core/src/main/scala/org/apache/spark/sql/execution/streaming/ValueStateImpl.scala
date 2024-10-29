@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.ValueState
 
@@ -29,13 +30,15 @@ import org.apache.spark.sql.streaming.ValueState
  * @param stateName - name of logical state partition
  * @param keyExprEnc - Spark SQL encoder for key
  * @param valEncoder - Spark SQL encoder for value
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S])
+    valEncoder: Encoder[S],
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends ValueState[S] with Logging {
 
   private val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder, stateName)
@@ -74,10 +77,12 @@ class ValueStateImpl[S](
     val encodedValue = stateTypesEncoder.encodeValue(newState)
     store.put(stateTypesEncoder.encodeGroupingKey(),
       encodedValue, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
   }
 
   /** Function to remove state for given key */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
   }
 }

@@ -652,7 +652,7 @@ class DataStreamWriter:
         partitionBy: Optional[Union[str, List[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
-    ) -> StreamingQuery:
+    ) -> "StreamingQuery":
         return self._start_internal(
             path=path,
             tableName=None,
@@ -673,7 +673,7 @@ class DataStreamWriter:
         partitionBy: Optional[Union[str, List[str]]] = None,
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
-    ) -> StreamingQuery:
+    ) -> "StreamingQuery":
         return self._start_internal(
             path=None,
             tableName=tableName,

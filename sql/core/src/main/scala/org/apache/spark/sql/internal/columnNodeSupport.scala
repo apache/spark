@@ -54,8 +54,8 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
         case Literal(value, None, _) =>
           expressions.Literal(value)
 
-        case UnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn, _) =>
-          convertUnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn)
+        case UnresolvedAttribute(nameParts, planId, isMetadataColumn, _) =>
+          convertUnresolvedAttribute(nameParts, planId, isMetadataColumn)
 
         case UnresolvedStar(unparsedTarget, None, _) =>
           val target = unparsedTarget.map { t =>
@@ -74,7 +74,7 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
           analysis.UnresolvedRegex(columnNameRegex, Some(nameParts), conf.caseSensitiveAnalysis)
 
         case UnresolvedRegex(unparsedIdentifier, planId, _) =>
-          convertUnresolvedAttribute(unparsedIdentifier, planId, isMetadataColumn = false)
+          convertUnresolvedRegex(unparsedIdentifier, planId)
 
         case UnresolvedFunction(functionName, arguments, isDistinct, isUDF, isInternal, _) =>
           val nameParts = if (isUDF) {
@@ -223,15 +223,25 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
   }
 
   private def convertUnresolvedAttribute(
-      unparsedIdentifier: String,
+      nameParts: Seq[String],
       planId: Option[Long],
       isMetadataColumn: Boolean): analysis.UnresolvedAttribute = {
-    val attribute = analysis.UnresolvedAttribute.quotedString(unparsedIdentifier)
+    val attribute = analysis.UnresolvedAttribute(nameParts)
     if (planId.isDefined) {
       attribute.setTagValue(LogicalPlan.PLAN_ID_TAG, planId.get)
     }
     if (isMetadataColumn) {
       attribute.setTagValue(LogicalPlan.IS_METADATA_COL, ())
+    }
+    attribute
+  }
+
+  private def convertUnresolvedRegex(
+      unparsedIdentifier: String,
+      planId: Option[Long]): analysis.UnresolvedAttribute = {
+    val attribute = analysis.UnresolvedAttribute.quotedString(unparsedIdentifier)
+    if (planId.isDefined) {
+      attribute.setTagValue(LogicalPlan.PLAN_ID_TAG, planId.get)
     }
     attribute
   }

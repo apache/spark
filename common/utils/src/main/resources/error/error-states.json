@@ -4631,6 +4631,18 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
+    "42K0O": {
+        "description": "ScalarFunction not overrides method 'produceResult(InternalRow)' with custom implementation.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
+    "42K0P": {
+        "description": "ScalarFunction not implements or overrides method 'produceResult(InternalRow)'.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42KD0": {
         "description": "Ambiguous name reference.",
         "origin": "Databricks",
@@ -4900,6 +4912,12 @@
         "origin": "SQL Server",
         "standard": "N",
         "usedBy": ["SQL Server"]
+    },
+    "42S23": {
+        "description": "Partition transform expression not in 'partitionedBy'",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
     },
     "44000": {
         "description": "with check option violation",

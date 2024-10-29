@@ -113,7 +113,7 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
       try {
         close();
       } catch (IOException ioe) {
-        throw Throwables.propagate(ioe);
+        throw new RuntimeException(ioe);
       }
     }
     return next != null;
@@ -137,7 +137,8 @@ class RocksDBIterator<T> implements KVStoreIterator<T> {
       next = null;
       return ret;
     } catch (Exception e) {
-      throw Throwables.propagate(e);
+      Throwables.throwIfUnchecked(e);
+      throw new RuntimeException(e);
     }
   }
 

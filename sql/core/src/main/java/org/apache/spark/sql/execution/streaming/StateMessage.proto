@@ -47,6 +47,7 @@ message StateVariableRequest {
   oneof method {
     ValueStateCall valueStateCall = 1;
     ListStateCall listStateCall = 2;
+    MapStateCall mapStateCall = 3;
   }
 }
 
@@ -60,7 +61,8 @@ message ImplicitGroupingKeyRequest {
 message StateCallCommand {
   string stateName = 1;
   string schema = 2;
-  TTLConfig ttl = 3;
+  string mapStateValueSchema = 3;
+  TTLConfig ttl = 4;
 }
 
 message ValueStateCall {
@@ -82,6 +84,21 @@ message ListStateCall {
     AppendValue appendValue = 5;
     AppendList appendList = 6;
     Clear clear = 7;
+  }
+}
+
+message MapStateCall {
+  string stateName = 1;
+  oneof method {
+    Exists exists = 2;
+    GetValue getValue = 3;
+    ContainsKey containsKey = 4;
+    UpdateValue updateValue = 5;
+    Iterator iterator = 6;
+    Keys keys = 7;
+    Values values = 8;
+    RemoveKey removeKey = 9;
+    Clear clear = 10;
   }
 }
 
@@ -117,6 +134,35 @@ message AppendValue {
 }
 
 message AppendList {
+}
+
+message GetValue {
+  bytes userKey = 1;
+}
+
+message ContainsKey {
+  bytes userKey = 1;
+}
+
+message UpdateValue {
+  bytes userKey = 1;
+  bytes value = 2;
+}
+
+message Iterator {
+  string iteratorId = 1;
+}
+
+message Keys {
+  string iteratorId = 1;
+}
+
+message Values {
+  string iteratorId = 1;
+}
+
+message RemoveKey {
+  bytes userKey = 1;
 }
 
 enum HandleState {

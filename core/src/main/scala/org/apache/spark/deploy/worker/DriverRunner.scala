@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
+import com.google.common.io.{Files, FileWriteMode}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DriverDescription, SparkHadoopUtil}
@@ -216,7 +216,7 @@ private[deploy] class DriverRunner(
       val redactedCommand = Utils.redactCommandLineArgs(conf, builder.command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
       val header = "Launch Command: %s\n%s\n\n".format(redactedCommand, "=" * 40)
-      Files.append(header, stderr, StandardCharsets.UTF_8)
+      Files.asCharSink(stderr, StandardCharsets.UTF_8, FileWriteMode.APPEND).write(header)
       CommandUtils.redirectStream(process.getErrorStream, stderr)
     }
     runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)

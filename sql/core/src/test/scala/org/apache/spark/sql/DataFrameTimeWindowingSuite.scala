@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.sql.Timestamp
 import java.time.LocalDateTime
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -711,6 +712,58 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("2016-03-27 19:38:10", "2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", 1),
           Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
         )
+      )
+    }
+  }
+
+  test("SPARK-49836 using window fn with window as parameter should preserve parent operator") {
+    withTempView("clicks") {
+      val df = Seq(
+        // small window: [00:00, 01:00), user1, 2
+        ("2024-09-30 00:00:00", "user1"), ("2024-09-30 00:00:30", "user1"),
+        // small window: [01:00, 02:00), user2, 2
+        ("2024-09-30 00:01:00", "user2"), ("2024-09-30 00:01:30", "user2"),
+        // small window: [07:00, 08:00), user1, 1
+        ("2024-09-30 00:07:00", "user1"),
+        // small window: [11:00, 12:00), user1, 3
+        ("2024-09-30 00:11:00", "user1"), ("2024-09-30 00:11:30", "user1"),
+        ("2024-09-30 00:11:45", "user1")
+      ).toDF("eventTime", "userId")
+
+      // large window: [00:00, 10:00), user1, 3, [00:00, 10:00), user2, 2, [10:00, 20:00), user1, 3
+
+      df.createOrReplaceTempView("clicks")
+
+      val aggregatedData = spark.sql(
+        """
+          |SELECT
+          |  cpu_large.large_window.end AS timestamp,
+          |  avg(cpu_large.numClicks) AS avgClicksPerUser
+          |FROM
+          |(
+          |  SELECT
+          |    window(small_window, '10 minutes') AS large_window,
+          |    userId,
+          |    sum(numClicks) AS numClicks
+          |  FROM
+          |  (
+          |    SELECT
+          |      window(eventTime, '1 minute') AS small_window,
+          |      userId,
+          |      count(*) AS numClicks
+          |    FROM clicks
+          |    GROUP BY window, userId
+          |  ) cpu_small
+          |  GROUP BY window, userId
+          |) cpu_large
+          |GROUP BY timestamp
+          |""".stripMargin)
+
+      checkAnswer(
+        aggregatedData,
+        Seq(
+          Row(Timestamp.valueOf("2024-09-30 00:10:00"), 2.5),
+          Row(Timestamp.valueOf("2024-09-30 00:20:00"), 3))
       )
     }
   }

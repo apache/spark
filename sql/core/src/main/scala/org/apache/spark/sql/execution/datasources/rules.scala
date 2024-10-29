@@ -89,9 +89,9 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         LogicalRelation(ds.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
-        case e: SparkIllegalArgumentException if e.getErrorClass != null =>
+        case e: SparkIllegalArgumentException if e.getCondition != null =>
           u.failAnalysis(
-            errorClass = e.getErrorClass,
+            errorClass = e.getCondition,
             messageParameters = e.getMessageParameters.asScala.toMap,
             cause = e)
         case e: Exception if !e.isInstanceOf[AnalysisException] =>
@@ -469,8 +469,8 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
         supportColDefaultValue = true)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
-        (e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
-          e.getErrorClass == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
+        (e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||
+          e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS") =>
         val newException = e.copy(
           errorClass = Some("INSERT_PARTITION_COLUMN_ARITY_MISMATCH"),
           messageParameters = e.messageParameters ++ Map(
@@ -501,10 +501,10 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
           val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionSchema,
             Some(metadata))
-        case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
+        case LogicalRelationWithTable(h: HadoopFsRelation, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema, catalogTable)
-        case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
+        case LogicalRelationWithTable(_: InsertableRelation, catalogTable) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, new StructType(), catalogTable)
         case _ => i
@@ -548,7 +548,7 @@ object PreReadCheck extends (LogicalPlan => Unit) {
   private def checkNumInputFileBlockSources(e: Expression, operator: LogicalPlan): Int = {
     operator match {
       case _: HiveTableRelation => 1
-      case _ @ LogicalRelation(_: HadoopFsRelation, _, _, _) => 1
+      case _ @ LogicalRelationWithTable(_: HadoopFsRelation, _) => 1
       case _: LeafNode => 0
       // UNION ALL has multiple children, but these children do not concurrently use InputFileBlock.
       case u: Union =>
@@ -574,11 +574,11 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition,
+      case InsertIntoStatement(LogicalRelationWithTable(relation, _), partition,
           _, query, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
-          case LogicalRelation(src, _, _, _) => src
+          case l: LogicalRelation => l.relation
         }
         if (srcRelations.contains(relation)) {
           throw new AnalysisException(

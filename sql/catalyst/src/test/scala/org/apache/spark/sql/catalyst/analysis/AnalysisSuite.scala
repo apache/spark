@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.TimeZone
+import java.util.{TimeZone, UUID}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -1763,7 +1763,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-46064 Basic functionality of elimination for watermark node in batch query") {
-    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+    val dfWithEventTimeWatermark = EventTimeWatermark(UUID.randomUUID(), $"ts",
       IntervalUtils.fromIntervalString("10 seconds"), batchRelationWithTs)
 
     val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
@@ -1776,7 +1776,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     "EventTimeWatermark changes the isStreaming flag during resolution") {
     // UnresolvedRelation which is batch initially and will be resolved as streaming
     val dfWithTempView = UnresolvedRelation(TableIdentifier("streamingTable"))
-    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+    val dfWithEventTimeWatermark = EventTimeWatermark(UUID.randomUUID(), $"ts",
       IntervalUtils.fromIntervalString("10 seconds"), dfWithTempView)
 
     val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
@@ -1831,5 +1831,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     preemptedError.clear()
     assert(preemptedError.getErrorOpt().isEmpty)
+  }
+
+  test("SPARK-49782: ResolveDataFrameDropColumns rule resolves complex UnresolvedAttribute") {
+    val function = UnresolvedFunction("trim", Seq(UnresolvedAttribute("i")), isDistinct = false)
+    val addColumnF = Project(Seq(UnresolvedAttribute("i"), Alias(function, "f")()), testRelation5)
+    // Drop column "f" via ResolveDataFrameDropColumns rule.
+    val inputPlan = DataFrameDropColumns(Seq(UnresolvedAttribute("f")), addColumnF)
+    // The expected Project (root node) should only have column "i".
+    val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
+    checkAnalysis(inputPlan, expectedPlan)
   }
 }

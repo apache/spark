@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, PyPy 3.9)"
+name: "Build / Python-only (master, Python 3.9)"
 
 on:
   schedule:
-    - cron: '0 15 * * *'
+    - cron: '0 21 * * *'
 
 jobs:
   run-build:
@@ -36,7 +36,7 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYTHON_TO_TEST": "pypy3"
+          "PYTHON_TO_TEST": "python3.9"
         }
       jobs: >-
         {
