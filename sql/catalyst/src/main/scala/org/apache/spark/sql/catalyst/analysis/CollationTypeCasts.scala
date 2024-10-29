@@ -24,7 +24,8 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, DefaultStringType, MapType, StringType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
@@ -203,7 +204,7 @@ object CollationTypeCasts extends TypeCoercionRule {
           )
         }
         else {
-          implicitTypes.headOption.map(StringType(_)).getOrElse(DefaultStringType())
+          implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
         }
     }
   }

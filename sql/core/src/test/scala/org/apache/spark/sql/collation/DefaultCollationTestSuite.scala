@@ -289,16 +289,17 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   // region DML tests
 
   test("literals with default collation") {
-    withSessionCollation("UTF8_LCASE") {
+    val sessionCollation = "UTF8_LCASE"
+    withSessionCollation(sessionCollation) {
 
       // literal without collation
-      checkAnswer(sql("SELECT COLLATION('a')"), Seq(Row("UTF8_LCASE")))
+      checkAnswer(sql("SELECT COLLATION('a')"), Seq(Row(sessionCollation)))
 
-      checkAnswer(sql("SELECT COLLATION(map('a', 'b')['a'])"), Seq(Row("UTF8_LCASE")))
+      checkAnswer(sql("SELECT COLLATION(map('a', 'b')['a'])"), Seq(Row(sessionCollation)))
 
-      checkAnswer(sql("SELECT COLLATION(array('a')[0])"), Seq(Row("UTF8_LCASE")))
+      checkAnswer(sql("SELECT COLLATION(array('a')[0])"), Seq(Row(sessionCollation)))
 
-      checkAnswer(sql("SELECT COLLATION(struct('a' as c)['c'])"), Seq(Row("UTF8_LCASE")))
+      checkAnswer(sql("SELECT COLLATION(struct('a' as c)['c'])"), Seq(Row(sessionCollation)))
     }
   }
 
@@ -319,22 +320,27 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
   }
 
   test("cast is aware of session collation") {
-    withSessionCollation("UTF8_LCASE") {
+    val sessionCollation = "UTF8_LCASE"
+    withSessionCollation(sessionCollation) {
       checkAnswer(
-        sql("SELECT COLLATION(cast('a' collate unicode as STRING))"),
-        Seq(Row("UTF8_LCASE")))
+        sql("SELECT COLLATION(cast('a' as STRING))"),
+        Seq(Row(sessionCollation)))
 
       checkAnswer(
-        sql("SELECT COLLATION(cast(map('a', 'b' collate unicode) as MAP<STRING, STRING>)['a'])"),
-        Seq(Row("UTF8_LCASE")))
+        sql("SELECT COLLATION(cast(map('a', 'b') as MAP<STRING, STRING>)['a'])"),
+        Seq(Row(sessionCollation)))
 
       checkAnswer(
-        sql("SELECT COLLATION(cast(array('a' collate unicode) as ARRAY<STRING>)[0])"),
-        Seq(Row("UTF8_LCASE")))
+        sql("SELECT COLLATION(map_keys(cast(map('a', 'b') as MAP<STRING, STRING>))[0])"),
+        Seq(Row(sessionCollation)))
 
       checkAnswer(
-        sql("SELECT COLLATION(cast(struct('a' collate unicode as c) as STRUCT<c: STRING>)['c'])"),
-        Seq(Row("UTF8_LCASE")))
+        sql("SELECT COLLATION(cast(array('a') as ARRAY<STRING>)[0])"),
+        Seq(Row(sessionCollation)))
+
+      checkAnswer(
+        sql("SELECT COLLATION(cast(struct('a' as c) as STRUCT<c: STRING>)['c'])"),
+        Seq(Row(sessionCollation)))
     }
   }
 

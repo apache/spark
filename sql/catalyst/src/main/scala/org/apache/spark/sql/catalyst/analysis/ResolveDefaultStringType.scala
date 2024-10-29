@@ -20,13 +20,14 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1DDLCommand, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.{DataType, DefaultStringType, StringType}
-import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StringType, StronglyTypedStringType}
 
 /**
- * Resolves default string types in DDL commands. DDL commands should have a default collation
- * based on the object's collation, however, this is not implemented yet. So, we will just use
- * UTF8_BINARY for now.
+ * Resolves default string types in DDL commands. For DML commands, the default string type is
+ * determined by the session's default string type. For DDL, the default string type is
+ * the default type of the object (table -> schema -> catalog).
+ * However, this is not implemented yet. So, we will just use UTF8_BINARY for now.
  */
 object ResolveDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -41,7 +42,7 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, StringType))
 
       case alter: AlterColumn
-          if alter.dataType.isDefined && SchemaUtils.hasDefaultStringType(alter.dataType.get) =>
+          if alter.dataType.isDefined && hasDefaultStringType(alter.dataType.get) =>
         alter.copy(dataType = Some(replaceDefaultStringType(alter.dataType.get, StringType)))
     }
   }
@@ -61,22 +62,35 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
 
   private def transformExpression(expression: Expression, newType: StringType): Expression = {
     expression match {
-      case columnDef: ColumnDefinition if SchemaUtils.hasDefaultStringType(columnDef.dataType) =>
+      case columnDef: ColumnDefinition if hasDefaultStringType(columnDef.dataType) =>
         columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
 
-      case cast: Cast if SchemaUtils.hasDefaultStringType(cast.dataType) =>
+      case cast: Cast if hasDefaultStringType(cast.dataType) =>
         cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
 
-      case Literal(value, dt) if SchemaUtils.hasDefaultStringType(dt) =>
+      case Literal(value, dt) if hasDefaultStringType(dt) =>
         Literal(value, replaceDefaultStringType(dt, newType))
 
       case other => other
     }
   }
 
+  private def hasDefaultStringType(dataType: DataType): Boolean =
+    dataType.existsRecursively(isDefaultStringType)
+
+  private def isDefaultStringType(dataType: DataType): Boolean = {
+    dataType match {
+      case st: StringType =>
+        val sessionCollation = SQLConf.get.defaultStringType
+        st == sessionCollation && !st.isInstanceOf[StronglyTypedStringType]
+      case _ => false
+    }
+  }
+
   private def replaceDefaultStringType(dataType: DataType, newType: StringType): DataType = {
     dataType.transformRecursively {
-      case _: DefaultStringType => newType
+      case _ if isDefaultStringType(dataType) =>
+        newType
     }
   }
 
@@ -84,7 +98,7 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
       colTypes: Seq[QualifiedColType],
       newType: StringType): Seq[QualifiedColType] = {
     colTypes.map {
-      case colWithDefault if SchemaUtils.hasDefaultStringType(colWithDefault.dataType) =>
+      case colWithDefault if hasDefaultStringType(colWithDefault.dataType) =>
         val replaced = replaceDefaultStringType(colWithDefault.dataType, newType)
         colWithDefault.copy(dataType = replaced)
 

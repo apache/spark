@@ -21,7 +21,6 @@ import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
-import org.apache.spark.sql.internal.SqlApiConf
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -116,17 +115,14 @@ case object StringType extends StringType(0) {
 }
 
 /**
- * The result type of literals, column definitions without explicit collation, casts to string and
- * some expressions that produce strings but whose output type is not based on the types of its
- * children. Idea is to have this behave like a string with the default collation of the session,
- * but that we can still differentiate it from a regular string type, because in some places
- * default string is not the one with the session collation (e.g. in DDL commands).
+ * String type which result from a strongly typed string declaration
+ * `STRING COLLATE ...`, and not just implicit `STRING`.
  */
-private[spark] class DefaultStringType private (collationId: Int)
-    extends StringType(collationId) {}
+private[spark] class StronglyTypedStringType private(collationId: Int)
+  extends StringType(collationId) {}
 
-private[spark] object DefaultStringType {
-  def apply(): DefaultStringType = {
-    new DefaultStringType(SqlApiConf.get.defaultStringType.collationId)
+private[spark] object StronglyTypedStringType {
+  def apply(id: Int): StronglyTypedStringType = {
+    new StronglyTypedStringType(id)
   }
 }
