@@ -21,20 +21,14 @@ import java.io._
 import java.nio.charset.Charset
 import java.util.concurrent.Executors
 
-import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
-import scala.language.implicitConversions
-import scala.util.Random
-
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.Tag
+import org.apache.spark.{SparkConf, SparkException, TaskContext}
 
-import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
@@ -2236,6 +2230,133 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           // reload version 3, should be successful
           db.load(3)
         }
+      }
+    }
+  }
+
+  test("Rocks DB task completion listener does not double unlock acquireThread") {
+    // Create a custom ExecutionContext with 3 threads
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonFixedThreadPool(5, "pool-thread-executor"))
+    val timeout = 5.seconds
+
+    val stateLock = new Object()
+    var state = 0
+    // Timeline of this test:
+    // STATE | MAIN             | THREAD 1         | THREAD 2         | THREAD 3
+    // ------| ---------------- | ---------------- | ---------------- | ----------------
+    // 0.    | wait for s2      | Load, commit     |                  |
+    //       |                  | wait for s1      | load, signal s1  |
+    // 1.    |                  | task complete    | wait for s3      |
+    //       |                  | signal s2, END   |                  |
+    // 2.    | start thread 3   |                  |                  | load, commit
+    //       | wait for timeout |                  |                  | timeout, END
+    //       | signal s3        |                  |                  |
+    // 3.    | wait for s4      |                  | commit           |
+    //       |                  |                  | signal s4, END   |
+    // 4.    | close db, END    |                  |                  |
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val conf = dbConf.copy(lockAcquireTimeoutMs = timeout.toMillis.toInt)
+      val db = new RocksDB(
+        remoteDir,
+        conf = conf,
+        localRootDir = Utils.createTempDir(),
+        hadoopConf = new Configuration(),
+        loggingId = s"[Thread-${Thread.currentThread.getId}]",
+        useColumnFamilies = false
+      )
+      try {
+        Future { // THREAD 1
+          // Set thread 1's task context so that it is not a clone
+          // of withDB's taskContext, which will close the db when the
+          // task is marked as complete
+          val taskContext = TaskContext.empty()
+          TaskContext.setTaskContext(taskContext)
+
+          // Simulate a task that loads and commits, db should be unlocked after
+          db.load(0)
+          db.put("a", "1")
+          db.commit()
+
+          Future { // THREAD 2
+            // Set thread 2's task context so that it is not a clone of thread 1's
+            // so it won't be marked as complete
+            val taskContext = TaskContext.empty()
+            TaskContext.setTaskContext(taskContext)
+
+            // Load the db and signal that we have entered state 1
+            stateLock.synchronized {
+              db.load(1)
+              state = 1
+              stateLock.notifyAll()
+            }
+
+            stateLock.synchronized {
+              // Wait until we have entered state 3, commit and signal
+              // that we have entered state 4
+              while (state != 3) {
+                stateLock.wait()
+              }
+              db.commit()
+              state = 4
+              stateLock.notifyAll()
+            }
+          }
+
+          stateLock.synchronized {
+            // Wait until we have entered state 1
+            while (state != 1) {
+              stateLock.wait()
+            }
+
+            // thread 1's task context is marked as complete and signal
+            // that we have entered state 2
+            // At this point, thread 2 should still hold the DB lock.
+            taskContext.markTaskCompleted(None)
+            state = 2
+            stateLock.notifyAll()
+          }
+        }
+
+        stateLock.synchronized {
+          // Wait until we have entered state 2 (thread 1 is complete)
+          while (state != 2) {
+            stateLock.wait()
+          }
+        }
+
+        // Thread 3 tries to load db, but it is still locked by thread 2
+        val thread3 = Future {
+          val taskContext = TaskContext.empty()
+          TaskContext.setTaskContext(taskContext)
+
+          db.load(1)
+          db.commit()
+        }
+
+        // Therefore it should timeout
+        val e = intercept[SparkException] {
+          ThreadUtils.awaitResult(thread3, 10.seconds)
+        }
+        assert(e.getMessage.contains("CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR"))
+
+        stateLock.synchronized {
+          // Signal that we have entered state 3 (thread 2 can now release lock)
+          state = 3
+          stateLock.notifyAll()
+        }
+
+        stateLock.synchronized {
+          // Wait until we have entered state 4 (thread 2 has released lock)
+          // so that we can clean up
+          while (state != 4) {
+            stateLock.wait()
+          }
+        }
+      } finally {
+        db.close()
       }
     }
   }

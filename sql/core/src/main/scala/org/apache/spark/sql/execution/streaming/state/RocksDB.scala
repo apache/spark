@@ -956,10 +956,40 @@ class RocksDB(
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
-        _ => this.release(StoreTaskCompletionListener)
+        _ => this.releaseForThread(StoreTaskCompletionListener, newAcquiredThreadInfo.threadRef)
       })
       logInfo(log"RocksDB instance was acquired by ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
         log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
+    }
+  }
+
+  /**
+   * Function to release RocksDB instance lock for if the provided thread is the one
+   * that acquired it.
+   *
+   * @param opType - operation type releasing the lock
+   * @param threadRef - thread reference to check against the acquired thread
+   */
+  private def releaseForThread(opType: RocksDBOpType,
+    threadRef: WeakReference[Thread]): Unit = acquireLock.synchronized {
+    if (acquiredThreadInfo != null && acquiredThreadInfo.threadRef.get.isDefined) {
+      if (!threadRef.get.isDefined) {
+        logInfo(log"Thread reference is empty when attempting to release for" +
+          log" opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
+          log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
+        return
+      }
+
+      if (acquiredThreadInfo.threadRef.get.get.getId == threadRef.get.get.getId) {
+        logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD,
+          acquiredThreadInfo)} " + log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
+        acquiredThreadInfo = null
+        acquireLock.notifyAll()
+      } else {
+        logInfo(log"Thread reference does not match the acquired thread when attempting to" +
+          log" release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
+          log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
+      }
     }
   }
 
