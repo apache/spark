@@ -135,15 +135,18 @@ object CollationTypeCasts extends TypeCoercionRule {
   }
 
   /**
-   * If childType and target type are both strings, the collation of the output
+   * If childType is collated and target is UTF8_BINARY, the collation of the output
    * should be that of the childType.
    */
   private def shouldRemoveCast(cast: Cast): Boolean = {
     val isUserDefined = cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
-    val childType = cast.child.dataType
+    val isChildTypeCollatedString = cast.child.dataType match {
+      case st: StringType => !st.isUTF8BinaryCollation
+      case _ => false
+    }
     val targetType = cast.dataType
 
-    isUserDefined && childType.isInstanceOf[StringType] && targetType == StringType
+    isUserDefined && isChildTypeCollatedString && targetType == StringType
   }
 
   /**
