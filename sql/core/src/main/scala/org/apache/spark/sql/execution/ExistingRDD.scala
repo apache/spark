@@ -311,5 +311,10 @@ case class RDDScanExec(
 
   override def inputRDD: RDD[InternalRow] = rdd
 
+  // Don't care about `stream` when canonicalizing.
+  override protected def doCanonicalize(): SparkPlan = {
+    super.doCanonicalize().asInstanceOf[RDDScanExec].copy(stream = None)
+  }
+
   override def getStream: Option[SparkDataStream] = stream
 }

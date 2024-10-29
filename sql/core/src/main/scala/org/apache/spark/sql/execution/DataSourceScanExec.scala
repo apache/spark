@@ -203,12 +203,13 @@ case class RowDataSourceScanExec(
       )
   }
 
-  // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
+  // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
       output.map(QueryPlan.normalizeExpressions(_, output)),
       rdd = null,
-      tableIdentifier = None)
+      tableIdentifier = None,
+      stream = None)
 
   override def getStream: Option[SparkDataStream] = stream
 }
@@ -822,7 +823,9 @@ case class FileSourceScanExec(
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
-      stream,
+      // remove stream on canonicalization; this is needed for reused shuffle to be effective in
+      // self-join
+      None,
       output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(
