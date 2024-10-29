@@ -50,14 +50,17 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
 
   object SinglePartitionShuffleWithGlobalOrdering {
     def unapply(plan: SparkPlan): Option[Seq[SortOrder]] = plan match {
-      case ShuffleExchangeExec(SinglePartition, GlobalOrdering(ordering), _, _) => Some(ordering)
+      case ShuffleExchangeExec(SinglePartition, SparkPlanWithGlobalOrdering(ordering), _, _) =>
+        Some(ordering)
       case p: AQEShuffleReadExec => unapply(p.child)
       case p: ShuffleQueryStageExec => unapply(p.plan)
       case _ => None
     }
   }
 
-  object GlobalOrdering {
+  // Note: this is not implementing a generalized notion of "global order preservation", but just
+  // tackles the regular ORDER BY semantics with optional LIMIT (top-K).
+  object SparkPlanWithGlobalOrdering {
     def unapply(plan: SparkPlan): Option[Seq[SortOrder]] = plan match {
       case p: SortExec if p.global => Some(p.sortOrder)
       case p: LocalLimitExec => unapply(p.child)

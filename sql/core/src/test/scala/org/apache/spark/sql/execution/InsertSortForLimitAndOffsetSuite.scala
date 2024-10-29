@@ -50,7 +50,7 @@ class InsertSortForLimitAndOffsetSuite extends QueryTest
 
   private def hasLocalSort(plan: SparkPlan): Boolean = {
     find(plan) {
-      case s: SortExec => !s.global
+      case GlobalLimitExec(_, s: SortExec, _) => !s.global
       case _ => false
     }.isDefined
   }
