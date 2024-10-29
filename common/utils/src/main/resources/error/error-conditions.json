@@ -1113,7 +1113,7 @@
   },
   "DATA_SOURCE_UNSUPPORTED_DML_OPERATION" : {
     "message" : [
-      "Data source '<provider>' does not support requested operation: <operation>"
+      "Data source '<provider>' does not support the requested operation: <operation>"
     ],
     "sqlState" : "KD011"
   },
