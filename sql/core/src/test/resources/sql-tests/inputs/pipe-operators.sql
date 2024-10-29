@@ -739,6 +739,15 @@ select 1 x, 3 z
 |> aggregate count(*) group by x, z, x
 |> select x;
 
+-- Grouping expressions are allowed in the aggregate functions list if they appear separately in the
+-- GROUP BY clause.
+table other
+|> aggregate a group by a;
+
+-- Aggregate expressions may contain a mix of aggregate functions and grouping expressions.
+table other
+|> aggregate a + count(b) group by a;
+
 -- Aggregation operators: negative tests.
 -----------------------------------------
 
@@ -781,11 +790,6 @@ select 1 as x, 2 as y
 table other
 |> aggregate a;
 
--- Non-aggregate expressions are not allowed in place of aggregate functions, even if they appear
--- separately in the GROUP BY clause.
-table other
-|> aggregate a group by a;
-
 -- Using aggregate functions without the AGGREGATE keyword is not allowed.
 table other
 |> select sum(a) as result;
@@ -811,6 +815,11 @@ select 1 x, 2 y, 3 z
 |> aggregate count(*) AS c, sum(x) AS x group by x
 |> where c = 1
 |> where x = 1;
+
+-- Aggregate expressions may not contain references to columns or expressions not otherwise listed
+-- in the GROUP BY clause.
+table other
+|> aggregate b group by a;
 
 -- Cleanup.
 -----------

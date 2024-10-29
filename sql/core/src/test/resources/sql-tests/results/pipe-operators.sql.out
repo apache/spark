@@ -2089,6 +2089,26 @@ struct<x:int>
 
 
 -- !query
+table other
+|> aggregate a group by a
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+1	1
+2	2
+
+
+-- !query
+table other
+|> aggregate a + count(b) group by a
+-- !query schema
+struct<a:int,(a + count(b)):bigint>
+-- !query output
+1	3
+2	3
+
+
+-- !query
 select 3 as x, 4 as y
 |> aggregate group by all
 -- !query schema
@@ -2272,29 +2292,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 -- !query
 table other
-|> aggregate a group by a
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "case" : "Non-aggregate expressions in place of aggregate functions, even if they appear separately in the GROUP BY clause"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 37,
-    "fragment" : "table other\n|> aggregate a group by a"
-  } ]
-}
-
-
--- !query
-table other
 |> select sum(a) as result
 -- !query schema
 struct<>
@@ -2425,6 +2422,23 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 97,
     "fragment" : "x"
   } ]
+}
+
+
+-- !query
+table other
+|> aggregate b group by a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"b\"",
+    "expressionAnyValue" : "\"any_value(b)\""
+  }
 }
 
 

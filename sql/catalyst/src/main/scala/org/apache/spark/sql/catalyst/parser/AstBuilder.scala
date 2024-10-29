@@ -5967,15 +5967,6 @@ class AstBuilder extends DataTypeAstBuilder
           }
           a.groupingExpressions.foreach(visit)
           a.aggregateExpressions.foreach(visit)
-          // Non-aggregate expressions are not allowed in place of aggregate functions, even if they
-          // appear separately in the GROUP BY clause.
-          val groupingExpressionSet = a.groupingExpressions.toSet
-          a.aggregateExpressions.foreach { e: Expression =>
-            if (groupingExpressionSet.contains(e)) {
-              error("Non-aggregate expressions in place of aggregate functions, even if they " +
-                "appear separately in the GROUP BY clause")
-            }
-          }
           // Prepend grouping keys to the list of aggregate functions, since operator pipe AGGREGATE
           // clause returns the GROUP BY expressions followed by the list of aggregate functions.
           val namedGroupingExpressions: Seq[NamedExpression] =

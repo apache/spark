@@ -2448,6 +2448,24 @@ Project [x#x]
 
 
 -- !query
+table other
+|> aggregate a group by a
+-- !query analysis
+Aggregate [a#x], [a#x, a#x]
++- SubqueryAlias spark_catalog.default.other
+   +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+table other
+|> aggregate a + count(b) group by a
+-- !query analysis
+Aggregate [a#x], [a#x, (cast(a#x as bigint) + count(b#x)) AS (a + count(b))#xL]
++- SubqueryAlias spark_catalog.default.other
+   +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
 select 3 as x, 4 as y
 |> aggregate group by all
 -- !query analysis
@@ -2615,27 +2633,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 -- !query
 table other
-|> aggregate a group by a
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "case" : "Non-aggregate expressions in place of aggregate functions, even if they appear separately in the GROUP BY clause"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 37,
-    "fragment" : "table other\n|> aggregate a group by a"
-  } ]
-}
-
-
--- !query
-table other
 |> select sum(a) as result
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -2754,6 +2751,21 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 97,
     "fragment" : "x"
   } ]
+}
+
+
+-- !query
+table other
+|> aggregate b group by a
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_AGGREGATION",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "expression" : "\"b\"",
+    "expressionAnyValue" : "\"any_value(b)\""
+  }
 }
 
 
