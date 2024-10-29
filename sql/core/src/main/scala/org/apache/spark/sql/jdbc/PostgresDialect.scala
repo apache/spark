@@ -382,17 +382,45 @@ private case class PostgresDialect()
       case Types.ARRAY =>
         val tableName = rsmd.getTableName(columnIdx)
         val columnName = rsmd.getColumnName(columnIdx)
+
         /*
          Spark does not support different dimensionality per row, therefore we retrieve the
          dimensionality of any row from Postgres. This might fail later on as Postgres allows
          different dimensions per row for arrays.
          */
-
         val query = s"SELECT array_ndims($columnName) FROM $tableName LIMIT 1"
+        var arrayDimensionalityResolveNeedsFallback = true
+
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
-              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
+              if (rs.next()) {
+                metadata.putLong("arrayDimension", rs.getLong(1))
+                arrayDimensionalityResolveNeedsFallback = false
+              }
+            }
+          }
+
+          if (arrayDimensionalityResolveNeedsFallback) {
+            /*
+            In case that table doesn't contain any rows, previous query won't resolve dimensionality.
+            Therefore, fallback to dimension resolution from metadata table.
+             */
+            val fallbackQuery =
+              s"""
+                 |SELECT pg_attribute.attndims
+                 |FROM pg_attribute
+                 |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
+                 |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+                 |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
+                 |""".stripMargin
+
+            Using.resource(conn.createStatement()) { stmt =>
+              Using.resource(stmt.executeQuery(fallbackQuery)) { rs =>
+                if (rs.next()) {
+                  metadata.putLong("arrayDimension", rs.getLong(1))
+                }
+              }
             }
           }
         } catch {

@@ -326,13 +326,12 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   }
 
   test("Test reading multiple dimension array from table created via CTAS command") {
-    val exception = intercept[org.apache.spark.SparkSQLException] {
-      sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
-    }.getMessage
-
-    // There is 2d and 1d array in unsupported_array_of_array_of_int. Reading this table
-    // is not supported
-    assert(exception.contains("Some values in field 0 are incompatible with the" +
-      " column array type. Expected type \"ARRAY<ARRAY<INT>>\""))
+    checkError(
+      exception = intercept[org.apache.spark.SparkSQLException] {
+        sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
+      },
+      condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+      parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\""),
+    )
   }
 }
