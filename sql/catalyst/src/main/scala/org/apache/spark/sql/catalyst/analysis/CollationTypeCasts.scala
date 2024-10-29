@@ -31,6 +31,9 @@ object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
 
+    case cast: Cast if shouldRemoveCast(cast) =>
+      cast.child
+
     case ifExpr: If =>
       ifExpr.withNewChildren(
         ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue)))
@@ -130,6 +133,19 @@ object CollationTypeCasts extends TypeCoercionRule {
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
   }
+
+  /**
+   * If childType and target type are both strings, the collation of the output
+   * should be that of the childType.
+   */
+  private def shouldRemoveCast(cast: Cast): Boolean = {
+    val isUserDefined = cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
+    val childType = cast.child.dataType
+    val targetType = cast.dataType
+
+    isUserDefined && childType.isInstanceOf[StringType] && targetType == StringType
+  }
+
   /**
    * Extracts StringTypes from filtered hasStringType
    */

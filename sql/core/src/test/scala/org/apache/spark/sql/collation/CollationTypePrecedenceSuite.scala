@@ -69,22 +69,29 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
 
   test("implicit collation in columns") {
     val tableName = "implicit_coll_tbl"
+    val c1Collation = "UNICODE"
+    val c2Collation = "UNICODE_CI"
+    val structCollation = "UTF8_LCASE"
     withTable(tableName) {
       sql(s"""
            |CREATE TABLE $tableName (
-           |  c1 STRING COLLATE UNICODE,
-           |  c2 STRING COLLATE UNICODE_CI,
-           |  c3 STRUCT<col1: STRING COLLATE UTF8_LCASE>)
+           |  c1 STRING COLLATE $c1Collation,
+           |  c2 STRING COLLATE $c2Collation,
+           |  c3 STRUCT<col1: STRING COLLATE $structCollation>)
            |""".stripMargin)
       sql(s"INSERT INTO $tableName VALUES ('a', 'b', named_struct('col1', 'c'))")
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || 'a') FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(c1Collation)))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c3.col1 || 'a') FROM $tableName"),
+        Seq(Row(structCollation)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(SUBSTRING(c1, 0, 1) || 'a') FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(c1Collation)))
 
       assertImplicitMismatch(sql(s"SELECT COLLATION(c1 || c2) FROM $tableName"))
       assertImplicitMismatch(sql(s"SELECT COLLATION(c1 || c3.col1) FROM $tableName"))
@@ -94,16 +101,18 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
   }
 
   test("variables have implicit collation") {
+    val v1Collation = "UTF8_BINARY"
+    val v2Collation = "UTF8_LCASE"
     sql(s"DECLARE v1 = 'a'")
-    sql(s"DECLARE v2 = 'b' collate utf8_lcase")
+    sql(s"DECLARE v2 = 'b' collate $v2Collation")
 
     checkAnswer(
       sql(s"SELECT COLLATION(v1 || 'a')"),
-      Row("UTF8_BINARY"))
+      Row(v1Collation))
 
     checkAnswer(
       sql(s"SELECT COLLATION(v2 || 'a')"),
-      Row("UTF8_LCASE"))
+      Row(v2Collation))
 
     checkAnswer(
       sql(s"SELECT COLLATION(v2 || 'a' COLLATE UTF8_BINARY)"),
@@ -111,7 +120,7 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
 
     checkAnswer(
       sql(s"SELECT COLLATION(SUBSTRING(v2, 0, 1) || 'a')"),
-      Row("UTF8_LCASE"))
+      Row(v2Collation))
 
     assertImplicitMismatch(sql(s"SELECT COLLATION(v1 || v2)"))
     assertImplicitMismatch(sql(s"SELECT COLLATION(SUBSTRING(v1, 0, 1) || v2)"))
@@ -157,24 +166,26 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
   }
 
   test("struct test") {
-    val tableName = "struct_tblll"
+    val tableName = "struct_tbl"
+    val c1Collation = "UNICODE_CI"
+    val c2Collation = "UNICODE"
     withTable(tableName) {
       sql(s"""
            |CREATE TABLE $tableName (
-           |  c1 STRUCT<col1: STRING COLLATE UNICODE_CI, col2: STRING COLLATE UNICODE>,
-           |  c2 STRUCT<col1: STRUCT<col1: STRING COLLATE UNICODE_CI>>)
+           |  c1 STRUCT<col1: STRING COLLATE $c1Collation>,
+           |  c2 STRUCT<col1: STRUCT<col1: STRING COLLATE $c2Collation>>)
            |USING $dataSource
            |""".stripMargin)
-      sql(s"INSERT INTO $tableName VALUES (named_struct('col1', 'a', 'col2', 'b')," +
+      sql(s"INSERT INTO $tableName VALUES (named_struct('col1', 'a')," +
         s"named_struct('col1', named_struct('col1', 'c')))")
 
       checkAnswer(
         sql(s"SELECT COLLATION(c2.col1.col1 || 'a') FROM $tableName"),
-        Seq(Row("UNICODE_CI")))
+        Seq(Row(c2Collation)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1.col1 || 'a') FROM $tableName"),
-        Seq(Row("UNICODE_CI")))
+        Seq(Row(c1Collation)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1.col1 || 'a' collate UNICODE) FROM $tableName"),
@@ -205,11 +216,13 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
 
   test("array test") {
     val tableName = "array_tbl"
+    val columnCollation = "UNICODE"
+    val arrayCollation = "UNICODE_CI"
     withTable(tableName) {
       sql(s"""
            |CREATE TABLE $tableName (
-           |  c1 STRING COLLATE UNICODE,
-           |  c2 ARRAY<STRING COLLATE UNICODE_CI>)
+           |  c1 STRING COLLATE $columnCollation,
+           |  c2 ARRAY<STRING COLLATE $arrayCollation>)
            |USING $dataSource
            |""".stripMargin)
 
@@ -230,7 +243,7 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
 
       checkAnswer(
         sql(s"SELECT collation(element_at(array_append(c2, 'd'), 1)) FROM $tableName"),
-        Seq(Row("UNICODE_CI"))
+        Seq(Row(arrayCollation))
       )
 
       checkAnswer(
@@ -241,17 +254,39 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
     }
   }
 
+  test("array cast") {
+    val tableName = "array_cast_tbl"
+    val columnCollation = "UNICODE"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (c1 ARRAY<STRING COLLATE $columnCollation>) USING $dataSource")
+      sql(s"INSERT INTO $tableName VALUES (array('a'))")
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(c1[0]) FROM $tableName"),
+        Seq(Row(columnCollation)))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(cast(c1 AS ARRAY<STRING>)[0]) FROM $tableName"),
+        Seq(Row("UTF8_BINARY")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(cast(c1 AS ARRAY<STRING COLLATE UTF8_LCASE>)[0]) FROM $tableName"),
+        Seq(Row("UTF8_LCASE")))
+    }
+  }
+
   test("user defined cast") {
     val tableName = "dflt_coll_tbl"
+    val columnCollation = "UNICODE"
     withTable(tableName) {
-      sql(s"CREATE TABLE $tableName (c1 STRING COLLATE UNICODE) USING $dataSource")
+      sql(s"CREATE TABLE $tableName (c1 STRING COLLATE $columnCollation) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a')")
 
       // only for non string inputs cast results in default collation
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST(to_char(DATE'2016-04-08', 'y') AS STRING)) " +
           s"FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(columnCollation)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(CAST(to_char(DATE'2016-04-08', 'y') AS STRING)) " +
@@ -264,8 +299,16 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
         Seq(Row("UTF8_BINARY")))
 
       checkAnswer(
+        sql(s"SELECT COLLATION(CAST(c1 AS STRING)) FROM $tableName"),
+        Seq(Row(columnCollation)))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(CAST(c1 collate UTF8_LCASE AS STRING)) FROM $tableName"),
+        Seq(Row("UTF8_LCASE")))
+
+      checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST('a' AS STRING)) FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(columnCollation)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST('a' collate UTF8_LCASE AS STRING)) FROM $tableName"),
@@ -273,11 +316,11 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST(c1 AS STRING)) FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(columnCollation)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || SUBSTRING(CAST(c1 AS STRING), 0, 1)) FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(columnCollation)))
       }
   }
 
