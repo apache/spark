@@ -721,6 +721,10 @@ The Dataframe being written to Kafka should have the following columns in schema
   <td>partition (optional)</td>
   <td>int</td>
 </tr>
+<tr>
+  <td>timestamp (optional)</td>
+  <td>double or timestamp</td>
+</tr>
 </table>
 \* The topic column is required if the "topic" configuration option is not specified.<br>
 
@@ -733,8 +737,10 @@ If a "partition" column is not specified (or its value is ```null```)
 then the partition is calculated by the Kafka producer.
 A Kafka partitioner can be specified in Spark by setting the
 ```kafka.partitioner.class``` option. If not present, Kafka default partitioner
-will be used.
-
+will be used. If a "timestamp" column exists then its value is assigned to the resulting record.
+In case its value is ```null``` the timestamp is filled dynamically by the Kafka producer.
+Since eventually this value is cast as timestamp, a double value is the only way to preserve
+milliseconds.
 
 The following options must be set for the Kafka sink
 for both batch and streaming queries.

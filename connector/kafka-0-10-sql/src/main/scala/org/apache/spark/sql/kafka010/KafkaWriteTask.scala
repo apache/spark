@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, UnsafeProjection}
 import org.apache.spark.sql.kafka010.producer.{CachedKafkaProducer, InternalKafkaProducerPool}
 import org.apache.spark.sql.types.BinaryType
+import org.apache.spark.sql.types.TimestampType
 
 /**
  * Writes out data in a single Spark task, without any concerns about how
@@ -100,8 +101,13 @@ private[kafka010] abstract class KafkaRowWriter(
     }
     val partition: Integer =
       if (projectedRow.isNullAt(4)) null else projectedRow.getInt(4)
+
+    val timestamp: java.lang.Long =
+      if (projectedRow.isNullAt(5)) null
+      else projectedRow.get(5, TimestampType).asInstanceOf[Long] / 1000 // strip off micros
+
     val record = if (projectedRow.isNullAt(3)) {
-      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, partition, key, value)
+      new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, partition, timestamp, key, value)
     } else {
       val headerArray = projectedRow.getArray(3)
       val headers = (0 until headerArray.numElements()).map { i =>
@@ -110,7 +116,7 @@ private[kafka010] abstract class KafkaRowWriter(
           .asInstanceOf[Header]
       }
       new ProducerRecord[Array[Byte], Array[Byte]](
-        topic.toString, partition, key, value, headers.asJava)
+        topic.toString, partition, timestamp, key, value, headers.asJava)
     }
     producer.send(record, callback)
   }
@@ -128,7 +134,8 @@ private[kafka010] abstract class KafkaRowWriter(
         Cast(KafkaWriter.keyExpression(inputSchema), BinaryType),
         Cast(KafkaWriter.valueExpression(inputSchema), BinaryType),
         KafkaWriter.headersExpression(inputSchema),
-        KafkaWriter.partitionExpression(inputSchema)
+        KafkaWriter.partitionExpression(inputSchema),
+        Cast(KafkaWriter.timestampExpression(inputSchema), TimestampType)
       ),
       inputSchema
     )
