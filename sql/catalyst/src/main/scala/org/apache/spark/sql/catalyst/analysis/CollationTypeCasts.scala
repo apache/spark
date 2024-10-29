@@ -27,16 +27,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
-private sealed trait CollationStrength {}
-
-private object CollationStrength {
-  case object Explicit extends CollationStrength {}
-  case object Implicit extends CollationStrength {}
-  case object Default extends CollationStrength {}
-}
-
-private case class CollationContext(dataType: DataType, strength: CollationStrength) {}
-
 object CollationTypeCasts extends TypeCoercionRule {
   override val transform: PartialFunction[Expression, Expression] = {
     case e if !e.childrenResolved => e
@@ -270,3 +260,22 @@ object CollationTypeCasts extends TypeCoercionRule {
     }
   }
 }
+
+/**
+ * Represents the strength of collation used for determining precedence in collation resolution.
+ */
+private sealed trait CollationStrength {}
+
+private object CollationStrength {
+  case object Explicit extends CollationStrength {}
+  case object Implicit extends CollationStrength {}
+  case object Default extends CollationStrength {}
+}
+
+/**
+ * Encapsulates the context for collation, including data type and strength.
+ *
+ * @param dataType The data type associated with this collation context.
+ * @param strength The strength level of the collation, which determines its precedence.
+ */
+private case class CollationContext(dataType: DataType, strength: CollationStrength) {}
