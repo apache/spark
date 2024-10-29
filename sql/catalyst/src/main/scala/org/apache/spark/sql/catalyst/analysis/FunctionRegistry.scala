@@ -615,6 +615,7 @@ object FunctionRegistry {
     expression[UrlEncode]("url_encode"),
     expression[UrlDecode]("url_decode"),
     expression[ParseUrl]("parse_url"),
+    expression[TryParseUrl]("try_parse_url"),
 
     // datetime functions
     expression[AddMonths]("add_months"),

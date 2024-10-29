@@ -20,7 +20,6 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 from threading import RLock
-import warnings
 import uuid
 from collections.abc import Generator
 from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, Type, ClassVar
@@ -30,6 +29,7 @@ import os
 import grpc
 from grpc_status import rpc_status
 
+from pyspark.sql.connect.logging import logger
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark.errors import PySparkRuntimeError
@@ -206,7 +206,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
-                warnings.warn(f"ReleaseExecute failed with exception: {e}.")
+                logger.warn(f"ReleaseExecute failed with exception: {e}.")
 
         with self._lock:
             if self._release_thread_pool_instance is not None:
@@ -231,7 +231,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     with attempt:
                         self._stub.ReleaseExecute(request, metadata=self._metadata)
             except Exception as e:
-                warnings.warn(f"ReleaseExecute failed with exception: {e}.")
+                logger.warn(f"ReleaseExecute failed with exception: {e}.")
 
         with self._lock:
             if self._release_thread_pool_instance is not None:

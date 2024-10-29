@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Python-only (branch-3.4)"
+name: "Build / Python-only (master, PyPy 3.10)"
 
 on:
   schedule:
-    - cron: '0 9 * * *'
+    - cron: '0 15 * * *'
 
 jobs:
   run-build:
@@ -31,12 +31,12 @@ jobs:
     uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      java: 8
-      branch: branch-3.4
+      java: 17
+      branch: master
       hadoop: hadoop3
       envs: >-
         {
-          "PYTHON_TO_TEST": ""
+          "PYTHON_TO_TEST": "pypy3"
         }
       jobs: >-
         {

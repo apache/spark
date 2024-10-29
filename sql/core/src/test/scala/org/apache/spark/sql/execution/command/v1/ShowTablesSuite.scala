@@ -102,7 +102,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.Tests
         exception = intercept[AnalysisException] {
           sql(showTableCmd)
         },
-        condition = "_LEGACY_ERROR_TEMP_1125",
+        condition = "MISSING_DATABASE_FOR_V1_SESSION_CATALOG",
         parameters = Map.empty
       )
     }
