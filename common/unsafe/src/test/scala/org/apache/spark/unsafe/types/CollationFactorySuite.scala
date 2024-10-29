@@ -119,7 +119,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       ("UNICODE_UNSPECIFIED_CI_UNSPECIFIED", "UNICODE"),
       ("UNICODE_INDETERMINATE", "UNICODE"),
       ("UNICODE_CI_INDETERMINATE", "UNICODE"),
-      ("UNICODE_RTRIM_INDETERMINATE", "UNICODE"),
+      ("UNICODE_RTRIM_INDETERMINATE", "UNICODE")
     ).foreach{case (collationName, proposals) =>
       checkCollationNameError(collationName, proposals)
     }
