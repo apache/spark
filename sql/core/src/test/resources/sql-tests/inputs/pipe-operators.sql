@@ -681,7 +681,7 @@ table windowTestData
 table windowTestData
 |> window w as (partition by cate order by val) limit 5;
 
--- multiple WINDOW clause are not supported.
+-- Multiple consecutive WINDOW clauses are not supported.
 table windowTestData
 |> window w1 as (partition by cate)
 |> window w2 as (partition by val order by cate)
