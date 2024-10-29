@@ -87,13 +87,13 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
     }
   }
 
-  def logMetrics(metrics: QueryExecutionMetrics): Unit = {
+  def logMetrics(name: String, metrics: QueryExecutionMetrics): Unit = {
     val totalTime = metrics.time / NANOS_PER_MILLIS.toDouble
     val totalTimeEffective = metrics.timeEffective / NANOS_PER_MILLIS.toDouble
     // scalastyle:off line.size.limit
     val message: MessageWithContext =
       log"""
-         |=== Metrics of Executed Rules ===
+         |=== Metrics of Executed Rules ${MDC(RULE_EXECUTOR_NAME, name)} ===
          |Total number of runs: ${MDC(NUM_RULE_OF_RUNS, metrics.numRuns)}
          |Total time: ${MDC(TOTAL_TIME, totalTime)} ms
          |Total number of effective runs: ${MDC(NUM_EFFECTIVE_RULE_OF_RUNS, metrics.numEffectiveRuns)}
@@ -117,6 +117,12 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
 }
 
 abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
+
+  /** Name for this rule executor, automatically inferred based on class name. */
+  val name: String = {
+    val className = getClass.getName
+    if (className endsWith "$") className.dropRight(1) else className
+  }
 
   /**
    * An execution strategy for rules that indicates the maximum number of executions. If the
@@ -291,7 +297,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
       planChangeLogger.logBatch(batch.name, batchStartPlan, curPlan)
     }
-    planChangeLogger.logMetrics(RuleExecutor.getCurrentMetrics() - beforeMetrics)
+    planChangeLogger.logMetrics(name, RuleExecutor.getCurrentMetrics() - beforeMetrics)
 
     curPlan
   }
