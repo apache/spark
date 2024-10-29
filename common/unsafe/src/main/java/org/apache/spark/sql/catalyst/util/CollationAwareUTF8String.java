@@ -1082,18 +1082,38 @@ public class CollationAwareUTF8String {
 
   /**
    * Trims the `srcString` string from both ends of the string using the specified `trimString`
+   * characters, with respect to the UTF8_BINARY trim collation. String trimming is performed by
+   * first trimming the left side of the string, and then trimming the right side of the string.
+   * The method returns the trimmed string. If the `trimString` is null, the method returns null.
+   *
+   * @param srcString the input string to be trimmed from both ends of the string
+   * @param trimString the trim string characters to trim
+   * @param collationId the collation ID to use for string trim
+   * @return the trimmed string (for UTF8_BINARY collation)
+   */
+  public static UTF8String binaryTrim(
+      final UTF8String srcString,
+      final UTF8String trimString,
+      final int collationId) {
+    return binaryTrimRight(srcString.trimLeft(trimString), trimString, collationId);
+  }
+
+  /**
+   * Trims the `srcString` string from both ends of the string using the specified `trimString`
    * characters, with respect to the UTF8_LCASE collation. String trimming is performed by
    * first trimming the left side of the string, and then trimming the right side of the string.
    * The method returns the trimmed string. If the `trimString` is null, the method returns null.
    *
    * @param srcString the input string to be trimmed from both ends of the string
    * @param trimString the trim string characters to trim
+   * @param collationId the collation ID to use for string trim
    * @return the trimmed string (for UTF8_LCASE collation)
    */
   public static UTF8String lowercaseTrim(
       final UTF8String srcString,
-      final UTF8String trimString) {
-    return lowercaseTrimRight(lowercaseTrimLeft(srcString, trimString), trimString);
+      final UTF8String trimString,
+      final int collationId) {
+    return lowercaseTrimRight(lowercaseTrimLeft(srcString, trimString), trimString, collationId);
   }
 
   /**
@@ -1121,7 +1141,8 @@ public class CollationAwareUTF8String {
    * the left side, until reaching a character whose lowercased code point is not in the hash set.
    * Finally, the method returns the substring from that position to the end of `srcString`.
    * If `trimString` is null, null is returned. If `trimString` is empty, `srcString` is returned.
-   *
+   * Note: as currently only trimming collation supported is RTRIM, trimLeft is not modified
+   * to support other trim collations, this should be done in case of adding TRIM and LTRIM.
    * @param srcString the input string to be trimmed from the left end of the string
    * @param trimString the trim string characters to trim
    * @return the trimmed string (for UTF8_LCASE collation)
@@ -1184,7 +1205,9 @@ public class CollationAwareUTF8String {
    * character in `trimString`, until reaching a character that is not found in `trimString`.
    * Finally, the method returns the substring from that position to the end of `srcString`.
    * If `trimString` is null, null is returned. If `trimString` is empty, `srcString` is returned.
-   *
+   * Note: as currently only trimming collation supported is RTRIM, trimLeft is not modified
+   * to support other trim collations, this should be done in case of adding TRIM and LTRIM
+   * collation.
    * @param srcString the input string to be trimmed from the left end of the string
    * @param trimString the trim string characters to trim
    * @param collationId the collation ID to use for string trimming
@@ -1232,22 +1255,103 @@ public class CollationAwareUTF8String {
     // Return the substring from the calculated position until the end of the string.
     return UTF8String.fromString(src.substring(charIndex));
   }
+  /**
+   * Trims the `srcString` string from the right side using the specified `trimString` characters,
+   * with respect to the UTF8_BINARY trim collation. For UTF8_BINARY trim collation, the method has
+   * one special case to cover with respect to trimRight function for regular UTF8_Binary collation.
+   * Trailing spaces should be ignored in case of trim collation (rtrim for example) and if
+   * trimString does not contain spaces. In this case, the method trims the string from the right
+   * and after call of regular trim functions returns back trimmed spaces as those should not get
+   * removed.
+   * @param srcString the input string to be trimmed from the right end of the string
+   * @param trimString the trim string characters to trim
+   * @param collationId the collation ID to use for string trim
+   * @return the trimmed string (for UTF_BINARY collation)
+   */
+  public static UTF8String binaryTrimRight(
+      final UTF8String srcString,
+      final UTF8String trimString,
+      final int collationId) {
+    // Matching the default UTF8String behavior for null `trimString`.
+    if (trimString == null) {
+      return null;
+    }
+
+    // Create a hash set of code points for all characters of `trimString`.
+    HashSet<Integer> trimChars = new HashSet<>();
+    Iterator<Integer> trimIter = trimString.codePointIterator();
+    while (trimIter.hasNext()) trimChars.add(trimIter.next());
+
+    // Iterate over `srcString` from the right to find the first character that is not in the set.
+    int searchIndex = srcString.numChars(), codePoint, codePointBuffer = -1;
+
+    // In cases of trim collation (rtrim for example) trailing spaces should be ignored.
+    // If trimString contains spaces this behaviour is not important as they would get trimmed
+    // anyway. However, if it is not the case they should be ignored and then appended after
+    // trimming other characters.
+    int lastNonSpaceByteIdx = srcString.numBytes(), lastNonSpaceCharacterIdx = srcString.numChars();
+    if (!trimChars.contains(SpecialCodePointConstants.ASCII_SPACE) &&
+      CollationFactory.ignoresSpacesInTrimFunctions(
+        collationId, /*isLTrim=*/ false, /*isRTrim=*/true)) {
+      while (lastNonSpaceByteIdx > 0 &&
+        srcString.getByte(lastNonSpaceByteIdx - 1) == ' ') {
+        --lastNonSpaceByteIdx;
+      }
+      // In case of src string contains only spaces there is no need to do any trimming, since it's
+      // already checked that trim string does not contain any spaces.
+      if (lastNonSpaceByteIdx == 0) {
+        return srcString;
+      }
+      searchIndex = lastNonSpaceCharacterIdx =
+        srcString.numChars() - (srcString.numBytes() - lastNonSpaceByteIdx);
+    }
+    Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
+    for (int i = lastNonSpaceCharacterIdx; i < srcString.numChars(); i++) {
+      srcIter.next();
+    }
+
+    while (srcIter.hasNext()) {
+      codePoint = srcIter.next();
+      if (trimChars.contains(codePoint)) {
+        --searchIndex;
+      }
+      else {
+        break;
+      }
+    }
+
+    // Return the substring from the start of the string to the calculated position and append
+    // trailing spaces if they were ignored
+    if (searchIndex == srcString.numChars()) {
+      return srcString;
+    }
+    if (lastNonSpaceCharacterIdx == srcString.numChars()) {
+      return srcString.substring(0, searchIndex);
+    }
+    return UTF8String.concat(
+      srcString.substring(0, searchIndex),
+      srcString.substring(lastNonSpaceCharacterIdx, srcString.numChars()));
+  }
 
   /**
    * Trims the `srcString` string from the right side using the specified `trimString` characters,
    * with respect to the UTF8_LCASE collation. For UTF8_LCASE, the method first creates a hash
    * set of lowercased code points in `trimString`, and then iterates over the `srcString` from
    * the right side, until reaching a character whose lowercased code point is not in the hash set.
+   * In case of UTF8_LCASE trim collation and when trimString does not contain spaces, trailing
+   * spaces should be ignored. However, after trimming function call they should be appended back.
    * Finally, the method returns the substring from the start of `srcString` until that position.
    * If `trimString` is null, null is returned. If `trimString` is empty, `srcString` is returned.
    *
    * @param srcString the input string to be trimmed from the right end of the string
    * @param trimString the trim string characters to trim
+   * @param collationId the collation ID to use for string trim
    * @return the trimmed string (for UTF8_LCASE collation)
    */
   public static UTF8String lowercaseTrimRight(
       final UTF8String srcString,
-      final UTF8String trimString) {
+      final UTF8String trimString,
+      final int collationId) {
     // Matching the default UTF8String behavior for null `trimString`.
     if (trimString == null) {
       return null;
@@ -1260,7 +1364,32 @@ public class CollationAwareUTF8String {
 
     // Iterate over `srcString` from the right to find the first character that is not in the set.
     int searchIndex = srcString.numChars(), codePoint, codePointBuffer = -1;
+
+    // In cases of trim collation (rtrim for example) trailing spaces should be ignored.
+    // If trimString contains spaces this behaviour is not important as they would get trimmed
+    // anyway. However, if it is not the case they should be ignored and then appended after
+    // trimming other characters.
+    int lastNonSpaceByteIdx = srcString.numBytes(), lastNonSpaceCharacterIdx = srcString.numChars();
+    if (!trimChars.contains(SpecialCodePointConstants.ASCII_SPACE) &&
+      CollationFactory.ignoresSpacesInTrimFunctions(
+        collationId, /*isLTrim=*/ false, /*isRTrim=*/true)) {
+      while (lastNonSpaceByteIdx > 0 &&
+        srcString.getByte(lastNonSpaceByteIdx - 1) == ' ') {
+        --lastNonSpaceByteIdx;
+      }
+      // In case of src string contains only spaces there is no need to do any trimming, since it's
+      // already checked that trim string does not contain any spaces.
+      if (lastNonSpaceByteIdx == 0) {
+        return srcString;
+      }
+      searchIndex = lastNonSpaceCharacterIdx =
+        srcString.numChars() - (srcString.numBytes() - lastNonSpaceByteIdx);
+    }
     Iterator<Integer> srcIter = srcString.reverseCodePointIterator();
+    for (int i = lastNonSpaceCharacterIdx; i < srcString.numChars(); i++) {
+      srcIter.next();
+    }
+
     while (srcIter.hasNext()) {
       if (codePointBuffer != -1) {
         codePoint = codePointBuffer;
@@ -1291,8 +1420,17 @@ public class CollationAwareUTF8String {
       }
     }
 
-    // Return the substring from the start of the string to the calculated position.
-    return searchIndex == srcString.numChars() ? srcString : srcString.substring(0, searchIndex);
+    // Return the substring from the start of the string to the calculated position and append
+    // trailing spaces if they were ignored
+    if (searchIndex == srcString.numChars()) {
+      return srcString;
+    }
+    if (lastNonSpaceCharacterIdx == srcString.numChars()) {
+      return srcString.substring(0, searchIndex);
+    }
+    return UTF8String.concat(
+      srcString.substring(0, searchIndex),
+      srcString.substring(lastNonSpaceCharacterIdx, srcString.numChars()));
   }
 
   /**
@@ -1329,7 +1467,26 @@ public class CollationAwareUTF8String {
     String src = srcString.toValidString();
     CharacterIterator target = new StringCharacterIterator(src);
     Collator collator = CollationFactory.fetchCollation(collationId).collator;
-    int charIndex = src.length(), longestMatchLen;
+    int charIndex = src.length(), longestMatchLen, lastNonSpacePosition = src.length();
+
+    // In cases of trim collation (rtrim for example) trailing spaces should be ignored.
+    // If trimString contains spaces this behaviour is not important as they would get trimmed
+    // anyway. However, if it is not the case they should be ignored and then appended after
+    // trimming other characters.
+    if (!trimChars.containsKey(SpecialCodePointConstants.ASCII_SPACE) &&
+      CollationFactory.ignoresSpacesInTrimFunctions(
+        collationId, /*isLTrim=*/ false, /*isRTrim=*/true)) {
+      while (lastNonSpacePosition > 0 && src.charAt(lastNonSpacePosition - 1) == ' ') {
+        --lastNonSpacePosition;
+      }
+      // In case of src string contains only spaces there is no need to do any trimming, since it's
+      // already checked that trim string does not contain any spaces.
+      if (lastNonSpacePosition == 0) {
+        return UTF8String.fromString(src);
+      }
+      charIndex = lastNonSpacePosition;
+    }
+
     while (charIndex >= 0) {
       longestMatchLen = 0;
       for (String trim : trimChars.values()) {
@@ -1357,8 +1514,18 @@ public class CollationAwareUTF8String {
       else charIndex -= longestMatchLen;
     }
 
-    // Return the substring from the start of the string until that position.
-    return UTF8String.fromString(src.substring(0, charIndex));
+    // Return the substring from the start of the string until that position and append
+    // trailing spaces if they were ignored
+    if (charIndex == src.length()) {
+      return srcString;
+    }
+    if (lastNonSpacePosition == srcString.numChars()) {
+      return UTF8String.fromString(src.substring(0, charIndex));
+    }
+    return UTF8String.fromString(
+      src.substring(0, charIndex) +
+      src.substring(lastNonSpacePosition)
+    );
   }
 
   public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,

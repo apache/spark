@@ -68,8 +68,6 @@ from pyspark.sql.types import (
     StructType,
     ArrayType,
     StringType,
-    ByteType,
-    ShortType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
 
@@ -275,16 +273,8 @@ def lit(col: Any) -> Column:
                 errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
                 messageParameters={"dtype": col.dtype.name},
             )
-
-        # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
-        # Actually this is not a problem for Connect, but here still convert it
-        # to int16 for compatibility.
-        if dt == ByteType():
-            dt = ShortType()
-
         return array(*[lit(c) for c in col]).cast(ArrayType(dt))
-    else:
-        return ConnectColumn(LiteralExpression._from_value(col))
+    return ConnectColumn(LiteralExpression._from_value(col))
 
 
 lit.__doc__ = pysparkfuncs.lit.__doc__
@@ -2580,15 +2570,23 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
 locate.__doc__ = pysparkfuncs.locate.__doc__
 
 
-def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
-    return _invoke_function("lpad", _to_col(col), lit(len), lit(pad))
+def lpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
+    return _invoke_function_over_columns("lpad", col, lit(len), lit(pad))
 
 
 lpad.__doc__ = pysparkfuncs.lpad.__doc__
 
 
-def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
-    return _invoke_function("rpad", _to_col(col), lit(len), lit(pad))
+def rpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
+    return _invoke_function_over_columns("rpad", col, lit(len), lit(pad))
 
 
 rpad.__doc__ = pysparkfuncs.rpad.__doc__

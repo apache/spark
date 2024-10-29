@@ -41,7 +41,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ ScanOperation(projects, filtersStayUp, filtersPushDown,
-      l @ LogicalRelation(hadoopFsRelation: HadoopFsRelation, _, _, _)) =>
+        l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _)) =>
         val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
         prunePhysicalColumns(l, projects, allFilters, hadoopFsRelation,
           (prunedDataSchema, prunedMetadataSchema) => {
