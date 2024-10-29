@@ -7442,7 +7442,7 @@
         "usedBy": ["Databricks"]
     },
     "KD011": {
-        "description": "external data source does not support DML operation",
+        "description": "external data source does not support operation",
         "origin": "Spark",
         "standard": "N",
         "usedBy": ["Spark"]
