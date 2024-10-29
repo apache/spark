@@ -157,14 +157,14 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |    UPPER(name) AS test_type,
           |    name,
           |    IF(
-          |      LOWER(name) = 'adfsaef' OR LOWER(name) = 'agadg',
-          |      'agfagff',
+          |      LOWER(name) = 'legolas' OR LOWER(name) = 'elrond',
+          |      'Elf',
           |      IF(
-          |        LOWER(name) = 'adgfda' OR LOWER(name) = 'ssadf',
-          |        'sxzvfvxf',
+          |        LOWER(name) = 'gimli' OR LOWER(name) = 'thorin',
+          |        'Dwarf',
           |        IF(
-          |          LOWER(name) = 'sdfadsf' OR LOWER(name) = 'sadfgvad',
-          |          'sAFvadsfvcds',
+          |          LOWER(name) = 'gandalf' OR LOWER(name) = 'radagast',
+          |          'Wizard',
           |          LOWER(name)
           |        )
           |      )
@@ -173,7 +173,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |),
           |dummy_new AS (
           |  SELECT *
-          |  FROM dummy WHERE test_type_name = 'safcdfz'
+          |  FROM dummy WHERE test_type_name = 'Wizard'
           |)
           |SELECT * FROM dummy_new limit 1""".stripMargin
     )
@@ -183,7 +183,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   test("SPARK-50087: SqlServer handle booleans in CASE WHEN test") {
     val df = sql(
       s"""|SELECT * FROM $catalogName.employee
-          |WHERE CASE WHEN name = '1' THEN name = 'barxxyz' ELSE NOT (name = 'barxxyz') END
+          |WHERE CASE WHEN name = 'Legolas' THEN name = 'Elf' ELSE NOT (name = 'Wizard') END
           |""".stripMargin
     )
     df.collect()
@@ -192,7 +192,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   test("SPARK-50087: SqlServer handle booleans in CASE WHEN with always true test") {
     val df = sql(
       s"""|SELECT * FROM $catalogName.employee
-          |WHERE CASE WHEN (name = 'barxxyz') THEN (name = 'barx') ELSE (1=1) END
+          |WHERE CASE WHEN (name = 'Legolas') THEN (name = 'Elf') ELSE (1=1) END
           |""".stripMargin
     )
     df.collect()
@@ -201,9 +201,20 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   test("SPARK-50087: SqlServer handle booleans in nested CASE WHEN test") {
     val df = sql(
       s"""|SELECT * FROM $catalogName.employee
-          |WHERE CASE WHEN (name = 'barxxyz') THEN
-          | CASE WHEN (name = '5') THEN (name = 'barx') ELSE (name = 'aweda') END
-          | ELSE (name = '1') END
+          |WHERE CASE WHEN (name = 'Legolas') THEN
+          | CASE WHEN (name = 'Elf') THEN (name = 'Elrond') ELSE (name = 'Gandalf') END
+          | ELSE (name = 'Sauron') END
+          |""".stripMargin
+    )
+    df.collect()
+  }
+
+  test("SPARK-50087: SqlServer handle non-booleans in nested CASE WHEN test") {
+    val df = sql(
+      s"""|SELECT * FROM $catalogName.employee
+          |WHERE CASE WHEN (name = 'Legolas') THEN
+          | CASE WHEN (name = 'Elf') THEN 'Elf' ELSE 'Wizard' END
+          | ELSE 'Sauron' END
           |""".stripMargin
     )
     df.collect()
