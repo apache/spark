@@ -124,7 +124,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
   /**
    * Duplicate all resources provided in SparkContext constructor into the current session.
    * This method must be called from within a [[JobArtifactSet.withActiveJobArtifactState]] block.
-  */
+   */
   private def copyInitialContextResourcesIfNeeded(): Unit = synchronized {
     if (!initialContextResourcesCopied) {
       val currentUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
