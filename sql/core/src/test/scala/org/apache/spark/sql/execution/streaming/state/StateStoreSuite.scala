@@ -1627,7 +1627,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     withSpark(new SparkContext(conf)) { sc =>
       withCoordinatorRef(sc) { _ =>
-        val rootLocation = Utils.createTempDir(namePrefix = "spark-48997").getAbsolutePath
+        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-48997"
         // 0 and 1's maintenance will fail
         val provider0Id =
           StateStoreProviderId(StateStoreId(rootLocation, 0, 0), UUID.randomUUID)
