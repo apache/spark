@@ -4960,7 +4960,8 @@
           "Access to the SparkSession SQL Context."
         ]
       }
-    }
+    },
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [
