@@ -2346,7 +2346,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         val e = intercept[SparkException] {
           ThreadUtils.awaitResult(thread3, 10.seconds)
         }
-        assert(e.getMessage.contains("CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR"))
+        assert(e.getCause.getMessage.contains(
+          "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR"))
 
         stateLock.synchronized {
           // Signal that we have entered state 3 (thread 2 can now release lock)
