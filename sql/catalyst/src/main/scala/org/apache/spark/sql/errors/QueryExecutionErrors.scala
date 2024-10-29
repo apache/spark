@@ -1155,8 +1155,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def cannotParseStatisticAsPercentileError(
       stats: String, e: NumberFormatException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2113",
-      messageParameters = Map("stats" -> stats),
+      errorClass = "UNRECOGNIZED_STATISTIC",
+      messageParameters = Map("stats" -> toSQLId(stats)),
       cause = e)
   }
 

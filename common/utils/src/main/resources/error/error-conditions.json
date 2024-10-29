@@ -4758,7 +4758,7 @@
   },
   "UNRECOGNIZED_STATISTIC" : {
     "message" : [
-      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values."
+      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values. Percentile must be a numeric value followed by '%', within the range 0% to 100%."
     ],
     "sqlState" : "42704"
   },
@@ -7160,11 +7160,6 @@
   "_LEGACY_ERROR_TEMP_2112" : {
     "message" : [
       "Unexpected window function frame <frame>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2113" : {
-    "message" : [
-      "Unable to parse <stats> as a percentile."
     ]
   },
   "_LEGACY_ERROR_TEMP_2115" : {
