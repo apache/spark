@@ -267,9 +267,11 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("correlated scalar subquery in aggregate") {
-    val sub = spark.table("r").where($"a".outer() === $"c").select(sum($"d")).scalar()
     checkAnswer(
-      spark.table("l").groupBy($"a", sub).agg(sub.as("sum_d")).select($"a", $"sum_d"),
+      spark.table("l").groupBy(
+        $"a",
+        spark.table("r").where($"a".outer() === $"c").select(sum($"d")).scalar().as("sum_d")
+      ).agg(Map.empty).select($"a", $"sum_d"),
       sql("select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2")
     )
   }
@@ -279,9 +281,11 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       withView("vr") {
         r.write.saveAsTable("tr")
         sql("create view vr as select * from tr")
-        val sub = spark.table("vr").where($"a".outer() === $"c").select(sum($"d")).scalar()
         checkAnswer(
-          spark.table("l").groupBy($"a", sub).agg(sub.as("sum_d")).select($"a", $"sum_d"),
+          spark.table("l").groupBy(
+            $"a",
+            spark.table("vr").where($"a".outer() === $"c").select(sum($"d")).scalar().as("sum_d")
+          ).agg(Map.empty).select($"a", $"sum_d"),
           sql("select a, (select sum(d) from vr where a = c) sum_d from l l1 group by 1, 2")
         )
       }

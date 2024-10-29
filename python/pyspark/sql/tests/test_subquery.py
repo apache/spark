@@ -257,17 +257,20 @@ class SubqueryTestsMixin:
                 )
 
             with self.subTest("in aggregate"):
-                sub = (
-                    self.spark.table("r")
-                    .where(sf.col("a").outer() == sf.col("c"))
-                    .select(sf.sum("d"))
-                    .scalar()
-                )
                 assertDataFrameEqual(
                     (
                         self.spark.table("l")
-                        .groupBy("a", sub)
-                        .agg(sub.alias("sum_d"))
+                        .groupBy(
+                            "a",
+                            (
+                                self.spark.table("r")
+                                .where(sf.col("a").outer() == sf.col("c"))
+                                .select(sf.sum("d"))
+                                .scalar()
+                                .alias("sum_d")
+                            ),
+                        )
+                        .agg({})
                         .select("a", "sum_d")
                     ),
                     self.spark.sql(
@@ -376,12 +379,14 @@ class SubqueryTestsMixin:
 
                 assertDataFrameEqual(
                     self.spark.table("l").where(
-                        ~self.spark.table("r")
-                        .where(
-                            (sf.col("a").outer() == sf.col("c"))
-                            & (sf.col("b").outer() < sf.col("d"))
+                        ~(
+                            self.spark.table("r")
+                            .where(
+                                (sf.col("a").outer() == sf.col("c"))
+                                & (sf.col("b").outer() < sf.col("d"))
+                            )
+                            .exists()
                         )
-                        .exists()
                     ),
                     self.spark.sql(
                         """
