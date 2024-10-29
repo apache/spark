@@ -59,7 +59,7 @@ jobs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
-      image_docs_url_link: ${{ steps.infra-image-link-images.outputs.image_docs_url_link }}
+      image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -145,7 +145,7 @@ jobs:
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_docs_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Link the docker images
-      id: infra-image-link-images
+      id: infra-image-link
       run: |
         # Set the image URL for job "docs"
         # Should delete the link and directly use image_docs_url after SPARK 3.x EOL
@@ -372,7 +372,7 @@ jobs:
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
       - name: Build and push (Documentation)
-        if: inputs.branch != 'branch-3.5'
+        if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:

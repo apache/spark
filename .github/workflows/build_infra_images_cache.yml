@@ -62,7 +62,7 @@ jobs:
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
       - name: Build and push (Documentation)
-        if: inputs.branch != 'branch-3.5'
+        if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:
@@ -72,5 +72,5 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ github.ref_name }}
           cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ github.ref_name }},mode=max
       - name: Image digest (Documentation)
-        if: inputs.branch != 'branch-3.5'
+        if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
         run: echo ${{ steps.docker_build_docs.outputs.digest }}
