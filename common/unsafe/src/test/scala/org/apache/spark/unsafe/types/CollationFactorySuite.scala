@@ -169,7 +169,13 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI_RTRIM", "aaa", "AaA ", true),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "AaA ", true),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa", " AaA ", false),
-      CollationTestCase("UNICODE_RTRIM", "    ", "  ", true)
+      CollationTestCase("UNICODE_RTRIM", "    ", "  ", true),
+      CollationTestCase("SR_CI", "cČć", "CčĆ", true),
+      CollationTestCase("SR_CI", "cCc", "CčĆ", false),
+      CollationTestCase("SR_CI_AI", "cCc", "CčĆ", true),
+      CollationTestCase("sr_Cyrl_CI", "цЧћ", "ЦчЋ", true),
+      CollationTestCase("sr_Cyrl_CI", "цЦц", "ЦчЋ", false),
+      CollationTestCase("sr_Cyrl_CI_AI", "цЦц", "ЦчЋ", false)
     )
 
     checks.foreach(testCase => {
@@ -229,7 +235,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI_RTRIM", "aaa  ", "bbb ", -1),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa", 1),
       CollationTestCase("UNICODE_CI_RTRIM", "aaa ", "aa  ", 1),
-      CollationTestCase("UNICODE_CI_RTRIM", " ", "   ", 0)
+      CollationTestCase("UNICODE_CI_RTRIM", " ", "   ", 0),
+      CollationTestCase("SR_CI_AI", "cČć", "ČćC", 0),
+      CollationTestCase("SR_CI", "cČć", "ČćC", -1)
     )
 
     checks.foreach(testCase => {
@@ -248,7 +256,10 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       CollationTestCase("UNICODE_CI", "abcde", "abcde", 5),
       CollationTestCase("UNICODE_CI", "abcde", "ABCDE", 5),
       CollationTestCase("UNICODE_CI", "abcde", "fgh", 0),
-      CollationTestCase("UNICODE_CI", "abcde", "FGH", 0)
+      CollationTestCase("UNICODE_CI", "abcde", "FGH", 0),
+      CollationTestCase("SR_CI_AI", "abcčċ", "CCC", 3),
+      CollationTestCase("SR_CI", "abcčċ", "C", 1),
+      CollationTestCase("SR", "abcčċ", "CCC", 0)
     )
 
     checks.foreach(testCase => {
@@ -285,7 +296,9 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       "UNICODE_CI",
       "UNICODE_AI",
       "UNICODE_CI_AI",
-      "UNICODE_AI_CI"
+      "UNICODE_AI_CI",
+      "DE_CI_AI",
+      "MT_CI"
     ).foreach(collationId => {
       val col1 = fetchCollation(collationId)
       val col2 = fetchCollation(collationId)
