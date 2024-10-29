@@ -125,23 +125,23 @@
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.1</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
-    <protobuf.version>3.25.5</protobuf.version>
+    <protobuf.version>4.28.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.9.2</zookeeper.version>
-    <curator.version>5.7.0</curator.version>
+    <zookeeper.version>3.9.3</zookeeper.version>
+    <curator.version>5.7.1</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.8.0</kafka.version>
+    <kafka.version>3.8.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.14.3</parquet.version>
     <orc.version>2.0.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.23</jetty.version>
+    <jetty.version>11.0.24</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -294,7 +294,7 @@
     <!-- Version used in Connect -->
     <connect.guava.version>33.2.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
-    <io.grpc.version>1.62.2</io.grpc.version>
+    <io.grpc.version>1.67.1</io.grpc.version>
     <mima.version>1.1.4</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
@@ -726,7 +726,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.5.2</version>
+        <version>9.7.3</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>

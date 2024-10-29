@@ -463,7 +463,7 @@ private[spark] class BlockManager(
    * '''Important!''' Callers must not mutate or release the data buffer underlying `bytes`. Doing
    * so may corrupt or change the data stored by the `BlockManager`.
    */
-  private case class ByteBufferBlockStoreUpdater[T](
+  private[spark] case class ByteBufferBlockStoreUpdater[T](
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[T],
