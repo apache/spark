@@ -257,11 +257,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def invalidFractionOfSecondError(): DateTimeException = {
+  def invalidFractionOfSecondError(secAndMicros: Decimal): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
       messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)
+        "secAndMicros" -> s"$secAndMicros"
       ),
       context = Array.empty,
       summary = "")
@@ -295,8 +295,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in sum of decimals", context = context)
+  def overflowInSumOfDecimalError(
+      context: QueryContext,
+      suggestedFunc: String): ArithmeticException = {
+    arithmeticOverflowError("Overflow in sum of decimals", suggestedFunc = suggestedFunc,
+      context = context)
   }
 
   def overflowInIntegralDivideError(context: QueryContext): ArithmeticException = {
@@ -362,12 +365,28 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "groupIndex" -> groupIndex.toString()))
   }
 
+  def invalidRegexpReplaceError(
+      source: String,
+      pattern: String,
+      replacement: String,
+      position: Int,
+      cause: Throwable): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_REGEXP_REPLACE",
+      messageParameters = Map(
+        "source" -> source,
+        "pattern" -> pattern,
+        "replacement" -> replacement,
+        "position" -> position.toString
+      ),
+      cause = cause
+    )
+  }
+
   def invalidUrlError(url: UTF8String, e: URISyntaxException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_URL",
-      messageParameters = Map(
-        "url" -> url.toString,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
+      messageParameters = Map("url" -> url.toString),
       cause = e)
   }
 
@@ -385,10 +404,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def negativeValueUnexpectedError(
-      frequencyExpression : Expression): SparkIllegalArgumentException = {
+      frequencyExpression: Expression, negativeValue: Long): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2013",
-      messageParameters = Map("frequencyExpression" -> frequencyExpression.sql))
+      errorClass = "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION",
+      messageParameters = Map(
+        "frequencyExpression" -> toSQLExpr(frequencyExpression),
+        "negativeValue" -> toSQLValue(negativeValue)))
   }
 
   def addNewFunctionMismatchedWithFunctionError(funcName: String): Throwable = {

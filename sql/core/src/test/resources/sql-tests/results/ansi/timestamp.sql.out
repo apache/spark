@@ -126,7 +126,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "INVALID_FRACTION_OF_SECOND",
   "sqlState" : "22023",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\""
+    "secAndMicros" : "60.007000"
   }
 }
 

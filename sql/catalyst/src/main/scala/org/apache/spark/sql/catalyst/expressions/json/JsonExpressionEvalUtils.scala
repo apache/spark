@@ -64,7 +64,7 @@ case class JsonToStructsEvaluator(
     nullableSchema: DataType,
     nameOfCorruptRecord: String,
     timeZoneId: Option[String],
-    variantAllowDuplicateKeys: Boolean) extends Serializable {
+    variantAllowDuplicateKeys: Boolean) {
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
@@ -117,7 +117,7 @@ case class JsonToStructsEvaluator(
 case class StructsToJsonEvaluator(
     options: Map[String, String],
     inputSchema: DataType,
-    timeZoneId: Option[String]) extends Serializable {
+    timeZoneId: Option[String]) {
 
   @transient
   private lazy val writer = new CharArrayWriter()
