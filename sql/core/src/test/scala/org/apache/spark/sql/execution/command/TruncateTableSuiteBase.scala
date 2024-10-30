@@ -104,6 +104,11 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
 
       // throw exception if the column in partition spec is not a partition column.
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        s"`$SESSION_CATALOG_NAME`.`ns`.`parttable`"
+      } else {
+        "`test_catalog`.`ns`.`partTable`"
+      }
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
@@ -111,7 +116,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         condition = "PARTITIONS_NOT_FOUND",
         parameters = Map(
           "partitionList" -> "`unknown`",
-          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`parttable`")
+          "tableName" -> expectedTableName)
       )
     }
   }
@@ -123,10 +128,20 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
       sql(s"INSERT INTO $t SELECT 0")
 
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
-      }.getMessage
-      assert(errMsg.contains(invalidPartColumnError))
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+      } else {
+        "`test_catalog`.`ns`.`tbl`"
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`c0`",
+          "tableName" -> expectedTableName)
+      )
     }
   }
 
@@ -151,6 +166,11 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"INSERT INTO $t PARTITION (id=0) SELECT 'abc'")
       sql(s"INSERT INTO $t PARTITION (id=1) SELECT 'def'")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
@@ -158,7 +178,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           condition = "PARTITIONS_NOT_FOUND",
           parameters = Map(
             "partitionList" -> "`ID`",
-            "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`")
+            "tableName" -> expectedTableName)
         )
       }
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {

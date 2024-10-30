@@ -98,6 +98,11 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     withNamespaceAndTable("ns", "tbl") { t =>
       spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
         checkError(
           exception = intercept[AnalysisException] {
             spark.sql(s"ALTER TABLE $t ADD PARTITION (ID=1) LOCATION 'loc1'")
@@ -105,7 +110,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
           condition = "PARTITIONS_NOT_FOUND",
           parameters = Map(
             "partitionList" -> "`ID`",
-            "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`")
+            "tableName" -> expectedTableName)
         )
       }
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {

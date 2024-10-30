@@ -67,6 +67,11 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   test("non-partitioning columns") {
     withNamespaceAndTable("ns", "dateTable") { t =>
       createDateTable(t)
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        s"`$SESSION_CATALOG_NAME`.`ns`.`datetable`"
+      } else {
+        "`test_catalog`.`ns`.`dateTable`"
+      }
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"SHOW PARTITIONS $t PARTITION(abcd=2015, xyz=1)")
@@ -74,7 +79,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
         condition = "PARTITIONS_NOT_FOUND",
         parameters = Map(
           "partitionList" -> "`abcd`",
-          "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`datetable`")
+          "tableName" -> expectedTableName)
       )
     }
   }

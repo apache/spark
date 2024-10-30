@@ -104,6 +104,11 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $t DROP PARTITION (ID=1)")
@@ -111,7 +116,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
           condition = "PARTITIONS_NOT_FOUND",
           parameters = Map(
             "partitionList" -> "`ID`",
-            "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`")
+            "tableName" -> expectedTableName)
         )
       }
 

@@ -171,6 +171,11 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       checkPartitions(t, Map("id" -> "1"))
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $t PARTITION (ID = 1) RENAME TO PARTITION (id = 2)")
@@ -178,7 +183,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
           condition = "PARTITIONS_NOT_FOUND",
           parameters = Map(
             "partitionList" -> "`ID`",
-            "tableName" -> s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`")
+            "tableName" -> expectedTableName)
         )
         checkPartitions(t, Map("id" -> "1"))
       }

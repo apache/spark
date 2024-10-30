@@ -167,7 +167,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(a='Us', d=1)
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "PARTITIONS_NOT_FOUND",
-  "sqlState" : "42703",
+  "sqlState" : "428FT",
   "messageParameters" : {
     "partitionList" : "`a`",
     "tableName" : "`spark_catalog`.`showdb`.`show_t1`"
