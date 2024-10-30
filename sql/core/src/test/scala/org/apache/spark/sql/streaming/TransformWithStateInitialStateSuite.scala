@@ -637,19 +637,11 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       flattenOption: Boolean)
       (startQuery: (DataFrame, DataFrame, DataFrame,
         MemoryStream[InitInputRow]) => DataFrame): Unit = {
-    Seq(
-      (TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString, "1"),
-      (TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
-        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString)
-    ).foreach { partitions =>
-      val samePartition = if (partitions._1 == partitions._2) {
-        ""
-      } else {
-        "not "
-      }
+    Seq(("5", "2"), ("5", "8"), ("5", "5")).foreach { partitions =>
       test("transformWithStateWithInitialState - state data source reader dataframe " +
-        s"as initial state with flatten option set to $flattenOption, initial state rows are " +
-        s"${samePartition}coming from the same shuffle partition number with current query") {
+        s"as initial state with flatten option set to $flattenOption, the first stream and " +
+        s"the second stream is running on shuffle partition number of ${partitions._1} and " +
+        s"${partitions._2} respectively.") {
         withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
           classOf[RocksDBStateStoreProvider].getName) {
           withTempDir { checkpointDir =>
