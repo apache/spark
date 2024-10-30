@@ -72,7 +72,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       numNulls = 0;
     }
 
-    if (hugeVectorThreshold > 0 && capacity > hugeVectorThreshold) {
+    if (hugeVectorThreshold > -1 && capacity > hugeVectorThreshold) {
       capacity = defaultCapacity;
       releaseMemory();
       reserveInternal(capacity);

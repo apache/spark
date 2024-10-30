@@ -25,8 +25,8 @@ import org.apache.spark.util.SparkClassUtils
 
 /**
  * Configuration for all objects that are placed in the `sql/api` project. The normal way of
- * accessing this class is through `SqlApiConf.get`. If this code is being used with sql/core
- * then its values are bound to the currently set SQLConf. With Spark Connect, it will default to
+ * accessing this class is through `SqlApiConf.get`. If this code is being used with sql/core then
+ * its values are bound to the currently set SQLConf. With Spark Connect, it will default to
  * hardcoded values.
  */
 private[sql] trait SqlApiConf {

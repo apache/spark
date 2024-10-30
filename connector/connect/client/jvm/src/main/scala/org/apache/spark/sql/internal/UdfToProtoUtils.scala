@@ -25,9 +25,9 @@ import com.google.protobuf.ByteString
 import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter.toConnectProtoType
 import org.apache.spark.sql.connect.common.UdfPacket
-import org.apache.spark.sql.encoderFor
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.util.{ClosureCleaner, SparkClassUtils, SparkSerDeUtils}
 
@@ -79,12 +79,12 @@ private[sql] object UdfToProtoUtils {
     udf match {
       case f: SparkUserDefinedFunction =>
         val outputEncoder = f.outputEncoder
-          .map(e => encoderFor(e))
+          .map(e => agnosticEncoderFor(e))
           .getOrElse(RowEncoder.encoderForDataType(f.dataType, lenient = false))
         val inputEncoders = if (f.inputEncoders.forall(_.isEmpty)) {
           Nil // Java UDFs have no bindings for their inputs.
         } else {
-          f.inputEncoders.map(e => encoderFor(e.get)) // TODO support Any and UnboundRow.
+          f.inputEncoders.map(e => agnosticEncoderFor(e.get)) // TODO support Any and UnboundRow.
         }
         inputEncoders.foreach(e => protoUdf.addInputTypes(toConnectProtoType(e.dataType)))
         protoUdf
@@ -93,8 +93,8 @@ private[sql] object UdfToProtoUtils {
           .setAggregate(false)
         f.givenName.foreach(invokeUdf.setFunctionName)
       case f: UserDefinedAggregator[_, _, _] =>
-        val outputEncoder = encoderFor(f.aggregator.outputEncoder)
-        val inputEncoder = encoderFor(f.inputEncoder)
+        val outputEncoder = agnosticEncoderFor(f.aggregator.outputEncoder)
+        val inputEncoder = agnosticEncoderFor(f.inputEncoder)
         protoUdf
           .setPayload(toUdfPacketBytes(f.aggregator, inputEncoder :: Nil, outputEncoder))
           .addInputTypes(toConnectProtoType(inputEncoder.dataType))

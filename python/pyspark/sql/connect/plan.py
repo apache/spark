@@ -40,7 +40,6 @@ import json
 import pickle
 from threading import Lock
 from inspect import signature, isclass
-import warnings
 
 import pyarrow as pa
 
@@ -50,6 +49,7 @@ from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.column import Column
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
 from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.expressions import Expression
@@ -596,7 +596,7 @@ class CachedRemoteRelation(LogicalPlan):
                         metadata = session.client._builder.metadata()
                         channel(req, metadata=metadata)  # type: ignore[arg-type]
             except Exception as e:
-                warnings.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
+                logger.warn(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 
 
 class Hint(LogicalPlan):
@@ -1329,6 +1329,27 @@ class Unpivot(LogicalPlan):
         return plan
 
 
+class Transpose(LogicalPlan):
+    """Logical plan object for a transpose operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        index_columns: Sequence[Column],
+    ) -> None:
+        super().__init__(child)
+        self.index_columns = index_columns
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.transpose.input.CopyFrom(self._child.plan(session))
+        if self.index_columns is not None and len(self.index_columns) > 0:
+            for index_column in self.index_columns:
+                plan.transpose.index_columns.append(index_column.to_plan(session))
+        return plan
+
+
 class CollectMetrics(LogicalPlan):
     """Logical plan object for a CollectMetrics operation."""
 
@@ -1847,21 +1868,29 @@ class RemoveRemoteCachedRelation(LogicalPlan):
 
 
 class Checkpoint(LogicalPlan):
-    def __init__(self, child: Optional["LogicalPlan"], local: bool, eager: bool) -> None:
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        local: bool,
+        eager: bool,
+        storage_level: Optional[StorageLevel] = None,
+    ) -> None:
         super().__init__(child)
         self._local = local
         self._eager = eager
+        self._storage_level = storage_level
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
         assert self._child is not None
-        cmd.checkpoint_command.CopyFrom(
-            proto.CheckpointCommand(
-                relation=self._child.plan(session),
-                local=self._local,
-                eager=self._eager,
-            )
+        checkpoint_command = proto.CheckpointCommand(
+            relation=self._child.plan(session),
+            local=self._local,
+            eager=self._eager,
         )
+        if self._storage_level is not None:
+            checkpoint_command.storage_level.CopyFrom(storage_level_to_proto(self._storage_level))
+        cmd.checkpoint_command.CopyFrom(checkpoint_command)
         return cmd
 
 

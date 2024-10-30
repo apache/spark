@@ -45,7 +45,7 @@ class AlterTableRenameColumnSuite
         exception = intercept[AnalysisException] {
           sql("ALTER TABLE does_not_exist RENAME COLUMN col1 TO col3")
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> "`does_not_exist`"),
         context = ExpectedContext(fragment = "does_not_exist", start = 12, stop = 25)
       )
@@ -153,7 +153,7 @@ class AlterTableRenameColumnSuite
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`does_not_exist`",
@@ -171,7 +171,7 @@ class AlterTableRenameColumnSuite
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`.`does_not_exist`",

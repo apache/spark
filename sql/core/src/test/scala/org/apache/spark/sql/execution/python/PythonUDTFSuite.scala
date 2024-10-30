@@ -133,7 +133,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql("select udtf.* from t, lateral variantInputUDTF(v) udtf").collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> """"InputVariantUDTF\(outer\(v#\d+\)\)"""",
           "dataType" -> "VARIANT"),
@@ -156,7 +156,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql("select udtf.* from t, lateral variantInputUDTF(map_v) udtf").collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> """"InputVariantUDTF\(outer\(map_v#\d+\)\)"""",
           "dataType" -> "MAP<BIGINT, VARIANT>"),
@@ -175,7 +175,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql("select * from variantOutUDTF()").collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"SimpleOutputVariantUDTF()\"",
           "dataType" -> "VARIANT"),
@@ -192,7 +192,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           spark.sql("select * from arrayOfVariantOutUDTF()").collect()
         },
-        errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
         parameters = Map(
           "sqlExpr" -> "\"OutputArrayOfVariantUDTF()\"",
           "dataType" -> "ARRAY<VARIANT>"),
@@ -488,7 +488,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
           |  WITH SINGLE PARTITION
           |  ORDER BY device_id, data_ds)
           |""".stripMargin)),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" ->
         ("The table function call includes a table argument with an invalid " +
           "partitioning/ordering specification: the ORDER BY clause included multiple " +

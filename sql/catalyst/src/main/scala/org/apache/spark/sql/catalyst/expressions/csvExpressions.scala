@@ -19,19 +19,19 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
 
-import com.univocity.parsers.csv.CsvParser
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.csv.SchemaOfCsvEvaluator
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -147,7 +147,7 @@ case class CsvToStructs(
     converter(parser.parse(csv))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
 
   override def prettyName: String = "from_csv"
 
@@ -170,7 +170,7 @@ case class CsvToStructs(
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
+  extends UnaryExpression with RuntimeReplaceable with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -202,30 +202,20 @@ case class SchemaOfCsv(
     }
   }
 
-  override def eval(v: InternalRow): Any = {
-    // 'lineSep' is a plan-wise option so we set a noncharacter, according to
-    // the unicode specification, which should not appear in Java's strings.
-    // See also SPARK-38955 and https://www.unicode.org/charts/PDF/UFFF0.pdf.
-    // scalastyle:off nonascii
-    val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
-    // scalastyle:on nonascii
-    val parsedOptions = new CSVOptions(exprOptions, true, "UTC")
-    val parser = new CsvParser(parsedOptions.asParserSettings)
-    val row = parser.parseLine(csv.toString)
-    assert(row != null, "Parsed CSV record should not be null.")
-
-    val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
-    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val inferSchema = new CSVInferSchema(parsedOptions)
-    val fieldTypes = inferSchema.inferRowType(startType, row)
-    val st = StructType(inferSchema.toStructFields(fieldTypes, header))
-    UTF8String.fromString(st.sql)
-  }
-
   override def prettyName: String = "schema_of_csv"
 
   override protected def withNewChildInternal(newChild: Expression): SchemaOfCsv =
     copy(child = newChild)
+
+  @transient
+  private lazy val evaluator: SchemaOfCsvEvaluator = SchemaOfCsvEvaluator(options)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType))
 }
 
 /**

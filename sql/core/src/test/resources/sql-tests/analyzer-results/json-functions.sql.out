@@ -118,14 +118,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select from_json('{"a":1}', 'a INT')
 -- !query analysis
-Project [from_json(StructField(a,IntegerType,true), {"a":1}, Some(America/Los_Angeles)) AS from_json({"a":1})#x]
+Project [from_json(StructField(a,IntegerType,true), {"a":1}, Some(America/Los_Angeles), false) AS from_json({"a":1})#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'))
 -- !query analysis
-Project [from_json(StructField(time,TimestampType,true), (timestampFormat,dd/MM/yyyy), {"time":"26/08/2015"}, Some(America/Los_Angeles)) AS from_json({"time":"26/08/2015"})#x]
+Project [from_json(StructField(time,TimestampType,true), (timestampFormat,dd/MM/yyyy), {"time":"26/08/2015"}, Some(America/Los_Angeles), false) AS from_json({"time":"26/08/2015"})#x]
 +- OneRowRelation
 
 
@@ -279,14 +279,14 @@ DropTempViewCommand jsonTable
 -- !query
 select from_json('{"a":1, "b":2}', 'map<string, int>')
 -- !query analysis
-Project [from_json(MapType(StringType,IntegerType,true), {"a":1, "b":2}, Some(America/Los_Angeles)) AS entries#x]
+Project [from_json(MapType(StringType,IntegerType,true), {"a":1, "b":2}, Some(America/Los_Angeles), false) AS entries#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('{"a":1, "b":"2"}', 'struct<a:int,b:string>')
 -- !query analysis
-Project [from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), {"a":1, "b":"2"}, Some(America/Los_Angeles)) AS from_json({"a":1, "b":"2"})#x]
+Project [from_json(StructField(a,IntegerType,true), StructField(b,StringType,true), {"a":1, "b":"2"}, Some(America/Los_Angeles), false) AS from_json({"a":1, "b":"2"})#x]
 +- OneRowRelation
 
 
@@ -300,70 +300,70 @@ Project [schema_of_json({"c1":0, "c2":[1]}) AS schema_of_json({"c1":0, "c2":[1]}
 -- !query
 select from_json('{"c1":[1, 2, 3]}', schema_of_json('{"c1":[0]}'))
 -- !query analysis
-Project [from_json(StructField(c1,ArrayType(LongType,true),true), {"c1":[1, 2, 3]}, Some(America/Los_Angeles)) AS from_json({"c1":[1, 2, 3]})#x]
+Project [from_json(StructField(c1,ArrayType(LongType,true),true), {"c1":[1, 2, 3]}, Some(America/Los_Angeles), false) AS from_json({"c1":[1, 2, 3]})#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('[1, 2, 3]', 'array<int>')
 -- !query analysis
-Project [from_json(ArrayType(IntegerType,true), [1, 2, 3], Some(America/Los_Angeles)) AS from_json([1, 2, 3])#x]
+Project [from_json(ArrayType(IntegerType,true), [1, 2, 3], Some(America/Los_Angeles), false) AS from_json([1, 2, 3])#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('[1, "2", 3]', 'array<int>')
 -- !query analysis
-Project [from_json(ArrayType(IntegerType,true), [1, "2", 3], Some(America/Los_Angeles)) AS from_json([1, "2", 3])#x]
+Project [from_json(ArrayType(IntegerType,true), [1, "2", 3], Some(America/Los_Angeles), false) AS from_json([1, "2", 3])#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('[1, 2, null]', 'array<int>')
 -- !query analysis
-Project [from_json(ArrayType(IntegerType,true), [1, 2, null], Some(America/Los_Angeles)) AS from_json([1, 2, null])#x]
+Project [from_json(ArrayType(IntegerType,true), [1, 2, null], Some(America/Los_Angeles), false) AS from_json([1, 2, null])#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('[{"a": 1}, {"a":2}]', 'array<struct<a:int>>')
 -- !query analysis
-Project [from_json(ArrayType(StructType(StructField(a,IntegerType,true)),true), [{"a": 1}, {"a":2}], Some(America/Los_Angeles)) AS from_json([{"a": 1}, {"a":2}])#x]
+Project [from_json(ArrayType(StructType(StructField(a,IntegerType,true)),true), [{"a": 1}, {"a":2}], Some(America/Los_Angeles), false) AS from_json([{"a": 1}, {"a":2}])#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('{"a": 1}', 'array<struct<a:int>>')
 -- !query analysis
-Project [from_json(ArrayType(StructType(StructField(a,IntegerType,true)),true), {"a": 1}, Some(America/Los_Angeles)) AS from_json({"a": 1})#x]
+Project [from_json(ArrayType(StructType(StructField(a,IntegerType,true)),true), {"a": 1}, Some(America/Los_Angeles), false) AS from_json({"a": 1})#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('[null, {"a":2}]', 'array<struct<a:int>>')
 -- !query analysis
-Project [from_json(ArrayType(StructType(StructField(a,IntegerType,true)),true), [null, {"a":2}], Some(America/Los_Angeles)) AS from_json([null, {"a":2}])#x]
+Project [from_json(ArrayType(StructType(StructField(a,IntegerType,true)),true), [null, {"a":2}], Some(America/Los_Angeles), false) AS from_json([null, {"a":2}])#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('[{"a": 1}, {"b":2}]', 'array<map<string,int>>')
 -- !query analysis
-Project [from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"a": 1}, {"b":2}], Some(America/Los_Angeles)) AS from_json([{"a": 1}, {"b":2}])#x]
+Project [from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"a": 1}, {"b":2}], Some(America/Los_Angeles), false) AS from_json([{"a": 1}, {"b":2}])#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('[{"a": 1}, 2]', 'array<map<string,int>>')
 -- !query analysis
-Project [from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"a": 1}, 2], Some(America/Los_Angeles)) AS from_json([{"a": 1}, 2])#x]
+Project [from_json(ArrayType(MapType(StringType,IntegerType,true),true), [{"a": 1}, 2], Some(America/Los_Angeles), false) AS from_json([{"a": 1}, 2])#x]
 +- OneRowRelation
 
 
 -- !query
 select from_json('{"d": "2012-12-15", "t": "2012-12-15 15:15:15"}', 'd date, t timestamp')
 -- !query analysis
-Project [from_json(StructField(d,DateType,true), StructField(t,TimestampType,true), {"d": "2012-12-15", "t": "2012-12-15 15:15:15"}, Some(America/Los_Angeles)) AS from_json({"d": "2012-12-15", "t": "2012-12-15 15:15:15"})#x]
+Project [from_json(StructField(d,DateType,true), StructField(t,TimestampType,true), {"d": "2012-12-15", "t": "2012-12-15 15:15:15"}, Some(America/Los_Angeles), false) AS from_json({"d": "2012-12-15", "t": "2012-12-15 15:15:15"})#x]
 +- OneRowRelation
 
 
@@ -373,7 +373,7 @@ select from_json(
   'd date, t timestamp',
   map('dateFormat', 'MM/dd yyyy', 'timestampFormat', 'MM/dd yyyy HH:mm:ss'))
 -- !query analysis
-Project [from_json(StructField(d,DateType,true), StructField(t,TimestampType,true), (dateFormat,MM/dd yyyy), (timestampFormat,MM/dd yyyy HH:mm:ss), {"d": "12/15 2012", "t": "12/15 2012 15:15:15"}, Some(America/Los_Angeles)) AS from_json({"d": "12/15 2012", "t": "12/15 2012 15:15:15"})#x]
+Project [from_json(StructField(d,DateType,true), StructField(t,TimestampType,true), (dateFormat,MM/dd yyyy), (timestampFormat,MM/dd yyyy HH:mm:ss), {"d": "12/15 2012", "t": "12/15 2012 15:15:15"}, Some(America/Los_Angeles), false) AS from_json({"d": "12/15 2012", "t": "12/15 2012 15:15:15"})#x]
 +- OneRowRelation
 
 
@@ -383,7 +383,7 @@ select from_json(
   'd date',
   map('dateFormat', 'MM-dd'))
 -- !query analysis
-Project [from_json(StructField(d,DateType,true), (dateFormat,MM-dd), {"d": "02-29"}, Some(America/Los_Angeles)) AS from_json({"d": "02-29"})#x]
+Project [from_json(StructField(d,DateType,true), (dateFormat,MM-dd), {"d": "02-29"}, Some(America/Los_Angeles), false) AS from_json({"d": "02-29"})#x]
 +- OneRowRelation
 
 
@@ -393,7 +393,7 @@ select from_json(
   't timestamp',
   map('timestampFormat', 'MM-dd'))
 -- !query analysis
-Project [from_json(StructField(t,TimestampType,true), (timestampFormat,MM-dd), {"t": "02-29"}, Some(America/Los_Angeles)) AS from_json({"t": "02-29"})#x]
+Project [from_json(StructField(t,TimestampType,true), (timestampFormat,MM-dd), {"t": "02-29"}, Some(America/Los_Angeles), false) AS from_json({"t": "02-29"})#x]
 +- OneRowRelation
 
 

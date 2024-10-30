@@ -255,8 +255,10 @@ class XmlSuite
           .option("mode", FailFastMode.name)
           .xml(inputFile)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST")
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
     val exceptionInParsing = intercept[SparkException] {
       spark.read
@@ -268,11 +270,11 @@ class XmlSuite
     }
     checkErrorMatchPVals(
       exception = exceptionInParsing,
-      errorClass = "FAILED_READ_FILE.NO_HINT",
+      condition = "FAILED_READ_FILE.NO_HINT",
       parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
         "failFastMode" -> FailFastMode.name)
@@ -288,8 +290,10 @@ class XmlSuite
           .option("mode", FailFastMode.name)
           .xml(inputFile)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST"))
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST"))
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("_id string")
@@ -300,11 +304,11 @@ class XmlSuite
     }
     checkErrorMatchPVals(
       exception = exceptionInParsing,
-      errorClass = "FAILED_READ_FILE.NO_HINT",
+      condition = "FAILED_READ_FILE.NO_HINT",
       parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
         "failFastMode" -> FailFastMode.name)
@@ -1315,12 +1319,10 @@ class XmlSuite
         spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
           .collect()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      condition = "PARSE_MODE_UNSUPPORTED",
       parameters = Map(
-        "funcName" -> "schema_of_xml",
-        "mode" -> "DROPMALFORMED",
-        "permissiveMode" -> "PERMISSIVE",
-        "failFastMode" -> FailFastMode.name)
+        "funcName" -> "`schema_of_xml`",
+        "mode" -> "DROPMALFORMED")
     )
   }
 
@@ -1330,9 +1332,10 @@ class XmlSuite
         spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
           .collect()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
-        "failFastMode" -> FailFastMode.name)
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
   }
 
@@ -1394,7 +1397,7 @@ class XmlSuite
       exception = intercept[AnalysisException] {
         df.select(to_xml($"value")).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"to_xml(value)\"",
         "paramIndex" -> ordinalNumber(0),
@@ -1777,14 +1780,14 @@ class XmlSuite
       exception = intercept[AnalysisException] {
         spark.read.xml("/this/file/does/not/exist")
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
     checkError(
       exception = intercept[AnalysisException] {
         spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
   }
@@ -2498,7 +2501,7 @@ class XmlSuite
         }
         checkErrorMatchPVals(
           exception = err,
-          errorClass = "TASK_WRITE_FAILED",
+          condition = "TASK_WRITE_FAILED",
           parameters = Map("path" -> s".*${path.getName}.*"))
         val msg = err.getCause.getMessage
         assert(
@@ -2923,7 +2926,7 @@ class XmlSuite
           exception = intercept[SparkException] {
             df.collect()
           },
-          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
           parameters = Map("path" -> s".*$dir.*")
         )
       }
@@ -3020,7 +3023,7 @@ class XmlSuite
             }
             checkErrorMatchPVals(
               exception = e,
-              errorClass = "TASK_WRITE_FAILED",
+              condition = "TASK_WRITE_FAILED",
               parameters = Map("path" -> s".*${dir.getName}.*"))
             assert(e.getCause.isInstanceOf[XMLStreamException])
             assert(e.getCause.getMessage.contains(errorMsg))

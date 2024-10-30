@@ -166,7 +166,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         sql(s"ALTER TABLE $t ADD COLUMN c string AFTER non_exist"))
       checkError(
         exception = e1,
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`c`", "fields" -> "a, point, b")
       )
 
@@ -191,7 +191,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         sql(s"ALTER TABLE $t ADD COLUMN point.x2 int AFTER non_exist"))
       checkError(
         exception = e2,
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`x2`", "fields" -> "y, x, z")
       )
     }
@@ -231,7 +231,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         sql(s"ALTER TABLE $t ADD COLUMNS (yy int AFTER xx, xx int)"))
       checkError(
         exception = e,
-        errorClass = "FIELD_NOT_FOUND",
+        condition = "FIELD_NOT_FOUND",
         parameters = Map("fieldName" -> "`yy`", "fields" -> "a, x, y, z, b, point")
       )
     }
@@ -372,7 +372,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           exception = intercept[AnalysisException] {
             sql("alter table t add column s bigint default badvalue")
           },
-          errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
           parameters = Map(
             "statement" -> "ALTER TABLE",
             "colName" -> "`s`",
@@ -383,7 +383,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           exception = intercept[AnalysisException] {
             sql("alter table t alter column s set default badvalue")
           },
-          errorClass = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
           parameters = Map(
             "statement" -> "ALTER TABLE ALTER COLUMN",
             "colName" -> "`s`",
@@ -437,7 +437,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`",
@@ -475,7 +475,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $t ADD COLUMNS $field double")
           },
-          errorClass = "FIELD_ALREADY_EXISTS",
+          condition = "FIELD_ALREADY_EXISTS",
           parameters = expectedParameters,
           context = ExpectedContext(
             fragment = s"ALTER TABLE $t ADD COLUMNS $field double",
@@ -494,7 +494,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`data`"))
     }
   }
@@ -507,7 +507,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> toSQLId("point.z")))
     }
   }
@@ -538,7 +538,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
               exception = intercept[AnalysisException] {
                 sql(sqlText)
               },
-              errorClass = "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
+              condition = "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
               parameters = Map(
                 "table" -> s"${toSQLId(prependCatalogName(t))}",
                 "fieldName" -> "`id`"),
@@ -600,7 +600,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
+        condition = "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
         parameters = Map(
           "table" -> s"${toSQLId(prependCatalogName(t))}",
           "fieldName" -> "`point`"),
@@ -631,7 +631,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
+        condition = "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
         parameters = Map(
           "table" -> s"${toSQLId(prependCatalogName(t))}",
           "fieldName" -> "`points`"),
@@ -675,7 +675,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "CANNOT_UPDATE_FIELD.MAP_TYPE",
+        condition = "CANNOT_UPDATE_FIELD.MAP_TYPE",
         parameters = Map(
           "table" -> s"${toSQLId(prependCatalogName(t))}",
           "fieldName" -> "`m`"),
@@ -772,7 +772,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`data`",
@@ -791,7 +791,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`.`x`",
@@ -809,7 +809,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sql1)
         },
-        errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
+        condition = "NOT_SUPPORTED_CHANGE_COLUMN",
         sqlState = None,
         parameters = Map(
           "originType" -> "\"INT\"",
@@ -866,7 +866,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText1)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`non_exist`",
@@ -896,7 +896,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText2)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`.`non_exist`",
@@ -989,7 +989,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`data`",
@@ -1008,7 +1008,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`.`x`",
@@ -1110,7 +1110,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`data`",
@@ -1129,7 +1129,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`.`x`",
@@ -1177,7 +1177,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
           exception = intercept[AnalysisException] {
             sql(s"ALTER TABLE $t RENAME COLUMN $field TO $newName")
           },
-          errorClass = "FIELD_ALREADY_EXISTS",
+          condition = "FIELD_ALREADY_EXISTS",
           parameters = Map(
             "op" -> "rename",
             "fieldNames" -> s"${toSQLId(expectedName)}",
@@ -1282,7 +1282,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`data`",
@@ -1306,7 +1306,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = "42703",
         parameters = Map(
           "objectName" -> "`point`.`x`",
@@ -1392,7 +1392,7 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`data`"))
     }
   }

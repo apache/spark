@@ -1233,6 +1233,19 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.2.1</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
+  <td>-1.0</td>
+  <td>
+    A shuffle block is considered as skewed and will be accurately recorded in
+    <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
+    recommended to set this parameter to be the same as
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
+    feature by default.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.registration.timeout</code></td>
   <td>5000</td>
   <td>
@@ -3748,21 +3761,22 @@ Starting from version 4.0.0, `spark-submit` has adopted the [JSON Template Layou
 
 To configure the layout of structured logging, start with the `log4j2.properties.template` file.
 
-To query Spark logs using Spark SQL, you can use the following Python code snippet:
+To query Spark logs using Spark SQL, you can use the following code snippets:
 
+**Python:**
 ```python
-from pyspark.util import LogUtils
+from pyspark.logger import SPARK_LOG_SCHEMA
 
-logDf = spark.read.schema(LogUtils.LOG_SCHEMA).json("path/to/logs")
+logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
 ```
 
-Or using the following Scala code snippet:
+**Scala:**
 ```scala
-import org.apache.spark.util.LogUtils.LOG_SCHEMA
+import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA
 
-val logDf = spark.read.schema(LOG_SCHEMA).json("path/to/logs")
+val logDf = spark.read.schema(SPARK_LOG_SCHEMA).json("path/to/logs")
 ```
-
+**Note**: If you're using the interactive shell (pyspark shell or spark-shell), you can omit the import statement in the code because SPARK_LOG_SCHEMA is already available in the shell's context.
 ## Plain Text Logging
 If you prefer plain text logging, you have two options:
 - Disable structured JSON logging by setting the Spark configuration `spark.log.structuredLogging.enabled` to `false`.

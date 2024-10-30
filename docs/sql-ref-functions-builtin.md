@@ -116,3 +116,13 @@ license: |
 {% include_api_gen generated-generator-funcs-table.html %}
 #### Examples
 {% include_api_gen generated-generator-funcs-examples.html %}
+
+### Table Functions
+{% include_api_gen generated-table-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-table-funcs-examples.html %}
+
+### Variant Functions
+{% include_api_gen generated-variant-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-variant-funcs-examples.html %}

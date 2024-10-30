@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
@@ -258,7 +258,7 @@ case class RelationConversions(
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         val hiveTable = DDLUtils.readHiveTable(tableDesc)
         val hadoopRelation = metastoreCatalog.convert(hiveTable, isWrite = true) match {
-          case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
+          case LogicalRelationWithTable(t: HadoopFsRelation, _) => t
           case _ => throw QueryCompilationErrors.tableIdentifierNotConvertedToHadoopFsRelationError(
             tableDesc.identifier)
         }

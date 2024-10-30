@@ -517,7 +517,7 @@ class ALSModel private[ml] (
     )
 
     ratings.groupBy(srcOutputColumn)
-      .agg(collect_top_k(struct(ratingColumn, dstOutputColumn), num, false))
+      .agg(ALSModel.collect_top_k(struct(ratingColumn, dstOutputColumn), num, false))
       .as[(Int, Seq[(Float, Int)])]
       .map(t => (t._1, t._2.map(p => (p._2, p._1))))
       .toDF(srcOutputColumn, recommendColumn)
@@ -545,6 +545,9 @@ object ALSModel extends MLReadable[ALSModel] {
   private val NaN = "nan"
   private val Drop = "drop"
   private[recommendation] final val supportedColdStartStrategies = Array(NaN, Drop)
+
+  private[recommendation] def collect_top_k(e: Column, num: Int, reverse: Boolean): Column =
+    Column.internalFn("collect_top_k", e, lit(num), lit(reverse))
 
   @Since("1.6.0")
   override def read: MLReader[ALSModel] = new ALSModelReader

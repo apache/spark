@@ -26,14 +26,14 @@ import org.apache.spark.sql.exceptions.SqlScriptingException.errorMessageWithLin
 class SqlScriptingException (
     errorClass: String,
     cause: Throwable,
-    origin: Origin,
+    val origin: Origin,
     messageParameters: Map[String, String] = Map.empty)
   extends Exception(
     errorMessageWithLineNumber(Option(origin), errorClass, messageParameters),
     cause)
   with SparkThrowable {
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 }
 

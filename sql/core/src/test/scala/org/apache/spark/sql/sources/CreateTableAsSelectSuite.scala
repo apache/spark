@@ -164,7 +164,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[ParseException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        condition = "_LEGACY_ERROR_TEMP_0035",
         parameters = Map(
           "message" -> "CREATE TEMPORARY TABLE ... AS ..., use CREATE TEMPORARY VIEW instead"),
         context = ExpectedContext(
@@ -291,7 +291,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[ParseException] {
           sql(sqlText)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_0035",
+        condition = "_LEGACY_ERROR_TEMP_0035",
         parameters = Map(
           "message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
         context = ExpectedContext(

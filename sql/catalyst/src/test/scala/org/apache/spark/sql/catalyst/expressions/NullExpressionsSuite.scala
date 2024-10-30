@@ -57,7 +57,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[SparkRuntimeException] {
         evaluateWithoutCodegen(AssertNotNull(Literal(null)))
       },
-      errorClass = "NOT_NULL_ASSERT_VIOLATION",
+      condition = "NOT_NULL_ASSERT_VIOLATION",
       sqlState = "42000",
       parameters = Map("walkedTypePath" -> "\n\n"))
   }

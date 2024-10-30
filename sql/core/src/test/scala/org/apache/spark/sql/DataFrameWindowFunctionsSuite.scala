@@ -388,7 +388,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       df.select($"key", count("invalid").over()))
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`invalid`",
         "proposal" -> "`value`, `key`"),
@@ -870,7 +870,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           lag($"value", 3, null, true).over(window),
           lag(concat($"value", $"key"), 1, null, true).over(window)).orderBy($"order").collect()
       },
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"lag(value, nonfoldableliteral(), NULL)\"",
         "inputName" -> "`offset`",

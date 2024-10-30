@@ -31,8 +31,8 @@ class UnpivotParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
   }
 
-  private def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)(errorClass)
+  private def intercept(sqlCommand: String, condition: Option[String], messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)(condition)
 
   test("unpivot - single value") {
     assertEqual(

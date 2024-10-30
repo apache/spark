@@ -39,8 +39,7 @@ class TestMapStateProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputMapRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
 
     var output = List[(String, String, String)]()
 
@@ -74,8 +73,6 @@ class TestMapStateProcessor
     }
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
 /**
@@ -103,7 +100,7 @@ class TransformWithMapStateSuite extends StreamTest
         ExpectFailure[SparkIllegalArgumentException] { e => {
           checkError(
             exception = e.asInstanceOf[SparkIllegalArgumentException],
-            errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+            condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
             sqlState = Some("42601"),
             parameters = Map("stateName" -> "sessionState")
           )
@@ -152,7 +149,7 @@ class TransformWithMapStateSuite extends StreamTest
         ExpectFailure[SparkIllegalArgumentException] { e => {
           checkError(
             exception = e.asInstanceOf[SparkIllegalArgumentException],
-            errorClass = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
+            condition = "ILLEGAL_STATE_STORE_VALUE.NULL_VALUE",
             sqlState = Some("42601"),
             parameters = Map("stateName" -> "sessionState"))
         }}
@@ -209,9 +206,13 @@ class TransformWithMapStateSuite extends StreamTest
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
+        AddData(inputData, InputMapRow("k1", "clear", ("", ""))),
+        AddData(inputData, InputMapRow("k3", "updateValue", ("v7", "11"))),
         CheckNewAnswer(("k2", "exists", "false")),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numMapStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
         }
       )
     }

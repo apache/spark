@@ -107,7 +107,7 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton {
           "CREATE TABLE t1 (c1 string) USING parquet",
           StructType(Array(StructField("c2", IntegerType))))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3065",
+      condition = "_LEGACY_ERROR_TEMP_3065",
       parameters = Map(
         "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
         "msg" -> ("Unable to alter table. " +

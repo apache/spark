@@ -24,6 +24,9 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 
 import org.scalatest.{BeforeAndAfterAll, Suite}
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.Futures.timeout
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.sql.SparkSession
@@ -121,6 +124,8 @@ object SparkConnectServerUtils {
       // to make the tests exercise reattach.
       "spark.connect.execute.reattachable.senderMaxStreamDuration=1s",
       "spark.connect.execute.reattachable.senderMaxStreamSize=123",
+      // Testing SPARK-49673, setting maxBatchSize to 10MiB
+      s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
       // Disable UI
       "spark.ui.enabled=false")
     Seq("--jars", catalystTestJar) ++ confs.flatMap(v => "--conf" :: v :: Nil)
@@ -184,12 +189,14 @@ object SparkConnectServerUtils {
           .port(port)
           .retryPolicy(RetryPolicy
             .defaultPolicy()
-            .copy(maxRetries = Some(7), maxBackoff = Some(FiniteDuration(10, "s"))))
+            .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
           .build())
       .create()
 
     // Execute an RPC which will get retried until the server is up.
-    assert(spark.version == SparkBuildInfo.spark_version)
+    eventually(timeout(1.minute)) {
+      assert(spark.version == SparkBuildInfo.spark_version)
+    }
 
     // Auto-sync dependencies.
     SparkConnectServerUtils.syncTestDependencies(spark)

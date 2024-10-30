@@ -20,11 +20,11 @@ package org.apache.spark.sql.streaming
 import java.time.Duration
 
 /**
- * TTL Configuration for state variable. State values will not be returned past ttlDuration,
- * and will be eventually removed from the state store. Any state update resets the ttl to
- * current processing time plus ttlDuration.
+ * TTL Configuration for state variable. State values will not be returned past ttlDuration, and
+ * will be eventually removed from the state store. Any state update resets the ttl to current
+ * processing time plus ttlDuration.
  *
- * @param ttlDuration time to live duration for state
- *                    stored in the state variable.
+ * @param ttlDuration
+ *   time to live duration for state stored in the state variable.
  */
 case class TTLConfig(ttlDuration: Duration)

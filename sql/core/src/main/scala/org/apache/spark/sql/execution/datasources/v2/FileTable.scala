@@ -146,6 +146,19 @@ abstract class FileTable(
     val entry = options.get(DataSource.GLOB_PATHS_KEY)
     Option(entry).map(_ == "true").getOrElse(true)
   }
+
+  /**
+   * Merge the options of FileTable and the table operation while respecting the
+   * keys of the table operation.
+   *
+   * @param options The options of the table operation.
+   * @return
+   */
+  protected def mergedOptions(options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val finalOptions = this.options.asCaseSensitiveMap().asScala ++
+      options.asCaseSensitiveMap().asScala
+    new CaseInsensitiveStringMap(finalOptions.asJava)
+  }
 }
 
 object FileTable {

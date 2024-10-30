@@ -265,7 +265,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
   private def assertQueryUsingRightBatchExecutor(
       testSource: TestDataFrameProvider,
       query: StreamingQuery): Unit = {
-    val useWrapper = query.sparkSession.conf.get(
+    val useWrapper = query.sparkSession.sessionState.conf.getConf(
       SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED)
 
     if (useWrapper) {

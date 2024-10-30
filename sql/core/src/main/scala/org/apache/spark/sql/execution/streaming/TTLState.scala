@@ -85,7 +85,7 @@ abstract class SingleKeyTTLStateImpl(
 
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
 
-  private val ttlColumnFamilyName = s"_ttl_$stateName"
+  private val ttlColumnFamilyName = "$ttl_" + stateName
   private val keySchema = getSingleKeyTTLRowSchema(keyExprEnc.schema)
   private val keyTTLRowEncoder = new SingleKeyTTLEncoder(keyExprEnc)
 
@@ -205,7 +205,7 @@ abstract class CompositeKeyTTLStateImpl[K](
 
   import org.apache.spark.sql.execution.streaming.StateTTLSchema._
 
-  private val ttlColumnFamilyName = s"_ttl_$stateName"
+  private val ttlColumnFamilyName = "$ttl_" + stateName
   private val keySchema = getCompositeKeyTTLRowSchema(
     keyExprEnc.schema, userKeyEncoder.schema
   )

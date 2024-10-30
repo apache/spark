@@ -591,7 +591,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
             exception = intercept[AnalysisException] {
               sql("SELECT dAtABaSe1.unknownFunc(1)")
             },
-            errorClass = "UNRESOLVED_ROUTINE",
+            condition = "UNRESOLVED_ROUTINE",
             parameters = Map(
               "routineName" -> "`dAtABaSe1`.`unknownFunc`",
               "searchPath" ->
@@ -790,7 +790,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
         checkError(
           exception = intercept[SparkException](df.collect()),
-          errorClass = "FAILED_EXECUTE_UDF",
+          condition = "FAILED_EXECUTE_UDF",
           parameters = Map(
             "functionName" ->
               "`org`.`apache`.`spark`.`sql`.`hive`.`execution`.`SimpleUDFAssertTrue`",

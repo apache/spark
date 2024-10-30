@@ -103,7 +103,8 @@ class TransformWithStateInPandasPythonRunner(
 
     executionContext.execute(
       new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle,
-        groupingKeySchema))
+        groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
+        sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(log"completion listener called")

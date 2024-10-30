@@ -21,7 +21,7 @@ import org.apache.spark.sql.internal.SQLConf
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "Usage: input [NOT] BETWEEN lower AND upper - evaluate if `input` is [not] in between `lower` and `upper`",
+  usage = "input [NOT] _FUNC_ lower AND upper - evaluate if `input` is [not] in between `lower` and `upper`",
   examples = """
     Examples:
       > SELECT 0.5 _FUNC_ 0.1 AND 1.0;
@@ -33,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
       * lower - Lower bound of the between check.
       * upper - Upper bound of the between check.
   """,
-  since = "4.0.0",
+  since = "1.0.0",
   group = "conditional_funcs")
 case class Between private(input: Expression, lower: Expression, upper: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules  {

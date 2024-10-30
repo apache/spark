@@ -52,7 +52,7 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> toSQLId(t)),
         context = ExpectedContext(
           fragment = t,
@@ -116,7 +116,7 @@ trait AlterTableUnsetTblPropertiesSuiteBase extends QueryTest with DDLCommandTes
             exception = intercept[ParseException] {
               sql(sqlText)
             },
-            errorClass = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
+            condition = "UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY",
             parameters = Map(
               "property" -> key,
               "msg" -> keyParameters.getOrElse(

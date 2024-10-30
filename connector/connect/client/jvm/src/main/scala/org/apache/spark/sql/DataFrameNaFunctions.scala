@@ -22,6 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.connect.proto.{NAReplace, Relation}
 import org.apache.spark.connect.proto.Expression.{Literal => GLiteral}
 import org.apache.spark.connect.proto.NAReplace.Replacement
+import org.apache.spark.sql.connect.ConnectConversions._
 
 /**
  * Functionality for working with missing data in `DataFrame`s.
@@ -29,7 +30,7 @@ import org.apache.spark.connect.proto.NAReplace.Replacement
  * @since 3.4.0
  */
 final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root: Relation)
-    extends api.DataFrameNaFunctions[Dataset] {
+    extends api.DataFrameNaFunctions {
   import sparkSession.RichColumn
 
   override protected def drop(minNonNulls: Option[Int]): Dataset[Row] =

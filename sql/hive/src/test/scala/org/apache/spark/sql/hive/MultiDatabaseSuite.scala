@@ -272,7 +272,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         df.write.format("parquet").saveAsTable("`d:b`.`t:a`")
       }
       checkError(e,
-        errorClass = "SCHEMA_NOT_FOUND",
+        condition = "SCHEMA_NOT_FOUND",
         parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
     }
 
@@ -281,7 +281,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         df.write.format("parquet").saveAsTable("`d:b`.`table`")
       }
       checkError(e,
-        errorClass = "SCHEMA_NOT_FOUND",
+        condition = "SCHEMA_NOT_FOUND",
         parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
     }
 
@@ -297,7 +297,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
             |)
             """.stripMargin)
         }
-        checkError(e, errorClass = "INVALID_SCHEMA_OR_RELATION_NAME",
+        checkError(e, condition = "INVALID_SCHEMA_OR_RELATION_NAME",
           parameters = Map("name" -> "`t:a`"))
       }
 
@@ -313,7 +313,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
               """.stripMargin)
         }
         checkError(e,
-          errorClass = "SCHEMA_NOT_FOUND",
+          condition = "SCHEMA_NOT_FOUND",
           parameters = Map("schemaName" -> "`spark_catalog`.`d:b`"))
       }
     }

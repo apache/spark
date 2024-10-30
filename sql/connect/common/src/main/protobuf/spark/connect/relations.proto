@@ -76,6 +76,7 @@ message Relation {
     AsOfJoin as_of_join = 39;
     CommonInlineUserDefinedDataSource common_inline_user_defined_data_source = 40;
     WithRelations with_relations = 41;
+    Transpose transpose = 42;
 
     // NA functions
     NAFill fill_na = 90;
@@ -887,6 +888,18 @@ message Unpivot {
   message Values {
     repeated Expression values = 1;
   }
+}
+
+// Transpose a DataFrame, switching rows to columns.
+// Transforms the DataFrame such that the values in the specified index column
+// become the new columns of the DataFrame.
+message Transpose {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Optional) A list of columns that will be treated as the indices.
+  // Only single column is supported now.
+  repeated Expression index_columns = 2;
 }
 
 message ToSchema {

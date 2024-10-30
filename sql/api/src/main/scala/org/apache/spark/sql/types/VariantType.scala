@@ -20,9 +20,9 @@ package org.apache.spark.sql.types
 import org.apache.spark.annotation.Unstable
 
 /**
- * The data type representing semi-structured values with arbitrary hierarchical data structures. It
- * is intended to store parsed JSON values and most other data types in the system (e.g., it cannot
- * store a map with a non-string key type).
+ * The data type representing semi-structured values with arbitrary hierarchical data structures.
+ * It is intended to store parsed JSON values and most other data types in the system (e.g., it
+ * cannot store a map with a non-string key type).
  *
  * @since 4.0.0
  */

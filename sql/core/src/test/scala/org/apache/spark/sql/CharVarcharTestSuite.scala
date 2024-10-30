@@ -67,7 +67,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   def assertLengthCheckFailure(func: () => Unit): Unit = {
     checkError(
       exception = intercept[SparkRuntimeException](func()),
-      errorClass = "EXCEED_LIMIT_LENGTH",
+      condition = "EXCEED_LIMIT_LENGTH",
       parameters = Map("limit" -> "5")
     )
   }
@@ -702,7 +702,7 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "from_json('{\"a\": \"str\"}', 'a CHAR(5)')",
@@ -724,19 +724,19 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.createDataFrame(df.collectAsList(), schema)
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
     )
     checkError(
       exception = intercept[AnalysisException] {
         spark.createDataFrame(df.rdd, schema)
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
     )
     checkError(
       exception = intercept[AnalysisException] {
         spark.createDataFrame(df.toJavaRDD, schema)
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
     )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       val df1 = spark.createDataFrame(df.collectAsList(), schema)
@@ -750,12 +750,12 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.read.schema(new StructType().add("id", CharType(5)))
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING")
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING")
     checkError(
       exception = intercept[AnalysisException] {
         spark.read.schema("id char(5)")
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
     )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       val ds = spark.range(10).map(_.toString)
@@ -792,13 +792,13 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.udf.register("testchar", () => "B", VarcharType(1))
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
     )
     checkError(
       exception = intercept[AnalysisException] {
         spark.udf.register("testchar2", (x: String) => x, VarcharType(1))
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
     )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       spark.udf.register("testchar", () => "B", VarcharType(1))
@@ -817,13 +817,13 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.readStream.schema(new StructType().add("id", CharType(5)))
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
     )
     checkError(
       exception = intercept[AnalysisException] {
         spark.readStream.schema("id char(5)")
       },
-      errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
+      condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING"
     )
     withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
       withTempPath { dir =>
@@ -845,7 +845,7 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       val df = sql("SELECT * FROM t")
       checkError(exception = intercept[AnalysisException] {
         df.to(newSchema)
-      }, errorClass = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING", parameters = Map.empty)
+      }, condition = "UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING", parameters = Map.empty)
       withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
         val df1 = df.to(newSchema)
         checkAnswer(df1, df.select("v", "c"))

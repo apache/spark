@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
@@ -39,6 +39,7 @@ class CollationSQLExpressionsSuite
     with ExpressionEvalHelper {
 
   private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
+  private val testAdditionalCollations = Seq("UNICODE", "SR", "SR_CI", "SR_AI", "SR_CI_AI")
 
   test("Support Md5 hash expression with collation") {
     case class Md5TestCase(
@@ -49,9 +50,14 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Md5TestCase("Spark", "UTF8_BINARY", "8cde774d6f7333752ed72cacddb05126"),
+      Md5TestCase("Spark", "UTF8_BINARY_RTRIM", "8cde774d6f7333752ed72cacddb05126"),
       Md5TestCase("Spark", "UTF8_LCASE", "8cde774d6f7333752ed72cacddb05126"),
+      Md5TestCase("Spark", "UTF8_LCASE_RTRIM", "8cde774d6f7333752ed72cacddb05126"),
       Md5TestCase("SQL", "UNICODE", "9778840a0100cb30c982876741b0b5a2"),
-      Md5TestCase("SQL", "UNICODE_CI", "9778840a0100cb30c982876741b0b5a2")
+      Md5TestCase("SQL", "UNICODE_RTRIM", "9778840a0100cb30c982876741b0b5a2"),
+      Md5TestCase("SQL", "UNICODE_CI", "9778840a0100cb30c982876741b0b5a2"),
+      Md5TestCase("SQL", "UNICODE_CI_RTRIM", "9778840a0100cb30c982876741b0b5a2"),
+      Md5TestCase("SQL", "SR_CI_AI", "9778840a0100cb30c982876741b0b5a2")
     )
 
     // Supported collations
@@ -81,11 +87,21 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       Sha2TestCase("Spark", "UTF8_BINARY", 256,
         "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
+      Sha2TestCase("Spark", "UTF8_BINARY_RTRIM", 256,
+        "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
       Sha2TestCase("Spark", "UTF8_LCASE", 256,
+        "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
+      Sha2TestCase("Spark", "UTF8_LCASE_RTRIM", 256,
         "529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b"),
       Sha2TestCase("SQL", "UNICODE", 256,
         "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
+      Sha2TestCase("SQL", "UNICODE_RTRIM", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
       Sha2TestCase("SQL", "UNICODE_CI", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
+      Sha2TestCase("SQL", "UNICODE_CI_RTRIM", 256,
+        "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35"),
+      Sha2TestCase("SQL", "SR_AI", 256,
         "a7056a455639d1c7deec82ee787db24a0c1878e2792b4597709f0facf7cc7b35")
     )
 
@@ -114,9 +130,14 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Sha1TestCase("Spark", "UTF8_BINARY", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
+      Sha1TestCase("Spark", "UTF8_BINARY_RTRIM", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
       Sha1TestCase("Spark", "UTF8_LCASE", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
+      Sha1TestCase("Spark", "UTF8_LCASE_RTRIM", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c"),
       Sha1TestCase("SQL", "UNICODE", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
-      Sha1TestCase("SQL", "UNICODE_CI", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d")
+      Sha1TestCase("SQL", "UNICODE_RTRIM", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
+      Sha1TestCase("SQL", "UNICODE_CI", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
+      Sha1TestCase("SQL", "UNICODE_CI_RTRIM", "2064cb643caa8d9e1de12eea7f3e143ca9f8680d"),
+      Sha1TestCase("Spark", "SR_CI", "85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c")
     )
 
     // Supported collations
@@ -144,9 +165,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Crc321TestCase("Spark", "UTF8_BINARY", 1557323817),
+      Crc321TestCase("Spark", "UTF8_BINARY_RTRIM", 1557323817),
       Crc321TestCase("Spark", "UTF8_LCASE", 1557323817),
+      Crc321TestCase("Spark", "UTF8_LCASE_RTRIM", 1557323817),
       Crc321TestCase("SQL", "UNICODE", 1299261525),
-      Crc321TestCase("SQL", "UNICODE_CI", 1299261525)
+      Crc321TestCase("SQL", "UNICODE_RTRIM", 1299261525),
+      Crc321TestCase("SQL", "UNICODE_CI", 1299261525),
+      Crc321TestCase("SQL", "UNICODE_CI_RTRIM", 1299261525)
     )
 
     // Supported collations
@@ -172,9 +197,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       Murmur3HashTestCase("Spark", "UTF8_BINARY", 228093765),
+      Murmur3HashTestCase("Spark  ", "UTF8_BINARY_RTRIM", 1779328737),
       Murmur3HashTestCase("Spark", "UTF8_LCASE", -1928694360),
+      Murmur3HashTestCase("Spark  ", "UTF8_LCASE_RTRIM", -1928694360),
       Murmur3HashTestCase("SQL", "UNICODE", -1923567940),
-      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950)
+      Murmur3HashTestCase("SQL ", "UNICODE_RTRIM", -1923567940),
+      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950),
+      Murmur3HashTestCase("SQL ", "UNICODE_CI_RTRIM", 1029527950)
     )
 
     // Supported collations
@@ -200,9 +229,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       XxHash64TestCase("Spark", "UTF8_BINARY", -4294468057691064905L),
+      XxHash64TestCase("Spark ", "UTF8_BINARY_RTRIM", 6480371823304753502L),
       XxHash64TestCase("Spark", "UTF8_LCASE", -3142112654825786434L),
+      XxHash64TestCase("Spark ", "UTF8_LCASE_RTRIM", -3142112654825786434L),
       XxHash64TestCase("SQL", "UNICODE", 5964849564945649886L),
-      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L)
+      XxHash64TestCase("SQL ", "UNICODE_RTRIM", 5964849564945649886L),
+      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L),
+      XxHash64TestCase("SQL ", "UNICODE_CI_RTRIM", 3732497619779520590L)
     )
 
     // Supported collations
@@ -521,7 +554,8 @@ class CollationSQLExpressionsSuite
       HexTestCase("Spark SQL", "UTF8_BINARY", "537061726B2053514C"),
       HexTestCase("Spark SQL", "UTF8_LCASE", "537061726B2053514C"),
       HexTestCase("Spark SQL", "UNICODE", "537061726B2053514C"),
-      HexTestCase("Spark SQL", "UNICODE_CI", "537061726B2053514C")
+      HexTestCase("Spark SQL", "UNICODE_CI", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "DE_CI_AI", "537061726B2053514C")
     )
     testCases.foreach(t => {
       val query =
@@ -544,7 +578,8 @@ class CollationSQLExpressionsSuite
       UnHexTestCase("537061726B2053514C", "UTF8_BINARY", "Spark SQL"),
       UnHexTestCase("537061726B2053514C", "UTF8_LCASE", "Spark SQL"),
       UnHexTestCase("537061726B2053514C", "UNICODE", "Spark SQL"),
-      UnHexTestCase("537061726B2053514C", "UNICODE_CI", "Spark SQL")
+      UnHexTestCase("537061726B2053514C", "UNICODE_CI", "Spark SQL"),
+      UnHexTestCase("537061726B2053514C", "DE", "Spark SQL")
     )
     testCases.foreach(t => {
       val query =
@@ -612,7 +647,8 @@ class CollationSQLExpressionsSuite
       StringSpaceTestCase(1, "UTF8_BINARY", " "),
       StringSpaceTestCase(2, "UTF8_LCASE", "  "),
       StringSpaceTestCase(3, "UNICODE", "   "),
-      StringSpaceTestCase(4, "UNICODE_CI", "    ")
+      StringSpaceTestCase(4, "UNICODE_CI", "    "),
+      StringSpaceTestCase(5, "AF_CI_AI", "     ")
     )
 
     // Supported collations
@@ -686,7 +722,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "INVALID_FORMAT.MISMATCH_INPUT",
+        condition = "INVALID_FORMAT.MISMATCH_INPUT",
         parameters = Map("inputType" -> "\"STRING\"", "input" -> "xx", "format" -> "999")
       )
     }
@@ -980,8 +1016,17 @@ class CollationSQLExpressionsSuite
       StringToMapTestCase("1:ax2:bx3:c", "x", ":", "UNICODE",
         Map("1" -> "a", "2" -> "b", "3" -> "c")),
       StringToMapTestCase("1/AX2/BX3/C", "x", "/", "UNICODE_CI",
-        Map("1" -> "A", "2" -> "B", "3" -> "C"))
+        Map("1" -> "A", "2" -> "B", "3" -> "C")),
+      StringToMapTestCase("1:cx2:čx3:ć", "x", ":", "SR_CI_AI",
+        Map("1" -> "c", "2" -> "č", "3" -> "ć")),
+      StringToMapTestCase("c:1,č:2,ć:3", ",", ":", "SR_CI",
+        Map("c" -> "1", "č" -> "2", "ć" -> "3"))
     )
+    val unsupportedTestCases = Seq(
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_AI", null),
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_RTRIM", null),
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_BINARY_RTRIM", null),
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_LCASE_RTRIM", null))
     testCases.foreach(t => {
       // Unit test.
       val text = Literal.create(t.text, StringType(t.collation))
@@ -994,6 +1039,31 @@ class CollationSQLExpressionsSuite
         checkAnswer(sql(query), Row(t.result))
         val dataType = MapType(StringType(t.collation), StringType(t.collation), true)
         assert(sql(query).schema.fields.head.dataType.sameType(dataType))
+      }
+    })
+    // Test unsupported collation.
+    unsupportedTestCases.foreach(t => {
+      withSQLConf(SQLConf.DEFAULT_COLLATION.key -> t.collation) {
+        val query =
+          s"select str_to_map('${t.text}', '${t.pairDelim}', " +
+            s"'${t.keyValueDelim}')"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "sqlExpr" -> ("\"str_to_map('a:1,b:2,c:3' collate " + s"${t.collation}, " +
+              "'?' collate " + s"${t.collation}, '?' collate ${t.collation})" + "\""),
+            "paramIndex" -> "first",
+            "inputSql" -> ("\"'a:1,b:2,c:3' collate " + s"${t.collation}" + "\""),
+            "inputType" -> ("\"STRING COLLATE " + s"${t.collation}" + "\""),
+            "requiredType" -> "\"STRING\""),
+          context = ExpectedContext(
+            fragment = "str_to_map('a:1,b:2,c:3', '?', '?')",
+            start = 7,
+            stop = 41))
       }
     })
   }
@@ -1015,7 +1085,7 @@ class CollationSQLExpressionsSuite
           exception = intercept[SparkRuntimeException] {
             sql(query).collect()
           },
-          errorClass = "USER_RAISED_EXCEPTION",
+          condition = "USER_RAISED_EXCEPTION",
           parameters = Map("errorMessage" -> t.errorMessage)
         )
       }
@@ -1024,7 +1094,7 @@ class CollationSQLExpressionsSuite
 
   test("Support CurrentDatabase/Catalog/User expressions with collation") {
     // Supported collations
-    Seq("UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
+    Seq("UTF8_LCASE", "UNICODE", "UNICODE_CI", "SR_CI_AI").foreach(collationName =>
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val queryDatabase = sql("SELECT current_schema()")
         val queryCatalog = sql("SELECT current_catalog()")
@@ -1040,7 +1110,7 @@ class CollationSQLExpressionsSuite
 
   test("Support Uuid misc expression with collation") {
     // Supported collations
-    Seq("UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
+    Seq("UTF8_LCASE", "UNICODE", "UNICODE_CI", "NO_CI_AI").foreach(collationName =>
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val query = s"SELECT uuid()"
         // Result & data type
@@ -1056,7 +1126,7 @@ class CollationSQLExpressionsSuite
 
   test("Support SparkVersion misc expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName =>
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "DE").foreach(collationName =>
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val query = s"SELECT version()"
         // Result & data type
@@ -1193,8 +1263,10 @@ class CollationSQLExpressionsSuite
       exception = intercept[AnalysisException] {
         sql("SELECT mask(collate('ab-CD-12-@$','UNICODE'),collate('X','UNICODE_CI'),'x','0','#')")
       },
-      errorClass = "COLLATION_MISMATCH.EXPLICIT",
-      parameters = Map("explicitTypes" -> "`string collate UNICODE`, `string collate UNICODE_CI`")
+      condition = "COLLATION_MISMATCH.EXPLICIT",
+      parameters = Map(
+        "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI""""
+      )
     )
   }
 
@@ -1385,7 +1457,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
         parameters = Map("badRecord" -> "{\"a\":1,", "failFastMode" -> "FAILFAST")
       )
     }
@@ -1489,7 +1561,7 @@ class CollationSQLExpressionsSuite
           val testQuery = sql(query)
           testQuery.collect()
         },
-        errorClass = "INVALID_VARIANT_CAST",
+        condition = "INVALID_VARIANT_CAST",
         parameters = Map("value" -> "\"Spark\"", "dataType" -> "\"INT\"")
       )
     }
@@ -1576,9 +1648,9 @@ class CollationSQLExpressionsSuite
       SchemaOfVariantTestCase("null", "UTF8_BINARY", "VOID"),
       SchemaOfVariantTestCase("[]", "UTF8_LCASE", "ARRAY<VOID>"),
       SchemaOfVariantTestCase("[{\"a\":true,\"b\":0}]", "UNICODE",
-        "ARRAY<STRUCT<a: BOOLEAN, b: BIGINT>>"),
+        "ARRAY<OBJECT<a: BOOLEAN, b: BIGINT>>"),
       SchemaOfVariantTestCase("[{\"A\":\"x\",\"B\":-1.00}]", "UNICODE_CI",
-        "ARRAY<STRUCT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>")
+        "ARRAY<OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>")
     )
 
     // Supported collations
@@ -1607,9 +1679,9 @@ class CollationSQLExpressionsSuite
       SchemaOfVariantAggTestCase("('1'), ('2'), ('3')", "UTF8_BINARY", "BIGINT"),
       SchemaOfVariantAggTestCase("('true'), ('false'), ('true')", "UTF8_LCASE", "BOOLEAN"),
       SchemaOfVariantAggTestCase("('{\"a\": 1}'), ('{\"b\": true}'), ('{\"c\": 1.23}')",
-        "UNICODE", "STRUCT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
+        "UNICODE", "OBJECT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
       SchemaOfVariantAggTestCase("('{\"A\": \"x\"}'), ('{\"B\": 9.99}'), ('{\"C\": 0}')",
-        "UNICODE_CI", "STRUCT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>")
+        "UNICODE_CI", "OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>")
     )
 
     // Supported collations
@@ -1629,7 +1701,7 @@ class CollationSQLExpressionsSuite
 
   test("Support InputFileName expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI").foreach(collationName => {
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "MT_CI_AI").foreach(collationName => {
       val query =
         s"""
            |select input_file_name()
@@ -1677,7 +1749,7 @@ class CollationSQLExpressionsSuite
   }
 
   test("Support mode for string expression with collation - Basic Test") {
-    Seq("utf8_binary", "UTF8_LCASE", "unicode_ci", "unicode").foreach { collationId =>
+    Seq("utf8_binary", "UTF8_LCASE", "unicode_ci", "unicode", "NL_AI").foreach { collationId =>
       val query = s"SELECT mode(collate('abc', '${collationId}'))"
       checkAnswer(sql(query), Row("abc"))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(collationId)))
@@ -1690,7 +1762,8 @@ class CollationSQLExpressionsSuite
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
-      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a")
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("SR", Map("c" -> 3L, "č" -> 2L, "Č" -> 2L), "c")
     )
     testCases.foreach(t => {
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
@@ -1728,12 +1801,46 @@ class CollationSQLExpressionsSuite
       UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
       UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
 
-    testCasesUTF8String.foreach(t => {
+    testCasesUTF8String.foreach ( t => {
       val buffer = new OpenHashMap[AnyRef, Long](5)
       val myMode = Mode(child = Literal.create("some_column_name", StringType(t.collationId)))
       t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
       assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
     })
+  }
+
+  test("Support Mode.eval(buffer) with complex types") {
+    case class UTF8StringModeTestCase[R](
+        collationId: String,
+        bufferValues: Map[InternalRow, Long],
+        result: R)
+
+    val bufferValuesUTF8String: Map[Any, Long] = Map(
+      UTF8String.fromString("a") -> 5L,
+      UTF8String.fromString("b") -> 4L,
+      UTF8String.fromString("B") -> 3L,
+      UTF8String.fromString("d") -> 2L,
+      UTF8String.fromString("e") -> 1L)
+
+    val bufferValuesComplex = bufferValuesUTF8String.map{
+      case (k, v) => (InternalRow.fromSeq(Seq(k, k, k)), v)
+    }
+    val testCasesUTF8String = Seq(
+      UTF8StringModeTestCase("utf8_binary", bufferValuesComplex, "[a,a,a]"),
+      UTF8StringModeTestCase("UTF8_LCASE", bufferValuesComplex, "[b,b,b]"),
+      UTF8StringModeTestCase("unicode_ci", bufferValuesComplex, "[b,b,b]"),
+      UTF8StringModeTestCase("unicode", bufferValuesComplex, "[a,a,a]"))
+
+    testCasesUTF8String.foreach { t =>
+      val buffer = new OpenHashMap[AnyRef, Long](5)
+      val myMode = Mode(child = Literal.create(null, StructType(Seq(
+        StructField("f1", StringType(t.collationId), true),
+        StructField("f2", StringType(t.collationId), true),
+        StructField("f3", StringType(t.collationId), true)
+      ))))
+      t.bufferValues.foreach { case (k, v) => buffer.update(k, v) }
+      assert(myMode.eval(buffer).toString.toLowerCase() == t.result.toLowerCase())
+    }
   }
 
   test("Support mode for string expression with collated strings in struct") {
@@ -1756,33 +1863,7 @@ class CollationSQLExpressionsSuite
           t.collationId + ", f2: INT>) USING parquet")
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(mode(i).f1) FROM ${tableName}"
-        if(t.collationId == "UTF8_LCASE" ||
-          t.collationId == "unicode_ci" ||
-          t.collationId == "unicode") {
-          // Cannot resolve "mode(i)" due to data type mismatch:
-          // Input to function mode was a complex type with strings collated on non-binary
-          // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
-          val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode'" +
-              " was a type of binary-unstable type that is not currently supported by mode."),
-            ("hint", "")).toMap
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(query)
-            },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = params,
-            queryContext = Array(
-              ExpectedContext(objectType = "",
-                objectName = "",
-                startIndex = 13,
-                stopIndex = 19,
-                fragment = "mode(i)")
-            )
-          )
-        } else {
-          checkAnswer(sql(query), Row(t.result))
-        }
+        checkAnswer(sql(query), Row(t.result))
       }
     })
   }
@@ -1795,47 +1876,21 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
-    testCases.foreach(t => {
+    testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
         (0L to numRepeats).map(_ => s"named_struct('f1', " +
           s"named_struct('f2', collate('$elt', '${t.collationId}')), 'f3', 1)").mkString(",")
       }.mkString(",")
 
-      val tableName = s"t_${t.collationId}_mode_nested_struct"
+      val tableName = s"t_${t.collationId}_mode_nested_struct1"
       withTable(tableName) {
         sql(s"CREATE TABLE ${tableName}(i STRUCT<f1: STRUCT<f2: STRING COLLATE " +
           t.collationId + ">, f3: INT>) USING parquet")
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(mode(i).f1.f2) FROM ${tableName}"
-        if(t.collationId == "UTF8_LCASE" ||
-          t.collationId == "unicode_ci" ||
-          t.collationId == "unicode") {
-          // Cannot resolve "mode(i)" due to data type mismatch:
-          // Input to function mode was a complex type with strings collated on non-binary
-          // collations, which is not yet supported.. SQLSTATE: 42K09; line 1 pos 13;
-          val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode' " +
-              "was a type of binary-unstable type that is not currently supported by mode."),
-            ("hint", "")).toMap
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(query)
-            },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = params,
-            queryContext = Array(
-              ExpectedContext(objectType = "",
-                objectName = "",
-                startIndex = 13,
-                stopIndex = 19,
-                fragment = "mode(i)")
-            )
-          )
-        } else {
-          checkAnswer(sql(query), Row(t.result))
-        }
+        checkAnswer(sql(query), Row(t.result))
       }
-    })
+    }
   }
 
   test("Support mode for string expression with collated strings in array complex type") {
@@ -1846,44 +1901,105 @@ class CollationSQLExpressionsSuite
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
-    testCases.foreach(t => {
+    testCases.foreach { t =>
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ => s"array(named_struct('f2', " +
+          s"collate('$elt', '${t.collationId}'), 'f3', 1))").mkString(",")
+      }.mkString(",")
+
+      val tableName = s"t_${t.collationId}_mode_nested_struct2"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(" +
+          s"i ARRAY< STRUCT<f2: STRING COLLATE ${t.collationId}, f3: INT>>)" +
+          s" USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT lower(element_at(mode(i).f2, 1)) FROM ${tableName}"
+        checkAnswer(sql(query), Row(t.result))
+      }
+    }
+  }
+
+  test("Support mode for string expression with collated strings in 3D array type") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+    )
+    testCases.foreach { t =>
+      val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
+        (0L to numRepeats).map(_ =>
+          s"array(array(array(collate('$elt', '${t.collationId}'))))").mkString(",")
+      }.mkString(",")
+
+      val tableName = s"t_${t.collationId}_mode_nested_3d_array"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(i ARRAY<ARRAY<ARRAY" +
+          s"<STRING COLLATE ${t.collationId}>>>) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
+        val query = s"SELECT lower(" +
+          s"element_at(element_at(element_at(mode(i),1),1),1)) FROM ${tableName}"
+        checkAnswer(sql(query), Row(t.result))
+      }
+    }
+  }
+
+  test("Support mode for string expression with collated complex type - Highly nested") {
+    case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
+    val testCases = Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+    )
+    testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
         (0L to numRepeats).map(_ => s"array(named_struct('s1', named_struct('a2', " +
           s"array(collate('$elt', '${t.collationId}'))), 'f3', 1))").mkString(",")
       }.mkString(",")
 
-      val tableName = s"t_${t.collationId}_mode_nested_struct"
+      val tableName = s"t_${t.collationId}_mode_highly_nested_struct"
       withTable(tableName) {
         sql(s"CREATE TABLE ${tableName}(" +
           s"i ARRAY<STRUCT<s1: STRUCT<a2: ARRAY<STRING COLLATE ${t.collationId}>>, f3: INT>>)" +
           s" USING parquet")
         sql(s"INSERT INTO ${tableName} VALUES " + valuesToAdd)
         val query = s"SELECT lower(element_at(element_at(mode(i), 1).s1.a2, 1)) FROM ${tableName}"
-        if(t.collationId == "UTF8_LCASE" ||
-          t.collationId == "unicode_ci" || t.collationId == "unicode") {
-          val params = Seq(("sqlExpr", "\"mode(i)\""),
-            ("msg", "The input to the function 'mode' was a type" +
-              " of binary-unstable type that is not currently supported by mode."),
-            ("hint", "")).toMap
-          checkError(
-            exception = intercept[AnalysisException] {
-              sql(query)
-            },
-            errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-            parameters = params,
-            queryContext = Array(
-              ExpectedContext(objectType = "",
-                objectName = "",
-                startIndex = 35,
-                stopIndex = 41,
-                fragment = "mode(i)")
-            )
-          )
-        } else {
+
           checkAnswer(sql(query), Row(t.result))
-        }
       }
-    })
+    }
+  }
+
+  test("Support mode for string expression with collated complex type - nested map") {
+    case class ModeTestCase(collationId: String, bufferValues: Map[String, Long], result: String)
+    Seq(
+      ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
+      ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
+      ModeTestCase("utf8_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}")
+    ).foreach { t1 =>
+      def getValuesToAdd(t: ModeTestCase): String = {
+        val valuesToAdd = t.bufferValues.map {
+          case (elt, numRepeats) =>
+            (0L to numRepeats).map(i =>
+              s"named_struct('m1', map(collate('$elt', '${t.collationId}'), 1))"
+            ).mkString(",")
+        }.mkString(",")
+        valuesToAdd
+      }
+      val tableName = s"t_${t1.collationId}_mode_nested_map_struct1"
+      withTable(tableName) {
+        sql(s"CREATE TABLE ${tableName}(" +
+          s"i STRUCT<m1: MAP<STRING COLLATE ${t1.collationId}, INT>>) USING parquet")
+        sql(s"INSERT INTO ${tableName} VALUES ${getValuesToAdd(t1)}")
+        val query = "SELECT lower(cast(mode(i).m1 as string))" +
+          s" FROM ${tableName}"
+        val queryResult = sql(query)
+        checkAnswer(queryResult, Row(t1.result))
+      }
+    }
   }
 
   test("SPARK-48430: Map value extraction with collations") {
@@ -2319,7 +2435,7 @@ class CollationSQLExpressionsSuite
       exception = intercept[ExtendedAnalysisException] {
         sql(queryFail).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_STATIC_METHOD",
       parameters = Map(
         "methodName" -> "toHexString",
         "className" -> "java.lang.Integer",
@@ -2331,821 +2447,690 @@ class CollationSQLExpressionsSuite
     )
   }
 
-  test("min_by supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT min_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);"
+  // common method for subsequent tests verifying various SQL expressions with collations
+  private def testCollationSqlExpressionCommon(
+      query: String,
+      collation: String,
+      result: Row,
+      expectedType: DataType): Unit = {
+    testCollationSqlExpressionCommon(query, collation, Seq(result), Seq(expectedType))
+  }
+
+  // common method for subsequent tests verifying various SQL expressions with collations
+  private def testCollationSqlExpressionCommon(
+      query: String,
+      collation: String,
+      result: Seq[Row],
+      expectedTypes: Seq[DataType]): Unit = {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row("a")
-        )
+      // check result correctness
+      checkAnswer(sql(query), result)
+      // check result rows data types
+      for (i <- 0 until expectedTypes.length)
+        assert(sql(query).schema(i).dataType == expectedTypes(i))
+    }
+  }
+
+  test("min_by supports collation") {
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT min_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y)",
+        collation,
+        result = Row("a"),
+        expectedType = StringType(collation)
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("max_by supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT max_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row("b")
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT max_by(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y)",
+        collation,
+        result = Row("b"),
+        expectedType = StringType(collation)
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array('a', 'b', 'c');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array('a', 'b', 'c')",
+        collation,
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_agg supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_agg(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_agg(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col)",
+        collation,
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_contains supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_contains(array('a', 'b', 'c'), 'b');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(true)
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_contains(array('a', 'b', 'c'), 'b')",
+        collation,
+        result = Row(true),
+        expectedType = BooleanType
       )
-      // check result row data type
-      val dataType = BooleanType
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("arrays_overlap supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT arrays_overlap(array('a', 'b', 'c'), array('c', 'd', 'e'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(true)
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT arrays_overlap(array('a', 'b', 'c'), array('c', 'd', 'e'))",
+        collation,
+        result = Row(true),
+        expectedType = BooleanType
       )
-      // check result row data type
-      val dataType = BooleanType
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_insert supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_insert(array('a', 'b', 'c', 'd'), 5, 'e');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c", "d", "e"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_insert(array('a', 'b', 'c', 'd'), 5, 'e')",
+        collation,
+        result = Row(Seq("a", "b", "c", "d", "e")),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), true)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_intersect supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_intersect(array('a', 'b', 'c'), array('b', 'c', 'd'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("b", "c"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_intersect(array('a', 'b', 'c'), array('b', 'c', 'd'))",
+        collation,
+        result = Row(Seq("b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_join supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_join(array('hello', 'world'), ' ');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row("hello world")
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_join(array('hello', 'world'), ' ')",
+        collation,
+        result = Row("hello world"),
+        expectedType = StringType(collation)
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_position supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_position(array('a', 'b', 'c', 'c'), 'c');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(3)
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_position(array('a', 'b', 'c', 'c'), 'c')",
+        collation,
+        result = Row(3),
+        expectedType = LongType
       )
-      // check result row data type
-      val dataType = LongType
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_size supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_size(array('a', 'b', 'c', 'c'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(4)
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_size(array('a', 'b', 'c', 'c'))",
+        collation,
+        result = Row(4),
+        expectedType = IntegerType
       )
-      // check result row data type
-      val dataType = IntegerType
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_sort supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_sort(array('b', null, 'A'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("A", "b", null))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_sort(array('b', null, 'A'))",
+        collation,
+        result = Row(Seq("A", "b", null)),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), true)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_except supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_except(array('a', 'b', 'c'), array('c', 'd', 'e'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_except(array('a', 'b', 'c'), array('c', 'd', 'e'))",
+        collation,
+        result = Row(Seq("a", "b")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_union supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_union(array('a', 'b', 'c'), array('a', 'c', 'd'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c", "d"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_union(array('a', 'b', 'c'), array('a', 'c', 'd'))",
+        collation,
+        result = Row(Seq("a", "b", "c", "d")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_compact supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_compact(array('a', 'b', null, 'c'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_compact(array('a', 'b', null, 'c'))",
+        collation,
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("arrays_zip supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT arrays_zip(array('a', 'b', 'c'), array(1, 2, 3));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq(Row("a", 1), Row("b", 2), Row("c", 3)))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT arrays_zip(array('a', 'b', 'c'), array(1, 2, 3))",
+        collation,
+        result = Row(Seq(Row("a", 1), Row("b", 2), Row("c", 3))),
+        expectedType = ArrayType(StructType(
+          StructField("0", StringType(collation), true) ::
+            StructField("1", IntegerType, true) :: Nil
+        ), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StructType(
-        StructField("0", StringType(collation), true) ::
-          StructField("1", IntegerType, true) :: Nil
-      ), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_min supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_min(array('a', 'b', null, 'c'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row("a")
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_min(array('a', 'b', null, 'c'))",
+        collation,
+        result = Row("a"),
+        expectedType = StringType(collation)
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_max supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_max(array('a', 'b', null, 'c'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row("c")
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_max(array('a', 'b', null, 'c'))",
+        collation,
+        result = Row("c"),
+        expectedType = StringType(collation)
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_append supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_append(array('b', 'd', 'c', 'a'), 'e');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("b", "d", "c", "a", "e"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_append(array('b', 'd', 'c', 'a'), 'e')",
+        collation,
+        result = Row(Seq("b", "d", "c", "a", "e")),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), true)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_repeat supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_repeat('abc', 2);"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("abc", "abc"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_repeat('abc', 2)",
+        collation,
+        result = Row(Seq("abc", "abc")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_remove supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_remove(array('a', 'b', null, 'c'), 'b');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", null, "c"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_remove(array('a', 'b', null, 'c'), 'b')",
+        collation,
+        result = Row(Seq("a", null, "c")),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), true)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_prepend supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_prepend(array('b', 'd', 'c', 'a'), 'd');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("d", "b", "d", "c", "a"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_prepend(array('b', 'd', 'c', 'a'), 'd')",
+        collation,
+        result = Row(Seq("d", "b", "d", "c", "a")),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), true)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("array_distinct supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT array_distinct(array('a', 'b', 'c', null, 'c'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c", null))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT array_distinct(array('a', 'b', 'c', null, 'c'))",
+        collation,
+        result = Row(Seq("a", "b", "c", null)),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), true)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("collect_list supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT collect_list(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT collect_list(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col)",
+        collation,
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
-  test("collect_set supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT collect_set(col) FROM VALUES ('a'), ('b'), ('a') AS tab(col);"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      val result = sql(query).collect().head.getSeq[String](0).toSet
-      val expected = Set("a", "b")
-      assert(result == expected)
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
+  test("collect_set does not support collation") {
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT collect_set(col) FROM VALUES ('a'), ('b'), ('a') AS tab(col);"
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query)
+          },
+          condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
+          sqlState = Some("42K09"),
+          parameters = Map(
+            "functionName" -> "`collect_set`",
+            "dataType" -> "\"MAP\" or \"COLLATED STRING\"",
+            "sqlExpr" -> "\"collect_set(col)\""),
+          context = ExpectedContext(
+            fragment = "collect_set(col)",
+            start = 7,
+            stop = 22))
+      }
     }
   }
 
   test("element_at supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT element_at(array('a', 'b', 'c'), 2);"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row("b")
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT element_at(array('a', 'b', 'c'), 2)",
+        collation,
+        result = Row("b"),
+        expectedType = StringType(collation)
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("aggregate supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT aggregate(array('a', 'b', 'c'), '', (acc, x) -> concat(acc, x));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row("abc")
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT aggregate(array('a', 'b', 'c'), '', (acc, x) -> concat(acc, x))",
+        collation,
+        result = Row("abc"),
+        expectedType = StringType(collation)
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("explode supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT explode(array('a', 'b'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT explode(array('a', 'b'))",
+        collation,
+        result = Seq(
           Row("a"),
           Row("b")
+        ),
+        expectedTypes = Seq(
+          StringType(collation)
         )
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("posexplode supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT posexplode(array('a', 'b'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT posexplode(array('a', 'b'))",
+        collation,
+        result = Seq(
           Row(0, "a"),
           Row(1, "b")
+        ),
+        expectedTypes = Seq(
+          IntegerType,
+          StringType(collation)
         )
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == IntegerType)
-      assert(sql(query).schema(1).dataType == dataType)
     }
   }
 
   test("filter supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT filter(array('a', 'b', 'c'), x -> x < 'b');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT filter(array('a', 'b', 'c'), x -> x < 'b')",
+        collation,
+        result = Row(Seq("a")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("flatten supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT flatten(array(array('a', 'b'), array('c', 'd')));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c", "d"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT flatten(array(array('a', 'b'), array('c', 'd')))",
+        collation,
+        result = Row(Seq("a", "b", "c", "d")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("inline supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT inline(array(struct(1, 'a'), struct(2, 'b')));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT inline(array(struct(1, 'a'), struct(2, 'b')))",
+        collation,
         Seq(
           Row(1, "a"),
           Row(2, "b")
+        ),
+        expectedTypes = Seq(
+          IntegerType,
+          StringType(collation)
         )
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == IntegerType)
-      assert(sql(query).schema(1).dataType == dataType)
     }
   }
 
   test("shuffle supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT shuffle(array('a', 'b', 'c', 'd'));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
+    testAdditionalCollations.foreach { collation =>
+      val query = "SELECT shuffle(array('a', 'b', 'c', 'd'));"
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
+        // check result row data type
+        val dataType = ArrayType(StringType(collation), false)
+        assert(sql(query).schema.head.dataType == dataType)
+      }
     }
   }
 
   test("slice supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT slice(array('a', 'b', 'c', 'd'), 2, 2);"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("b", "c"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT slice(array('a', 'b', 'c', 'd'), 2, 2)",
+        collation,
+        result = Row(Seq("b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("sort_array supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT sort_array(array('b', 'd', null, 'c', 'a'), true);"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq(null, "a", "b", "c", "d"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT sort_array(array('b', 'd', null, 'c', 'a'), true)",
+        collation,
+        result = Row(Seq(null, "a", "b", "c", "d")),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), true)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("zip_with supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT zip_with(array('a', 'b'), array('x', 'y'), (x, y) -> concat(x, y));"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("ax", "by"))
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT zip_with(array('a', 'b'), array('x', 'y'), (x, y) -> concat(x, y))",
+        collation,
+        result = Row(Seq("ax", "by")),
+        expectedType = ArrayType(
+          StringType(collation),
+          containsNull = true
         )
       )
-      // check result row data type
-      val dataType = ArrayType(
-        StringType(collation),
-        containsNull = true
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("map_contains_key supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_contains_key(map('a', 1, 'b', 2), 'a')"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(true)
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_contains_key(map('a', 1, 'b', 2), 'a')",
+        collation,
+        result = Row(true),
+        expectedType = BooleanType
       )
-      // check result row data type
-      val dataType = BooleanType
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("map_from_arrays supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_from_arrays(array('a','b','c'), array(1,2,3))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Map("a" -> 1, "b" -> 2, "c" -> 3))
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_from_arrays(array('a','b','c'), array(1,2,3))",
+        collation,
+        result = Row(Map("a" -> 1, "b" -> 2, "c" -> 3)),
+        expectedType = MapType(
+          StringType(collation),
+          IntegerType, false
         )
       )
-      // check result row data type
-      val dataType = MapType(
-        StringType(collation),
-        IntegerType, false
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("map_keys supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_keys(map('a', 1, 'b', 2))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_keys(map('a', 1, 'b', 2))",
+        collation,
+        result = Row(Seq("a", "b")),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(
-        StringType(collation), true
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("map_values supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_values(map(1, 'a', 2, 'b'))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_values(map(1, 'a', 2, 'b'))",
+        collation,
+        result = Row(Seq("a", "b")),
+        expectedType = ArrayType(StringType(collation), true)
       )
-      // check result row data type
-      val dataType = ArrayType(
-        StringType(collation), true
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("map_entries supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_entries(map('a', 1, 'b', 2))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq(Row("a", 1), Row("b", 2)))
-        )
-      )
-      // check result row data type
-      val dataType = ArrayType(StructType(
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_entries(map('a', 1, 'b', 2))",
+        collation,
+        result = Row(Seq(Row("a", 1), Row("b", 2))),
+        expectedType = ArrayType(StructType(
           StructField("key", StringType(collation), false) ::
-          StructField("value", IntegerType, false) :: Nil
-          ), false)
-      assert(sql(query).schema.head.dataType == dataType)
+            StructField("value", IntegerType, false) :: Nil
+        ), false)
+      )
     }
   }
 
   test("map_from_entries supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_from_entries(array(struct(1, 'a'), struct(2, 'b')))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Map(1 -> "a", 2 -> "b"))
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_from_entries(array(struct(1, 'a'), struct(2, 'b')))",
+        collation,
+        result = Row(Map(1 -> "a", 2 -> "b")),
+        expectedType = MapType(
+          IntegerType,
+          StringType(collation),
+          valueContainsNull = false
         )
       )
-      // check result row data type
-      val dataType = MapType(
-        IntegerType,
-        StringType(collation),
-        valueContainsNull = false
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("map_concat supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_concat(map(1, 'a'), map(2, 'b'))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Map(1 -> "a", 2 -> "b"))
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_concat(map(1, 'a'), map(2, 'b'))",
+        collation,
+        result = Row(Map(1 -> "a", 2 -> "b")),
+        expectedType = MapType(
+          IntegerType,
+          StringType(collation),
+          valueContainsNull = false
         )
       )
-      // check result row data type
-      val dataType = MapType(
-        IntegerType,
-        StringType(collation),
-        valueContainsNull = false
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("map_filter supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_filter(map('a', 1, 'b', 2, 'c', 3), (k, v) -> k < 'c')"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Map("a" -> 1, "b" -> 2))
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_filter(map('a', 1, 'b', 2, 'c', 3), (k, v) -> k < 'c')",
+        collation,
+        result = Row(Map("a" -> 1, "b" -> 2)),
+        expectedType = MapType(
+          StringType(collation),
+          IntegerType,
+          valueContainsNull = false
         )
       )
-      // check result row data type
-      val dataType = MapType(
-        StringType(collation),
-        IntegerType,
-        valueContainsNull = false
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("map_zip_with supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT map_zip_with(map(1, 'a'), map(1, 'x'), (k, v1, v2) -> concat(v1, v2))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Map(1 -> "ax"))
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT map_zip_with(map(1, 'a'), map(1, 'x'), (k, v1, v2) -> concat(v1, v2))",
+        collation,
+        result = Row(Map(1 -> "ax")),
+        expectedType = MapType(
+          IntegerType,
+          StringType(collation),
+          valueContainsNull = true
         )
       )
-      // check result row data type
-      val dataType = MapType(
-        IntegerType,
-        StringType(collation),
-        valueContainsNull = true
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("transform supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT transform(array('aa', 'bb', 'cc'), x -> substring(x, 2))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Seq("a", "b", "c"))
-        )
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT transform(array('aa', 'bb', 'cc'), x -> substring(x, 2))",
+        collation,
+        result = Row(Seq("a", "b", "c")),
+        expectedType = ArrayType(StringType(collation), false)
       )
-      // check result row data type
-      val dataType = ArrayType(StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("transform_values supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT transform_values(map_from_arrays(array(1, 2, 3)," +
-      s"array('aa', 'bb', 'cc')), (k, v) -> substring(v, 2))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Map(1 -> "a", 2 -> "b", 3 -> "c"))
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT transform_values(map_from_arrays(array(1, 2, 3)," +
+          "array('aa', 'bb', 'cc')), (k, v) -> substring(v, 2))",
+        collation,
+        result = Row(Map(1 -> "a", 2 -> "b", 3 -> "c")),
+        expectedType = MapType(
+          IntegerType,
+          StringType(collation),
+          false
         )
       )
-      // check result row data type
-      val dataType = MapType(IntegerType,
-        StringType(collation), false)
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("transform_keys supports collation") {
-    val collation = "UNICODE"
-    val query = s"SELECT transform_keys(map_from_arrays(array('aa', 'bb', 'cc')," +
-      s"array(1, 2, 3)), (k, v) -> substring(k, 2))"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
-          Row(Map("a" -> 1, "b" -> 2, "c" -> 3))
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT transform_keys(map_from_arrays(array('aa', 'bb', 'cc')," +
+          "array(1, 2, 3)), (k, v) -> substring(k, 2))",
+        collation,
+        result = Row(Map("a" -> 1, "b" -> 2, "c" -> 3)),
+        expectedType = MapType(
+          StringType(collation),
+          IntegerType,
+          false
         )
       )
-      // check result row data type
-      val dataType = MapType(
-        StringType(collation), IntegerType, false
-      )
-      assert(sql(query).schema.head.dataType == dataType)
     }
   }
 
   test("stack supports collation") {
-    val query = s"SELECT stack(2, 'a', 'b', 'c')"
-    val collation = "UNICODE"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collation) {
-      checkAnswer(
-        sql(query),
-        Seq(
+    testAdditionalCollations.foreach { collation =>
+      testCollationSqlExpressionCommon(
+        query = "SELECT stack(2, 'a', 'b', 'c')",
+        collation,
+        result = Seq(
           Row("a", "b"),
           Row("c", null)
+        ),
+        expectedTypes = Seq(
+          StringType(collation)
         )
       )
-      // check result row data type
-      val dataType = StringType(collation)
-      assert(sql(query).schema.head.dataType == dataType)
+    }
+  }
+
+  test("SPARK-50060: set operators with conflicting collations") {
+    val setOperators = Seq[(String, Int, Int)](
+      ("UNION", 64, 45),
+      ("INTERSECT", 68, 49),
+      ("EXCEPT", 65, 46))
+
+    for {
+      ansiEnabled <- Seq(true, false)
+      (operator, stopExplicit, stopDefault) <- setOperators
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+        SqlApiConf.DEFAULT_COLLATION -> "UNICODE_CI") {
+        val explicitConflictQuery =
+          s"SELECT 'a' COLLATE UTF8_LCASE $operator SELECT 'A' COLLATE UNICODE_CI"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(explicitConflictQuery)
+          },
+          condition = "INCOMPATIBLE_COLUMN_TYPE",
+          parameters = Map(
+            "columnOrdinalNumber" -> "first",
+            "tableOrdinalNumber" -> "second",
+            "dataType1" -> "\"STRING COLLATE UNICODE_CI\"",
+            "dataType2" -> "\"STRING COLLATE UTF8_LCASE\"",
+            "operator" -> operator,
+            "hint" -> ""),
+          context = ExpectedContext(
+            fragment = explicitConflictQuery,
+            start = 0,
+            stop = stopExplicit))
+
+        val defaultConflictQuery =
+          s"SELECT 'a' COLLATE UTF8_LCASE $operator SELECT 'A'"
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(defaultConflictQuery)
+          },
+          condition = "INCOMPATIBLE_COLUMN_TYPE",
+          parameters = Map(
+            "columnOrdinalNumber" -> "first",
+            "tableOrdinalNumber" -> "second",
+            "dataType1" -> "\"STRING COLLATE UNICODE_CI\"",
+            "dataType2" -> "\"STRING COLLATE UTF8_LCASE\"",
+            "operator" -> operator,
+            "hint" -> ""),
+          context = ExpectedContext(
+            fragment = defaultConflictQuery,
+            start = 0,
+            stop = stopDefault))
+      }
     }
   }
 

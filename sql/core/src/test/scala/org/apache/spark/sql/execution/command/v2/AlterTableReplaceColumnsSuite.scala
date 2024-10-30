@@ -35,7 +35,7 @@ class AlterTableReplaceColumnsSuite
       exception = intercept[ParseException] {
         sql(sql1)
       },
-      errorClass = "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION",
+      condition = "UNSUPPORTED_DEFAULT_VALUE.WITHOUT_SUGGESTION",
       parameters = Map.empty,
       context = ExpectedContext(sql1, 0, 48)
     )

@@ -38,7 +38,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
         parameters = Map("name" -> tableName),
         context = ExpectedContext(
           fragment = t,
@@ -61,7 +61,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
         parameters = Map("name" -> tableName),
         context = ExpectedContext(
           fragment = table,

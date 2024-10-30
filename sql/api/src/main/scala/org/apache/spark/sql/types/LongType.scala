@@ -25,7 +25,8 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class LongType private() extends IntegralType {
+class LongType private () extends IntegralType {
+
   /**
    * The default size of a value of the LongType is 8 bytes.
    */

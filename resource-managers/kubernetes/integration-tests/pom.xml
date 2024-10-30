@@ -46,7 +46,6 @@
     <test.exclude.tags></test.exclude.tags>
     <test.default.exclude.tags>org.apache.spark.deploy.k8s.integrationtest.YuniKornTag</test.default.exclude.tags>
     <test.include.tags></test.include.tags>
-    <volcano.exclude>**/*Volcano*.scala</volcano.exclude>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Kubernetes Integration Tests</name>
@@ -80,22 +79,15 @@
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>bundle</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>net.alchim31.maven</groupId>
-          <artifactId>scala-maven-plugin</artifactId>
-          <configuration>
-            <excludes>
-              <exclude>${volcano.exclude}</exclude>
-            </excludes>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
     <plugins>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
@@ -204,24 +196,7 @@
 
   <profiles>
     <profile>
-      <id>hadoop-3</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>software.amazon.awssdk</groupId>
-          <artifactId>bundle</artifactId>
-          <version>${aws.java.sdk.v2.version}</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
       <id>volcano</id>
-      <properties>
-        <volcano.exclude></volcano.exclude>
-      </properties>
       <dependencies>
         <dependency>
           <groupId>io.fabric8</groupId>
@@ -229,6 +204,28 @@
           <version>${kubernetes-client.version}</version>
         </dependency>
       </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>add-volcano-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>volcano/src/test/scala</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
 </project>
