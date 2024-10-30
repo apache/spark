@@ -2368,6 +2368,38 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  test("RocksDB task completion listener correctly releases failed task") {
+    // Create a custom ExecutionContext with 3 threads
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonFixedThreadPool(3, "pool-thread-executor"))
+    val timeout = 5.seconds
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir) { db =>
+        db.commit()
+
+        // New task that will load and then complete with failure
+        val fut = Future {
+          val taskContext = TaskContext.empty()
+          TaskContext.setTaskContext(taskContext)
+
+          db.load(0)
+
+          // Task completion listener should unlock
+          taskContext.markTaskCompleted(
+            Some(new SparkException("Task failure injection")))
+        }
+
+        ThreadUtils.awaitResult(fut, timeout)
+
+        // We should be able to load the db again here
+        db.load(0)
+        db.commit()
+      }
+    }
+  }
+
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   def withDB[T](
