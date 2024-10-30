@@ -533,7 +533,7 @@ class PandasGroupedOpsMixin:
                     watermark_timestamp
                 )
             else:
-                expiry_list_iter = []
+                expiry_list_iter = iter([[]])
 
             result_iter_list = [data_iter]
             # process with valid expiry time info and with empty input rows,

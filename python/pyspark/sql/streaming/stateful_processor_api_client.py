@@ -195,7 +195,7 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error deleting timer: " f"{response_message[1]}")
 
-    def get_list_timer_row(self, iterator_id) -> int:
+    def get_list_timer_row(self, iterator_id: str) -> int:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.list_timer_iterator_cursors:
@@ -237,7 +237,9 @@ class StatefulProcessorApiClient:
             self.list_timer_iterator_cursors.pop(iterator_id, None)
         return pandas_df.at[index, "timestamp"].item()
 
-    def get_expiry_timers_iterator(self, expiry_timestamp: int) -> Iterator[list[Tuple, int]]:
+    def get_expiry_timers_iterator(
+        self, expiry_timestamp: int
+    ) -> Iterator[list[Tuple[Tuple, int]]]:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         while True:
