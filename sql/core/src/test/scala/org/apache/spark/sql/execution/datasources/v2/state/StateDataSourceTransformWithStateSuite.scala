@@ -21,7 +21,7 @@ import java.time.Duration
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, TestClass}
-import org.apache.spark.sql.functions.{explode, timestamp_seconds}
+import org.apache.spark.sql.functions.{col, explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -995,6 +995,90 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         checkAnswer(resultDf,
           Seq(Row("a", 20000L, 0)))
       }
+    }
+  }
+
+  /**
+   * Note that we cannot use the golden files approach for transformWithState. The new schema
+   * format keeps track of the schema file path as an absolute path which cannot be used with
+   * the getResource model used in other similar tests. Hence, we force the snapshot creation
+   * for given versions and ensure that we are loading from given start snapshot version for loading
+   * the state data.
+   */
+  testWithChangelogCheckpointingEnabled("snapshotStartBatchId with transformWithState") {
+    class AggregationStatefulProcessor extends StatefulProcessor[Int, (Int, Long), (Int, Long)] {
+      @transient protected var _countState: ValueState[Long] = _
+
+      override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+        _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+      }
+
+      override def handleInputRows(
+          key: Int,
+          inputRows: Iterator[(Int, Long)],
+          timerValues: TimerValues): Iterator[(Int, Long)] = {
+        val count = _countState.getOption().getOrElse(0L)
+        var totalSum = 0L
+        inputRows.foreach { entry =>
+          totalSum += entry._2
+        }
+        _countState.update(count + totalSum)
+        Iterator((key, count + totalSum))
+      }
+    }
+
+    withTempDir { tmpDir =>
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+        SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100",
+        SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.key -> "1") {
+        val inputData = MemoryStream[(Int, Long)]
+        val query = inputData
+          .toDS()
+          .groupByKey(_._1)
+          .transformWithState(new AggregationStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Append())
+        testStream(query)(
+          StartStream(checkpointLocation = tmpDir.getCanonicalPath),
+          AddData(inputData, (1, 1L), (2, 2L), (3, 3L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          AddData(inputData, (2, 2L), (3, 3L), (4, 4L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          AddData(inputData, (3, 3L), (4, 4L), (5, 5L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          AddData(inputData, (4, 4L), (5, 5L), (6, 6L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          AddData(inputData, (5, 5L), (6, 6L), (7, 7L)),
+          ProcessAllAvailable(),
+          Execute { _ => Thread.sleep(2000) },
+          StopStream
+        )
+      }
+
+      val stateSnapshotDf = spark
+        .read
+        .format("statestore")
+        .option("snapshotPartitionId", 0)
+        .option("snapshotStartBatchId", 1)
+        .option("stateVarName", "countState")
+        .load(tmpDir.getCanonicalPath)
+
+      val stateDf = spark
+        .read
+        .format("statestore")
+        .option("stateVarName", "countState")
+        .load(tmpDir.getCanonicalPath)
+        .filter(col("partition_id") === 0)
+
+      checkAnswer(stateSnapshotDf, stateDf)
     }
   }
 }
