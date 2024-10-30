@@ -22,7 +22,6 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_plotly,
-    have_numpy,
     plotly_requirement_message,
     have_pandas,
     pandas_requirement_message,
