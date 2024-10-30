@@ -643,7 +643,7 @@ sortItem
     ;
 
 fromStatement
-    : fromClause fromStatementBody+
+    : fromClause (fromStatementBody)*
     ;
 
 fromStatementBody

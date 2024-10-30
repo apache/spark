@@ -83,7 +83,9 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
     val ctx = parser.singleStatement()
     withErrorHandling(ctx, Some(sqlText)) {
       astBuilder.visitSingleStatement(ctx) match {
-        case plan: LogicalPlan => plan
+        case plan: LogicalPlan => 
+          println(plan)
+          plan
         case _ =>
           val position = Origin(None, None)
           throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
