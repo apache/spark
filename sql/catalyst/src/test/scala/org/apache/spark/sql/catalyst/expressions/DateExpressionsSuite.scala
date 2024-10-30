@@ -1202,7 +1202,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 16, 6)))
             if (ansi) {
               checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(
-                Decimal(BigDecimal(60.5), 16, 6))), EmptyRow, "The fraction of sec must be zero")
+                Decimal(BigDecimal(60.5), 16, 6))), EmptyRow, "Valid range for seconds is [0, 60]")
             } else {
               checkEvaluation(makeTimestampExpr, expectedAnswer("2019-07-01 00:00:00"))
             }
