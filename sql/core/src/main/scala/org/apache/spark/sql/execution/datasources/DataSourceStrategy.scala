@@ -298,15 +298,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         table.partitionColumnNames.map(name => name -> None).toMap,
         Seq.empty, append.query, false, append.isByName)
 
-    case UnresolvedCatalogRelation(tableMeta, options, false)
-        if DDLUtils.isDatasourceTable(tableMeta) =>
-      readDataSourceTable(tableMeta, options)
-
-    case UnresolvedCatalogRelation(tableMeta, _, false) =>
-      DDLUtils.readHiveTable(tableMeta)
-
-    case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
-      getStreamingRelation(tableMeta, extraOptions)
+    case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
+      resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
@@ -319,6 +312,21 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         // Fallback to V1 relation
         v1Relation
       }
+  }
+
+  def resolveUnresolvedCatalogRelation(
+      unresolvedCatalogRelation: UnresolvedCatalogRelation): LogicalPlan = {
+    unresolvedCatalogRelation match {
+      case UnresolvedCatalogRelation(tableMeta, options, false)
+          if DDLUtils.isDatasourceTable(tableMeta) =>
+        readDataSourceTable(tableMeta, options)
+
+      case UnresolvedCatalogRelation(tableMeta, _, false) =>
+        DDLUtils.readHiveTable(tableMeta)
+
+      case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
+        getStreamingRelation(tableMeta, extraOptions)
+    }
   }
 }
 
