@@ -239,7 +239,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   createQueryTest("no from clause",
     "SELECT 1, +1, -1")
 
-  if (!spark.sessionState.conf.ansiEnabled) {
+  if (!conf.ansiEnabled) {
     createQueryTest("boolean = number",
       """
         |SELECT
@@ -287,7 +287,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   createQueryTest("Constant Folding Optimization for AVG_SUM_COUNT",
     "SELECT AVG(0), SUM(0), COUNT(null), COUNT(value) FROM src GROUP BY key")
 
-  if (!spark.sessionState.conf.ansiEnabled) {
+  if (!conf.ansiEnabled) {
     createQueryTest("Cast Timestamp to Timestamp in UDF",
       """
         | SELECT DATEDIFF(CAST(value AS timestamp), CAST('2002-03-21 00:00:00' AS timestamp))
@@ -523,7 +523,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   createQueryTest("Specify the udtf output",
     "SELECT d FROM (SELECT explode(array(1,1)) d FROM src LIMIT 1) t")
 
-  if (!spark.sessionState.conf.ansiEnabled) {
+  if (!conf.ansiEnabled) {
     createQueryTest("SPARK-9034 Reflect field names defined in GenericUDTF #1",
       "SELECT col FROM (SELECT explode(array(key,value)) FROM src LIMIT 1) t")
   }
@@ -787,7 +787,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("SPARK-5367: resolve star expression in udf") {
     assert(sql("select concat(*) from src limit 5").collect().length == 5)
     assert(sql("select concat(key, *) from src limit 5").collect().length == 5)
-    if (!spark.sessionState.conf.ansiEnabled) {
+    if (!conf.ansiEnabled) {
       assert(sql("select array(*) from src limit 5").collect().length == 5)
       assert(sql("select array(key, *) from src limit 5").collect().length == 5)
     }
