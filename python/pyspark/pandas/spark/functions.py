@@ -18,25 +18,8 @@
 Additional Spark functions used in pandas-on-Spark.
 """
 from pyspark.sql import Column, functions as F
-from pyspark.sql.utils import is_remote
-from typing import Union, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pyspark.sql._typing import ColumnOrName
-
-
-def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(name, *cols)
-
-    else:
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(sc._jvm.PythonSQLUtils.internalFn(name, _to_seq(sc, cols, _to_java_column)))
+from pyspark.sql.utils import _invoke_internal_function_over_columns
+from typing import Union
 
 
 def timestamp_ntz_to_long(col: Column) -> Column:

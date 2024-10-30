@@ -27,13 +27,13 @@ from pyspark.errors import (
 from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.utils import require_minimum_numpy_version, require_minimum_pandas_version
 from pyspark.sql.types import NumericType
-from pyspark.sql.utils import is_remote, require_minimum_plotly_version
+from pyspark.sql.utils import require_minimum_plotly_version, _invoke_internal_function_over_columns
+
 from pandas.core.dtypes.inference import is_integer
 
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, Row
-    from pyspark.sql._typing import ColumnOrName
     import pandas as pd
     import numpy as np
     from plotly.graph_objs import Figure
@@ -565,6 +565,10 @@ class PySparkKdePlotBase:
 
 class PySparkHistogramPlotBase:
     @staticmethod
+    def array_binary_search(col: Column, value: Column) -> Column:
+        return _invoke_internal_function_over_columns("array_binary_search", col, value)
+
+    @staticmethod
     def get_bins(sdf: "DataFrame", bins: int) -> "np.ndarray":
         require_minimum_numpy_version()
         import numpy as np
@@ -615,7 +619,7 @@ class PySparkHistogramPlotBase:
         # determines which bucket a given value falls into, based on predefined bin intervals
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column) -> Column:
-            index = array_binary_search(F.lit(bins), value)
+            index = PySparkHistogramPlotBase.array_binary_search(F.lit(bins), value)
             bucket = F.when(index >= 0, index).otherwise(-index - 2)
             unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (
@@ -710,6 +714,12 @@ class PySparkHistogramPlotBase:
 
 class PySparkBoxPlotBase:
     @staticmethod
+    def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
+        return _invoke_internal_function_over_columns(
+            "collect_top_k", col, F.lit(num), F.lit(reverse)
+        )
+
+    @staticmethod
     def compute_box(
         sdf: "DataFrame", colnames: List[str], whis: float, precision: float, showfliers: bool
     ) -> Optional["Row"]:
@@ -763,7 +773,7 @@ class PySparkBoxPlotBase:
                     outlier,
                     F.struct(F.abs(value - med), value.alias("val")),
                 ).otherwise(F.lit(None))
-                topk = collect_top_k(pair, 1001, False)
+                topk = PySparkBoxPlotBase.collect_top_k(pair, 1001, False)
                 fliers = F.when(F.size(topk) > 0, topk["val"]).otherwise(F.lit(None))
             else:
                 fliers = F.lit(None)
@@ -782,29 +792,3 @@ class PySparkBoxPlotBase:
 
         sdf_result = sdf.join(sdf_stats.hint("broadcast")).select(*result_scols)
         return sdf_result.first()
-
-
-def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(name, *cols)
-
-    else:
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(
-            sc._jvm.PythonSQLUtils.internalFn(  # type: ignore
-                name, _to_seq(sc, cols, _to_java_column)  # type: ignore
-            )
-        )
-
-
-def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
-    return _invoke_internal_function_over_columns("collect_top_k", col, F.lit(num), F.lit(reverse))
-
-
-def array_binary_search(col: Column, value: Column) -> Column:
-    return _invoke_internal_function_over_columns("array_binary_search", col, value)
