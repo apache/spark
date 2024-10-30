@@ -897,19 +897,12 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
       }
       // def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
-      // checkPipeSelect("TABLE t |> SELECT 1 AS X")
-      // checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
-      // checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+      checkPipeSelect("TABLE t |> SELECT 1 AS X")
+      checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
+      checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
       // FROM operators.
       def checkPipeSelectFrom(query: String): Unit = check(query, Seq(PROJECT))
-      println("JCJC1")
-      checkPipeSelectFrom("TABLE t |> SELECT 1 AS X")
-      println("JCJC2")
-      checkPipeSelectFrom("SELECT 1 AS X FROM t")
-      println("JCJC3")
       checkPipeSelectFrom("FROM t |> SELECT 1 AS X")
-      println("JCJC4")
-      // checkPipeSelectFrom("FROM t JOIN other ON (t.x = other.x) |> SELECT 1 AS X")
       // Basic WHERE operators.
       def checkPipeWhere(query: String): Unit = check(query, Seq(FILTER))
       checkPipeWhere("TABLE t |> WHERE X = 1")

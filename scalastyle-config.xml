@@ -44,9 +44,9 @@ This file is divided into 3 sections:
   <!--                               rules we enforce                                   -->
   <!-- ================================================================================ -->
 
-  <check level="error" class="org.scalastyle.file.FileTabChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.file.FileTabChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="false">
+  <check level="error" class="org.scalastyle.file.HeaderMatchesChecker" enabled="true">
     <parameters>
        <parameter name="header"><![CDATA[/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -67,82 +67,82 @@ This file is divided into 3 sections:
     </parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.SpacesAfterPlusChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.SpacesAfterPlusChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.SpacesBeforePlusChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.SpacesBeforePlusChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.file.WhitespaceEndOfLineChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.file.FileLineLengthChecker" enabled="false">
+  <check level="error" class="org.scalastyle.file.FileLineLengthChecker" enabled="true">
     <parameters>
       <parameter name="maxLineLength"><![CDATA[100]]></parameter>
       <parameter name="tabSize"><![CDATA[2]]></parameter>
-      <parameter name="ignoreImports">false</parameter>
+      <parameter name="ignoreImports">true</parameter>
     </parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.ClassNamesChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.ClassNamesChecker" enabled="true">
     <parameters><parameter name="regex"><![CDATA[[A-Z][A-Za-z]*]]></parameter></parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.ObjectNamesChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.ObjectNamesChecker" enabled="true">
     <parameters><parameter name="regex"><![CDATA[(config|[A-Z][A-Za-z]*)]]></parameter></parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.PackageObjectNamesChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.PackageObjectNamesChecker" enabled="true">
     <parameters><parameter name="regex"><![CDATA[^[a-z][A-Za-z]*$]]></parameter></parameters>
   </check>
 
-  <check customId="argcount" level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="false">
+  <check customId="argcount" level="error" class="org.scalastyle.scalariform.ParameterNumberChecker" enabled="true">
     <parameters><parameter name="maxParameters"><![CDATA[10]]></parameter></parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.NoFinalizeChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.NoFinalizeChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.CovariantEqualsChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.CovariantEqualsChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.StructuralTypeChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.StructuralTypeChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.UppercaseLChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.UppercaseLChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.IfBraceChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.IfBraceChecker" enabled="true">
     <parameters>
-      <parameter name="singleLineAllowed"><![CDATA[false]]></parameter>
-      <parameter name="doubleLineAllowed"><![CDATA[false]]></parameter>
+      <parameter name="singleLineAllowed"><![CDATA[true]]></parameter>
+      <parameter name="doubleLineAllowed"><![CDATA[true]]></parameter>
     </parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.PublicMethodsHaveTypeChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.file.NewLineAtEofChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.file.NewLineAtEofChecker" enabled="true"></check>
 
-  <check customId="nonascii" level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="false"></check>
+  <check customId="nonascii" level="error" class="org.scalastyle.scalariform.NonASCIICharacterChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.SpaceAfterCommentStartChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.EnsureSingleSpaceBeforeTokenChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.EnsureSingleSpaceBeforeTokenChecker" enabled="true">
    <parameters>
      <parameter name="tokens">ARROW, EQUALS, ELSE, TRY, CATCH, FINALLY, LARROW, RARROW</parameter>
    </parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.EnsureSingleSpaceAfterTokenChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.EnsureSingleSpaceAfterTokenChecker" enabled="true">
     <parameters>
      <parameter name="tokens">ARROW, EQUALS, COMMA, COLON, IF, ELSE, DO, WHILE, FOR, MATCH, TRY, CATCH, FINALLY, LARROW, RARROW</parameter>
     </parameters>
   </check>
 
   <!-- ??? usually shouldn't be checked into the code base. -->
-  <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.NotImplementedErrorUsage" enabled="true"></check>
 
   <!-- As of SPARK-7558, all tests in Spark should extend o.a.s.SparkFunSuite instead of AnyFunSuite directly -->
-  <check customId="funsuite" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="false">
+  <check customId="funsuite" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">^AnyFunSuite[A-Za-z]*$</parameter></parameters>
     <customMessage>Tests must extend org.apache.spark.SparkFunSuite instead.</customMessage>
   </check>
 
   <!-- As of SPARK-7977 all printlns need to be wrapped in '// scalastyle:off/on println' -->
-  <check customId="println" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="false">
+  <check customId="println" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">^println$</parameter></parameters>
     <customMessage><![CDATA[Are you sure you want to println? If yes, wrap the code block with
       // scalastyle:off println
@@ -150,12 +150,12 @@ This file is divided into 3 sections:
       // scalastyle:on println]]></customMessage>
   </check>
 
-  <check customId="invalidMDC" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="invalidMDC" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">s".*\$\{MDC\(</parameter></parameters>
     <customMessage><![CDATA[MDC should be used in string interpolation log"..." instead of s"..."]]></customMessage>
   </check>
 
-  <check customId="hadoopconfiguration" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="hadoopconfiguration" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">spark(.sqlContext)?.sparkContext.hadoopConfiguration</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use sparkContext.hadoopConfiguration? In most cases, you should use
@@ -168,14 +168,14 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="visiblefortesting" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="visiblefortesting" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">@VisibleForTesting</parameter></parameters>
     <customMessage><![CDATA[
       @VisibleForTesting causes classpath issues. Please note this in the java doc instead (SPARK-11615).
     ]]></customMessage>
   </check>
 
-  <check customId="runtimeaddshutdownhook" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="runtimeaddshutdownhook" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Runtime\.getRuntime\.addShutdownHook</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use Runtime.getRuntime.addShutdownHook? In most cases, you should use
@@ -187,7 +187,7 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="mutablesynchronizedbuffer" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="mutablesynchronizedbuffer" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">mutable\.SynchronizedBuffer</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use mutable.SynchronizedBuffer? In most cases, you should use
@@ -199,7 +199,7 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="classforname" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="classforname" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Class\.forName</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use Class.forName? In most cases, you should use Utils.classForName instead.
@@ -210,7 +210,7 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="awaitresult" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="awaitresult" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Await\.result</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use Await.result? In most cases, you should use ThreadUtils.awaitResult instead.
@@ -221,7 +221,7 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="awaitready" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="awaitready" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Await\.ready</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use Await.ready? In most cases, you should use ThreadUtils.awaitReady instead.
@@ -232,7 +232,7 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="parvector" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="parvector" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">new.*ParVector</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure you want to create a ParVector? It will not automatically propagate Spark ThreadLocals or the
@@ -244,7 +244,7 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="caselocale" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="caselocale" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">(\.toUpperCase|\.toLowerCase)(?!(\(|\(Locale.ROOT\)))</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use toUpperCase or toLowerCase without the root locale? In most cases, you
@@ -257,7 +257,7 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="throwerror" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="throwerror" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">throw new \w+Error\(</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to throw Error? In most cases, you should use appropriate Exception instead.
@@ -269,37 +269,37 @@ This file is divided into 3 sections:
   </check>
 
   <!-- As of SPARK-45338 JavaConversions should be replaced with CollectionConverters -->
-  <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="false">
+  <check customId="javaconversions" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConversions</parameter></parameters>
     <customMessage>Instead of importing implicits in scala.collection.JavaConversions._, import
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
   <!-- As of SPARK-45338 JavaConverters should be replaced with CollectionConverters -->
-  <check customId="javaconverters" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="false">
+  <check customId="javaconverters" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">JavaConverters</parameter></parameters>
     <customMessage>Instead of importing implicits in scala.collection.JavaConverters._, import
       scala.jdk.CollectionConverters._ and use .asScala / .asJava methods</customMessage>
   </check>
 
-  <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="commonslang2" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">org\.apache\.commons\.lang\.</parameter></parameters>
     <customMessage>Use Commons Lang 3 classes (package org.apache.commons.lang3.*) instead
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
-  <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="uribuilder" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">UriBuilder\.fromUri</parameter></parameters>
     <customMessage>Use Utils.getUriBuilder instead.</customMessage>
   </check>
 
-  <check customId="executioncontextglobal" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="executioncontextglobal" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">scala\.concurrent\.ExecutionContext\.Implicits\.global</parameter></parameters>
     <customMessage> User queries can use global thread pool, causing starvation and eventual OOM.
       Thus, Spark-internal APIs should not use this thread pool</customMessage>
   </check>
 
-  <check customId="FileSystemGet" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="FileSystemGet" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileSystem.get\([a-zA-Z_$][a-zA-Z_$0-9]*\)</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that you want to use "FileSystem.get(Configuration conf)"? If the input
@@ -313,13 +313,13 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="extractopt" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="false">
+  <check customId="extractopt" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">extractOpt</parameter></parameters>
     <customMessage>Use jsonOption(x).map(.extract[T]) instead of .extractOpt[T], as the latter
     is slower.  </customMessage>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.ImportOrderChecker" enabled="true">
     <parameters>
       <parameter name="groups">java,scala,3rdParty,spark</parameter>
       <parameter name="group.java">javax?\..*</parameter>
@@ -329,41 +329,41 @@ This file is divided into 3 sections:
     </parameters>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.DisallowSpaceBeforeTokenChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.DisallowSpaceBeforeTokenChecker" enabled="true">
     <parameters>
       <parameter name="tokens">COMMA</parameter>
     </parameters>
   </check>
 
   <!-- SPARK-3854: Single Space between ')' and '{' -->
-  <check customId="SingleSpaceBetweenRParenAndLCurlyBrace" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="SingleSpaceBetweenRParenAndLCurlyBrace" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">\)\{</parameter></parameters>
     <customMessage><![CDATA[
       Single Space between ')' and `{`.
     ]]></customMessage>
   </check>
 
-  <check customId="NoScalaDoc" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="NoScalaDoc" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">(?m)^(\s*)/[*][*].*$(\r|)\n^\1  [*]</parameter></parameters>
     <customMessage>Use Javadoc style indentation for multiline comments</customMessage>
   </check>
 
-  <check customId="OmitBracesInCase" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="OmitBracesInCase" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">case[^\n>]*=>\s*\{</parameter></parameters>
     <customMessage>Omit braces in case clauses.</customMessage>
   </check>
 
-  <check level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">new (java\.lang\.)?(Byte|Integer|Long|Short)\(</parameter></parameters>
     <customMessage>Use static factory 'valueOf' or 'parseXXX' instead of the deprecated constructors.</customMessage>
   </check>
 
   <!-- SPARK-16877: Avoid Java annotations -->
-  <check level="error" class="org.scalastyle.scalariform.OverrideJavaChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.OverrideJavaChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
 
-  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
     <parameters><parameter name="illegalImports"><![CDATA[scala.collection.Seq,scala.collection.IndexedSeq]]></parameter></parameters>
     <customMessage><![CDATA[
       Don't import scala.collection.Seq and scala.collection.IndexedSeq as it may bring some problems with cross-build between Scala 2.12 and 2.13.
@@ -375,12 +375,12 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
     <parameters><parameter name="illegalImports"><![CDATA[collection]]></parameter></parameters>
     <customMessage>Please use scala.collection instead.</customMessage>
   </check>
 
-  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
     <parameters><parameter name="illegalImports"><![CDATA[org.apache.log4j]]></parameter></parameters>
     <customMessage>Please use Apache Log4j 2 instead.</customMessage>
   </check>
@@ -392,107 +392,107 @@ This file is divided into 3 sections:
 
   <!-- We cannot turn the following two on, because it'd fail a lot of string interpolation use cases. -->
   <!-- Ideally the following two rules should be configurable to rule out string interpolation. -->
-  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceBeforeLeftBracketChecker" enabled="false"></check>
-  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceAfterLeftBracketChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceBeforeLeftBracketChecker" enabled="true"></check>
+  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceAfterLeftBracketChecker" enabled="true"></check>
 
   <!-- This breaks symbolic method names so we don't turn it on. -->
   <!-- Maybe we should update it to allow basic symbolic names, and then we are good to go. -->
-  <check level="error" class="org.scalastyle.scalariform.MethodNamesChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.MethodNamesChecker" enabled="true">
     <parameters>
     <parameter name="regex"><![CDATA[^[a-z][A-Za-z0-9]*$]]></parameter>
     </parameters>
   </check>
 
   <!-- Should turn this on, but we have a few places that need to be fixed first -->
-  <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.EqualsHashCodeChecker" enabled="true"></check>
 
   <!-- ================================================================================ -->
   <!--                               rules we don't want                                -->
   <!-- ================================================================================ -->
 
-  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
     <parameters><parameter name="illegalImports"><![CDATA[sun._,java.awt._]]></parameter></parameters>
   </check>
 
   <!-- We want the opposite of this: NewLineAtEofChecker -->
-  <check level="error" class="org.scalastyle.file.NoNewLineAtEofChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.file.NoNewLineAtEofChecker" enabled="true"></check>
 
   <!-- This one complains about all kinds of random things. Disable. -->
-  <check level="error" class="org.scalastyle.scalariform.SimplifyBooleanExpressionChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.SimplifyBooleanExpressionChecker" enabled="true"></check>
 
   <!-- We use return quite a bit for control flows and guards -->
-  <check level="error" class="org.scalastyle.scalariform.ReturnChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.ReturnChecker" enabled="true"></check>
 
   <!-- We use null a lot in low level code and to interface with 3rd party code -->
-  <check level="error" class="org.scalastyle.scalariform.NullChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.NullChecker" enabled="true"></check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.scalariform.NoCloneChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.NoCloneChecker" enabled="true"></check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.file.FileLengthChecker" enabled="false">
+  <check level="error" class="org.scalastyle.file.FileLengthChecker" enabled="true">
     <parameters><parameter name="maxFileLength">800></parameter></parameters>
   </check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.scalariform.NumberOfTypesChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.NumberOfTypesChecker" enabled="true">
     <parameters><parameter name="maxTypes">30</parameter></parameters>
   </check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.scalariform.CyclomaticComplexityChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.CyclomaticComplexityChecker" enabled="true">
     <parameters><parameter name="maximum">10</parameter></parameters>
   </check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.scalariform.MethodLengthChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.MethodLengthChecker" enabled="true">
     <parameters><parameter name="maxLength">50</parameter></parameters>
   </check>
 
   <!-- Not exactly feasible to enforce this right now. -->
   <!-- It is also infrequent that somebody introduces a new class with a lot of methods. -->
-  <check level="error" class="org.scalastyle.scalariform.NumberOfMethodsInTypeChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.NumberOfMethodsInTypeChecker" enabled="true">
     <parameters><parameter name="maxMethods"><![CDATA[30]]></parameter></parameters>
   </check>
 
   <!-- Doesn't seem super big deal here, and we have a lot of magic numbers ... -->
-  <check level="error" class="org.scalastyle.scalariform.MagicNumberChecker" enabled="false">
+  <check level="error" class="org.scalastyle.scalariform.MagicNumberChecker" enabled="true">
     <parameters><parameter name="ignore">-1,0,1,2,3</parameter></parameters>
   </check>
 
-  <check customId="GuavaToStringHelper" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="GuavaToStringHelper" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Objects.toStringHelper</parameter></parameters>
     <customMessage>Avoid using Object.toStringHelper. Use ToStringBuilder instead.</customMessage>
   </check>
 
-  <check customId="GuavaFilesCreateTempDir" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="GuavaFilesCreateTempDir" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Files\.createTempDir\(</parameter></parameters>
     <customMessage>Avoid using com.google.common.io.Files.createTempDir due to CVE-2020-8908.
       Use org.apache.spark.util.Utils.createTempDir instead.
     </customMessage>
   </check>
 
-  <check customId="GuavaFileBackedOutputStream" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="GuavaFileBackedOutputStream" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">FileBackedOutputStream</parameter></parameters>
     <customMessage>Avoid using FileBackedOutputStream due to CVE-2023-2976.</customMessage>
   </check>
 
-  <check customId="GuavaAtomicDoubleArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="GuavaAtomicDoubleArray" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">AtomicDoubleArray</parameter></parameters>
     <customMessage>Avoid using AtomicDoubleArray due to CVE-2018-10237.</customMessage>
   </check>
 
-  <check customId="GuavaCompoundOrdering" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="GuavaCompoundOrdering" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">CompoundOrdering</parameter></parameters>
     <customMessage>Avoid using CompoundOrdering due to CVE-2018-10237.</customMessage>
   </check>
 
-  <check customId="byteCountToDisplaySize" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="byteCountToDisplaySize" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">byteCountToDisplaySize</parameter></parameters>
     <customMessage>Use Utils.bytesToString instead of byteCountToDisplaySize for consistency.</customMessage>
   </check>
 
-  <check customId="pathfromuri" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="pathfromuri" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">new Path\(new URI\(</parameter></parameters>
     <customMessage><![CDATA[
       Are you sure that this string is uri encoded? Please be careful when converting hadoop Paths
@@ -500,7 +500,7 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
-  <check customId="URLConstructor" level="error" class="org.scalastyle.file.RegexChecker" enabled="false">
+  <check customId="URLConstructor" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">new URL\(</parameter></parameters>
     <customMessage>Use URI.toURL or URL.of instead of URL constructors.</customMessage>
   </check>

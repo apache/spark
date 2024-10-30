@@ -526,9 +526,6 @@ class AstBuilder extends DataTypeAstBuilder
         optionalMap(body.queryOrganization)(withQueryResultClauses(_, _, forPipeOperators = false))
     }
     // If there are multiple SELECT just UNION them together into one query.
-    println(selects.length)
-    println(selects.toSeq)
-    println(from)
     if (selects.length == 0) {
       from
     } else if (selects.length == 1) {
@@ -1428,8 +1425,6 @@ class AstBuilder extends DataTypeAstBuilder
       } else {
         plan(relationPrimary)
       }
-      println("visitFomClause")
-      println(right)
       val join = right.optionalMap(left) { (left, right) =>
         if (relation.LATERAL != null) {
           relationPrimary match {
@@ -1452,17 +1447,13 @@ class AstBuilder extends DataTypeAstBuilder
       if (!ctx.lateralView.isEmpty) {
         throw QueryParsingErrors.lateralWithPivotInFromClauseNotAllowedError(ctx)
       }
-      println("pivoting")
       withPivot(ctx.pivotClause, from)
     } else if (ctx.unpivotClause() != null) {
       if (!ctx.lateralView.isEmpty) {
         throw QueryParsingErrors.lateralWithUnpivotInFromClauseNotAllowedError(ctx)
       }
-      println("unpivoting")
       withUnpivot(ctx.unpivotClause, from)
     } else {
-      println("lateral")
-      println(ctx.lateralView.asScala.foldLeft(from)(withGenerate))
       ctx.lateralView.asScala.foldLeft(from)(withGenerate)
     }
   }
@@ -5932,8 +5923,6 @@ class AstBuilder extends DataTypeAstBuilder
       case _ =>
         SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
     }
-    println("visitOperatorPipeRightSide")
-    println(left)
     Option(ctx.selectClause).map { c =>
       withSelectQuerySpecification(
         ctx = ctx,
