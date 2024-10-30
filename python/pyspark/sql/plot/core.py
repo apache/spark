@@ -489,7 +489,7 @@ class PySparkPlotAccessor:
 
 class PySparkKdePlotBase:
     @staticmethod
-    def linspace(start, stop, num):
+    def linspace(start, stop, num):  # type: ignore[no-untyped-def]
         if num == 1:
             return [float(start)]
         step = float(stop - start) / (num - 1)
