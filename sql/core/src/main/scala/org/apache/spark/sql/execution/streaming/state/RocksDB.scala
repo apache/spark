@@ -1480,10 +1480,9 @@ object RocksDBNativeHistogram {
   }
 }
 
-case class AcquiredThreadInfo() {
-  val threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread())
-  val tc: TaskContext = TaskContext.get()
-
+case class AcquiredThreadInfo(
+    threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread()),
+    tc: TaskContext = TaskContext.get()) {
   override def toString(): String = {
     val taskStr = if (tc != null) {
       val taskDetails =
