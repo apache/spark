@@ -352,10 +352,10 @@ class PySparkPlotAccessor:
         y_field = schema[y] if y in schema.names else None
         if y_field is None or not isinstance(y_field.dataType, NumericType):
             raise PySparkTypeError(
-                errorClass="PLOT_NOT_NUMERIC_COLUMN",
+                errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
                 messageParameters={
                     "arg_name": "y",
-                    "arg_type": str(y_field.dataType) if y_field else "None",
+                    "arg_type": str(y_field.dataType.__class__.__name__) if y_field else "None",
                 },
             )
         return self(kind="pie", x=x, y=y, **kwargs)

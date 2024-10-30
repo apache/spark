@@ -324,8 +324,8 @@ class DataFramePlotPlotlyTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="PLOT_NOT_NUMERIC_COLUMN",
-            messageParameters={"arg_name": "y", "arg_type": "StringType()"},
+            errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
+            messageParameters={"arg_name": "y", "arg_type": "StringType"},
         )
 
     def test_box_plot(self):
