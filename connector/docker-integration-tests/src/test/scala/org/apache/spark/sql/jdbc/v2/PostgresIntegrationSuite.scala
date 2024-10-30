@@ -331,7 +331,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
         sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
       },
       condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
-      parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\""),
+      parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\"")
     )
   }
 }

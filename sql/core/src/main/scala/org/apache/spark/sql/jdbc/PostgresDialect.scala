@@ -389,36 +389,33 @@ private case class PostgresDialect()
          different dimensions per row for arrays.
          */
         val query = s"SELECT array_ndims($columnName) FROM $tableName LIMIT 1"
-        var arrayDimensionalityResolveNeedsFallback = true
 
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
               if (rs.next()) {
                 metadata.putLong("arrayDimension", rs.getLong(1))
-                arrayDimensionalityResolveNeedsFallback = false
-              }
-            }
-          }
+              } else {
+                /*
+                If previous query doesn't return any rows, we should fallback to querying the
+                Postgres metadata table.
+                 */
+                val fallbackQuery =
+                  s"""
+                     |SELECT pg_attribute.attndims
+                     |FROM pg_attribute
+                     |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
+                     |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+                     |WHERE pg_class.relname = '$tableName'
+                     |AND pg_attribute.attname = '$columnName'
+                     |""".stripMargin
 
-          if (arrayDimensionalityResolveNeedsFallback) {
-            /*
-            In case that table doesn't contain any rows, previous query won't resolve dimensionality.
-            Therefore, fallback to dimension resolution from metadata table.
-             */
-            val fallbackQuery =
-              s"""
-                 |SELECT pg_attribute.attndims
-                 |FROM pg_attribute
-                 |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
-                 |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
-                 |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
-                 |""".stripMargin
-
-            Using.resource(conn.createStatement()) { stmt =>
-              Using.resource(stmt.executeQuery(fallbackQuery)) { rs =>
-                if (rs.next()) {
-                  metadata.putLong("arrayDimension", rs.getLong(1))
+                Using.resource(conn.createStatement()) { stmt2 =>
+                  Using.resource(stmt2.executeQuery(fallbackQuery)) { rs2 =>
+                    if (rs2.next()) {
+                      metadata.putLong("arrayDimension", rs2.getLong(1))
+                    }
+                  }
                 }
               }
             }
