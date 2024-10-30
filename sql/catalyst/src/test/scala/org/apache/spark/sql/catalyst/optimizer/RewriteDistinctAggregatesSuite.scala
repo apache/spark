@@ -87,7 +87,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
 
     val rewrite = RewriteDistinctAggregates(input)
     rewrite match {
-      case Aggregate(_, _, LocalRelation(_, _, _)) =>
+      case Aggregate(_, _, _: LocalRelation) =>
       case _ => fail(s"Plan is not as expected:\n$rewrite")
     }
   }

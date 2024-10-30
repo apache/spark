@@ -321,6 +321,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val scan =
         FileSourceScanExec(
           fsRelation,
+          l.stream,
           outputAttributes,
           outputDataSchema,
           partitionKeyFilters.toSeq,
