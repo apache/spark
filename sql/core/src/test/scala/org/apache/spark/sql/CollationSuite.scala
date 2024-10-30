@@ -2048,36 +2048,36 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   }
 
   test("fully qualified name") {
-    Seq[String]("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI_AI").foreach { collation =>
+    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI_AI").foreach { collation =>
       // Make sure that the collation expression returns the correct fully qualified name.
       val df = sql(s"SELECT collation('a' collate $collation)")
       checkAnswer(df,
         Seq(Row(s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}.$collation")))
 
       // Make sure the user can specify the fully qualified name as a collation name.
-      Seq[String]("contains", "startswith", "endswith").foreach{ binaryFunction =>
+      Seq("contains", "startswith", "endswith").foreach{ binaryFunction =>
         val dfRegularName = sql(
           s"SELECT $binaryFunction('a' collate $collation, 'A' collate $collation)")
         val dfFullyQualifiedName = sql(
           s"SELECT $binaryFunction('a' collate system.builtin.$collation, 'A' collate $collation)")
-        checkAnswer(dfRegularName, dfFullyQualifiedName.collect())
+        checkAnswer(dfRegularName, dfFullyQualifiedName)
       }
     }
 
     // Wrong collation names raise a Spark exception.
-    Seq[(String, String)](
+    Seq(
       ("system.builtin2.UTF8_BINARY", "UTF8_BINARY"),
       ("system.UTF8_BINARY", "UTF8_BINARY"),
       ("builtin.UTF8_LCASE", "UTF8_LCASE")
-    ).foreach { collation =>
+    ).foreach { case(collationName, proposal) =>
       checkError(
         exception = intercept[SparkException] {
-          sql(s"SELECT 'a' COLLATE ${collation._1}")
+          sql(s"SELECT 'a' COLLATE ${collationName}")
         },
         condition = "COLLATION_INVALID_NAME",
         sqlState = "42704",
-        parameters = Map("collationName" -> collation._1.split("\\.").last,
-          "proposals" -> collation._2))
+        parameters = Map("collationName" -> collationName.split("\\.").last,
+          "proposals" -> proposal))
     }
 
     // Case insensitive fully qualified names are supported.

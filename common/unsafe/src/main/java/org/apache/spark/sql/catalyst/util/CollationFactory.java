@@ -1204,7 +1204,7 @@ public final class CollationFactory {
     // Currently only predefined collations are supported.
     assert definitionOrigin == Collation.CollationSpec.DefinitionOrigin.PREDEFINED;
     return String.format("%s.%s.%s", CATALOG, SCHEMA,
-        Collation.CollationSpec.fetchCollation(collationId).collationName);
+      Collation.CollationSpec.fetchCollation(collationId).collationName);
   }
 
   public static boolean isCaseInsensitive(int collationId) {
