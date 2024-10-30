@@ -753,7 +753,6 @@ class RocksDB(
       changelogWriter.foreach(_.abort())
       // Make sure changelogWriter gets recreated next time.
       changelogWriter = None
-
       logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
     } finally {
       release(RollbackStore)
