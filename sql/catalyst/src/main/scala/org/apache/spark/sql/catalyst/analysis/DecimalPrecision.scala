@@ -18,8 +18,6 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
 
 // scalastyle:off
 /**
@@ -54,26 +52,5 @@ object DecimalPrecision extends TypeCoercionRule {
     // Skip nodes whose children have not been resolved yet
     case e if !e.childrenResolved => e
     case withChildrenResolved => DecimalPrecisionTypeCoercion(withChildrenResolved)
-  }
-
-  import scala.math.max
-
-  // Returns the wider decimal type that's wider than both of them
-  def widerDecimalType(d1: DecimalType, d2: DecimalType): DecimalType = {
-    widerDecimalType(d1.precision, d1.scale, d2.precision, d2.scale)
-  }
-  // max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2)
-  def widerDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
-    val scale = max(s1, s2)
-    val range = max(p1 - s1, p2 - s2)
-    bounded(scale + range, scale)
-  }
-
-  def bounded(precision: Int, scale: Int): DecimalType = {
-    if (conf.getConf(SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST)) {
-      DecimalType.bounded(precision, scale)
-    } else {
-      DecimalType.boundedPreferIntegralDigits(precision, scale)
-    }
   }
 }

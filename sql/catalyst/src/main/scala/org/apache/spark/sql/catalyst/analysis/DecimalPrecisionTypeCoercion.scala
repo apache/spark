@@ -18,35 +18,18 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{
-  BinaryComparison,
-  BinaryOperator,
-  Cast,
-  DecimalLiteral,
-  Expression,
-  GreaterThan,
-  GreaterThanOrEqual,
-  LessThan,
-  LessThanOrEqual,
-  Literal
-}
+import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, BinaryOperator, Cast, DecimalLiteral, Expression, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.types.{
-  DataType,
-  DecimalExpression,
-  DecimalType,
-  DoubleType,
-  FloatType,
-  IntegralType,
-  IntegralTypeExpression
-}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, DecimalExpression, DecimalType, DoubleType, FloatType, IntegralType, IntegralTypeExpression}
 
 /**
  * Type coercion helper that matches against [[BinaryComparison]] and [[BinaryOperator]]
  * expression in order to type coerce children to common precision.
  */
 object DecimalPrecisionTypeCoercion extends SQLConfHelper {
+  import scala.math.max
 
   /**
    * Strength reduction for comparing integral expressions with decimal literals.
@@ -154,7 +137,7 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
   private def decimalAndDecimal(): PartialFunction[Expression, Expression] = {
     case b @ BinaryComparison(e1 @ DecimalExpression(p1, s1), e2 @ DecimalExpression(p2, s2))
         if p1 != p2 || s1 != s2 =>
-      val resultType = DecimalPrecision.widerDecimalType(p1, s1, p2, s2)
+      val resultType = widerDecimalType(p1, s1, p2, s2)
       val newE1 = if (e1.dataType == resultType) e1 else Cast(e1, resultType)
       val newE2 = if (e2.dataType == resultType) e2 else Cast(e2, resultType)
       b.withNewChildren(Seq(newE1, newE2))
@@ -202,5 +185,24 @@ object DecimalPrecisionTypeCoercion extends SQLConfHelper {
           b.withNewChildren(Seq(Cast(l, DoubleType), r))
         case _ => b
       }
+  }
+
+  // Returns the wider decimal type that's wider than both of them
+  def widerDecimalType(d1: DecimalType, d2: DecimalType): DecimalType = {
+    widerDecimalType(d1.precision, d1.scale, d2.precision, d2.scale)
+  }
+  // max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2)
+  def widerDecimalType(p1: Int, s1: Int, p2: Int, s2: Int): DecimalType = {
+    val scale = max(s1, s2)
+    val range = max(p1 - s1, p2 - s2)
+    bounded(scale + range, scale)
+  }
+
+  def bounded(precision: Int, scale: Int): DecimalType = {
+    if (conf.getConf(SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST)) {
+      DecimalType.bounded(precision, scale)
+    } else {
+      DecimalType.boundedPreferIntegralDigits(precision, scale)
+    }
   }
 }
