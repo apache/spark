@@ -1695,8 +1695,9 @@ class SparkConnectPlanner(
 
   private def unpackScalaUDF[T](fun: proto.ScalarScalaUDF): T = {
     try {
-      logDebug(s"Unpack using class loader: ${Utils.getContextOrSparkClassLoader}")
-      Utils.deserialize[T](fun.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
+      val classloader = sessionHolder.artifactManager.classloader
+      logDebug(s"Unpack using class loader: $classloader")
+      Utils.deserialize[T](fun.getPayload.toByteArray, classloader)
     } catch {
       case t: Throwable =>
         Throwables.getRootCause(t) match {
@@ -2941,7 +2942,7 @@ class SparkConnectPlanner(
         case StreamingForeachFunction.FunctionCase.SCALA_FUNCTION =>
           val scalaFn = Utils.deserialize[StreamingForeachBatchHelper.ForeachBatchFnType](
             writeOp.getForeachBatch.getScalaFunction.getPayload.toByteArray,
-            Utils.getContextOrSparkClassLoader)
+            sessionHolder.artifactManager.classloader)
           StreamingForeachBatchHelper.scalaForeachBatchWrapper(scalaFn, sessionHolder)
 
         case StreamingForeachFunction.FunctionCase.FUNCTION_NOT_SET =>
@@ -3249,7 +3250,7 @@ class SparkConnectPlanner(
           val listenerPacket = Utils
             .deserialize[StreamingListenerPacket](
               command.getAddListener.getListenerPayload.toByteArray,
-              Utils.getContextOrSparkClassLoader)
+              sessionHolder.artifactManager.classloader)
 
           listenerPacket.listener.asInstanceOf[StreamingQueryListener]
         }

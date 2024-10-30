@@ -41,7 +41,6 @@ private[sql] object SimpleSparkConnectService {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf()
       .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
-      .set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, true)
       .set(SQLConf.ARTIFACTS_REPL_CLASS_ISOLATION_ENABLED, true)
     val sparkSession = SparkSession.builder().config(conf).getOrCreate()
     val sparkContext = sparkSession.sparkContext // init spark context

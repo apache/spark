@@ -31,7 +31,6 @@ object SparkConnectServer extends Logging {
     logInfo("Starting Spark session.")
     val session = SparkSession
       .builder()
-      .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, true)
       .config(SQLConf.ARTIFACTS_REPL_CLASS_ISOLATION_ENABLED.key, true)
       .getOrCreate()
     try {

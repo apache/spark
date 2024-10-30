@@ -331,10 +331,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
    * @tparam T
    */
   def withSession[T](f: SparkSession => T): T = {
-    artifactManager.withResources {
-      session.withActive {
-        f(session)
-      }
+    session.withActive {
+      f(session)
     }
   }
 
