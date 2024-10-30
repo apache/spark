@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{QueryTest}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
@@ -33,32 +32,6 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
       assert(originalQuery.columns sameElements newQuery.columns)
 
       checkAnswer(originalQuery, newQuery.collect().toIndexedSeq)
-    } finally {
-      spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
-    }
-  }
-
-  test("EXEC IMMEDIATE STACK OVERFLOW") {
-    try {
-      spark.sql("DECLARE parm = 1;")
-      val query = (1 to 20000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
-      Seq(
-        s"EXECUTE IMMEDIATE '$query'",
-        s"EXECUTE IMMEDIATE '$query' INTO parm").foreach { q =>
-        val e = intercept[ParseException] {
-          spark.sql(q)
-        }
-
-        checkError(
-          exception = e,
-          errorClass = "FAILED_TO_PARSE_TOO_COMPLEX",
-          parameters = Map(),
-          context = ExpectedContext(
-            query,
-            start = 0,
-            stop = query.length - 1)
-        )
-      }
     } finally {
       spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
     }

@@ -32,9 +32,10 @@ import org.apache.spark.sql.Column
  *   Window.partitionBy("country").orderBy("date").rowsBetween(-3, 3)
  * }}}
  *
- * @note When ordering is not defined, an unbounded window frame (rowFrame, unboundedPreceding,
- *       unboundedFollowing) is used by default. When ordering is defined, a growing window frame
- *       (rangeFrame, unboundedPreceding, currentRow) is used by default.
+ * @note
+ *   When ordering is not defined, an unbounded window frame (rowFrame, unboundedPreceding,
+ *   unboundedFollowing) is used by default. When ordering is defined, a growing window frame
+ *   (rangeFrame, unboundedPreceding, currentRow) is used by default.
  *
  * @since 1.4.0
  */
@@ -47,7 +48,7 @@ object Window {
    */
   @scala.annotation.varargs
   def partitionBy(colName: String, colNames: String*): WindowSpec = {
-    spec.partitionBy(colName, colNames : _*)
+    spec.partitionBy(colName, colNames: _*)
   }
 
   /**
@@ -56,7 +57,7 @@ object Window {
    */
   @scala.annotation.varargs
   def partitionBy(cols: Column*): WindowSpec = {
-    spec.partitionBy(cols : _*)
+    spec.partitionBy(cols: _*)
   }
 
   /**
@@ -65,7 +66,7 @@ object Window {
    */
   @scala.annotation.varargs
   def orderBy(colName: String, colNames: String*): WindowSpec = {
-    spec.orderBy(colName, colNames : _*)
+    spec.orderBy(colName, colNames: _*)
   }
 
   /**
@@ -74,12 +75,12 @@ object Window {
    */
   @scala.annotation.varargs
   def orderBy(cols: Column*): WindowSpec = {
-    spec.orderBy(cols : _*)
+    spec.orderBy(cols: _*)
   }
 
   /**
-   * Value representing the first row in the partition, equivalent to "UNBOUNDED PRECEDING" in SQL.
-   * This can be used to specify the frame boundaries:
+   * Value representing the first row in the partition, equivalent to "UNBOUNDED PRECEDING" in
+   * SQL. This can be used to specify the frame boundaries:
    *
    * {{{
    *   Window.rowsBetween(Window.unboundedPreceding, Window.currentRow)
@@ -113,22 +114,22 @@ object Window {
   def currentRow: Long = 0
 
   /**
-   * Creates a [[WindowSpec]] with the frame boundaries defined,
-   * from `start` (inclusive) to `end` (inclusive).
+   * Creates a [[WindowSpec]] with the frame boundaries defined, from `start` (inclusive) to `end`
+   * (inclusive).
    *
    * Both `start` and `end` are positions relative to the current row. For example, "0" means
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
-   * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
-   * and `Window.currentRow` to specify special boundary values, rather than using integral
-   * values directly.
+   * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`, and
+   * `Window.currentRow` to specify special boundary values, rather than using integral values
+   * directly.
    *
-   * A row based boundary is based on the position of the row within the partition.
-   * An offset indicates the number of rows above or below the current row, the frame for the
-   * current row starts or ends. For instance, given a row based sliding frame with a lower bound
-   * offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
-   * index 4 to index 7.
+   * A row based boundary is based on the position of the row within the partition. An offset
+   * indicates the number of rows above or below the current row, the frame for the current row
+   * starts or ends. For instance, given a row based sliding frame with a lower bound offset of -1
+   * and a upper bound offset of +2. The frame for row with index 5 would range from index 4 to
+   * index 7.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window
@@ -150,10 +151,12 @@ object Window {
    *   +---+--------+---+
    * }}}
    *
-   * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value (`Window.unboundedFollowing`).
+   * @param start
+   *   boundary start, inclusive. The frame is unbounded if this is the minimum long value
+   *   (`Window.unboundedPreceding`).
+   * @param end
+   *   boundary end, inclusive. The frame is unbounded if this is the maximum long value
+   *   (`Window.unboundedFollowing`).
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rowsBetween.
@@ -162,25 +165,24 @@ object Window {
   }
 
   /**
-   * Creates a [[WindowSpec]] with the frame boundaries defined,
-   * from `start` (inclusive) to `end` (inclusive).
+   * Creates a [[WindowSpec]] with the frame boundaries defined, from `start` (inclusive) to `end`
+   * (inclusive).
    *
    * Both `start` and `end` are relative to the current row. For example, "0" means "current row",
-   * while "-1" means one off before the current row, and "5" means the five off after the
-   * current row.
+   * while "-1" means one off before the current row, and "5" means the five off after the current
+   * row.
    *
-   * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
-   * and `Window.currentRow` to specify special boundary values, rather than using long values
+   * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`, and
+   * `Window.currentRow` to specify special boundary values, rather than using long values
    * directly.
    *
-   * A range-based boundary is based on the actual value of the ORDER BY
-   * expression(s). An offset is used to alter the value of the ORDER BY expression,
-   * for instance if the current ORDER BY expression has a value of 10 and the lower bound offset
-   * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
-   * number of constraints on the ORDER BY expressions: there can be only one expression and this
-   * expression must have a numerical data type. An exception can be made when the offset is
-   * unbounded, because no value modification is needed, in this case multiple and non-numeric
-   * ORDER BY expression are allowed.
+   * A range-based boundary is based on the actual value of the ORDER BY expression(s). An offset
+   * is used to alter the value of the ORDER BY expression, for instance if the current ORDER BY
+   * expression has a value of 10 and the lower bound offset is -3, the resulting lower bound for
+   * the current row will be 10 - 3 = 7. This however puts a number of constraints on the ORDER BY
+   * expressions: there can be only one expression and this expression must have a numerical data
+   * type. An exception can be made when the offset is unbounded, because no value modification is
+   * needed, in this case multiple and non-numeric ORDER BY expression are allowed.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window
@@ -202,10 +204,12 @@ object Window {
    *   +---+--------+---+
    * }}}
    *
-   * @param start boundary start, inclusive. The frame is unbounded if this is
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value (`Window.unboundedFollowing`).
+   * @param start
+   *   boundary start, inclusive. The frame is unbounded if this is the minimum long value
+   *   (`Window.unboundedPreceding`).
+   * @param end
+   *   boundary end, inclusive. The frame is unbounded if this is the maximum long value
+   *   (`Window.unboundedFollowing`).
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rangeBetween.
@@ -234,4 +238,4 @@ object Window {
  * @since 1.4.0
  */
 @Stable
-class Window private()  // So we can see Window in JavaDoc.
+class Window private () // So we can see Window in JavaDoc.

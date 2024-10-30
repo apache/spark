@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
@@ -220,7 +220,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     plan match {
-      case LogicalRelation(_, _, Some(catalogTable), _) =>
+      case LogicalRelationWithTable(_, Some(catalogTable)) =>
         isSameName(catalogTable.identifier.nameParts)
 
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _) =>
@@ -474,7 +474,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
     // so we always do bucketed scan in a cached plan.
     var disableConfigs = Seq(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
-    if (!session.conf.get(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
+    if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
       disableConfigs =

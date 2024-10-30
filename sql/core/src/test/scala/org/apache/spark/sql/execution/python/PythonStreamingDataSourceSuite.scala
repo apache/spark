@@ -258,7 +258,7 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
       }
       checkErrorMatchPVals(
         err,
-        errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+        condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
         parameters = Map(
           "action" -> action,
           "msg" -> "(.|\\n)*"
@@ -324,7 +324,7 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
       }
       checkErrorMatchPVals(
         err,
-        errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+        condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
         parameters = Map(
           "action" -> action,
           "msg" -> "(.|\\n)*"
@@ -574,7 +574,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       val q = spark.readStream.format(dataSourceName).load().writeStream.format("console").start()
       q.awaitTermination()
     }
-    assert(err.getErrorClass == "STREAM_FAILED")
+    assert(err.getCondition == "STREAM_FAILED")
     assert(err.getMessage.contains("error creating stream reader"))
   }
 
@@ -661,7 +661,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       }
       checkErrorMatchPVals(
         err,
-        errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+        condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
         parameters = Map(
           "action" -> action,
           "msg" -> "(.|\\n)*"
@@ -723,7 +723,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       }
       checkErrorMatchPVals(
         err,
-        errorClass = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
+        condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
         parameters = Map(
           "action" -> action,
           "msg" -> "(.|\\n)*"
@@ -1035,7 +1035,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           runQuery("complete")
         },
-        errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+        condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
         sqlState = "42KDE",
         parameters = Map(
           "outputMode" -> "complete",

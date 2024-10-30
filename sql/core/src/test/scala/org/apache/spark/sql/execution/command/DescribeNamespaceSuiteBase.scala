@@ -43,7 +43,7 @@ trait DescribeNamespaceSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"DESCRIBE NAMESPACE EXTENDED $catalog.$ns")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 

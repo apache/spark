@@ -21,10 +21,10 @@ import org.apache.spark.annotation.{Evolving, Experimental}
 @Experimental
 @Evolving
 /**
- * Interface used for arbitrary stateful operations with the v2 API to capture
- * map value state.
+ * Interface used for arbitrary stateful operations with the v2 API to capture map value state.
  */
 trait MapState[K, V] extends Serializable {
+
   /** Whether state exists or not. */
   def exists(): Boolean
 
@@ -35,7 +35,7 @@ trait MapState[K, V] extends Serializable {
   def containsKey(key: K): Boolean
 
   /** Update value for given user key */
-  def updateValue(key: K, value: V) : Unit
+  def updateValue(key: K, value: V): Unit
 
   /** Get the map associated with grouping key */
   def iterator(): Iterator[(K, V)]

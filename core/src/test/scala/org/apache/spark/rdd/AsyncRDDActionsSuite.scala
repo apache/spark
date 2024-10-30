@@ -201,10 +201,10 @@ class AsyncRDDActionsSuite extends SparkFunSuite with TimeLimits {
 
   test("FutureAction result, timeout") {
     val f = sc.parallelize(1 to 100, 4)
-              .mapPartitions(itr => { Thread.sleep(20); itr })
+              .mapPartitions(itr => { Thread.sleep(200); itr })
               .countAsync()
     intercept[TimeoutException] {
-      ThreadUtils.awaitResult(f, Duration(20, "milliseconds"))
+      ThreadUtils.awaitResult(f, Duration(2, "milliseconds"))
     }
   }
 

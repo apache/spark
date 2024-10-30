@@ -191,7 +191,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         exception = intercept[AnalysisException] {
           df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1156",
+        condition = "_LEGACY_ERROR_TEMP_1156",
         parameters = Map(
           "colName" -> "NAME",
           "tableSchema" ->
@@ -224,7 +224,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           df3.write.mode(SaveMode.Overwrite).option("truncate", true)
             .jdbc(url1, "TEST.TRUNCATETEST", properties)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1156",
+        condition = "_LEGACY_ERROR_TEMP_1156",
         parameters = Map(
           "colName" -> "seq",
           "tableSchema" ->
@@ -256,7 +256,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       exception = intercept[AnalysisException] {
         df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1156",
+      condition = "_LEGACY_ERROR_TEMP_1156",
       parameters = Map(
         "colName" -> "seq",
         "tableSchema" ->
@@ -507,7 +507,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .option("createTableColumnTypes", "name CLOB(2000)")
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"CLOB(2000)\""))
   }
 
@@ -519,7 +519,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'`'", "hint" -> ""))
   }
 
@@ -533,7 +533,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       }
       checkError(
         exception = e,
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> "`name`"))
     }
   }

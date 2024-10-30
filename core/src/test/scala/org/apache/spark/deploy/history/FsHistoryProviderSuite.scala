@@ -708,7 +708,8 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       while (entry != null) {
         val actual = new String(ByteStreams.toByteArray(inputStream), StandardCharsets.UTF_8)
         val expected =
-          Files.toString(logs.find(_.getName == entry.getName).get, StandardCharsets.UTF_8)
+          Files.asCharSource(logs.find(_.getName == entry.getName).get, StandardCharsets.UTF_8)
+            .read()
         actual should be (expected)
         totalEntries += 1
         entry = inputStream.getNextEntry

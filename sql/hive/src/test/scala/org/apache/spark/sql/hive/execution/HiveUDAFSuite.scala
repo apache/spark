@@ -151,7 +151,7 @@ class HiveUDAFSuite extends QueryTest
           exception = intercept[AnalysisException] {
             sql("SELECT testUDAFPercentile(x, rand()) from view1 group by y")
           },
-          errorClass = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
+          condition = "AGGREGATE_FUNCTION_WITH_NONDETERMINISTIC_EXPRESSION",
           parameters = Map("sqlExpr" -> "\"testUDAFPercentile( x, rand())\""),
           context = ExpectedContext(
             fragment = "rand()",
@@ -181,7 +181,7 @@ class HiveUDAFSuite extends QueryTest
         exception = intercept[AnalysisException] {
           sql(s"SELECT $functionName(100)")
         },
-        errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+        condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
         parameters = Map(
           "functionName" -> toSQLId("longProductSum"),
           "expectedNum" -> "2",

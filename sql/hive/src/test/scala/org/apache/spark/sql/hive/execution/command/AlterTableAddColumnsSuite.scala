@@ -35,7 +35,7 @@ class AlterTableAddColumnsSuite
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"ALTER TABLE $tbl ADD COLUMNS (ym INTERVAL YEAR)")
         },
-        errorClass = "UNSUPPORTED_FEATURE.HIVE_WITH_ANSI_INTERVALS",
+        condition = "UNSUPPORTED_FEATURE.HIVE_WITH_ANSI_INTERVALS",
         parameters = Map("tableName" -> toSQLId(tbl))
       )
     }

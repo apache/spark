@@ -146,7 +146,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
       },
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
@@ -251,7 +251,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwrite(lit(true))
       },
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
@@ -356,7 +356,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwritePartitions()
       },
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
@@ -829,14 +829,14 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         ds.write
       },
-      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`write`"))
 
     checkError(
       exception = intercept[AnalysisException] {
         ds.writeTo("testcat.table_name")
       },
-      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`writeTo`"))
   }
 }

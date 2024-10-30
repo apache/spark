@@ -40,13 +40,18 @@ trait DateTimeFormatterHelper {
   }
 
   private def verifyLocalDate(
-      accessor: TemporalAccessor, field: ChronoField, candidate: LocalDate): Unit = {
+      accessor: TemporalAccessor,
+      field: ChronoField,
+      candidate: LocalDate): Unit = {
     if (accessor.isSupported(field)) {
       val actual = accessor.get(field)
       val expected = candidate.get(field)
       if (actual != expected) {
         throw ExecutionErrors.fieldDiffersFromDerivedLocalDateError(
-          field, actual, expected, candidate)
+          field,
+          actual,
+          expected,
+          candidate)
       }
     }
   }
@@ -133,7 +138,8 @@ trait DateTimeFormatterHelper {
   // SparkUpgradeException. On the contrary, if the legacy policy set to CORRECTED,
   // DateTimeParseException will address by the caller side.
   protected def checkParsedDiff[T](
-      s: String, legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
+      s: String,
+      legacyParseFunc: String => T): PartialFunction[Throwable, T] = {
     case e if needConvertToSparkUpgradeException(e) =>
       try {
         legacyParseFunc(s)
@@ -151,11 +157,12 @@ trait DateTimeFormatterHelper {
       d: T,
       legacyFormatFunc: T => String): PartialFunction[Throwable, String] = {
     case e if needConvertToSparkUpgradeException(e) =>
-      val resultCandidate = try {
-        legacyFormatFunc(d)
-      } catch {
-        case _: Throwable => throw e
-      }
+      val resultCandidate =
+        try {
+          legacyFormatFunc(d)
+        } catch {
+          case _: Throwable => throw e
+        }
       throw ExecutionErrors.failToParseDateTimeInNewParserError(resultCandidate, e)
   }
 
@@ -166,9 +173,11 @@ trait DateTimeFormatterHelper {
    * policy or follow our guide to correct their pattern. Otherwise, the original
    * IllegalArgumentException will be thrown.
    *
-   * @param pattern the date time pattern
-   * @param tryLegacyFormatter a func to capture exception, identically which forces a legacy
-   *                           datetime formatter to be initialized
+   * @param pattern
+   *   the date time pattern
+   * @param tryLegacyFormatter
+   *   a func to capture exception, identically which forces a legacy datetime formatter to be
+   *   initialized
    */
   protected def checkLegacyFormatter(
       pattern: String,
@@ -214,8 +223,7 @@ private object DateTimeFormatterHelper {
   /**
    * Building a formatter for parsing seconds fraction with variable length
    */
-  def createBuilderWithVarLengthSecondFraction(
-      pattern: String): DateTimeFormatterBuilder = {
+  def createBuilderWithVarLengthSecondFraction(pattern: String): DateTimeFormatterBuilder = {
     val builder = createBuilder()
     pattern.split("'").zipWithIndex.foreach {
       // Split string starting with the regex itself which is `'` here will produce an extra empty
@@ -229,12 +237,14 @@ private object DateTimeFormatterHelper {
             case extractor(prefix, secondFraction, suffix) =>
               builder.appendPattern(prefix)
               if (secondFraction.nonEmpty) {
-                builder.appendFraction(ChronoField.NANO_OF_SECOND, 1, secondFraction.length, false)
+                builder
+                  .appendFraction(ChronoField.NANO_OF_SECOND, 1, secondFraction.length, false)
               }
               rest = suffix
-            case _ => throw new SparkIllegalArgumentException(
-              errorClass = "INVALID_DATETIME_PATTERN",
-              messageParameters = Map("pattern" -> pattern))
+            case _ =>
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_DATETIME_PATTERN.SECONDS_FRACTION",
+                messageParameters = Map("pattern" -> pattern))
           }
         }
       case (patternPart, _) => builder.appendLiteral(patternPart)
@@ -258,8 +268,10 @@ private object DateTimeFormatterHelper {
     val builder = createBuilder()
       .append(DateTimeFormatter.ISO_LOCAL_DATE)
       .appendLiteral(' ')
-      .appendValue(ChronoField.HOUR_OF_DAY, 2).appendLiteral(':')
-      .appendValue(ChronoField.MINUTE_OF_HOUR, 2).appendLiteral(':')
+      .appendValue(ChronoField.HOUR_OF_DAY, 2)
+      .appendLiteral(':')
+      .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
+      .appendLiteral(':')
       .appendValue(ChronoField.SECOND_OF_MINUTE, 2)
       .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
     toFormatter(builder, TimestampFormatter.defaultLocale)
@@ -299,17 +311,21 @@ private object DateTimeFormatterHelper {
    * parsing/formatting datetime values. The pattern string is incompatible with the one defined
    * by SimpleDateFormat in Spark 2.4 and earlier. This function converts all incompatible pattern
    * for the new parser in Spark 3.0. See more details in SPARK-31030.
-   * @param pattern The input pattern.
-   * @return The pattern for new parser
+   * @param pattern
+   *   The input pattern.
+   * @return
+   *   The pattern for new parser
    */
   def convertIncompatiblePattern(pattern: String, isParsing: Boolean): String = {
-    val eraDesignatorContained = pattern.split("'").zipWithIndex.exists {
-      case (patternPart, index) =>
+    val eraDesignatorContained =
+      pattern.split("'").zipWithIndex.exists { case (patternPart, index) =>
         // Text can be quoted using single quotes, we only check the non-quote parts.
         index % 2 == 0 && patternPart.contains("G")
-    }
-    (pattern + " ").split("'").zipWithIndex.map {
-      case (patternPart, index) =>
+      }
+    (pattern + " ")
+      .split("'")
+      .zipWithIndex
+      .map { case (patternPart, index) =>
         if (index % 2 == 0) {
           for (c <- patternPart if weekBasedLetters.contains(c)) {
             throw new SparkIllegalArgumentException(
@@ -317,12 +333,10 @@ private object DateTimeFormatterHelper {
               messageParameters = Map("c" -> c.toString))
           }
           for (c <- patternPart if unsupportedLetters.contains(c) ||
-            (isParsing && unsupportedLettersForParsing.contains(c))) {
+              (isParsing && unsupportedLettersForParsing.contains(c))) {
             throw new SparkIllegalArgumentException(
               errorClass = "INVALID_DATETIME_PATTERN.ILLEGAL_CHARACTER",
-              messageParameters = Map(
-                "c" -> c.toString,
-                "pattern" -> pattern))
+              messageParameters = Map("c" -> c.toString, "pattern" -> pattern))
           }
           for (style <- unsupportedPatternLengths if patternPart.contains(style)) {
             throw new SparkIllegalArgumentException(
@@ -340,6 +354,8 @@ private object DateTimeFormatterHelper {
         } else {
           patternPart
         }
-    }.mkString("'").stripSuffix(" ")
+      }
+      .mkString("'")
+      .stripSuffix(" ")
   }
 }

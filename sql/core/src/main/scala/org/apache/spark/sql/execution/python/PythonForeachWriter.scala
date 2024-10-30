@@ -21,12 +21,15 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
-import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext}
+import scala.util.control.NonFatal
+
+import org.apache.spark.{JobArtifactSet, SparkEnv, SparkThrowable, TaskContext}
 import org.apache.spark.api.python._
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.sources.ForeachUserFuncException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, Utils}
@@ -53,6 +56,8 @@ class WriterThread(outputIterator: Iterator[Array[Byte]])
     } catch {
       // Cache exceptions seen while evaluating the Python function on the streamed input. The
       // parent thread will throw this crashed exception eventually.
+      case NonFatal(e) if !e.isInstanceOf[SparkThrowable] =>
+        _exception = ForeachUserFuncException(e)
       case t: Throwable =>
         _exception = t
     }

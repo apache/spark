@@ -32,6 +32,6 @@ case class ParquetTable(
     userSpecifiedSchema, fallbackFileFormat) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ParquetScanBuilder =
-    (ParquetScanBuilder.apply _).tupled(newScanBuilderArgs(options))
+    (ParquetScanBuilder.apply _).tupled(newScanBuilderArgs(mergedOptions(options)))
 
 }

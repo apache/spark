@@ -39,7 +39,7 @@ trait DropNamespaceSuiteBase extends command.DropNamespaceSuiteBase
       exception = intercept[AnalysisException] {
         sql(s"DROP NAMESPACE default")
       },
-      errorClass = "UNSUPPORTED_FEATURE.DROP_DATABASE",
+      condition = "UNSUPPORTED_FEATURE.DROP_DATABASE",
       parameters = Map("database" -> s"`$catalog`.`default`")
     )
   }

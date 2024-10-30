@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -71,6 +72,37 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-49915: Handle zero and one in associative operators") {
+    val originalQuery =
+      testRelation.select(
+        $"a" + 0,
+        Literal(-3) + $"a" + 3,
+        $"b" * 0 * 1 * 2 * 3,
+        Count($"b") * 0,
+        $"b" * 1 * 1,
+        ($"b" + 0) * 1 * 2 * 3 * 4,
+        $"a" + 0 + $"b" + 0 + $"c" + 0,
+        $"a" + 0 + $"b" * 1 + $"c" + 0
+      )
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(
+          $"a".as("(a + 0)"),
+          $"a".as("((-3 + a) + 3)"),
+          ($"b" * 0).as("((((b * 0) * 1) * 2) * 3)"),
+          Literal(0L).as("(count(b) * 0)"),
+          $"b".as("((b * 1) * 1)"),
+          ($"b" * 24).as("(((((b + 0) * 1) * 2) * 3) * 4)"),
+          ($"a" + $"b" + $"c").as("""(((((a + 0) + b) + 0) + c) + 0)"""),
+          ($"a" + $"b" + $"c").as("((((a + 0) + (b * 1)) + c) + 0)")
+        ).analyze
 
     comparePlans(optimized, correctAnswer)
   }

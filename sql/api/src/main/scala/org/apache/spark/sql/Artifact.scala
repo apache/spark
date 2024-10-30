@@ -28,8 +28,7 @@ import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.MavenUtils
 
-
-private[sql] class Artifact private(val path: Path, val storage: LocalData) {
+private[sql] class Artifact private (val path: Path, val storage: LocalData) {
   require(!path.isAbsolute, s"Bad path: $path")
 
   lazy val size: Long = storage match {

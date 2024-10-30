@@ -335,7 +335,6 @@ Lines with a: 72, lines with b: 39
 To use Spark Connect as part of a Scala application/project, we first need to include the right dependencies.
 Using the `sbt` build system as an example, we add the following dependencies to the `build.sbt` file:
 {% highlight sbt %}
-libraryDependencies += "org.apache.spark" %% "spark-sql-api" % "3.5.0"
 libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "3.5.0"
 {% endhighlight %}
 

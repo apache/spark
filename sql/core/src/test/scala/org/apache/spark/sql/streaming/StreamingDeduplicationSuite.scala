@@ -521,7 +521,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       // verify that the key schema not compatible error is thrown
       checkError(
         ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-        errorClass = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
+        condition = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
         parameters = Map("storedKeySchema" -> ".*",
           "newKeySchema" -> ".*"),
         matchPVals = true
@@ -567,7 +567,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
 
     checkError(
       ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
-      errorClass = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
+      condition = "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY",
       parameters = Map(
         "schema" -> ".+\"str\":\"spark.UTF8_LCASE\".+"
       ),

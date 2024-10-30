@@ -137,8 +137,9 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
       "spark-local-dir-test",
       "/tmp",
       "",
+      "",
       false,
-      KubernetesHostPathVolumeConf("/hostPath/tmp")
+      KubernetesHostPathVolumeConf("/hostPath/tmp", "")
     )
     val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
     val mountVolumeStep = new MountVolumesFeatureStep(kubernetesConf)

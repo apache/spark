@@ -52,8 +52,8 @@ sealed abstract class UserDefinedFunction extends UserDefinedFunctionLike {
   def nullable: Boolean
 
   /**
-   * Returns true iff the UDF is deterministic, i.e. the UDF produces the same output given the same
-   * input.
+   * Returns true iff the UDF is deterministic, i.e. the UDF produces the same output given the
+   * same input.
    *
    * @since 2.3.0
    */
@@ -98,7 +98,8 @@ private[spark] case class SparkUserDefinedFunction(
     outputEncoder: Option[Encoder[_]] = None,
     givenName: Option[String] = None,
     nullable: Boolean = true,
-    deterministic: Boolean = true) extends UserDefinedFunction {
+    deterministic: Boolean = true)
+    extends UserDefinedFunction {
 
   override def withName(name: String): SparkUserDefinedFunction = {
     copy(givenName = Option(name))
@@ -169,7 +170,8 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
     inputEncoder: Encoder[IN],
     givenName: Option[String] = None,
     nullable: Boolean = true,
-    deterministic: Boolean = true) extends UserDefinedFunction {
+    deterministic: Boolean = true)
+    extends UserDefinedFunction {
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {
     copy(givenName = Option(name))

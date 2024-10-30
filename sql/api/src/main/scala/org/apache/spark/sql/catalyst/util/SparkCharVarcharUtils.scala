@@ -21,15 +21,18 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StringType, StructType, VarcharType}
 
 trait SparkCharVarcharUtils {
+
   /**
-   * Returns true if the given data type is CharType/VarcharType or has nested CharType/VarcharType.
+   * Returns true if the given data type is CharType/VarcharType or has nested
+   * CharType/VarcharType.
    */
   def hasCharVarchar(dt: DataType): Boolean = {
     dt.existsRecursively(f => f.isInstanceOf[CharType] || f.isInstanceOf[VarcharType])
   }
 
   /**
-   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested ones
+   * Validate the given [[DataType]] to fail if it is char or varchar types or contains nested
+   * ones
    */
   def failIfHasCharVarchar(dt: DataType): DataType = {
     if (!SqlApiConf.get.charVarcharAsString && hasCharVarchar(dt)) {

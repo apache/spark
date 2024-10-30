@@ -163,7 +163,7 @@ def install_spark(dest, spark_version, hadoop_version, hive_version):
                 tar.close()
             if os.path.exists(package_local_path):
                 os.remove(package_local_path)
-    raise IOError("Unable to download %s." % pretty_pkg_name)
+    raise OSError("Unable to download %s." % pretty_pkg_name)
 
 
 def get_preferred_mirrors():

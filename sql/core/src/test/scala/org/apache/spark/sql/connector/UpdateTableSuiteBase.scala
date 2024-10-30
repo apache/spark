@@ -579,7 +579,7 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       exception = intercept[SparkRuntimeException] {
         sql(s"UPDATE $tableNameAsString SET s = named_struct('n_i', null, 'n_l', -1L) WHERE pk = 1")
       },
-      errorClass = "NOT_NULL_ASSERT_VIOLATION",
+      condition = "NOT_NULL_ASSERT_VIOLATION",
       sqlState = "42000",
       parameters = Map("walkedTypePath" -> "\ns\nn_i\n"))
   }

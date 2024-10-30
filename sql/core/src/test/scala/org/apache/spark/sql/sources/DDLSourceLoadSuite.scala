@@ -30,7 +30,7 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.read.format("Fluet da Bomb").load()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1141",
+      condition = "_LEGACY_ERROR_TEMP_1141",
       parameters = Map(
         "provider" -> "Fluet da Bomb",
         "sourceNames" -> ("org.apache.spark.sql.sources.FakeSourceOne, " +
@@ -49,7 +49,7 @@ class DDLSourceLoadSuite extends DataSourceTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.read.format("Fake external source").load()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1141",
+      condition = "_LEGACY_ERROR_TEMP_1141",
       parameters = Map(
         "provider" -> "Fake external source",
         "sourceNames" -> ("org.apache.fakesource.FakeExternalSourceOne, " +

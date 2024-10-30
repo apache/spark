@@ -103,6 +103,8 @@ trait SharedSparkSessionBase
     new TestSparkSession(sparkConf)
   }
 
+  protected def sqlConf: SQLConf = _spark.sessionState.conf
+
   /**
    * Initialize the [[TestSparkSession]].  Generally, this is just called from
    * beforeAll; however, in test using styles other than FunSuite, there is

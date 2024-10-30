@@ -16,15 +16,20 @@
  */
 package org.apache.spark.sql.catalyst.encoders
 
-import org.apache.spark.util.SparkSerDeUtils
+import java.lang.invoke.{MethodHandle, MethodHandles, MethodType}
+
+import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.util.{SparkClassUtils, SparkSerDeUtils}
 
 /**
  * Codec for doing conversions between two representations.
  *
- * @tparam I input type (typically the external representation of the data.
- * @tparam O output type (typically the internal representation of the data.
+ * @tparam I
+ *   input type (typically the external representation of the data.
+ * @tparam O
+ *   output type (typically the internal representation of the data.
  */
-trait Codec[I, O] {
+trait Codec[I, O] extends Serializable {
   def encode(in: I): O
   def decode(out: O): I
 }
@@ -39,4 +44,30 @@ class JavaSerializationCodec[I] extends Codec[I, Array[Byte]] {
 
 object JavaSerializationCodec extends (() => Codec[Any, Array[Byte]]) {
   override def apply(): Codec[Any, Array[Byte]] = new JavaSerializationCodec[Any]
+}
+
+/**
+ * A codec that uses Kryo to (de)serialize arbitrary objects to and from a byte array.
+ *
+ * Please note that this is currently only supported for Classic Spark applications. The reason
+ * for this is that Connect applications can have a significantly different classpath than the
+ * driver or executor. This makes having a the same Kryo configuration on both the client and
+ * server (driver & executors) very tricky. As a workaround a user can define their own Codec
+ * which internalizes the Kryo configuration.
+ */
+object KryoSerializationCodec extends (() => Codec[Any, Array[Byte]]) {
+  private lazy val kryoCodecConstructor: MethodHandle = {
+    val cls = SparkClassUtils.classForName(
+      "org.apache.spark.sql.catalyst.encoders.KryoSerializationCodecImpl")
+    MethodHandles.lookup().findConstructor(cls, MethodType.methodType(classOf[Unit]))
+  }
+
+  override def apply(): Codec[Any, Array[Byte]] = {
+    try {
+      kryoCodecConstructor.invoke().asInstanceOf[Codec[Any, Array[Byte]]]
+    } catch {
+      case _: ClassNotFoundException =>
+        throw ExecutionErrors.cannotUseKryoSerialization()
+    }
+  }
 }

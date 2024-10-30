@@ -708,7 +708,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
     checkError(
       exception = e,
-      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
+      condition = "PROTOBUF_DEPENDENCY_NOT_FOUND",
       parameters = Map("dependencyName" -> "nestedenum.proto"))
   }
 
@@ -1057,7 +1057,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
     checkError(
       ex,
-      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+      condition = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
       parameters = Map("filePath" -> "/non/existent/path.desc")
     )
     assert(ex.getCause != null)
@@ -1699,7 +1699,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
       checkError(
         exception = parseError,
-        errorClass = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        condition = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
         parameters = Map(
           "sqlColumn" -> "`basic_enum`",
           "protobufColumn" -> "field 'basic_enum'",
@@ -1711,7 +1711,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
       checkError(
         exception = parseError,
-        errorClass = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        condition = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
         parameters = Map(
           "sqlColumn" -> "`basic_enum`",
           "protobufColumn" -> "field 'basic_enum'",
@@ -2093,7 +2093,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |  to_protobuf(complex_struct, 42, '$testFileDescFile', map())
              |FROM protobuf_test_table
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" -> s"""\"to_protobuf(complex_struct, 42, $testFileDescFile, map())\"""",
           "msg" -> ("The second argument of the TO_PROTOBUF SQL function must be a constant " +
@@ -2111,11 +2111,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |  to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())
              |FROM protobuf_test_table
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" -> "\"to_protobuf(complex_struct, SimpleMessageJavaTypes, 42, map())\"",
           "msg" -> ("The third argument of the TO_PROTOBUF SQL function must be a constant " +
-            "string representing the Protobuf descriptor file path"),
+            "string or binary data representing the Protobuf descriptor file path"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
           fragment = "to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())",
@@ -2130,7 +2130,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |  to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)
              |FROM protobuf_test_table
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" ->
             s"""\"to_protobuf(complex_struct, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
@@ -2152,7 +2152,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |SELECT from_protobuf(protobuf_data, 42, '$testFileDescFile', map())
              |FROM ($toProtobufSql)
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" -> s"""\"from_protobuf(protobuf_data, 42, $testFileDescFile, map())\"""",
           "msg" -> ("The second argument of the FROM_PROTOBUF SQL function must be a constant " +
@@ -2169,11 +2169,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |SELECT from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())
              |FROM ($toProtobufSql)
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" -> "\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, 42, map())\"",
           "msg" -> ("The third argument of the FROM_PROTOBUF SQL function must be a constant " +
-            "string representing the Protobuf descriptor file path"),
+            "string or binary data representing the Protobuf descriptor file path"),
           "hint" -> ""),
         queryContext = Array(ExpectedContext(
           fragment = "from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())",
@@ -2188,7 +2188,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
              |  from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)
              |FROM ($toProtobufSql)
              |""".stripMargin)),
-        errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
         parameters = Map(
           "sqlExpr" ->
             s"""\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",

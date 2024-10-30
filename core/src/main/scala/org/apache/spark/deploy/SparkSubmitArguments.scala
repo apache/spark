@@ -43,7 +43,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   extends SparkSubmitArgumentsParser with Logging {
   var maybeMaster: Option[String] = None
   // Global defaults. These should be keep to minimum to avoid confusing behavior.
-  def master: String = maybeMaster.getOrElse("local[*]")
+  def master: String =
+    maybeMaster.getOrElse(System.getProperty("spark.test.master", "local[*]"))
   var maybeRemote: Option[String] = None
   var deployMode: String = null
   var executorMemory: String = null

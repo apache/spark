@@ -135,7 +135,7 @@ abstract class InsertIntoTests(
       exception = intercept[AnalysisException] {
         doInsert(t1, df)
       },
-      errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+      condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       parameters = Map(
         "tableName" -> tableName,
         "tableColumns" -> "`id`, `data`, `missing`",
@@ -158,7 +158,7 @@ abstract class InsertIntoTests(
         exception = intercept[AnalysisException] {
           doInsert(t1, df)
         },
-        errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+        condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
         parameters = Map(
           "tableName" -> tableName,
           "tableColumns" -> "`id`, `data`",

@@ -51,7 +51,7 @@ class QueryCompilationErrorsDSv2Suite
         checkAnswer(spark.table(tbl), spark.emptyDataFrame)
         checkError(
           exception = e,
-          errorClass = "UNSUPPORTED_FEATURE.INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
+          condition = "UNSUPPORTED_FEATURE.INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
           parameters = Map("tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`"),
           sqlState = "0A000")
       }
@@ -70,7 +70,7 @@ class QueryCompilationErrorsDSv2Suite
       verifyTable(t1, spark.emptyDataFrame)
       checkError(
         exception = e,
-        errorClass = "NON_PARTITION_COLUMN",
+        condition = "NON_PARTITION_COLUMN",
         parameters = Map("columnName" -> "`id`"))
     }
   }
@@ -87,7 +87,7 @@ class QueryCompilationErrorsDSv2Suite
       verifyTable(t1, spark.emptyDataFrame)
       checkError(
         exception = e,
-        errorClass = "NON_PARTITION_COLUMN",
+        condition = "NON_PARTITION_COLUMN",
         parameters = Map("columnName" -> "`data`"))
     }
   }

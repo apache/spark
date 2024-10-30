@@ -64,7 +64,7 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
     }.getCause
     checkError(
       exception = exception.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
     )
   }
@@ -391,13 +391,13 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
   }
 
   test("verify corrupt column") {
-    checkExceptionInExpression[AnalysisException](
-      XmlToStructs(
+    checkErrorInExpression[AnalysisException](
+      JsonToStructs(
         schema = StructType.fromDDL("i int, _unparsed boolean"),
         options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
         child = Literal.create("""{"i":"a"}"""),
-        timeZoneId = UTC_OPT),
-      expectedErrMsg = "The field for corrupt records must be string type and nullable")
+        timeZoneId = UTC_OPT), null, "INVALID_CORRUPT_RECORD_TYPE",
+      Map("columnName" -> "`_unparsed`", "actualType" -> "\"BOOLEAN\""))
   }
 
   def decimalInput(langTag: String): (Decimal, String) = {

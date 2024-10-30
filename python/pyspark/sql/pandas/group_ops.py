@@ -49,7 +49,7 @@ class PandasGroupedOpsMixin:
     can use this class.
     """
 
-    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> DataFrame:
+    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> "DataFrame":
         """
         It is an alias of :meth:`pyspark.sql.GroupedData.applyInPandas`; however, it takes a
         :meth:`pyspark.sql.functions.pandas_udf` whereas
@@ -121,8 +121,8 @@ class PandasGroupedOpsMixin:
         return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
 
     def applyInPandas(
-        self, func: "PandasGroupedMapFunction", schema: Union[StructType, str]
-    ) -> DataFrame:
+        self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
         """
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
         as a `DataFrame`.
@@ -224,8 +224,6 @@ class PandasGroupedOpsMixin:
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
 
-        This API is experimental.
-
         See Also
         --------
         pyspark.sql.functions.pandas_udf
@@ -248,7 +246,7 @@ class PandasGroupedOpsMixin:
         stateStructType: Union[StructType, str],
         outputMode: str,
         timeoutConf: str,
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """
         Applies the given function to each group of data, while maintaining a user-defined
         per-group state. The result Dataset will represent the flattened record returned by the
@@ -329,8 +327,6 @@ class PandasGroupedOpsMixin:
         Notes
         -----
         This function requires a full shuffle.
-
-        This API is experimental.
         """
 
         from pyspark.sql import GroupedData
@@ -484,8 +480,6 @@ class PandasGroupedOpsMixin:
         Notes
         -----
         This function requires a full shuffle.
-
-        This API is experimental.
         """
 
         from pyspark.sql import GroupedData
@@ -683,10 +677,6 @@ class PandasCogroupedOps:
 
     .. versionchanged:: 3.4.0
         Support Spark Connect.
-
-    Notes
-    -----
-    This API is experimental.
     """
 
     def __init__(self, gd1: "GroupedData", gd2: "GroupedData"):
@@ -694,8 +684,8 @@ class PandasCogroupedOps:
         self._gd2 = gd2
 
     def applyInPandas(
-        self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
-    ) -> DataFrame:
+        self, func: "PandasCogroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
         """
         Applies a function to each cogroup using pandas and returns the result
         as a `DataFrame`.
@@ -777,8 +767,6 @@ class PandasCogroupedOps:
         This function requires a full shuffle. All the data of a cogroup will be loaded
         into memory, so the user should be aware of the potential OOM risk if data is skewed
         and certain groups are too large to fit in memory.
-
-        This API is experimental.
 
         See Also
         --------

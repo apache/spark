@@ -41,14 +41,20 @@ import org.apache.spark.sql.types.{Decimal, TimestampNTZType}
 import org.apache.spark.unsafe.types.UTF8String
 
 sealed trait TimestampFormatter extends Serializable {
+
   /**
    * Parses a timestamp in a string and converts it to microseconds.
    *
-   * @param s - string with timestamp to parse
-   * @return microseconds since epoch.
-   * @throws ParseException can be thrown by legacy parser
-   * @throws DateTimeParseException can be thrown by new parser
-   * @throws DateTimeException unable to obtain local date or time
+   * @param s
+   *   \- string with timestamp to parse
+   * @return
+   *   microseconds since epoch.
+   * @throws ParseException
+   *   can be thrown by legacy parser
+   * @throws DateTimeParseException
+   *   can be thrown by new parser
+   * @throws DateTimeException
+   *   unable to obtain local date or time
    */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
@@ -58,11 +64,16 @@ sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to an optional number of microseconds.
    *
-   * @param s - string with timestamp to parse
-   * @return An optional number of microseconds since epoch. The result is None on invalid input.
-   * @throws ParseException can be thrown by legacy parser
-   * @throws DateTimeParseException can be thrown by new parser
-   * @throws DateTimeException unable to obtain local date or time
+   * @param s
+   *   \- string with timestamp to parse
+   * @return
+   *   An optional number of microseconds since epoch. The result is None on invalid input.
+   * @throws ParseException
+   *   can be thrown by legacy parser
+   * @throws DateTimeParseException
+   *   can be thrown by new parser
+   * @throws DateTimeException
+   *   unable to obtain local date or time
    */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
@@ -75,16 +86,24 @@ sealed trait TimestampFormatter extends Serializable {
     }
 
   /**
-   * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local time.
+   * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local
+   * time.
    *
-   * @param s - string with timestamp to parse
-   * @param allowTimeZone - indicates strict parsing of timezone
-   * @return microseconds since epoch.
-   * @throws ParseException can be thrown by legacy parser
-   * @throws DateTimeParseException can be thrown by new parser
-   * @throws DateTimeException unable to obtain local date or time
-   * @throws IllegalStateException The formatter for timestamp without time zone should always
-   *                               implement this method. The exception should never be hit.
+   * @param s
+   *   \- string with timestamp to parse
+   * @param allowTimeZone
+   *   \- indicates strict parsing of timezone
+   * @return
+   *   microseconds since epoch.
+   * @throws ParseException
+   *   can be thrown by legacy parser
+   * @throws DateTimeParseException
+   *   can be thrown by new parser
+   * @throws DateTimeException
+   *   unable to obtain local date or time
+   * @throws IllegalStateException
+   *   The formatter for timestamp without time zone should always implement this method. The
+   *   exception should never be hit.
    */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
@@ -99,14 +118,21 @@ sealed trait TimestampFormatter extends Serializable {
    * Parses a timestamp in a string and converts it to an optional number of microseconds since
    * Unix Epoch in local time.
    *
-   * @param s - string with timestamp to parse
-   * @param allowTimeZone - indicates strict parsing of timezone
-   * @return An optional number of microseconds since epoch. The result is None on invalid input.
-   * @throws ParseException can be thrown by legacy parser
-   * @throws DateTimeParseException can be thrown by new parser
-   * @throws DateTimeException unable to obtain local date or time
-   * @throws IllegalStateException The formatter for timestamp without time zone should always
-   *                               implement this method. The exception should never be hit.
+   * @param s
+   *   \- string with timestamp to parse
+   * @param allowTimeZone
+   *   \- indicates strict parsing of timezone
+   * @return
+   *   An optional number of microseconds since epoch. The result is None on invalid input.
+   * @throws ParseException
+   *   can be thrown by legacy parser
+   * @throws DateTimeParseException
+   *   can be thrown by new parser
+   * @throws DateTimeException
+   *   unable to obtain local date or time
+   * @throws IllegalStateException
+   *   The formatter for timestamp without time zone should always implement this method. The
+   *   exception should never be hit.
    */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
@@ -120,8 +146,8 @@ sealed trait TimestampFormatter extends Serializable {
     }
 
   /**
-   * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local time.
-   * Zone-id and zone-offset components are ignored.
+   * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local
+   * time. Zone-id and zone-offset components are ignored.
    */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
@@ -144,9 +170,10 @@ sealed trait TimestampFormatter extends Serializable {
 
   /**
    * Validates the pattern string.
-   * @param checkLegacy  if true and the pattern is invalid, check whether the pattern is valid for
-   *                     legacy formatters and show hints for using legacy formatter.
-   *                     Otherwise, simply check the pattern string.
+   * @param checkLegacy
+   *   if true and the pattern is invalid, check whether the pattern is valid for legacy
+   *   formatters and show hints for using legacy formatter. Otherwise, simply check the pattern
+   *   string.
    */
   def validatePatternString(checkLegacy: Boolean): Unit
 }
@@ -157,7 +184,8 @@ class Iso8601TimestampFormatter(
     locale: Locale,
     legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
     isParsing: Boolean)
-  extends TimestampFormatter with DateTimeFormatterHelper {
+    extends TimestampFormatter
+    with DateTimeFormatterHelper {
   @transient
   protected lazy val formatter: DateTimeFormatter =
     getOrCreateFormatter(pattern, locale, isParsing)
@@ -166,8 +194,8 @@ class Iso8601TimestampFormatter(
   private lazy val zonedFormatter: DateTimeFormatter = formatter.withZone(zoneId)
 
   @transient
-  protected lazy val legacyFormatter = TimestampFormatter.getLegacyFormatter(
-    pattern, zoneId, locale, legacyFormat)
+  protected lazy val legacyFormatter =
+    TimestampFormatter.getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
 
   override def parseOptional(s: String): Option[Long] = {
     try {
@@ -235,8 +263,8 @@ class Iso8601TimestampFormatter(
   override def format(instant: Instant): String = {
     try {
       zonedFormatter.format(instant)
-    } catch checkFormattedDiff(toJavaTimestamp(instantToMicros(instant)),
-      (t: Timestamp) => format(t))
+    } catch
+      checkFormattedDiff(toJavaTimestamp(instantToMicros(instant)), (t: Timestamp) => format(t))
   }
 
   override def format(us: Long): String = {
@@ -256,8 +284,8 @@ class Iso8601TimestampFormatter(
     if (checkLegacy) {
       try {
         formatter
-      } catch checkLegacyFormatter(pattern,
-        legacyFormatter.validatePatternString(checkLegacy = true))
+      } catch
+        checkLegacyFormatter(pattern, legacyFormatter.validatePatternString(checkLegacy = true))
       ()
     } else {
       try {
@@ -268,22 +296,30 @@ class Iso8601TimestampFormatter(
 }
 
 /**
- * The formatter for timestamps which doesn't require users to specify a pattern. While formatting,
- * it uses the default pattern [[TimestampFormatter.defaultPattern()]]. In parsing, it follows
- * the CAST logic in conversion of strings to Catalyst's TimestampType.
+ * The formatter for timestamps which doesn't require users to specify a pattern. While
+ * formatting, it uses the default pattern [[TimestampFormatter.defaultPattern()]]. In parsing, it
+ * follows the CAST logic in conversion of strings to Catalyst's TimestampType.
  *
- * @param zoneId The time zone ID in which timestamps should be formatted or parsed.
- * @param locale The locale overrides the system locale and is used in formatting.
- * @param legacyFormat Defines the formatter used for legacy timestamps.
- * @param isParsing Whether the formatter is used for parsing (`true`) or for formatting (`false`).
+ * @param zoneId
+ *   The time zone ID in which timestamps should be formatted or parsed.
+ * @param locale
+ *   The locale overrides the system locale and is used in formatting.
+ * @param legacyFormat
+ *   Defines the formatter used for legacy timestamps.
+ * @param isParsing
+ *   Whether the formatter is used for parsing (`true`) or for formatting (`false`).
  */
 class DefaultTimestampFormatter(
     zoneId: ZoneId,
     locale: Locale,
     legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
     isParsing: Boolean)
-  extends Iso8601TimestampFormatter(
-    TimestampFormatter.defaultPattern(), zoneId, locale, legacyFormat, isParsing) {
+    extends Iso8601TimestampFormatter(
+      TimestampFormatter.defaultPattern(),
+      zoneId,
+      locale,
+      legacyFormat,
+      isParsing) {
 
   override def parse(s: String): Long = {
     try {
@@ -299,7 +335,9 @@ class DefaultTimestampFormatter(
       val utf8Value = UTF8String.fromString(s)
       SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, allowTimeZone).getOrElse {
         throw ExecutionErrors.cannotParseStringAsDataTypeError(
-          TimestampFormatter.defaultPattern(), s, TimestampNTZType)
+          TimestampFormatter.defaultPattern(),
+          s,
+          TimestampNTZType)
       }
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
@@ -311,20 +349,21 @@ class DefaultTimestampFormatter(
 }
 
 /**
- * The formatter parses/formats timestamps according to the pattern `yyyy-MM-dd HH:mm:ss.[..fff..]`
- * where `[..fff..]` is a fraction of second up to microsecond resolution. The formatter does not
- * output trailing zeros in the fraction. For example, the timestamp `2019-03-05 15:00:01.123400` is
- * formatted as the string `2019-03-05 15:00:01.1234`.
+ * The formatter parses/formats timestamps according to the pattern `yyyy-MM-dd
+ * HH:mm:ss.[..fff..]` where `[..fff..]` is a fraction of second up to microsecond resolution. The
+ * formatter does not output trailing zeros in the fraction. For example, the timestamp
+ * `2019-03-05 15:00:01.123400` is formatted as the string `2019-03-05 15:00:01.1234`.
  *
- * @param zoneId the time zone identifier in which the formatter parses or format timestamps
+ * @param zoneId
+ *   the time zone identifier in which the formatter parses or format timestamps
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
-  extends Iso8601TimestampFormatter(
-    TimestampFormatter.defaultPattern(),
-    zoneId,
-    TimestampFormatter.defaultLocale,
-    LegacyDateFormats.FAST_DATE_FORMAT,
-    isParsing = false) {
+    extends Iso8601TimestampFormatter(
+      TimestampFormatter.defaultPattern(),
+      zoneId,
+      TimestampFormatter.defaultLocale,
+      LegacyDateFormats.FAST_DATE_FORMAT,
+      isParsing = false) {
 
   @transient
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
@@ -366,16 +405,14 @@ class FractionTimestampFormatter(zoneId: ZoneId)
 }
 
 /**
- * The custom sub-class of `GregorianCalendar` is needed to get access to
- * protected `fields` immediately after parsing. We cannot use
- * the `get()` method because it performs normalization of the fraction
- * part. Accordingly, the `MILLISECOND` field doesn't contain original value.
+ * The custom sub-class of `GregorianCalendar` is needed to get access to protected `fields`
+ * immediately after parsing. We cannot use the `get()` method because it performs normalization
+ * of the fraction part. Accordingly, the `MILLISECOND` field doesn't contain original value.
  *
- * Also this class allows to set raw value to the `MILLISECOND` field
- * directly before formatting.
+ * Also this class allows to set raw value to the `MILLISECOND` field directly before formatting.
  */
 class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
-  extends GregorianCalendar(tz, Locale.US) {
+    extends GregorianCalendar(tz, Locale.US) {
   // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
   // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
   // if the `MILLISECOND` field was parsed to `1234`.
@@ -397,16 +434,13 @@ class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
   }
 }
 
-class LegacyFastTimestampFormatter(
-    pattern: String,
-    zoneId: ZoneId,
-    locale: Locale) extends TimestampFormatter {
+class LegacyFastTimestampFormatter(pattern: String, zoneId: ZoneId, locale: Locale)
+    extends TimestampFormatter {
 
   @transient private lazy val fastDateFormat =
     FastDateFormat.getInstance(pattern, TimeZone.getTimeZone(zoneId), locale)
-  @transient private lazy val cal = new MicrosCalendar(
-    fastDateFormat.getTimeZone,
-    fastDateFormat.getPattern.count(_ == 'S'))
+  @transient private lazy val cal =
+    new MicrosCalendar(fastDateFormat.getTimeZone, fastDateFormat.getPattern.count(_ == 'S'))
 
   override def parse(s: String): Long = {
     cal.clear() // Clear the calendar because it can be re-used many times
@@ -464,7 +498,8 @@ class LegacySimpleTimestampFormatter(
     pattern: String,
     zoneId: ZoneId,
     locale: Locale,
-    lenient: Boolean = true) extends TimestampFormatter {
+    lenient: Boolean = true)
+    extends TimestampFormatter {
   @transient private lazy val sdf = {
     val formatter = new SimpleDateFormat(pattern, locale)
     formatter.setTimeZone(TimeZone.getTimeZone(zoneId))
@@ -586,14 +621,10 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat,
       isParsing: Boolean,
       forTimestampNTZ: Boolean): TimestampFormatter = {
-    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing,
-      forTimestampNTZ)
+    getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing, forTimestampNTZ)
   }
 
-  def apply(
-      format: String,
-      zoneId: ZoneId,
-      isParsing: Boolean): TimestampFormatter = {
+  def apply(format: String, zoneId: ZoneId, isParsing: Boolean): TimestampFormatter = {
     getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 

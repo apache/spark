@@ -68,7 +68,7 @@ class DataSourceRegistration private[sql] (dataSourceManager: DataSourceManager)
       DataSource.lookupDataSource(name, SQLConf.get)
       throw QueryCompilationErrors.dataSourceAlreadyExists(name)
     } catch {
-      case e: SparkClassNotFoundException if e.getErrorClass == "DATA_SOURCE_NOT_FOUND" => // OK
+      case e: SparkClassNotFoundException if e.getCondition == "DATA_SOURCE_NOT_FOUND" => // OK
       case _: Throwable =>
         // If there are other errors when resolving the data source, it's unclear whether
         // it's safe to proceed. To prevent potential lookup errors, treat it as an existing

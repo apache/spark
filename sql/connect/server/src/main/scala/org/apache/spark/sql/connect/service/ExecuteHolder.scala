@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkEnv, SparkSQLException}
+import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Observation
@@ -35,30 +35,19 @@ import org.apache.spark.util.SystemClock
  * Object used to hold the Spark Connect execution state.
  */
 private[connect] class ExecuteHolder(
+    val executeKey: ExecuteKey,
     val request: proto.ExecutePlanRequest,
     val sessionHolder: SessionHolder)
     extends Logging {
 
   val session = sessionHolder.session
 
-  val operationId = if (request.hasOperationId) {
-    try {
-      UUID.fromString(request.getOperationId).toString
-    } catch {
-      case _: IllegalArgumentException =>
-        throw new SparkSQLException(
-          errorClass = "INVALID_HANDLE.FORMAT",
-          messageParameters = Map("handle" -> request.getOperationId))
-    }
-  } else {
-    UUID.randomUUID().toString
-  }
-
   /**
    * Tag that is set for this execution on SparkContext, via SparkContext.addJobTag. Used
    * (internally) for cancellation of the Spark Jobs ran by this execution.
    */
-  val jobTag = ExecuteJobTag(sessionHolder.userId, sessionHolder.sessionId, operationId)
+  val jobTag =
+    ExecuteJobTag(sessionHolder.userId, sessionHolder.sessionId, executeKey.operationId)
 
   /**
    * Tags set by Spark Connect client users via SparkSession.addTag. Used to identify and group
@@ -117,8 +106,8 @@ private[connect] class ExecuteHolder(
       : mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]] =
     new mutable.ArrayBuffer[ExecuteGrpcResponseSender[proto.ExecutePlanResponse]]()
 
-  /** For testing. Whether the async completion callback is called. */
-  @volatile private[connect] var completionCallbackCalled: Boolean = false
+  /** Indicates whether the cleanup method was called. */
+  private[connect] val completionCallbackCalled: AtomicBoolean = new AtomicBoolean(false)
 
   /**
    * Start the execution. The execution is started in a background thread in ExecuteThreadRunner.
@@ -240,16 +229,7 @@ private[connect] class ExecuteHolder(
   def close(): Unit = synchronized {
     if (closedTimeMs.isEmpty) {
       // interrupt execution, if still running.
-      runner.interrupt()
-      // Do not wait for the execution to finish, clean up resources immediately.
-      runner.processOnCompletion { _ =>
-        completionCallbackCalled = true
-        // The execution may not immediately get interrupted, clean up any remaining resources when
-        // it does.
-        responseObserver.removeAll()
-        // post closed to UI
-        eventsManager.postClosed()
-      }
+      val interrupted = runner.interrupt()
       // interrupt any attached grpcResponseSenders
       grpcResponseSenders.foreach(_.interrupt())
       // if there were still any grpcResponseSenders, register detach time
@@ -257,9 +237,23 @@ private[connect] class ExecuteHolder(
         lastAttachedRpcTimeMs = Some(System.currentTimeMillis())
         grpcResponseSenders.clear()
       }
-      // remove all cached responses from observer
-      responseObserver.removeAll()
+      if (!interrupted) {
+        cleanup()
+      }
       closedTimeMs = Some(System.currentTimeMillis())
+    }
+  }
+
+  /**
+   * A piece of code that is called only once when this execute holder is closed or the
+   * interrupted execution thread is terminated.
+   */
+  private[connect] def cleanup(): Unit = {
+    if (completionCallbackCalled.compareAndSet(false, true)) {
+      // Remove all cached responses from the observer.
+      responseObserver.removeAll()
+      // Post "closed" to UI.
+      eventsManager.postClosed()
     }
   }
 
@@ -278,7 +272,7 @@ private[connect] class ExecuteHolder(
       request = request,
       userId = sessionHolder.userId,
       sessionId = sessionHolder.sessionId,
-      operationId = operationId,
+      operationId = executeKey.operationId,
       jobTag = jobTag,
       sparkSessionTags = sparkSessionTags,
       reattachable = reattachable,
@@ -289,7 +283,10 @@ private[connect] class ExecuteHolder(
   }
 
   /** Get key used by SparkConnectExecutionManager global tracker. */
-  def key: ExecuteKey = ExecuteKey(sessionHolder.userId, sessionHolder.sessionId, operationId)
+  def key: ExecuteKey = executeKey
+
+  /** Get the operation ID. */
+  def operationId: String = key.operationId
 }
 
 /** Used to identify ExecuteHolder jobTag among SparkContext.SPARK_JOB_TAGS. */

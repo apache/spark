@@ -23,35 +23,18 @@ import unittest
 import uuid
 import contextlib
 
-grpc_requirement_message = None
-try:
-    import grpc
-except ImportError as e:
-    grpc_requirement_message = str(e)
-have_grpc = grpc_requirement_message is None
-
-
-grpc_status_requirement_message = None
-try:
-    import grpc_status
-except ImportError as e:
-    grpc_status_requirement_message = str(e)
-have_grpc_status = grpc_status_requirement_message is None
-
-googleapis_common_protos_requirement_message = None
-try:
-    from google.rpc import error_details_pb2
-except ImportError as e:
-    googleapis_common_protos_requirement_message = str(e)
-have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
-
-graphviz_requirement_message = None
-try:
-    import graphviz
-except ImportError as e:
-    graphviz_requirement_message = str(e)
-have_graphviz: bool = graphviz_requirement_message is None
-
+from pyspark.testing import (
+    grpc_requirement_message,
+    have_grpc,
+    grpc_status_requirement_message,
+    have_grpc_status,
+    googleapis_common_protos_requirement_message,
+    have_googleapis_common_protos,
+    graphviz_requirement_message,
+    have_graphviz,
+    connect_requirement_message,
+    should_test_connect,
+)
 from pyspark import Row, SparkConf
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -63,15 +46,6 @@ from pyspark.testing.sqlutils import (
 )
 from pyspark.sql.session import SparkSession as PySparkSession
 
-
-connect_requirement_message = (
-    pandas_requirement_message
-    or pyarrow_requirement_message
-    or grpc_requirement_message
-    or googleapis_common_protos_requirement_message
-    or grpc_status_requirement_message
-)
-should_test_connect: str = typing.cast(str, connect_requirement_message is None)
 
 if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame

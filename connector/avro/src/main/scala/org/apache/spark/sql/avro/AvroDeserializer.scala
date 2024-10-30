@@ -51,14 +51,16 @@ private[sql] class AvroDeserializer(
     datetimeRebaseSpec: RebaseSpec,
     filters: StructFilters,
     useStableIdForUnionType: Boolean,
-    stableIdPrefixForUnionType: String) {
+    stableIdPrefixForUnionType: String,
+    recursiveFieldMaxDepth: Int) {
 
   def this(
       rootAvroType: Schema,
       rootCatalystType: DataType,
       datetimeRebaseMode: String,
       useStableIdForUnionType: Boolean,
-      stableIdPrefixForUnionType: String) = {
+      stableIdPrefixForUnionType: String,
+      recursiveFieldMaxDepth: Int) = {
     this(
       rootAvroType,
       rootCatalystType,
@@ -66,7 +68,8 @@ private[sql] class AvroDeserializer(
       RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
       new NoopFilters,
       useStableIdForUnionType,
-      stableIdPrefixForUnionType)
+      stableIdPrefixForUnionType,
+      recursiveFieldMaxDepth)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
@@ -128,7 +131,8 @@ private[sql] class AvroDeserializer(
         s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
     val realDataType = SchemaConverters.toSqlType(
-      avroType, useStableIdForUnionType, stableIdPrefixForUnionType).dataType
+      avroType, useStableIdForUnionType, stableIdPrefixForUnionType,
+      recursiveFieldMaxDepth).dataType
 
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>

@@ -28,15 +28,16 @@ import org.apache.spark.sql.catalyst.util.StringConcat
  *
  * Please use `DataTypes.createMapType()` to create a specific instance.
  *
- * @param keyType The data type of map keys.
- * @param valueType The data type of map values.
- * @param valueContainsNull Indicates if map values have `null` values.
+ * @param keyType
+ *   The data type of map keys.
+ * @param valueType
+ *   The data type of map values.
+ * @param valueContainsNull
+ *   Indicates if map values have `null` values.
  */
 @Stable
-case class MapType(
-  keyType: DataType,
-  valueType: DataType,
-  valueContainsNull: Boolean) extends DataType {
+case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
+    extends DataType {
 
   /** No-arg constructor for kryo. */
   def this() = this(null, null, false)
@@ -48,8 +49,9 @@ case class MapType(
     if (maxDepth > 0) {
       stringConcat.append(s"$prefix-- key: ${keyType.typeName}\n")
       DataType.buildFormattedString(keyType, s"$prefix    |", stringConcat, maxDepth)
-      stringConcat.append(s"$prefix-- value: ${valueType.typeName} " +
-        s"(valueContainsNull = $valueContainsNull)\n")
+      stringConcat.append(
+        s"$prefix-- value: ${valueType.typeName} " +
+          s"(valueContainsNull = $valueContainsNull)\n")
       DataType.buildFormattedString(valueType, s"$prefix    |", stringConcat, maxDepth)
     }
   }
@@ -61,9 +63,9 @@ case class MapType(
       ("valueContainsNull" -> valueContainsNull)
 
   /**
-   * The default size of a value of the MapType is
-   * (the default size of the key type + the default size of the value type).
-   * We assume that there is only 1 element on average in a map. See SPARK-18853.
+   * The default size of a value of the MapType is (the default size of the key type + the default
+   * size of the value type). We assume that there is only 1 element on average in a map. See
+   * SPARK-18853.
    */
   override def defaultSize: Int = 1 * (keyType.defaultSize + valueType.defaultSize)
 
@@ -77,8 +79,8 @@ case class MapType(
     MapType(keyType.asNullable, valueType.asNullable, valueContainsNull = true)
 
   /**
-   * Returns the same data type but set all nullability fields are true
-   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   * Returns the same data type but set all nullability fields are true (`StructField.nullable`,
+   * `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    *
    * @since 4.0.0
    */
@@ -104,8 +106,8 @@ object MapType extends AbstractDataType {
   override private[sql] def simpleString: String = "map"
 
   /**
-   * Construct a [[MapType]] object with the given key type and value type.
-   * The `valueContainsNull` is true.
+   * Construct a [[MapType]] object with the given key type and value type. The
+   * `valueContainsNull` is true.
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
     MapType(keyType: DataType, valueType: DataType, valueContainsNull = true)

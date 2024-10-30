@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.col
@@ -40,8 +41,7 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
  *
  * @since 3.5.0
  */
-class KeyValueGroupedDataset[K, V] private[sql] ()
-    extends api.KeyValueGroupedDataset[K, V, Dataset] {
+class KeyValueGroupedDataset[K, V] private[sql] () extends api.KeyValueGroupedDataset[K, V] {
   type KVDS[KY, VL] = KeyValueGroupedDataset[KY, VL]
 
   private def unsupported(): Nothing = throw new UnsupportedOperationException()
@@ -398,7 +398,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     new KeyValueGroupedDatasetImpl[L, V, IK, IV](
       sparkSession,
       plan,
-      encoderFor[L],
+      agnosticEncoderFor[L],
       ivEncoder,
       vEncoder,
       groupingExprs,
@@ -412,7 +412,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       plan,
       kEncoder,
       ivEncoder,
-      encoderFor[W],
+      agnosticEncoderFor[W],
       groupingExprs,
       valueMapFunc
         .map(_.andThen(valueFunc))
@@ -430,7 +430,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       f: (K, Iterator[V]) => IterableOnce[U]): Dataset[U] = {
     // Apply mapValues changes to the udf
     val nf = UDFAdaptors.flatMapGroupsWithMappedValues(f, valueMapFunc)
-    val outputEncoder = encoderFor[U]
+    val outputEncoder = agnosticEncoderFor[U]
     sparkSession.newDataset[U](outputEncoder) { builder =>
       builder.getGroupMapBuilder
         .setInput(plan.getRoot)
@@ -446,7 +446,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val otherImpl = other.asInstanceOf[KeyValueGroupedDatasetImpl[K, U, _, Any]]
     // Apply mapValues changes to the udf
     val nf = UDFAdaptors.coGroupWithMappedValues(f, valueMapFunc, otherImpl.valueMapFunc)
-    val outputEncoder = encoderFor[R]
+    val outputEncoder = agnosticEncoderFor[R]
     sparkSession.newDataset[R](outputEncoder) { builder =>
       builder.getCoGroupMapBuilder
         .setInput(plan.getRoot)
@@ -461,7 +461,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     // TODO(SPARK-43415): For each column, apply the valueMap func first...
-    val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => encoderFor(c.encoder)))
+    val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(c => agnosticEncoderFor(c.encoder)))
     sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
         .setInput(plan.getRoot)
@@ -501,7 +501,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       null
     }
 
-    val outputEncoder = encoderFor[U]
+    val outputEncoder = agnosticEncoderFor[U]
     val nf = UDFAdaptors.flatMapGroupsWithStateWithMappedValues(func, valueMapFunc)
 
     sparkSession.newDataset[U](outputEncoder) { builder =>
