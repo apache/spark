@@ -17,11 +17,22 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, IntegralDivide}
+import org.apache.spark.sql.types.{ByteType, IntegerType, LongType, ShortType}
 
-object CollationTypeCasts extends TypeCoercionRule {
-  override val transform: PartialFunction[Expression, Expression] = {
-    case e if !e.childrenResolved => e
-    case withChildrenResolved => CollationTypeCoercion(withChildrenResolved)
+/**
+ * Type coercion helper that matches against [[IntegralDivide]] expressions in order to type coerce
+ * children to [[LongType]].
+ */
+object IntegralDivisionTypeCoercion {
+  def apply(expression: Expression): Expression = expression match {
+    case d @ IntegralDivide(left, right, _) =>
+      d.copy(left = mayCastToLong(left), right = mayCastToLong(right))
+    case other => other
+  }
+
+  private def mayCastToLong(expr: Expression): Expression = expr.dataType match {
+    case _: ByteType | _: ShortType | _: IntegerType => Cast(expr, LongType)
+    case _ => expr
   }
 }

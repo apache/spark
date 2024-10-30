@@ -17,11 +17,24 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, Stack}
+import org.apache.spark.sql.types.NullType
 
-object CollationTypeCasts extends TypeCoercionRule {
-  override val transform: PartialFunction[Expression, Expression] = {
-    case e if !e.childrenResolved => e
-    case withChildrenResolved => CollationTypeCoercion(withChildrenResolved)
+/**
+ * Type coercion helper that matches against [[Stack]] expressions in order to type coerce children
+ * that are of [[NullType]] to the expected column type.
+ */
+object StackTypeCoercion {
+  def apply(expression: Expression): Expression = expression match {
+    case s @ Stack(children) if s.hasFoldableNumRows =>
+      Stack(children.zipWithIndex.map {
+        // The first child is the number of rows for stack.
+        case (e, 0) => e
+        case (Literal(null, NullType), index: Int) =>
+          Literal.create(null, s.findDataType(index))
+        case (e, _) => e
+      })
+
+    case other => other
   }
 }
