@@ -300,14 +300,18 @@ class StatefulProcessorWithAllStateVars extends RunningCountStatefulProcessor {
       timerValues: TimerValues): Iterator[(String, String)] = {
     val curCountValue = if (_countState.exists()) {
       _countState.get()
-    } else 0L
+    } else {
+      0L
+    }
     var cnt = curCountValue
     inputRows.foreach { row =>
       cnt += 1
       _listState.appendValue(cnt)
       val mapCurVal = if (_mapState.containsKey(row)) {
         _mapState.getValue(row)
-      } else 0
+      } else {
+        0
+      }
       _mapState.updateValue(row, mapCurVal + 1L)
     }
     _countState.update(cnt)
@@ -638,7 +642,11 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       (TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
         TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString)
     ).foreach { partitions =>
-      val samePartition = if (partitions._1 == partitions._2) "" else "not "
+      val samePartition = if (partitions._1 == partitions._2) {
+        ""
+      } else {
+        "not "
+      }
       test("transformWithStateWithInitialState - state data source reader dataframe " +
         s"as initial state with flatten option set to $flattenOption, initial state rows are " +
         s"${samePartition}coming from the same shuffle partition number with current query") {
@@ -681,7 +689,6 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
               .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
               .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
               .load()
-
 
             // create a df where each row contains all value, list, map state rows
             // fill the missing column with null
