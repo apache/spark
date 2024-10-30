@@ -973,13 +973,13 @@ class RocksDB(
    * thread is the one that acquired the lock.
    *
    * @param opType - operation type releasing the lock
-   * @param forThreadOpt - optional thread to check against acquired thread
+   * @param releaseForThreadOpt - optional thread to check against acquired thread
    */
   private def release(opType: RocksDBOpType,
-    forThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
+    releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
     if (acquiredThreadInfo != null) {
-      if (forThreadOpt.nonEmpty) {
-        if (forThreadOpt.get.threadRef.get.isEmpty) {
+      if (releaseForThreadOpt.nonEmpty) {
+        if (releaseForThreadOpt.get.threadRef.get.isEmpty) {
           logInfo(log"Thread reference is empty when attempting to release for" +
             log" opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
             log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
@@ -987,7 +987,7 @@ class RocksDB(
         }
 
         if (acquiredThreadInfo.threadRef.get.isDefined
-          && acquiredThreadInfo != forThreadOpt.get) {
+          && acquiredThreadInfo != releaseForThreadOpt.get) {
           logInfo(log"Thread info does not match the acquired thread when attempting to" +
             log" release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
             log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
