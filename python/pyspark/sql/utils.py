@@ -225,7 +225,7 @@ def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> 
         return _invoke_function_over_columns(name, *cols)
 
     else:
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
+        from pyspark.sql.classic.column import Column, _to_seq, _to_java_column
         from pyspark import SparkContext
 
         sc = SparkContext._active_spark_context

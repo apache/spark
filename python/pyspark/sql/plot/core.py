@@ -27,11 +27,8 @@ from pyspark.errors import (
 from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.utils import require_minimum_numpy_version, require_minimum_pandas_version
 from pyspark.sql.types import NumericType
-from pyspark.sql.utils import (
-    is_remote,
-    require_minimum_plotly_version,
-    _invoke_internal_function_over_columns,
-)
+from pyspark.sql.utils import require_minimum_plotly_version, _invoke_internal_function_over_columns
+
 from pandas.core.dtypes.inference import is_integer
 
 

@@ -18,7 +18,7 @@
 Additional Spark functions used in pandas-on-Spark.
 """
 from pyspark.sql import Column, functions as F
-from pyspark.sql.utils import is_remote, _invoke_internal_function_over_columns
+from pyspark.sql.utils import _invoke_internal_function_over_columns
 from typing import Union
 
 
