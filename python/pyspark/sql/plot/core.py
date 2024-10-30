@@ -17,7 +17,7 @@
 
 import math
 
-from typing import Any, TYPE_CHECKING, List, Optional, Union
+from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
 from pyspark.errors import (
     PySparkRuntimeError,
@@ -489,10 +489,14 @@ class PySparkPlotAccessor:
 
 class PySparkKdePlotBase:
     @staticmethod
-    def get_ind(sdf: "DataFrame", ind: Optional[Union["np.ndarray", int]]) -> "np.ndarray":
-        require_minimum_numpy_version()
-        import numpy as np
+    def linspace(start, stop, num):
+        if num == 1:
+            return [float(start)]
+        step = float(stop - start) / (num - 1)
+        return [start + step * i for i in range(num)]
 
+    @staticmethod
+    def get_ind(sdf: "DataFrame", ind: Optional[Union[Sequence[float], int]]) -> Sequence[float]:
         def calc_min_max() -> "Row":
             if len(sdf.columns) > 1:
                 min_col = F.least(*map(F.min, sdf))  # type: ignore
@@ -505,7 +509,7 @@ class PySparkKdePlotBase:
         if ind is None:
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = np.linspace(
+            ind = PySparkKdePlotBase.linspace(
                 min_val - 0.5 * sample_range,
                 max_val + 0.5 * sample_range,
                 1000,
@@ -513,7 +517,7 @@ class PySparkKdePlotBase:
         elif is_integer(ind):
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = np.linspace(
+            ind = PySparkKdePlotBase.linspace(
                 min_val - 0.5 * sample_range,
                 max_val + 0.5 * sample_range,
                 ind,
@@ -524,7 +528,7 @@ class PySparkKdePlotBase:
     def compute_kde_col(
         input_col: Column,
         bw_method: Union[int, float],
-        ind: "np.ndarray",
+        ind: Sequence[float],
     ) -> Column:
         # refers to org.apache.spark.mllib.stat.KernelDensity
         assert bw_method is not None and isinstance(

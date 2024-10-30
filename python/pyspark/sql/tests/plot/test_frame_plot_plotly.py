@@ -392,7 +392,6 @@ class DataFramePlotPlotlyTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_kde_plot(self):
         fig = self.sdf4.plot.kde(column="math_score", bw_method=0.3, ind=5)
         expected_fig_data1 = {
