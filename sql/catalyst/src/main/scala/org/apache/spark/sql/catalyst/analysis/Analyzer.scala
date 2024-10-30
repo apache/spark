@@ -252,6 +252,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
+   * Same as 'extendedResolutionRules' but intended to run in the first resolution
+   * batch, e.g. hint resolution rules.
+   */
+  val earlyResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Override to provide rules to do post-hoc resolution. Note that these rules will be executed
    * in an individual batch. This batch is to run right after the normal resolution batch and
    * execute its rules in one pass.
@@ -281,6 +287,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Hints", fixedPoint,
       ResolveHints.ResolveJoinStrategyHints,
       ResolveHints.ResolveCoalesceHints),
+    Batch("Custom early rules", fixedPoint,
+      earlyResolutionRules : _*),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,

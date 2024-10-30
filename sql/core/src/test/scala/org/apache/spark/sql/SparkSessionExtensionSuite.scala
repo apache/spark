@@ -159,7 +159,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("inject custom hint rule") {
-    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+    withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
         "plan is expected to be a local relation"
