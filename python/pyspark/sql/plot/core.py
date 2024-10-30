@@ -25,9 +25,10 @@ from pyspark.errors import (
     PySparkValueError,
 )
 from pyspark.sql import Column, functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.pandas.utils import require_minimum_numpy_version, require_minimum_pandas_version
 from pyspark.sql.types import NumericType
-from pyspark.sql.utils import require_minimum_plotly_version, _invoke_internal_function_over_columns
+from pyspark.sql.utils import require_minimum_plotly_version
 
 from pandas.core.dtypes.inference import is_integer
 
@@ -569,10 +570,6 @@ class PySparkKdePlotBase:
 
 class PySparkHistogramPlotBase:
     @staticmethod
-    def array_binary_search(col: Column, value: Column) -> Column:
-        return _invoke_internal_function_over_columns("array_binary_search", col, value)
-
-    @staticmethod
     def get_bins(sdf: "DataFrame", bins: int) -> "np.ndarray":
         require_minimum_numpy_version()
         import numpy as np
@@ -623,7 +620,7 @@ class PySparkHistogramPlotBase:
         # determines which bucket a given value falls into, based on predefined bin intervals
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column) -> Column:
-            index = PySparkHistogramPlotBase.array_binary_search(F.lit(bins), value)
+            index = SF.array_binary_search(F.lit(bins), value)
             bucket = F.when(index >= 0, index).otherwise(-index - 2)
             unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (
@@ -718,12 +715,6 @@ class PySparkHistogramPlotBase:
 
 class PySparkBoxPlotBase:
     @staticmethod
-    def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
-        return _invoke_internal_function_over_columns(
-            "collect_top_k", col, F.lit(num), F.lit(reverse)
-        )
-
-    @staticmethod
     def compute_box(
         sdf: "DataFrame", colnames: List[str], whis: float, precision: float, showfliers: bool
     ) -> Optional["Row"]:
@@ -777,7 +768,7 @@ class PySparkBoxPlotBase:
                     outlier,
                     F.struct(F.abs(value - med), value.alias("val")),
                 ).otherwise(F.lit(None))
-                topk = PySparkBoxPlotBase.collect_top_k(pair, 1001, False)
+                topk = SF.collect_top_k(pair, 1001, False)
                 fliers = F.when(F.size(topk) > 0, topk["val"]).otherwise(F.lit(None))
             else:
                 fliers = F.lit(None)
