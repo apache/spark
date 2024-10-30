@@ -975,8 +975,9 @@ class RocksDB(
    * @param opType - operation type releasing the lock
    * @param releaseForThreadOpt - optional thread to check against acquired thread
    */
-  private def release(opType: RocksDBOpType,
-    releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
+  private def release(
+      opType: RocksDBOpType,
+      releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
     if (acquiredThreadInfo != null) {
       if (releaseForThreadOpt.nonEmpty) {
         if (releaseForThreadOpt.get.threadRef.get.isEmpty) {
