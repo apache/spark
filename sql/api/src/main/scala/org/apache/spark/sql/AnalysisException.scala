@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
  * @since 1.3.0
  */
 @Stable
-class AnalysisException protected[sql] (
+class AnalysisException protected (
     val message: String,
     val line: Option[Int] = None,
     val startPosition: Option[Int] = None,
@@ -37,16 +37,28 @@ class AnalysisException protected[sql] (
     val errorClass: Option[String] = None,
     val messageParameters: Map[String, String] = Map.empty,
     val context: Array[QueryContext] = Array.empty)
-  extends Exception(message, cause.orNull) with SparkThrowable with Serializable with WithOrigin {
+    extends Exception(message, cause.orNull)
+    with SparkThrowable
+    with Serializable
+    with WithOrigin {
+
+  def this(errorClass: String, messageParameters: Map[String, String], cause: Option[Throwable]) =
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters,
+      cause = cause)
 
   def this(
       errorClass: String,
       messageParameters: Map[String, String],
+      context: Array[QueryContext],
       cause: Option[Throwable]) =
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       errorClass = Some(errorClass),
       messageParameters = messageParameters,
+      context = context,
       cause = cause)
 
   def this(
@@ -61,18 +73,10 @@ class AnalysisException protected[sql] (
       cause = null,
       context = context)
 
-  def this(
-      errorClass: String,
-      messageParameters: Map[String, String]) =
-    this(
-      errorClass = errorClass,
-      messageParameters = messageParameters,
-      cause = None)
+  def this(errorClass: String, messageParameters: Map[String, String]) =
+    this(errorClass = errorClass, messageParameters = messageParameters, cause = None)
 
-  def this(
-      errorClass: String,
-      messageParameters: Map[String, String],
-      origin: Origin) =
+  def this(errorClass: String, messageParameters: Map[String, String], origin: Origin) =
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
       line = origin.line,
@@ -103,8 +107,14 @@ class AnalysisException protected[sql] (
       errorClass: Option[String] = this.errorClass,
       messageParameters: Map[String, String] = this.messageParameters,
       context: Array[QueryContext] = this.context): AnalysisException =
-    new AnalysisException(message, line, startPosition, cause, errorClass,
-      messageParameters, context)
+    new AnalysisException(
+      message,
+      line,
+      startPosition,
+      cause,
+      errorClass,
+      messageParameters,
+      context)
 
   def withPosition(origin: Origin): AnalysisException = {
     val newException = this.copy(
@@ -129,7 +139,7 @@ class AnalysisException protected[sql] (
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  override def getErrorClass: String = errorClass.orNull
+  override def getCondition: String = errorClass.orNull
 
   override def getQueryContext: Array[QueryContext] = context
 

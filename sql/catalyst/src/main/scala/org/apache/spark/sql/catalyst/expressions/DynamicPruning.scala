@@ -37,13 +37,13 @@ trait DynamicPruning extends Predicate
  *  beneficial and so it should be executed even if it cannot reuse the results of the
  *  broadcast through ReuseExchange; otherwise, it will use the filter only if it
  *  can reuse the results of the broadcast through ReuseExchange
- * @param broadcastKeyIndex the index of the filtering key collected from the broadcast
+ * @param broadcastKeyIndices the indices of the filtering keys collected from the broadcast
  */
 case class DynamicPruningSubquery(
     pruningKey: Expression,
     buildQuery: LogicalPlan,
     buildKeys: Seq[Expression],
-    broadcastKeyIndex: Int,
+    broadcastKeyIndices: Seq[Int],
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId,
     hint: Option[HintInfo] = None)
@@ -60,6 +60,13 @@ case class DynamicPruningSubquery(
 
   override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
 
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression]): DynamicPruningSubquery = {
+    // Updating outer attrs of DynamicPruningSubquery is unsupported; assert that they match
+    // pruningKey and return a copy without any changes.
+    assert(outerAttrs.size == 1 && outerAttrs.head.semanticEquals(pruningKey))
+    copy()
+  }
+
   override def withNewHint(hint: Option[HintInfo]): SubqueryExpression = copy(hint = hint)
 
   override lazy val resolved: Boolean = {
@@ -67,10 +74,12 @@ case class DynamicPruningSubquery(
       buildQuery.resolved &&
       buildKeys.nonEmpty &&
       buildKeys.forall(_.resolved) &&
-      broadcastKeyIndex >= 0 &&
-      broadcastKeyIndex < buildKeys.size &&
+      broadcastKeyIndices.forall(idx => idx >= 0 && idx < buildKeys.size) &&
       buildKeys.forall(_.references.subsetOf(buildQuery.outputSet)) &&
-      pruningKey.dataType == buildKeys(broadcastKeyIndex).dataType
+      // DynamicPruningSubquery should only have a single broadcasting key since
+      // there are no usage for multiple broadcasting keys at the moment.
+      broadcastKeyIndices.size == 1 &&
+      child.dataType == buildKeys(broadcastKeyIndices.head).dataType
   }
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(DYNAMIC_PRUNING_SUBQUERY)

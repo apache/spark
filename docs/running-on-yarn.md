@@ -33,6 +33,9 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 # Launching Spark on YARN
 
+Apache Hadoop does not support Java 17 as of 3.4.0, while Apache Spark requires at least Java 17 since 4.0.0, so a different JDK should be configured for Spark applications.
+Please refer to [Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications) for details.
+
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.
 These configs are used to write to HDFS and connect to the YARN ResourceManager. The
 configuration contained in this directory will be distributed to the YARN cluster so that all
@@ -143,7 +146,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Spark Properties
 
-<table class="table table-striped">
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.yarn.am.memory</code></td>
@@ -290,14 +293,6 @@ To use a custom metrics.properties for the application master and executors, upd
     <code>spark.yarn.scheduler.heartbeat.interval-ms</code> is reached.
   </td>
   <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.yarn.max.executor.failures</code></td>
-  <td>numExecutors * 2, with minimum of 3</td>
-  <td>
-    The maximum number of executor failures before failing the application.
-  </td>
-  <td>1.0.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.historyServer.address</code></td>
@@ -494,19 +489,10 @@ To use a custom metrics.properties for the application master and executors, upd
     and send to RM, which uses them when renewing delegation tokens. A typical use case of this feature is to support delegation
     tokens in an environment where a YARN cluster needs to talk to multiple downstream HDFS clusters, where the YARN RM may not have configs
     (e.g., dfs.nameservices, dfs.ha.namenodes.*, dfs.namenode.rpc-address.*) to connect to these clusters.
-    In this scenario, Spark users can specify the config value to be <code>^dfs.nameservices$|^dfs.namenode.rpc-address.*$|^dfs.ha.namenodes.*$</code> to parse
+    In this scenario, Spark users can specify the config value to be <code>^dfs.nameservices\$|^dfs.namenode.rpc-address.*\$|^dfs.ha.namenodes.*\$</code> to parse
     these HDFS configs from the job's local configuration files. This config is very similar to <code>mapreduce.job.send-token-conf</code>. Please check YARN-5910 for more details.
   </td>
   <td>3.3.0</td>
-</tr>
-<tr>
-  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
-  <td>(none)</td>
-  <td>
-  Defines the validity interval for executor failure tracking.
-  Executor failures which are older than the validity interval will be ignored.
-  </td>
-  <td>2.0.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>
@@ -696,7 +682,7 @@ To use a custom metrics.properties for the application master and executors, upd
 
 #### Available patterns for SHS custom executor log URL
 
-<table class="table table-striped">
+<table>
     <thead><tr><th>Pattern</th><th>Meaning</th></tr></thead>
     <tr>
       <td>&#123;&#123;HTTP_SCHEME&#125;&#125;</td>
@@ -783,7 +769,7 @@ staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 
-<table class="table table-striped">
+<table class="spark-config">
 <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kerberos.keytab</code></td>
@@ -882,8 +868,8 @@ to avoid garbage collection issues during shuffle.
 
 The following extra configuration options are available when the shuffle service is running on YARN:
 
-<table class="table table-striped">
-<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr></thead>
+<table class="spark-config">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.yarn.shuffle.stopOnFailure</code></td>
   <td><code>false</code></td>
@@ -892,6 +878,7 @@ The following extra configuration options are available when the shuffle service
     initialization. This prevents application failures caused by running containers on
     NodeManagers where the Spark Shuffle Service is not running.
   </td>
+  <td>2.1.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.shuffle.service.metrics.namespace</code></td>
@@ -900,6 +887,7 @@ The following extra configuration options are available when the shuffle service
     The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
     NodeManager.
   </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.shuffle.service.logs.namespace</code></td>
@@ -911,6 +899,7 @@ The following extra configuration options are available when the shuffle service
     may expect the logger name to look like a class name, it's generally recommended to provide a value which
     would be a valid Java package or class name and not include spaces.
   </td>
+  <td>3.3.0</td>
 </tr>
 <tr>
   <td><code>spark.shuffle.service.db.backend</code></td>
@@ -1046,3 +1035,34 @@ and one should be configured with:
   spark.shuffle.service.name = spark_shuffle_y
   spark.shuffle.service.port = <other value>
 ```
+
+# Configuring different JDKs for Spark Applications
+
+In some cases it may be desirable to use a different JDK from YARN node manager to run Spark applications,
+this can be achieved by setting the `JAVA_HOME` environment variable for YARN containers and the `spark-submit`
+process.
+
+Note that, Spark assumes that all JVM processes runs in one application use the same version of JDK, otherwise,
+you may encounter JDK serialization issues.
+
+To configure a Spark application to use a JDK which has been pre-installed on all nodes at `/opt/openjdk-17`:
+
+    $ export JAVA_HOME=/opt/openjdk-17
+    $ ./bin/spark-submit --class path.to.your.Class \
+        --master yarn \
+        --conf spark.yarn.appMasterEnv.JAVA_HOME=/opt/openjdk-17 \
+        --conf spark.executorEnv.JAVA_HOME=/opt/openjdk-17 \
+        <app jar> [app options]
+
+Optionally, the user may want to avoid installing a different JDK on the YARN cluster nodes, in such a case,
+it's also possible to distribute the JDK using YARN's Distributed Cache. For example, to use Java 21 to run
+a Spark application, prepare a JDK 21 tarball `openjdk-21.tar.gz` and untar it to `/opt` on the local node,
+then submit a Spark application:
+
+    $ export JAVA_HOME=/opt/openjdk-21
+    $ ./bin/spark-submit --class path.to.your.Class \
+        --master yarn \
+        --archives path/to/openjdk-21.tar.gz \
+        --conf spark.yarn.appMasterEnv.JAVA_HOME=./openjdk-21.tar.gz/openjdk-21 \
+        --conf spark.executorEnv.JAVA_HOME=./openjdk-21.tar.gz/openjdk-21 \
+        <app jar> [app options]

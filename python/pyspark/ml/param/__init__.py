@@ -30,8 +30,8 @@ from typing import (
 )
 
 import numpy as np
-from py4j.java_gateway import JavaObject
 
+from pyspark.util import is_remote_only
 from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
 
@@ -115,7 +115,7 @@ class TypeConverters:
     @staticmethod
     def _can_convert_to_string(value: Any) -> bool:
         vtype = type(value)
-        return isinstance(value, str) or vtype in [np.unicode_, np.string_, np.str_]
+        return isinstance(value, str) or vtype in [np.bytes_, np.str_]
 
     @staticmethod
     def identity(value: "T") -> "T":
@@ -230,7 +230,7 @@ class TypeConverters:
         """
         if isinstance(value, str):
             return value
-        elif type(value) in [np.string_, np.str_, np.unicode_]:
+        elif type(value) in [np.bytes_, np.str_]:
             return str(value)
         else:
             raise TypeError("Could not convert %s to string type" % type(value))
@@ -516,9 +516,12 @@ class Params(Identifiable, metaclass=ABCMeta):
         """
         Sets default params.
         """
+        if not is_remote_only():
+            from py4j.java_gateway import JavaObject
+
         for param, value in kwargs.items():
             p = getattr(self, param)
-            if value is not None and not isinstance(value, JavaObject):
+            if value is not None and (is_remote_only() or not isinstance(value, JavaObject)):
                 try:
                     value = p.typeConverter(value)
                 except TypeError as e:

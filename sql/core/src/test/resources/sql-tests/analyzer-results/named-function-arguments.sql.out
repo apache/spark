@@ -58,7 +58,7 @@ CreateViewCommand `t2`, select * from values
   ('val1e', 8S, null, 19L, float(17), 25D, 26E2, timestamp '2014-09-04 01:01:00.000', date '2014-09-04'),
   ('val1f', 19S, null, 19L, float(17), 25D, 26E2, timestamp '2014-10-04 01:01:00.000', date '2014-10-04'),
   ('val1b', null, 16, 19L, float(17), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', null)
-  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, true
+  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
       +- SubqueryAlias t2
          +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
@@ -69,7 +69,7 @@ SELECT hex(count_min_sketch(t2d, seed => 1, epsilon => 0.5d, confidence => 0.5d)
 -- !query analysis
 Aggregate [hex(count_min_sketch(t2d#xL, 0.5, 0.5, 1, 0, 0)) AS hex(count_min_sketch(t2d, 0.5, 0.5, 1))#x]
 +- SubqueryAlias t2
-   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+   +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
       +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
          +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
             +- SubqueryAlias t2
@@ -81,7 +81,7 @@ SELECT hex(count_min_sketch(seed => 1, epsilon => 0.5d, confidence => 0.5d, colu
 -- !query analysis
 Aggregate [hex(count_min_sketch(t2d#xL, 0.5, 0.5, 1, 0, 0)) AS hex(count_min_sketch(t2d, 0.5, 0.5, 1))#x]
 +- SubqueryAlias t2
-   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+   +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
       +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
          +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
             +- SubqueryAlias t2
@@ -93,7 +93,7 @@ SELECT hex(count_min_sketch(t2d, 0.5d, seed => 1, confidence => 0.5d)) FROM t2
 -- !query analysis
 Aggregate [hex(count_min_sketch(t2d#xL, 0.5, 0.5, 1, 0, 0)) AS hex(count_min_sketch(t2d, 0.5, 0.5, 1))#x]
 +- SubqueryAlias t2
-   +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+   +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
       +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
          +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
             +- SubqueryAlias t2
@@ -192,9 +192,9 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW v AS SELECT id FROM range(0, 8)
 -- !query analysis
-CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, true
+CreateViewCommand `v`, SELECT id FROM range(0, 8), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [id#xL]
-      +- Range (0, 8, step=1, splits=None)
+      +- Range (0, 8, step=1)
 
 
 -- !query
@@ -202,17 +202,21 @@ SELECT * FROM explode(collection => TABLE(v))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-  "sqlState" : "0A000",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "treeNode" : "'Generate explode(table-argument#x []), false\n:  +- SubqueryAlias v\n:     +- View (`v`, [id#xL])\n:        +- Project [cast(id#xL as bigint) AS id#xL]\n:           +- Project [id#xL]\n:              +- Range (0, 8, step=1, splits=None)\n+- OneRowRelation\n"
+    "inputSql" : "\"functiontablesubqueryargumentexpression()\"",
+    "inputType" : "\"STRUCT<id: BIGINT NOT NULL>\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"ARRAY\" or \"MAP\")",
+    "sqlExpr" : "\"explode(functiontablesubqueryargumentexpression())\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 37,
-    "stopIndex" : 44,
-    "fragment" : "TABLE(v)"
+    "startIndex" : 15,
+    "stopIndex" : 45,
+    "fragment" : "explode(collection => TABLE(v))"
   } ]
 }
 
@@ -225,8 +229,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNEXPECTED_POSITIONAL_ARGUMENT",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`lowerChar`"
+    "parameterName" : "`lowerChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -246,8 +250,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`digitChar`"
+    "parameterName" : "`digitChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -267,8 +271,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.BOTH_POSITIONAL_AND_NAMED",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
-    "parameterName" : "`str`"
+    "parameterName" : "`str`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -288,9 +292,9 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "REQUIRED_PARAMETER_NOT_FOUND",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`mask`",
     "index" : "0",
-    "parameterName" : "`str`"
+    "parameterName" : "`str`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -311,8 +315,8 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "4274K",
   "messageParameters" : {
     "argumentName" : "`cellular`",
-    "functionName" : "`mask`",
-    "proposal" : "`str` `upperChar` `otherChar`"
+    "proposal" : "`str` `upperChar` `otherChar`",
+    "routineName" : "`mask`"
   },
   "queryContext" : [ {
     "objectType" : "",

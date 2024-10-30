@@ -99,6 +99,10 @@ abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression]
       > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
        b
   """,
+  note = """
+    The function is non-deterministic so the output order can be different for
+    those associated the same values of `x`.
+  """,
   group = "agg_funcs",
   since = "3.0.0")
 case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
@@ -121,6 +125,10 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
     Examples:
       > SELECT _FUNC_(x, y) FROM VALUES ('a', 10), ('b', 50), ('c', 20) AS tab(x, y);
        a
+  """,
+  note = """
+    The function is non-deterministic so the output order can be different for
+    those associated the same values of `x`.
   """,
   group = "agg_funcs",
   since = "3.0.0")

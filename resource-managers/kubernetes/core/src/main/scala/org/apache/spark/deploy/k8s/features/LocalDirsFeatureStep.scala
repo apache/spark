@@ -52,7 +52,7 @@ private[spark] class LocalDirsFeatureStep(
         .getOrElse(defaultLocalDir)
         .split(",")
       randomize(resolvedLocalDirs)
-      localDirs = resolvedLocalDirs.toSeq
+      localDirs = resolvedLocalDirs.toImmutableArraySeq
       localDirVolumes = resolvedLocalDirs
         .zipWithIndex
         .map { case (_, index) =>

@@ -19,7 +19,8 @@ package org.apache.spark.mllib.clustering
 
 import scala.util.Random
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{NUM_ITERATIONS, POINT_OF_CENTER}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.linalg.Vectors
 
@@ -58,8 +59,8 @@ private[mllib] object LocalKMeans extends Logging {
         j += 1
       }
       if (j == 0) {
-        logWarning("kMeansPlusPlus initialization ran out of distinct points for centers." +
-          s" Using duplicate point for center k = $i.")
+        logWarning(log"kMeansPlusPlus initialization ran out of distinct points for centers." +
+          log" Using duplicate point for center k = ${MDC(POINT_OF_CENTER, i)}.")
         centers(i) = points(0).toDense
       } else {
         centers(i) = points(j - 1).toDense
@@ -112,9 +113,10 @@ private[mllib] object LocalKMeans extends Logging {
     }
 
     if (iteration == maxIterations) {
-      logInfo(s"Local KMeans++ reached the max number of iterations: $maxIterations.")
+      logInfo(log"Local KMeans++ reached the max number of " +
+        log"iterations: ${MDC(NUM_ITERATIONS, maxIterations)}.")
     } else {
-      logInfo(s"Local KMeans++ converged in $iteration iterations.")
+      logInfo(log"Local KMeans++ converged in ${MDC(NUM_ITERATIONS, iteration)} iterations.")
     }
 
     centers

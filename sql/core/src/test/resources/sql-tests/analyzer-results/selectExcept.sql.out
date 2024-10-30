@@ -18,7 +18,7 @@ CreateViewCommand `tbl_view`, SELECT * FROM VALUES
   (50, "name5", named_struct("f1", 5, "s2", named_struct("f2", 505, "f3", "e"))),
   (60, "name6", named_struct("f1", 6, "s2", named_struct("f2", 606, "f3", "f"))),
   (70, "name7", named_struct("f1", 7, "s2", named_struct("f2", 707, "f3", "g")))
-AS tbl_view(id, name, data), false, false, LocalTempView, true
+AS tbl_view(id, name, data), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x, name#x, data#x]
       +- SubqueryAlias tbl_view
          +- LocalRelation [id#x, name#x, data#x]
@@ -42,7 +42,7 @@ SELECT * FROM tbl_view
 -- !query analysis
 Project [id#x, name#x, data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -54,7 +54,7 @@ SELECT * EXCEPT (id) FROM tbl_view
 -- !query analysis
 Project [name#x, data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -66,7 +66,7 @@ SELECT * EXCEPT (name) FROM tbl_view
 -- !query analysis
 Project [id#x, data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -78,7 +78,7 @@ SELECT * EXCEPT (data) FROM tbl_view
 -- !query analysis
 Project [id#x, name#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -90,7 +90,7 @@ SELECT * EXCEPT (data.f1) FROM tbl_view
 -- !query analysis
 Project [id#x, name#x, named_struct(s2, data#x.s2) AS data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -102,7 +102,7 @@ SELECT * EXCEPT (data.s2) FROM tbl_view
 -- !query analysis
 Project [id#x, name#x, named_struct(f1, data#x.f1) AS data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -114,7 +114,19 @@ SELECT * EXCEPT (data.s2.f2) FROM tbl_view
 -- !query analysis
 Project [id#x, name#x, named_struct(f1, data#x.f1, s2, named_struct(f3, data#x.s2.f3)) AS data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
+      +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
+         +- Project [id#x, name#x, data#x]
+            +- SubqueryAlias tbl_view
+               +- LocalRelation [id#x, name#x, data#x]
+
+
+-- !query
+SELECT * EXCEPT (data.f1, data.s2) FROM tbl_view
+-- !query analysis
+Project [id#x, name#x, named_struct() AS data#x]
++- SubqueryAlias tbl_view
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -126,7 +138,7 @@ SELECT * EXCEPT (id, name, data) FROM tbl_view
 -- !query analysis
 Project
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -147,7 +159,7 @@ SELECT tbl_view.* EXCEPT (name) FROM tbl_view
 -- !query analysis
 Project [id#x, data#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -161,7 +173,7 @@ SELECT * EXCEPT (name, data) FROM tbl_view
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/ids, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/ids], Append, `spark_catalog`.`default`.`ids`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/ids), [id]
 +- Project [id#x]
    +- SubqueryAlias tbl_view
-      +- View (`tbl_view`, [id#x,name#x,data#x])
+      +- View (`tbl_view`, [id#x, name#x, data#x])
          +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
             +- Project [id#x, name#x, data#x]
                +- SubqueryAlias tbl_view
@@ -189,7 +201,7 @@ SELECT data.* EXCEPT (s2) FROM tbl_view
 -- !query analysis
 Project [data#x.f1 AS f1#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -201,7 +213,7 @@ SELECT data.* EXCEPT (s2.f2) FROM tbl_view
 -- !query analysis
 Project [data#x.f1 AS f1#x, named_struct(f3, data#x.s2.f3) AS s2#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -213,7 +225,7 @@ SELECT data.s2.* EXCEPT (f2) FROM tbl_view
 -- !query analysis
 Project [data#x.s2.f3 AS f3#x]
 +- SubqueryAlias tbl_view
-   +- View (`tbl_view`, [id#x,name#x,data#x])
+   +- View (`tbl_view`, [id#x, name#x, data#x])
       +- Project [cast(id#x as int) AS id#x, cast(name#x as string) AS name#x, cast(data#x as struct<f1:int,s2:struct<f2:int,f3:string>>) AS data#x]
          +- Project [id#x, name#x, data#x]
             +- SubqueryAlias tbl_view
@@ -328,3 +340,192 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "* EXCEPT(data.s2, data.s2.f2)"
   } ]
 }
+
+
+-- !query
+DROP VIEW tbl_view
+-- !query analysis
+DropTempViewCommand tbl_view
+
+
+-- !query
+CREATE TEMPORARY VIEW v1 AS VALUES (1, 2, NULL, 4, 5) AS T(c1, c2, c3, c4, c5)
+-- !query analysis
+CreateViewCommand `v1`, VALUES (1, 2, NULL, 4, 5) AS T(c1, c2, c3, c4, c5), false, false, LocalTempView, UNSUPPORTED, true
+   +- SubqueryAlias T
+      +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT coalesce(*) FROM v1
+-- !query analysis
+Project [coalesce(c1#x, c2#x, cast(c3#x as int), c4#x, c5#x) AS coalesce(c1, c2, c3, c4, c5)#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT coalesce(* EXCEPT(c1, c2)) FROM v1
+-- !query analysis
+Project [coalesce(cast(c3#x as int), c4#x, c5#x) AS coalesce(c3, c4, c5)#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT array(*) FROM v1
+-- !query analysis
+Project [array(c1#x, c2#x, cast(c3#x as int), c4#x, c5#x) AS array(c1, c2, c3, c4, c5)#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT array(v1.*) FROM v1
+-- !query analysis
+Project [array(c1#x, c2#x, cast(c3#x as int), c4#x, c5#x) AS array(c1, c2, c3, c4, c5)#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT concat_ws(',', *) FROM v1
+-- !query analysis
+Project [concat_ws(,, cast(c1#x as string), cast(c2#x as string), cast(c3#x as array<string>), cast(c4#x as string), cast(c5#x as string)) AS concat_ws(,, c1, c2, c3, c4, c5)#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT (*) FROM v1
+-- !query analysis
+Project [c1#x, c2#x, c3#x, c4#x, c5#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT struct(*) FROM v1
+-- !query analysis
+Project [struct(c1, c1#x, c2, c2#x, c3, c3#x, c4, c4#x, c5, c5#x) AS struct(c1, c2, c3, c4, c5)#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT greatest(*) FROM v1
+-- !query analysis
+Project [greatest(c1#x, c2#x, cast(c3#x as int), c4#x, c5#x) AS greatest(c1, c2, c3, c4, c5)#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT 5 IN (*) FROM v1
+-- !query analysis
+Project [cast(5 as int) IN (cast(c1#x as int),cast(c2#x as int),cast(c3#x as int),cast(c4#x as int),cast(c5#x as int)) AS (5 IN (c1, c2, c3, c4, c5))#x]
++- SubqueryAlias v1
+   +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+      +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+         +- SubqueryAlias T
+            +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT c1.* FROM VALUES(named_struct('a', 1, 'b', 2), 10, 20) as t(c1, c2, c3)
+-- !query analysis
+Project [c1#x.a AS a#x, c1#x.b AS b#x]
++- SubqueryAlias t
+   +- LocalRelation [c1#x, c2#x, c3#x]
+
+
+-- !query
+SELECT 1 FROM v1 WHERE coalesce(*) = 1
+-- !query analysis
+Project [1 AS 1#x]
++- Filter (coalesce(c1#x, c2#x, cast(c3#x as int), c4#x, c5#x) = 1)
+   +- SubqueryAlias v1
+      +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+         +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+            +- SubqueryAlias T
+               +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT 1 FROM v1 WHERE array(*) = array(1, 2, NULL, 4, 5)
+-- !query analysis
+Project [1 AS 1#x]
++- Filter (array(c1#x, c2#x, cast(c3#x as int), c4#x, c5#x) = array(1, 2, cast(null as int), 4, 5))
+   +- SubqueryAlias v1
+      +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+         +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+            +- SubqueryAlias T
+               +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT 1 FROM v1 WHERE 4 IN (*)
+-- !query analysis
+Project [1 AS 1#x]
++- Filter cast(4 as int) IN (cast(c1#x as int),cast(c2#x as int),cast(c3#x as int),cast(c4#x as int),cast(c5#x as int))
+   +- SubqueryAlias v1
+      +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+         +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+            +- SubqueryAlias T
+               +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT T.* FROM v1, LATERAL (SELECT  v1.*) AS T(c1, c2, c3, c4, c5)
+-- !query analysis
+Project [c1#x, c2#x, c3#x, c4#x, c5#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x && c3#x && c4#x && c5#x], Inner
+   :  +- SubqueryAlias T
+   :     +- Project [c1#x AS c1#x, c2#x AS c2#x, c3#x AS c3#x, c4#x AS c4#x, c5#x AS c5#x]
+   :        +- Project [outer(c1#x), outer(c2#x), outer(c3#x), outer(c4#x), outer(c5#x)]
+   :           +- OneRowRelation
+   +- SubqueryAlias v1
+      +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+         +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+            +- SubqueryAlias T
+               +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]
+
+
+-- !query
+SELECT T.* FROM v1, LATERAL (SELECT  COALESCE(v1.*)) AS T(x)
+-- !query analysis
+Project [x#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x && c3#x && c4#x && c5#x], Inner
+   :  +- SubqueryAlias T
+   :     +- Project [coalesce(outer(v1.c1), outer(v1.c2), outer(v1.c3), outer(v1.c4), outer(v1.c5))#x AS x#x]
+   :        +- Project [coalesce(outer(c1#x), outer(c2#x), cast(outer(c3#x) as int), outer(c4#x), outer(c5#x)) AS coalesce(outer(v1.c1), outer(v1.c2), outer(v1.c3), outer(v1.c4), outer(v1.c5))#x]
+   :           +- OneRowRelation
+   +- SubqueryAlias v1
+      +- View (`v1`, [c1#x, c2#x, c3#x, c4#x, c5#x])
+         +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as void) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x]
+            +- SubqueryAlias T
+               +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x]

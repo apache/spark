@@ -99,6 +99,43 @@ Project [CASE WHEN (1 > 2) THEN (cast(1 as double) / cast(0 as double)) ELSE cas
 
 
 -- !query
+SELECT nullifzero(0),
+  nullifzero(cast(0 as tinyint)),
+  nullifzero(cast(0 as bigint)),
+  nullifzero('0'),
+  nullifzero(0.0),
+  nullifzero(1),
+  nullifzero(null)
+-- !query analysis
+Project [nullifzero(0) AS nullifzero(0)#x, nullifzero(cast(0 as tinyint)) AS nullifzero(CAST(0 AS TINYINT))#x, nullifzero(cast(0 as bigint)) AS nullifzero(CAST(0 AS BIGINT))#xL, nullifzero(0) AS nullifzero(0)#x, nullifzero(0.0) AS nullifzero(0.0)#x, nullifzero(1) AS nullifzero(1)#x, nullifzero(null) AS nullifzero(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT nullifzero('abc')
+-- !query analysis
+Project [nullifzero(abc) AS nullifzero(abc)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT zeroifnull(null),
+  zeroifnull(1),
+  zeroifnull(cast(1 as tinyint)),
+  zeroifnull(cast(1 as bigint))
+-- !query analysis
+Project [zeroifnull(null) AS zeroifnull(NULL)#x, zeroifnull(1) AS zeroifnull(1)#x, zeroifnull(cast(1 as tinyint)) AS zeroifnull(CAST(1 AS TINYINT))#x, zeroifnull(cast(1 as bigint)) AS zeroifnull(CAST(1 AS BIGINT))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT zeroifnull('abc')
+-- !query analysis
+Project [zeroifnull(abc) AS zeroifnull(abc)#xL]
++- OneRowRelation
+
+
+-- !query
 DROP TABLE conditional_t
 -- !query analysis
 DropTable false, false

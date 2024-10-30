@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -29,10 +30,7 @@ import org.apache.spark.util.ThreadUtils
  */
 trait AsyncLogPurge extends Logging {
 
-  protected var currentBatchId: Long
-
   protected val minLogEntriesToMaintain: Int
-
 
   protected[sql] val errorNotifier: ErrorNotifier
 
@@ -43,25 +41,46 @@ trait AsyncLogPurge extends Logging {
 
   private val purgeRunning = new AtomicBoolean(false)
 
+  private val statefulMetadataPurgeRunning = new AtomicBoolean(false)
+
   protected def purge(threshold: Long): Unit
 
-  protected lazy val useAsyncPurge: Boolean = sparkSession.conf.get(SQLConf.ASYNC_LOG_PURGE)
+  // This method is used to purge the oldest OperatorStateMetadata and StateSchema files
+  // which are written per run.
+  protected def purgeStatefulMetadata(plan: SparkPlan): Unit
 
-  protected def purgeAsync(): Unit = {
+  protected lazy val useAsyncPurge: Boolean = sparkSession.sessionState.conf
+    .getConf(SQLConf.ASYNC_LOG_PURGE)
+
+  protected def purgeAsync(batchId: Long): Unit = {
     if (purgeRunning.compareAndSet(false, true)) {
-      // save local copy because currentBatchId may get updated.  There are not really
-      // any concurrency issues here in regards to calculating the purge threshold
-      // but for the sake of defensive coding lets make a copy
-      val currentBatchIdCopy: Long = currentBatchId
       asyncPurgeExecutorService.execute(() => {
         try {
-          purge(currentBatchIdCopy - minLogEntriesToMaintain)
+          purge(batchId - minLogEntriesToMaintain)
         } catch {
           case throwable: Throwable =>
             logError("Encountered error while performing async log purge", throwable)
             errorNotifier.markError(throwable)
         } finally {
           purgeRunning.set(false)
+        }
+      })
+    } else {
+      log.debug("Skipped log purging since there is already one in progress.")
+    }
+  }
+
+  protected def purgeStatefulMetadataAsync(plan: SparkPlan): Unit = {
+    if (statefulMetadataPurgeRunning.compareAndSet(false, true)) {
+      asyncPurgeExecutorService.execute(() => {
+        try {
+          purgeStatefulMetadata(plan)
+        } catch {
+          case throwable: Throwable =>
+            logError("Encountered error while performing async log purge", throwable)
+            errorNotifier.markError(throwable)
+        } finally {
+          statefulMetadataPurgeRunning.set(false)
         }
       })
     } else {

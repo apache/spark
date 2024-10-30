@@ -10,7 +10,7 @@ CreateViewCommand `nt1`, select * from values
   ("one", 1),
   ("two", 2),
   ("three", 3)
-  as nt1(k, v1), false, false, LocalTempView, true
+  as nt1(k, v1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- LocalRelation [k#x, v1#x]
@@ -27,7 +27,7 @@ CreateViewCommand `nt2`, select * from values
   ("one", 1),
   ("two", 22),
   ("one", 5)
-  as nt2(k, v2), false, false, LocalTempView, true
+  as nt2(k, v2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v2#x]
       +- SubqueryAlias nt2
          +- LocalRelation [k#x, v2#x]
@@ -44,7 +44,7 @@ CreateViewCommand `nt3`, select * from values
   ("one", 4),
   ("two", 5),
   ("one", 6)
-  as nt3(k, v3), false, false, LocalTempView, true
+  as nt3(k, v3), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v3#x]
       +- SubqueryAlias nt3
          +- LocalRelation [k#x, v3#x]
@@ -61,7 +61,7 @@ CreateViewCommand `nt4`, select * from values
   ("one", 7),
   ("two", 8),
   ("one", 9)
-  as nt4(k, v4), false, false, LocalTempView, true
+  as nt4(k, v4), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v4#x]
       +- SubqueryAlias nt4
          +- LocalRelation [k#x, v4#x]
@@ -74,13 +74,13 @@ Project [k#x, v1#x, v2#x]
 +- Project [k#x, v1#x, v2#x]
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -95,13 +95,13 @@ Project [k#x, v1#x, v2#x]
    +- Project [k#x, v1#x, v2#x]
       +- Join Inner, (k#x = k#x)
          :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x,v1#x])
+         :  +- View (`nt1`, [k#x, v1#x])
          :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
          :        +- Project [k#x, v1#x]
          :           +- SubqueryAlias nt1
          :              +- LocalRelation [k#x, v1#x]
          +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x,v2#x])
+            +- View (`nt2`, [k#x, v2#x])
                +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias nt2
@@ -116,13 +116,13 @@ Sort [v1#x ASC NULLS FIRST, v2#x ASC NULLS FIRST], true
    +- Project [k#x, v1#x, v2#x]
       +- Join LeftOuter, (k#x = k#x)
          :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x,v1#x])
+         :  +- View (`nt1`, [k#x, v1#x])
          :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
          :        +- Project [k#x, v1#x]
          :           +- SubqueryAlias nt1
          :              +- LocalRelation [k#x, v1#x]
          +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x,v2#x])
+            +- View (`nt2`, [k#x, v2#x])
                +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias nt2
@@ -137,13 +137,13 @@ Sort [v1#x ASC NULLS FIRST, v2#x ASC NULLS FIRST], true
    +- Project [k#x, v1#x, v2#x]
       +- Join RightOuter, (k#x = k#x)
          :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x,v1#x])
+         :  +- View (`nt1`, [k#x, v1#x])
          :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
          :        +- Project [k#x, v1#x]
          :           +- SubqueryAlias nt1
          :              +- LocalRelation [k#x, v1#x]
          +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x,v2#x])
+            +- View (`nt2`, [k#x, v2#x])
                +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias nt2
@@ -157,13 +157,13 @@ Aggregate [count(1) AS count(1)#xL]
 +- Project [coalesce(k#x, k#x) AS k#x, v1#x, v2#x]
    +- Join FullOuter, (k#x = k#x)
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -177,13 +177,13 @@ Project [k#x]
 +- Project [k#x, v1#x, v2#x]
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -198,13 +198,13 @@ Project [k#x]
    +- Project [k#x, v1#x, v2#x]
       +- Join Inner, (k#x = k#x)
          :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x,v1#x])
+         :  +- View (`nt1`, [k#x, v1#x])
          :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
          :        +- Project [k#x, v1#x]
          :           +- SubqueryAlias nt1
          :              +- LocalRelation [k#x, v1#x]
          +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x,v2#x])
+            +- View (`nt2`, [k#x, v2#x])
                +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias nt2
@@ -218,13 +218,13 @@ Project [k#x, v1#x]
 +- Project [k#x, v1#x, v2#x]
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -238,13 +238,13 @@ Project [k#x, v2#x]
 +- Project [k#x, v1#x, v2#x, k#x]
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -260,13 +260,13 @@ Project [k#x, v1#x, v2#x]
       +- Project [k#x, v1#x, v2#x]
          +- Join Inner, (k#x = k#x)
             :- SubqueryAlias nt1
-            :  +- View (`nt1`, [k#x,v1#x])
+            :  +- View (`nt1`, [k#x, v1#x])
             :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
             :        +- Project [k#x, v1#x]
             :           +- SubqueryAlias nt1
             :              +- LocalRelation [k#x, v1#x]
             +- SubqueryAlias nt2
-               +- View (`nt2`, [k#x,v2#x])
+               +- View (`nt2`, [k#x, v2#x])
                   +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                      +- Project [k#x, v2#x]
                         +- SubqueryAlias nt2
@@ -282,13 +282,13 @@ Project [k#x]
       +- Project [k#x, v1#x, v2#x]
          +- Join Inner, (k#x = k#x)
             :- SubqueryAlias nt1
-            :  +- View (`nt1`, [k#x,v1#x])
+            :  +- View (`nt1`, [k#x, v1#x])
             :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
             :        +- Project [k#x, v1#x]
             :           +- SubqueryAlias nt1
             :              +- LocalRelation [k#x, v1#x]
             +- SubqueryAlias nt2
-               +- View (`nt2`, [k#x,v2#x])
+               +- View (`nt2`, [k#x, v2#x])
                   +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                      +- Project [k#x, v2#x]
                         +- SubqueryAlias nt2
@@ -302,13 +302,13 @@ Project [k#x, v1#x, k#x, v2#x]
 +- Project [k#x, v1#x, v2#x, k#x]
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -322,13 +322,13 @@ Project [k#x, v1#x, v2#x, k#x]
 +- Project [k#x, v1#x, v2#x, k#x]
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -342,13 +342,13 @@ Project [k#x, k#x]
 +- Project [k#x, v1#x, v2#x, k#x]
    +- Join Inner, (k#x = k#x)
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -364,13 +364,13 @@ Project [k#x]
       +- Project [k#x, v1#x, v2#x, k#x]
          +- Join Inner, (k#x = k#x)
             :- SubqueryAlias nt1
-            :  +- View (`nt1`, [k#x,v1#x])
+            :  +- View (`nt1`, [k#x, v1#x])
             :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
             :        +- Project [k#x, v1#x]
             :           +- SubqueryAlias nt1
             :              +- LocalRelation [k#x, v1#x]
             +- SubqueryAlias nt2
-               +- View (`nt2`, [k#x,v2#x])
+               +- View (`nt2`, [k#x, v2#x])
                   +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                      +- Project [k#x, v2#x]
                         +- SubqueryAlias nt2
@@ -385,13 +385,13 @@ Sort [key#x ASC NULLS FIRST], true
    +- Project [k#x, v1#x, v2#x, k#x]
       +- Join Inner, (k#x = k#x)
          :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x,v1#x])
+         :  +- View (`nt1`, [k#x, v1#x])
          :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
          :        +- Project [k#x, v1#x]
          :           +- SubqueryAlias nt1
          :              +- LocalRelation [k#x, v1#x]
          +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x,v2#x])
+            +- View (`nt2`, [k#x, v2#x])
                +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias nt2
@@ -406,13 +406,13 @@ Project [k#x, k#x]
    +- Project [k#x, v1#x, v2#x, k#x]
       +- Join Inner, (k#x = k#x)
          :- SubqueryAlias nt1
-         :  +- View (`nt1`, [k#x,v1#x])
+         :  +- View (`nt1`, [k#x, v1#x])
          :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
          :        +- Project [k#x, v1#x]
          :           +- SubqueryAlias nt1
          :              +- LocalRelation [k#x, v1#x]
          +- SubqueryAlias nt2
-            +- View (`nt2`, [k#x,v2#x])
+            +- View (`nt2`, [k#x, v2#x])
                +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                   +- Project [k#x, v2#x]
                      +- SubqueryAlias nt2
@@ -428,13 +428,13 @@ Project [k#x, v1#x, v2#x]
       +- Project [k#x, v1#x, v2#x]
          +- Join Inner, (k#x = k#x)
             :- SubqueryAlias nt1
-            :  +- View (`nt1`, [k#x,v1#x])
+            :  +- View (`nt1`, [k#x, v1#x])
             :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
             :        +- Project [k#x, v1#x]
             :           +- SubqueryAlias nt1
             :              +- LocalRelation [k#x, v1#x]
             +- SubqueryAlias nt2
-               +- View (`nt2`, [k#x,v2#x])
+               +- View (`nt2`, [k#x, v2#x])
                   +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                      +- Project [k#x, v2#x]
                         +- SubqueryAlias nt2
@@ -450,13 +450,13 @@ Project [k#x, v1#x, k#x, v2#x]
       +- Project [k#x, v1#x, v2#x, k#x]
          +- Join Inner, (k#x = k#x)
             :- SubqueryAlias nt1
-            :  +- View (`nt1`, [k#x,v1#x])
+            :  +- View (`nt1`, [k#x, v1#x])
             :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
             :        +- Project [k#x, v1#x]
             :           +- SubqueryAlias nt1
             :              +- LocalRelation [k#x, v1#x]
             +- SubqueryAlias nt2
-               +- View (`nt2`, [k#x,v2#x])
+               +- View (`nt2`, [k#x, v2#x])
                   +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                      +- Project [k#x, v2#x]
                         +- SubqueryAlias nt2
@@ -472,13 +472,13 @@ Project [v1#x, k#x]
       +- Project [k#x, v1#x, v2#x, k#x]
          +- Join Inner, (k#x = k#x)
             :- SubqueryAlias nt1
-            :  +- View (`nt1`, [k#x,v1#x])
+            :  +- View (`nt1`, [k#x, v1#x])
             :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
             :        +- Project [k#x, v1#x]
             :           +- SubqueryAlias nt1
             :              +- LocalRelation [k#x, v1#x]
             +- SubqueryAlias nt2
-               +- View (`nt2`, [k#x,v2#x])
+               +- View (`nt2`, [k#x, v2#x])
                   +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                      +- Project [k#x, v2#x]
                         +- SubqueryAlias nt2
@@ -515,19 +515,19 @@ Project [k#x, v1#x, v2#x, v3#x]
       :- Project [k#x, v1#x, v2#x]
       :  +- Join Inner, (k#x = k#x)
       :     :- SubqueryAlias nt1
-      :     :  +- View (`nt1`, [k#x,v1#x])
+      :     :  +- View (`nt1`, [k#x, v1#x])
       :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :     :        +- Project [k#x, v1#x]
       :     :           +- SubqueryAlias nt1
       :     :              +- LocalRelation [k#x, v1#x]
       :     +- SubqueryAlias nt2
-      :        +- View (`nt2`, [k#x,v2#x])
+      :        +- View (`nt2`, [k#x, v2#x])
       :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
       :              +- Project [k#x, v2#x]
       :                 +- SubqueryAlias nt2
       :                    +- LocalRelation [k#x, v2#x]
       +- SubqueryAlias nt3
-         +- View (`nt3`, [k#x,v3#x])
+         +- View (`nt3`, [k#x, v3#x])
             +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
                +- Project [k#x, v3#x]
                   +- SubqueryAlias nt3
@@ -543,19 +543,19 @@ Project [k#x, v1#x, k#x, v2#x, k#x, v3#x]
       :- Project [k#x, v1#x, v2#x, k#x]
       :  +- Join Inner, (k#x = k#x)
       :     :- SubqueryAlias nt1
-      :     :  +- View (`nt1`, [k#x,v1#x])
+      :     :  +- View (`nt1`, [k#x, v1#x])
       :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :     :        +- Project [k#x, v1#x]
       :     :           +- SubqueryAlias nt1
       :     :              +- LocalRelation [k#x, v1#x]
       :     +- SubqueryAlias nt2
-      :        +- View (`nt2`, [k#x,v2#x])
+      :        +- View (`nt2`, [k#x, v2#x])
       :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
       :              +- Project [k#x, v2#x]
       :                 +- SubqueryAlias nt2
       :                    +- LocalRelation [k#x, v2#x]
       +- SubqueryAlias nt3
-         +- View (`nt3`, [k#x,v3#x])
+         +- View (`nt3`, [k#x, v3#x])
             +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
                +- Project [k#x, v3#x]
                   +- SubqueryAlias nt3
@@ -570,19 +570,19 @@ Project [k#x, v1#x, k#x, v2#x, k#x, v3#x]
    :- Project [k#x, v1#x, v2#x, k#x]
    :  +- Join Inner, (k#x = k#x)
    :     :- SubqueryAlias nt1
-   :     :  +- View (`nt1`, [k#x,v1#x])
+   :     :  +- View (`nt1`, [k#x, v1#x])
    :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :     :        +- Project [k#x, v1#x]
    :     :           +- SubqueryAlias nt1
    :     :              +- LocalRelation [k#x, v1#x]
    :     +- SubqueryAlias nt2
-   :        +- View (`nt2`, [k#x,v2#x])
+   :        +- View (`nt2`, [k#x, v2#x])
    :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
    :              +- Project [k#x, v2#x]
    :                 +- SubqueryAlias nt2
    :                    +- LocalRelation [k#x, v2#x]
    +- SubqueryAlias nt3
-      +- View (`nt3`, [k#x,v3#x])
+      +- View (`nt3`, [k#x, v3#x])
          +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
             +- Project [k#x, v3#x]
                +- SubqueryAlias nt3
@@ -597,19 +597,19 @@ Project [k#x, v1#x, v2#x, k#x, v3#x]
    :- Project [k#x, v1#x, v2#x]
    :  +- Join Inner, (k#x = k#x)
    :     :- SubqueryAlias nt1
-   :     :  +- View (`nt1`, [k#x,v1#x])
+   :     :  +- View (`nt1`, [k#x, v1#x])
    :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :     :        +- Project [k#x, v1#x]
    :     :           +- SubqueryAlias nt1
    :     :              +- LocalRelation [k#x, v1#x]
    :     +- SubqueryAlias nt2
-   :        +- View (`nt2`, [k#x,v2#x])
+   :        +- View (`nt2`, [k#x, v2#x])
    :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
    :              +- Project [k#x, v2#x]
    :                 +- SubqueryAlias nt2
    :                    +- LocalRelation [k#x, v2#x]
    +- SubqueryAlias nt3
-      +- View (`nt3`, [k#x,v3#x])
+      +- View (`nt3`, [k#x, v3#x])
          +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
             +- Project [k#x, v3#x]
                +- SubqueryAlias nt3
@@ -625,19 +625,19 @@ Project [k#x, v1#x, v2#x, k#x, v3#x]
       :- Project [k#x, v1#x, v2#x, k#x]
       :  +- Join Inner, (k#x = k#x)
       :     :- SubqueryAlias nt1
-      :     :  +- View (`nt1`, [k#x,v1#x])
+      :     :  +- View (`nt1`, [k#x, v1#x])
       :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :     :        +- Project [k#x, v1#x]
       :     :           +- SubqueryAlias nt1
       :     :              +- LocalRelation [k#x, v1#x]
       :     +- SubqueryAlias nt2
-      :        +- View (`nt2`, [k#x,v2#x])
+      :        +- View (`nt2`, [k#x, v2#x])
       :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
       :              +- Project [k#x, v2#x]
       :                 +- SubqueryAlias nt2
       :                    +- LocalRelation [k#x, v2#x]
       +- SubqueryAlias nt3
-         +- View (`nt3`, [k#x,v3#x])
+         +- View (`nt3`, [k#x, v3#x])
             +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
                +- Project [k#x, v3#x]
                   +- SubqueryAlias nt3
@@ -655,25 +655,25 @@ Project [k#x, v1#x, k#x, v2#x, k#x, v3#x, k#x, v4#x]
       :     :- Project [k#x, v1#x, v2#x, k#x]
       :     :  +- Join Inner, (k#x = k#x)
       :     :     :- SubqueryAlias nt1
-      :     :     :  +- View (`nt1`, [k#x,v1#x])
+      :     :     :  +- View (`nt1`, [k#x, v1#x])
       :     :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :     :     :        +- Project [k#x, v1#x]
       :     :     :           +- SubqueryAlias nt1
       :     :     :              +- LocalRelation [k#x, v1#x]
       :     :     +- SubqueryAlias nt2
-      :     :        +- View (`nt2`, [k#x,v2#x])
+      :     :        +- View (`nt2`, [k#x, v2#x])
       :     :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
       :     :              +- Project [k#x, v2#x]
       :     :                 +- SubqueryAlias nt2
       :     :                    +- LocalRelation [k#x, v2#x]
       :     +- SubqueryAlias nt3
-      :        +- View (`nt3`, [k#x,v3#x])
+      :        +- View (`nt3`, [k#x, v3#x])
       :           +- Project [cast(k#x as string) AS k#x, cast(v3#x as int) AS v3#x]
       :              +- Project [k#x, v3#x]
       :                 +- SubqueryAlias nt3
       :                    +- LocalRelation [k#x, v3#x]
       +- SubqueryAlias nt4
-         +- View (`nt4`, [k#x,v4#x])
+         +- View (`nt4`, [k#x, v4#x])
             +- Project [cast(k#x as string) AS k#x, cast(v4#x as int) AS v4#x]
                +- Project [k#x, v4#x]
                   +- SubqueryAlias nt4

@@ -20,16 +20,16 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.reflect.classTag
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VariantEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.errors.{DataTypeErrorsBase, ExecutionErrors}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * A factory for constructing encoders that convert external row to/from the Spark SQL
- * internal binary representation.
+ * A factory for constructing encoders that convert external row to/from the Spark SQL internal
+ * binary representation.
  *
  * The following is a mapping between Spark SQL types and its allowed external types:
  * {{{
@@ -59,7 +59,7 @@ import org.apache.spark.util.ArrayImplicits._
  *   StructType -> org.apache.spark.sql.Row
  * }}}
  */
-object RowEncoder {
+object RowEncoder extends DataTypeErrorsBase {
   def encoderFor(schema: StructType): AgnosticEncoder[Row] = {
     encoderFor(schema, lenient = false)
   }
@@ -68,61 +68,65 @@ object RowEncoder {
     encoderForDataType(schema, lenient).asInstanceOf[AgnosticEncoder[Row]]
   }
 
-  private[sql] def encoderForDataType(
-      dataType: DataType,
-      lenient: Boolean): AgnosticEncoder[_] = dataType match {
-    case NullType => NullEncoder
-    case BooleanType => BoxedBooleanEncoder
-    case ByteType => BoxedByteEncoder
-    case ShortType => BoxedShortEncoder
-    case IntegerType => BoxedIntEncoder
-    case LongType => BoxedLongEncoder
-    case FloatType => BoxedFloatEncoder
-    case DoubleType => BoxedDoubleEncoder
-    case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
-    case BinaryType => BinaryEncoder
-    case StringType => StringEncoder
-    case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
-    case TimestampType => TimestampEncoder(lenient)
-    case TimestampNTZType => LocalDateTimeEncoder
-    case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
-    case DateType => DateEncoder(lenient)
-    case CalendarIntervalType => CalendarIntervalEncoder
-    case _: DayTimeIntervalType => DayTimeIntervalEncoder
-    case _: YearMonthIntervalType => YearMonthIntervalEncoder
-    case _: VariantType => VariantEncoder
-    case p: PythonUserDefinedType =>
-      // TODO check if this works.
-      encoderForDataType(p.sqlType, lenient)
-    case udt: UserDefinedType[_] =>
-      val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
-      val udtClass: Class[_] = if (annotation != null) {
-        annotation.udt()
-      } else {
-        UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw ExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
+  private[sql] def encoderForDataType(dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
+    dataType match {
+      case NullType => NullEncoder
+      case BooleanType => BoxedBooleanEncoder
+      case ByteType => BoxedByteEncoder
+      case ShortType => BoxedShortEncoder
+      case IntegerType => BoxedIntEncoder
+      case LongType => BoxedLongEncoder
+      case FloatType => BoxedFloatEncoder
+      case DoubleType => BoxedDoubleEncoder
+      case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
+      case BinaryType => BinaryEncoder
+      case _: StringType => StringEncoder
+      case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
+      case TimestampType => TimestampEncoder(lenient)
+      case TimestampNTZType => LocalDateTimeEncoder
+      case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
+      case DateType => DateEncoder(lenient)
+      case CalendarIntervalType => CalendarIntervalEncoder
+      case _: DayTimeIntervalType => DayTimeIntervalEncoder
+      case _: YearMonthIntervalType => YearMonthIntervalEncoder
+      case _: VariantType => VariantEncoder
+      case p: PythonUserDefinedType =>
+        // TODO check if this works.
+        encoderForDataType(p.sqlType, lenient)
+      case udt: UserDefinedType[_] =>
+        val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
+        val udtClass: Class[_] = if (annotation != null) {
+          annotation.udt()
+        } else {
+          UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
+            throw ExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
+          }
         }
-      }
-      UDTEncoder(udt, udtClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
-    case ArrayType(elementType, containsNull) =>
-      IterableEncoder(
-        classTag[mutable.ArraySeq[_]],
-        encoderForDataType(elementType, lenient),
-        containsNull,
-        lenientSerialization = true)
-    case MapType(keyType, valueType, valueContainsNull) =>
-      MapEncoder(
-        classTag[scala.collection.Map[_, _]],
-        encoderForDataType(keyType, lenient),
-        encoderForDataType(valueType, lenient),
-        valueContainsNull)
-    case StructType(fields) =>
-      AgnosticRowEncoder(fields.map { field =>
-        EncoderField(
-          field.name,
-          encoderForDataType(field.dataType, lenient),
-          field.nullable,
-          field.metadata)
-      }.toImmutableArraySeq)
-  }
+        UDTEncoder(udt, udtClass.asInstanceOf[Class[_ <: UserDefinedType[_]]])
+      case ArrayType(elementType, containsNull) =>
+        IterableEncoder(
+          classTag[mutable.ArraySeq[_]],
+          encoderForDataType(elementType, lenient),
+          containsNull,
+          lenientSerialization = true)
+      case MapType(keyType, valueType, valueContainsNull) =>
+        MapEncoder(
+          classTag[scala.collection.Map[_, _]],
+          encoderForDataType(keyType, lenient),
+          encoderForDataType(valueType, lenient),
+          valueContainsNull)
+      case StructType(fields) =>
+        AgnosticRowEncoder(fields.map { field =>
+          EncoderField(
+            field.name,
+            encoderForDataType(field.dataType, lenient),
+            field.nullable,
+            field.metadata)
+        }.toImmutableArraySeq)
+
+      case _ =>
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
+          messageParameters = Map("dataType" -> toSQLType(dataType)))
+    }
 }

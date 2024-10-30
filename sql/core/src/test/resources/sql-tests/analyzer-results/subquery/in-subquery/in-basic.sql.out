@@ -2,7 +2,7 @@
 -- !query
 create temporary view tab_a as select * from values (1, 1) as tab_a(a1, b1)
 -- !query analysis
-CreateViewCommand `tab_a`, select * from values (1, 1) as tab_a(a1, b1), false, false, LocalTempView, true
+CreateViewCommand `tab_a`, select * from values (1, 1) as tab_a(a1, b1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a1#x, b1#x]
       +- SubqueryAlias tab_a
          +- LocalRelation [a1#x, b1#x]
@@ -11,7 +11,7 @@ CreateViewCommand `tab_a`, select * from values (1, 1) as tab_a(a1, b1), false, 
 -- !query
 create temporary view tab_b as select * from values (1, 1) as tab_b(a2, b2)
 -- !query analysis
-CreateViewCommand `tab_b`, select * from values (1, 1) as tab_b(a2, b2), false, false, LocalTempView, true
+CreateViewCommand `tab_b`, select * from values (1, 1) as tab_b(a2, b2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a2#x, b2#x]
       +- SubqueryAlias tab_b
          +- LocalRelation [a2#x, b2#x]
@@ -22,7 +22,7 @@ create temporary view struct_tab as select struct(col1 as a, col2 as b) as recor
  values (1, 1), (1, 2), (2, 1), (2, 2)
 -- !query analysis
 CreateViewCommand `struct_tab`, select struct(col1 as a, col2 as b) as record from
- values (1, 1), (1, 2), (2, 1), (2, 2), false, false, LocalTempView, true
+ values (1, 1), (1, 2), (2, 1), (2, 2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [struct(a, col1#x, b, col2#x) AS record#x]
       +- LocalRelation [col1#x, col2#x]
 
@@ -34,13 +34,13 @@ Project [1 AS 1#x]
 +- Filter NOT named_struct(a1, a1#x, b1, b1#x) IN (list#x [])
    :  +- Project [a2#x, b2#x]
    :     +- SubqueryAlias tab_b
-   :        +- View (`tab_b`, [a2#x,b2#x])
+   :        +- View (`tab_b`, [a2#x, b2#x])
    :           +- Project [cast(a2#x as int) AS a2#x, cast(b2#x as int) AS b2#x]
    :              +- Project [a2#x, b2#x]
    :                 +- SubqueryAlias tab_b
    :                    +- LocalRelation [a2#x, b2#x]
    +- SubqueryAlias tab_a
-      +- View (`tab_a`, [a1#x,b1#x])
+      +- View (`tab_a`, [a1#x, b1#x])
          +- Project [cast(a1#x as int) AS a1#x, cast(b1#x as int) AS b1#x]
             +- Project [a1#x, b1#x]
                +- SubqueryAlias tab_a
@@ -79,7 +79,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter record#x IN (list#x [])
    :  +- Project [named_struct(a, a2#x, b, b2#x) AS named_struct(a, a2 AS a, b, b2 AS b)#x]
    :     +- SubqueryAlias tab_b
-   :        +- View (`tab_b`, [a2#x,b2#x])
+   :        +- View (`tab_b`, [a2#x, b2#x])
    :           +- Project [cast(a2#x as int) AS a2#x, cast(b2#x as int) AS b2#x]
    :              +- Project [a2#x, b2#x]
    :                 +- SubqueryAlias tab_b
@@ -99,7 +99,7 @@ Aggregate [count(1) AS count(1)#xL]
 +- Filter NOT record#x IN (list#x [])
    :  +- Project [named_struct(a, a2#x, b, b2#x) AS named_struct(a, a2 AS a, b, b2 AS b)#x]
    :     +- SubqueryAlias tab_b
-   :        +- View (`tab_b`, [a2#x,b2#x])
+   :        +- View (`tab_b`, [a2#x, b2#x])
    :           +- Project [cast(a2#x as int) AS a2#x, cast(b2#x as int) AS b2#x]
    :              +- Project [a2#x, b2#x]
    :                 +- SubqueryAlias tab_b

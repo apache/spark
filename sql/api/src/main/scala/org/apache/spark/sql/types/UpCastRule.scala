@@ -16,21 +16,14 @@
  */
 package org.apache.spark.sql.types
 
-import scala.collection.immutable.IndexedSeq
-
 /**
  * Rule that defines which upcasts are allow in Spark.
  */
 private[sql] object UpCastRule {
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
-  val numericPrecedence: IndexedSeq[NumericType] = IndexedSeq(
-    ByteType,
-    ShortType,
-    IntegerType,
-    LongType,
-    FloatType,
-    DoubleType)
+  val numericPrecedence: IndexedSeq[NumericType] =
+    IndexedSeq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
 
   /**
    * Returns true iff we can safely up-cast the `from` type to `to` type without any truncating or
@@ -39,6 +32,7 @@ private[sql] object UpCastRule {
    */
   def canUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
+    case (VariantType, _) => false
     case (from: NumericType, to: DecimalType) if to.isWiderThan(from) => true
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
@@ -63,15 +57,18 @@ private[sql] object UpCastRule {
 
     case (StructType(fromFields), StructType(toFields)) =>
       fromFields.length == toFields.length &&
-        fromFields.zip(toFields).forall {
-          case (f1, f2) =>
-            resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
-        }
+      fromFields.zip(toFields).forall { case (f1, f2) =>
+        resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
+      }
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
+
+    case (udt: UserDefinedType[_], toType) => canUpCast(udt.sqlType, toType)
+
+    case (fromType, udt: UserDefinedType[_]) => canUpCast(fromType, udt.sqlType)
 
     case _ => false
   }

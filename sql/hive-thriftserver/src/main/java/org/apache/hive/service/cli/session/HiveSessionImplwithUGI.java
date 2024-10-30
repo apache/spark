@@ -28,8 +28,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -41,23 +39,13 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
 
   private UserGroupInformation sessionUgi = null;
   private String delegationTokenStr = null;
-  private Hive sessionHive = null;
   private HiveSession proxySession = null;
-  static final Logger LOG = LoggerFactory.getLogger(HiveSessionImplwithUGI.class);
 
   public HiveSessionImplwithUGI(TProtocolVersion protocol, String username, String password,
       HiveConf hiveConf, String ipAddress, String delegationToken) throws HiveSQLException {
     super(protocol, username, password, hiveConf, ipAddress);
     setSessionUGI(username);
     setDelegationToken(delegationToken);
-
-    // create a new metastore connection for this particular user session
-    Hive.set(null);
-    try {
-      sessionHive = Hive.getWithoutRegisterFns(getHiveConf());
-    } catch (HiveException e) {
-      throw new HiveSQLException("Failed to setup metastore connection", e);
-    }
   }
 
   // setup appropriate UGI for the session
@@ -83,15 +71,6 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
 
   public String getDelegationToken() {
     return this.delegationTokenStr;
-  }
-
-  @Override
-  protected synchronized void acquire(boolean userAccess) {
-    super.acquire(userAccess);
-    // if we have a metastore connection with impersonation, then set it first
-    if (sessionHive != null) {
-      Hive.set(sessionHive);
-    }
   }
 
   /**

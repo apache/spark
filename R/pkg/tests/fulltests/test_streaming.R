@@ -147,8 +147,7 @@ test_that("Unsupported operation", {
   # memory sink without aggregation
   df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
   expect_error(write.stream(df, "memory", queryName = "people", outputMode = "complete"),
-               paste0(".*(start : analysis error - Complete output mode not supported when there ",
-                      "are no streaming aggregations on streaming DataFrames/Datasets).*"))
+               ".*analysis error.*complete.*not supported.*no streaming aggregations*")
 })
 
 test_that("Terminated by error", {
@@ -257,7 +256,7 @@ test_that("Trigger", {
                "Value for trigger.processingTime must be a non-empty string.")
 
   expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
-               trigger.processingTime = "invalid"), "illegal argument")
+               trigger.processingTime = "invalid"))
 
   expect_error(write.stream(df, "memory", queryName = "times", outputMode = "append",
                trigger.once = ""), "Value for trigger.once must be TRUE.")

@@ -29,6 +29,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords.{GetNewApplicationResponse, SubmitApplicationRequest}
 import org.apache.hadoop.yarn.api.records._
@@ -704,6 +705,54 @@ class ClientSuite extends SparkFunSuite
       new FileStatus(1, true, 1, 1, 1L, new Path("hdfs:/valid/c"))).toArray)
     // Expect only a.jar and b.jar to be preloaded
     assert(client.getPreloadedStatCache(sparkConf.get(JARS_TO_DISTRIBUTE), mockFsLookup).size === 2)
+  }
+
+  Seq(
+      "client",
+      "cluster"
+    ).foreach { case (deployMode) =>
+      test(s"SPARK-47208: minimum memory overhead is correctly set in ($deployMode mode)") {
+        val sparkConf = new SparkConf()
+          .set("spark.app.name", "foo-test-app")
+          .set(SUBMIT_DEPLOY_MODE, deployMode)
+          .set(DRIVER_MIN_MEMORY_OVERHEAD, 500L)
+        val args = new ClientArguments(Array())
+
+        val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
+        val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
+        val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
+
+        val client = new Client(args, sparkConf, null)
+        client.createApplicationSubmissionContext(
+          new YarnClientApplication(getNewApplicationResponse, appContext),
+          containerLaunchContext)
+
+        appContext.getApplicationName should be ("foo-test-app")
+        // flag should only work for cluster mode
+        if (deployMode == "cluster") {
+          // 1Gb driver default + 500 overridden minimum default overhead
+          appContext.getResource should be (Resource.newInstance(1524L, 1))
+        } else {
+          // 512 driver default (non-cluster) + 384 overhead default
+          // that can't be changed in non cluster mode.
+          appContext.getResource should be (Resource.newInstance(896L, 1))
+        }
+      }
+    }
+
+  test("SPARK-49760: default app master SPARK_USER") {
+    val sparkConf = new SparkConf()
+    val client = createClient(sparkConf)
+    val env = client.setupLaunchEnv(new Path("/staging/dir/path"), Seq())
+    env("SPARK_USER") should be (UserGroupInformation.getCurrentUser().getShortUserName())
+  }
+
+  test("SPARK-49760: override app master SPARK_USER") {
+    val sparkConf = new SparkConf()
+        .set("spark.yarn.appMasterEnv.SPARK_USER", "overrideuser")
+    val client = createClient(sparkConf)
+    val env = client.setupLaunchEnv(new Path("/staging/dir/path"), Seq())
+    env("SPARK_USER") should be ("overrideuser")
   }
 
   private val matching = Seq(

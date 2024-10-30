@@ -30,7 +30,8 @@ import scala.util.control.NonFatal
 import com.google.common.io.ByteStreams
 
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{STORAGE_UNROLL_MEMORY_THRESHOLD, UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
@@ -110,12 +111,14 @@ private[spark] class MemoryStore(
   }
 
   if (maxMemory < unrollMemoryThreshold) {
-    logWarning(s"Max memory ${Utils.bytesToString(maxMemory)} is less than the initial memory " +
-      s"threshold ${Utils.bytesToString(unrollMemoryThreshold)} needed to store a block in " +
-      s"memory. Please configure Spark with more memory.")
+    logWarning(log"Max memory ${MDC(NUM_BYTES, Utils.bytesToString(maxMemory))} " +
+      log"is less than the initial memory " +
+      log"threshold ${MDC(MAX_SIZE, Utils.bytesToString(unrollMemoryThreshold))} " +
+      log"needed to store a block in memory. Please configure Spark with more memory.")
   }
 
-  logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
+  logInfo(log"MemoryStore started with capacity " +
+    log"${MDC(MEMORY_SIZE, Utils.bytesToString(maxMemory))}")
 
   /** Total storage memory used including unroll memory, in bytes. */
   private def memoryUsed: Long = memoryManager.storageMemoryUsed
@@ -156,8 +159,9 @@ private[spark] class MemoryStore(
       entries.synchronized {
         entries.put(blockId, entry)
       }
-      logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
-        blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+      logInfo(log"Block ${MDC(BLOCK_ID, blockId)} stored as bytes in memory " +
+        log"(estimated size ${MDC(SIZE, Utils.bytesToString(size))}, " +
+        log"free ${MDC(MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))})")
       true
     } else {
       false
@@ -213,8 +217,9 @@ private[spark] class MemoryStore(
       reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
 
     if (!keepUnrolling) {
-      logWarning(s"Failed to reserve initial memory threshold of " +
-        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
+      logWarning(log"Failed to reserve initial memory threshold of " +
+        log"${MDC(NUM_BYTES, Utils.bytesToString(initialMemoryThreshold))} " +
+        log"for computing block ${MDC(BLOCK_ID, blockId)} in memory.")
     } else {
       unrollMemoryUsedByThisBlock += initialMemoryThreshold
     }
@@ -247,7 +252,8 @@ private[spark] class MemoryStore(
     // SPARK-45025 - if a thread interrupt was received, we log a warning and return used memory
     // to avoid getting killed by task reaper eventually.
     if (shouldCheckThreadInterruption && Thread.currentThread().isInterrupted) {
-      logInfo(s"Failed to unroll block=$blockId since thread interrupt was received")
+      logInfo(
+        log"Failed to unroll block=${MDC(BLOCK_ID, blockId)} since thread interrupt was received")
       Left(unrollMemoryUsedByThisBlock)
     } else if (keepUnrolling) {
       // Make sure that we have enough memory to store the block. By this point, it is possible that
@@ -276,8 +282,9 @@ private[spark] class MemoryStore(
           entries.put(blockId, entry)
         }
 
-        logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(blockId,
-          Utils.bytesToString(entry.size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+        logInfo(log"Block ${MDC(BLOCK_ID, blockId)} stored as values in memory " +
+          log"(estimated size ${MDC(MEMORY_SIZE, Utils.bytesToString(entry.size))}, free " +
+          log"${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))})")
         Right(entry.size)
       } else {
         // We ran out of space while unrolling the values for this block
@@ -348,9 +355,10 @@ private[spark] class MemoryStore(
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
     val chunkSize = if (initialMemoryThreshold > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
-        s"is too large to be set as chunk size. Chunk size has been capped to " +
-        s"${Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)}")
+      logWarning(log"Initial memory threshold of " +
+        log"${MDC(NUM_BYTES, Utils.bytesToString(initialMemoryThreshold))} " +
+        log"is too large to be set as chunk size. Chunk size has been capped to " +
+        log"${MDC(MAX_SIZE, Utils.bytesToString(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH))}")
       ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
     } else {
       initialMemoryThreshold.toInt
@@ -517,8 +525,8 @@ private[spark] class MemoryStore(
       if (freedMemory >= space) {
         var lastSuccessfulBlock = -1
         try {
-          logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
-            s"(${Utils.bytesToString(freedMemory)} bytes)")
+          logInfo(log"${MDC(NUM_BLOCKS, selectedBlocks.size)} blocks selected for dropping " +
+            log"(${MDC(MEMORY_SIZE, Utils.bytesToString(freedMemory))} bytes)")
           selectedBlocks.indices.foreach { idx =>
             val blockId = selectedBlocks(idx)
             val entry = entries.synchronized {
@@ -533,8 +541,9 @@ private[spark] class MemoryStore(
             }
             lastSuccessfulBlock = idx
           }
-          logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
-            s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
+          logInfo(
+            log"After dropping ${MDC(NUM_BLOCKS, selectedBlocks.size)} blocks, free memory is" +
+            log"${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))}")
           freedMemory
         } finally {
           // like BlockManager.doPut, we use a finally rather than a catch to avoid having to deal
@@ -549,7 +558,7 @@ private[spark] class MemoryStore(
         }
       } else {
         blockId.foreach { id =>
-          logInfo(s"Will not store $id")
+          logInfo(log"Will not store ${MDC(BLOCK_ID, id)}")
         }
         selectedBlocks.foreach { id =>
           blockInfoManager.unlock(id)
@@ -645,11 +654,11 @@ private[spark] class MemoryStore(
    */
   private def logMemoryUsage(): Unit = {
     logInfo(
-      s"Memory use = ${Utils.bytesToString(blocksMemoryUsed)} (blocks) + " +
-      s"${Utils.bytesToString(currentUnrollMemory)} (scratch space shared across " +
-      s"$numTasksUnrolling tasks(s)) = ${Utils.bytesToString(memoryUsed)}. " +
-      s"Storage limit = ${Utils.bytesToString(maxMemory)}."
-    )
+      log"Memory use = ${MDC(CURRENT_MEMORY_SIZE, Utils.bytesToString(blocksMemoryUsed))} " +
+      log"(blocks) + ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(currentUnrollMemory))} " +
+      log"(scratch space shared across ${MDC(NUM_TASKS, numTasksUnrolling)} " +
+      log"tasks(s)) = ${MDC(STORAGE_MEMORY_SIZE, Utils.bytesToString(memoryUsed))}. " +
+      log"Storage limit = ${MDC(MAX_MEMORY_SIZE, Utils.bytesToString(maxMemory))}.")
   }
 
   /**
@@ -660,8 +669,8 @@ private[spark] class MemoryStore(
    */
   private def logUnrollFailureMessage(blockId: BlockId, finalVectorSize: Long): Unit = {
     logWarning(
-      s"Not enough space to cache $blockId in memory! " +
-      s"(computed ${Utils.bytesToString(finalVectorSize)} so far)"
+      log"Not enough space to cache ${MDC(BLOCK_ID, blockId)} in memory! " +
+        log"(computed ${MDC(NUM_BYTES, Utils.bytesToString(finalVectorSize))} so far)"
     )
     logMemoryUsage()
   }

@@ -187,7 +187,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               (SQLConf.PARQUET_INT96_TIMESTAMP_CONVERSION.key, int96TimestampConversion.toString())
           ) {
             val readBack = spark.read.parquet(tableDir.getAbsolutePath).collect()
-            assert(readBack.size === 6)
+            assert(readBack.length === 6)
             // if we apply the conversion, we'll get the "right" values, as saved by impala in the
             // original file.  Otherwise, they're off by the local timezone offset, set to
             // America/Los_Angeles in tests
@@ -213,8 +213,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // predicates because (a) in ParquetFilters, we ignore TimestampType and (b) parquet
               // does not read statistics from int96 fields, as they are unsigned.  See
               // scalastyle:off line.size.limit
-              // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
-              // https://github.com/apache/parquet-mr/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
+              // https://github.com/apache/parquet-java/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L419
+              // https://github.com/apache/parquet-java/blob/2fd62ee4d524c270764e9b91dca72e5cf1a005b7/parquet-hadoop/src/main/java/org/apache/parquet/format/converter/ParquetMetadataConverter.java#L348
               // scalastyle:on line.size.limit
               //
               // Just to be defensive in case anything ever changes in parquet, this test checks

@@ -35,10 +35,8 @@ from pyspark.pandas.data_type_ops.base import (
     _is_boolean_type,
 )
 from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
-from pyspark.sql import functions as F
-from pyspark.sql.column import Column as PySparkColumn
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, StringType
-from pyspark.sql.utils import get_column_class
 from pyspark.errors import PySparkValueError
 
 
@@ -317,7 +315,7 @@ class BooleanOps(DataTypeOps):
             return index_ops._with_new_scol(
                 scol,
                 field=index_ops._internal.data_fields[0].copy(
-                    dtype=dtype, spark_type=spark_type, nullable=nullable
+                    dtype=dtype, spark_type=spark_type, nullable=nullable  # type: ignore[arg-type]
                 ),
             )
         else:
@@ -331,23 +329,19 @@ class BooleanOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__lt__)(left, right)
+        return column_op(PySparkColumn.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__le__)(left, right)
+        return column_op(PySparkColumn.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__ge__)(left, right)
+        return column_op(PySparkColumn.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__gt__)(left, right)
+        return column_op(PySparkColumn.__gt__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         return operand._with_new_scol(~operand.spark.column, field=operand._internal.data_fields[0])

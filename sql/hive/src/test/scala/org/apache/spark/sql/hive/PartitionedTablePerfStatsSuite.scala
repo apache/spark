@@ -100,7 +100,7 @@ class PartitionedTablePerfStatsSuite
   }
 
   genericTest("partitioned pruned table reports only selected files") { spec =>
-    assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
+    assert(spark.conf.get(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
     withTable("test") {
       withTempDir { dir =>
         spec.setupTable("test", dir)

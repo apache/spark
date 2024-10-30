@@ -21,7 +21,11 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class GroupbyParityIndexTests(GroupbyIndexMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
+class GroupbyParityIndexTests(
+    GroupbyIndexMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

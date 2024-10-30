@@ -142,7 +142,7 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
       new LabeledPoint(0.0, Vectors.sparse(numCols, Seq((100, 2.0)))),
       new LabeledPoint(0.1, Vectors.sparse(numCols, Seq((200, 1.0)))))
     val chi = Statistics.chiSqTest(sc.parallelize(sparseData.toImmutableArraySeq))
-    assert(chi.size === numCols)
+    assert(chi.length === numCols)
     assert(chi(1000) != null) // SPARK-3087
 
     // Detect continuous features or labels

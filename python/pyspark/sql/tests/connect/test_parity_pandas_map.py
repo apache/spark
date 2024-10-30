@@ -14,35 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
-
 
 from pyspark.sql.tests.pandas.test_pandas_map import MapInPandasTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class MapInPandasParityTests(MapInPandasTestsMixin, ReusedConnectTestCase):
-    def test_other_than_dataframe_iter(self):
-        self.check_other_than_dataframe_iter()
-
-    def test_dataframes_with_other_column_names(self):
-        self.check_dataframes_with_other_column_names()
-
-    def test_dataframes_with_duplicate_column_names(self):
-        self.check_dataframes_with_duplicate_column_names()
-
-    def test_dataframes_with_less_columns(self):
-        self.check_dataframes_with_less_columns()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_dataframes_with_incompatible_types(self):
-        self.check_dataframes_with_incompatible_types()
-
-    def test_empty_dataframes_with_less_columns(self):
-        self.check_empty_dataframes_with_less_columns()
-
-    def test_empty_dataframes_with_other_columns(self):
-        self.check_empty_dataframes_with_other_columns()
+class MapInPandasParityTests(
+    MapInPandasTestsMixin,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

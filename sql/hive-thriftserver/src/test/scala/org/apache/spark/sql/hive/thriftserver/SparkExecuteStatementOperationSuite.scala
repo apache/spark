@@ -30,7 +30,7 @@ import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, NullType, StringType, StructField, StructType}
@@ -78,7 +78,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
 
       HiveThriftServer2.eventManager = mock(classOf[HiveThriftServer2EventManager])
 
-      val spySqlContext = spy[SQLContext](sqlContext)
+      val spySparkSession = spy[SparkSession](spark)
 
       // When cancel() is called on the operation, cleanup causes an exception to be thrown inside
       // of execute(). This should not cause the state to become ERROR. The exception here will be
@@ -90,9 +90,9 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
         throw new RuntimeException("Operation was cancelled by test cleanup.")
       })
       val statement = "stmt"
-      doReturn(dataFrame, Nil: _*).when(spySqlContext).sql(statement)
+      doReturn(dataFrame, Nil: _*).when(spySparkSession).sql(statement)
 
-      val executeStatementOperation = new MySparkExecuteStatementOperation(spySqlContext,
+      val executeStatementOperation = new MySparkExecuteStatementOperation(spySparkSession,
         hiveSession, statement, signal, finalState)
 
       val run = new Thread() {
@@ -110,12 +110,12 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
   }
 
   private class MySparkExecuteStatementOperation(
-      sqlContext: SQLContext,
+      session: SparkSession,
       hiveSession: HiveSession,
       statement: String,
       signal: Semaphore,
       finalState: OperationState)
-    extends SparkExecuteStatementOperation(sqlContext, hiveSession, statement,
+    extends SparkExecuteStatementOperation(session, hiveSession, statement,
       new util.HashMap, false, 0) {
 
     override def cleanup(): Unit = {

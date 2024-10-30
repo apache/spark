@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.xml
 
+import java.io.{FileNotFoundException, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
 
+import scala.util.control.NonFatal
+
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
@@ -40,7 +44,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Common functions for parsing XML files
  */
-abstract class XmlDataSource extends Serializable {
+abstract class XmlDataSource extends Serializable with Logging {
   def isSplitable: Boolean
 
   /**
@@ -172,13 +176,27 @@ object MultiLineXmlDataSource extends XmlDataSource {
       parsedOptions: XmlOptions): StructType = {
     val xml = createBaseRdd(sparkSession, inputPaths, parsedOptions)
 
-    val tokenRDD = xml.flatMap { portableDataStream =>
-      StaxXmlParser.tokenizeStream(
-        CodecStreams.createInputStreamWithCloseResource(
-          portableDataStream.getConfiguration,
-          new Path(portableDataStream.getPath())),
-        parsedOptions)
-    }
+    val tokenRDD: RDD[String] =
+      xml.flatMap { portableDataStream =>
+        try {
+          StaxXmlParser.tokenizeStream(
+            CodecStreams.createInputStreamWithCloseResource(
+              portableDataStream.getConfiguration,
+              new Path(portableDataStream.getPath())),
+            parsedOptions)
+        } catch {
+          case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
+            logWarning("Skipped missing file", e)
+            Iterator.empty[String]
+          case NonFatal(e) =>
+            ExceptionUtils.getRootCause(e) match {
+              case _: RuntimeException | _: IOException if parsedOptions.ignoreCorruptFiles =>
+                logWarning("Skipped the rest of the content in the corrupted file", e)
+                Iterator.empty[String]
+              case o => throw o
+            }
+        }
+      }
     SQLExecution.withSQLConfPropagated(sparkSession) {
       val schema =
         new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)

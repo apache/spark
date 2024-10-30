@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDef, LogicalPlan, WithCTE}
@@ -28,6 +30,7 @@ import org.apache.spark.sql.execution.CommandExecutionMode
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * A command used to create a data source table.
@@ -84,7 +87,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       // This is guaranteed in `PreprocessDDL`.
       assert(table.partitionColumnNames.isEmpty)
       dataSource match {
-        case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
+        case r: HadoopFsRelation => r.partitionSchema.fieldNames.toImmutableArraySeq
         case _ => Nil
       }
     }
@@ -194,7 +197,7 @@ case class CreateDataSourceTableAsSelectCommand(
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
-            sparkSession.sqlContext.conf.manageFilesourcePartitions =>
+            sparkSession.sessionState.conf.manageFilesourcePartitions =>
           // Need to recover partitions into the metastore so our saved data is visible.
           sessionState.executePlan(RepairTableCommand(
             table.identifier,
@@ -229,7 +232,8 @@ case class CreateDataSourceTableAsSelectCommand(
       dataSource.writeAndRead(mode, query, outputColumnNames)
     } catch {
       case ex: AnalysisException =>
-        logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)
+        logError(log"Failed to write to table " +
+          log"${MDC(TABLE_NAME, table.identifier.unquotedString)}", ex)
         throw ex
     }
   }

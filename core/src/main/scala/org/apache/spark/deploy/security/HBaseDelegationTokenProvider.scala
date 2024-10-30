@@ -27,7 +27,8 @@ import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.util.Utils
 
@@ -49,12 +50,12 @@ private[security] class HBaseDelegationTokenProvider
       logDebug("Attempting to fetch HBase security token.")
       val token = obtainToken.invoke(null, hbaseConf(hadoopConf))
         .asInstanceOf[Token[_ <: TokenIdentifier]]
-      logInfo(s"Get token from HBase: ${token.toString}")
+      logInfo(log"Get token from HBase: ${MDC(TOKEN, token.toString)}")
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>
-        logWarning(Utils.createFailedToGetTokenMessage(serviceName, e) +
-          s" Retrying to fetch HBase security token with $serviceName connection parameter.")
+        logWarning(Utils.createFailedToGetTokenMessage(serviceName, e) + log" Retrying to fetch " +
+          log"HBase security token with ${MDC(SERVICE_NAME, serviceName)} connection parameter.")
         // Seems to be spark is trying to get the token from HBase 2.x.x  version or above where the
         // obtainToken(Configuration conf) API has been removed. Lets try obtaining the token from
         // another compatible API of HBase service.
@@ -93,7 +94,7 @@ private[security] class HBaseDelegationTokenProvider
       logDebug("Attempting to fetch HBase security token.")
       val token = obtainTokenMethod.invoke(null, hbaseConnection)
         .asInstanceOf[Token[_ <: TokenIdentifier]]
-      logInfo(s"Get token from HBase: ${token.toString}")
+      logInfo(log"Get token from HBase: ${MDC(TOKEN, token.toString)}")
       creds.addToken(token.getService, token)
     } catch {
       case NonFatal(e) =>

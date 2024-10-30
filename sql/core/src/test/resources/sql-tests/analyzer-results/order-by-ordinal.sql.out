@@ -16,7 +16,7 @@ CreateViewCommand `data`, select * from values
   (2, 2),
   (3, 1),
   (3, 2)
-  as data(a, b), false, false, LocalTempView, true
+  as data(a, b), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias data
          +- LocalRelation [a#x, b#x]
@@ -28,7 +28,7 @@ select * from data order by 1 desc
 Sort [a#x DESC NULLS LAST], true
 +- Project [a#x, b#x]
    +- SubqueryAlias data
-      +- View (`data`, [a#x,b#x])
+      +- View (`data`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias data
@@ -41,7 +41,7 @@ select * from data order by 1 desc, b desc
 Sort [a#x DESC NULLS LAST, b#x DESC NULLS LAST], true
 +- Project [a#x, b#x]
    +- SubqueryAlias data
-      +- View (`data`, [a#x,b#x])
+      +- View (`data`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias data
@@ -54,7 +54,7 @@ select * from data order by 1 desc, 2 desc
 Sort [a#x DESC NULLS LAST, b#x DESC NULLS LAST], true
 +- Project [a#x, b#x]
    +- SubqueryAlias data
-      +- View (`data`, [a#x,b#x])
+      +- View (`data`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias data
@@ -67,7 +67,7 @@ select * from data order by 1 + 0 desc, b desc
 Sort [(1 + 0) DESC NULLS LAST, b#x DESC NULLS LAST], true
 +- Project [a#x, b#x]
    +- SubqueryAlias data
-      +- View (`data`, [a#x,b#x])
+      +- View (`data`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias data
@@ -143,7 +143,7 @@ select * from data sort by 1 desc
 Sort [a#x DESC NULLS LAST], false
 +- Project [a#x, b#x]
    +- SubqueryAlias data
-      +- View (`data`, [a#x,b#x])
+      +- View (`data`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias data
@@ -162,7 +162,7 @@ select * from data order by 0
 Sort [0 ASC NULLS FIRST], true
 +- Project [a#x, b#x]
    +- SubqueryAlias data
-      +- View (`data`, [a#x,b#x])
+      +- View (`data`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias data
@@ -175,7 +175,7 @@ select * from data sort by 0
 Sort [0 ASC NULLS FIRST], false
 +- Project [a#x, b#x]
    +- SubqueryAlias data
-      +- View (`data`, [a#x,b#x])
+      +- View (`data`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias data

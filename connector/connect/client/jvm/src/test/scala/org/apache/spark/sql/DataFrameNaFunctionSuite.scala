@@ -20,10 +20,10 @@ package org.apache.spark.sql
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.test.{QueryTest, SQLHelper}
+import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
+class DataFrameNaFunctionSuite extends QueryTest with RemoteSparkSession {
   private def createDF(): DataFrame = {
     val sparkSession = spark
     import sparkSession.implicits._

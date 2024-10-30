@@ -283,9 +283,12 @@ Serialization / IO / Conversion
    DataFrame.to_numpy
    DataFrame.to_spark
    DataFrame.to_string
+   DataFrame.to_feather
+   DataFrame.to_stata
    DataFrame.to_json
    DataFrame.to_dict
    DataFrame.to_excel
+   DataFrame.to_hdf
    DataFrame.to_clipboard
    DataFrame.to_markdown
    DataFrame.to_records
@@ -323,14 +326,15 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
    :template: autosummary/accessor_method.rst
 
    DataFrame.plot.area
-   DataFrame.plot.barh
    DataFrame.plot.bar
-   DataFrame.plot.hist
+   DataFrame.plot.barh
    DataFrame.plot.box
+   DataFrame.plot.density
+   DataFrame.plot.hist
+   DataFrame.plot.kde
    DataFrame.plot.line
    DataFrame.plot.pie
    DataFrame.plot.scatter
-   DataFrame.plot.density
 
 .. autosummary::
    :toctree: api/

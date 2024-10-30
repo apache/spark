@@ -21,7 +21,7 @@ from typing import cast, overload, List, Optional, TYPE_CHECKING, Union
 from numpy import ndarray
 from py4j.java_gateway import JavaObject
 
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Matrix, Vector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint

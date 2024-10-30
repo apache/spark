@@ -431,3 +431,80 @@ SELECT conv('-9223372036854775807', 36, 10)
 -- !query analysis
 Project [conv(-9223372036854775807, 36, 10, false) AS conv(-9223372036854775807, 36, 10)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT BIN(0)
+-- !query analysis
+Project [bin(cast(0 as bigint)) AS bin(0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT BIN(25)
+-- !query analysis
+Project [bin(cast(25 as bigint)) AS bin(25)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT BIN(25L)
+-- !query analysis
+Project [bin(25) AS bin(25)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT BIN(25.5)
+-- !query analysis
+Project [bin(cast(25.5 as bigint)) AS bin(25.5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT POSITIVE(0Y)
+-- !query analysis
+Project [positive(0) AS (+ 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT POSITIVE(25)
+-- !query analysis
+Project [positive(25) AS (+ 25)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT POSITIVE(-25L)
+-- !query analysis
+Project [positive(-25) AS (+ -25)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT POSITIVE(25.5)
+-- !query analysis
+Project [positive(25.5) AS (+ 25.5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT POSITIVE("25.5")
+-- !query analysis
+Project [positive(cast(25.5 as double)) AS (+ 25.5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT POSITIVE("invalid")
+-- !query analysis
+Project [positive(cast(invalid as double)) AS (+ invalid)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT POSITIVE(null)
+-- !query analysis
+Project [positive(cast(null as double)) AS (+ NULL)#x]
++- OneRowRelation

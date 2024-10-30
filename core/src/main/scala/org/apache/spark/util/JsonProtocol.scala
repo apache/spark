@@ -28,6 +28,7 @@ import org.json4s.jackson.JsonMethods.compact
 
 import org.apache.spark._
 import org.apache.spark.executor._
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
@@ -36,6 +37,16 @@ import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils.weakIntern
+
+/**
+ * Helper class for passing configuration options to JsonProtocol.
+ * We use this instead of passing SparkConf directly because it lets us avoid
+ * repeated re-parsing of configuration values on each read.
+ */
+private[spark] class JsonProtocolOptions(conf: SparkConf) {
+  val includeTaskMetricsAccumulators: Boolean =
+    conf.get(EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS)
+}
 
 /**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
@@ -55,30 +66,41 @@ import org.apache.spark.util.Utils.weakIntern
 private[spark] object JsonProtocol extends JsonUtils {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
+  private[util]
+  val defaultOptions: JsonProtocolOptions = new JsonProtocolOptions(new SparkConf(false))
+
   /** ------------------------------------------------- *
    * JSON serialization methods for SparkListenerEvents |
    * -------------------------------------------------- */
 
+  // Only for use in tests. Production code should use the two-argument overload defined below.
   def sparkEventToJsonString(event: SparkListenerEvent): String = {
+    sparkEventToJsonString(event, defaultOptions)
+  }
+
+  def sparkEventToJsonString(event: SparkListenerEvent, options: JsonProtocolOptions): String = {
     toJsonString { generator =>
-      writeSparkEventToJson(event, generator)
+      writeSparkEventToJson(event, generator, options)
     }
   }
 
-  def writeSparkEventToJson(event: SparkListenerEvent, g: JsonGenerator): Unit = {
+  def writeSparkEventToJson(
+      event: SparkListenerEvent,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
-        stageSubmittedToJson(stageSubmitted, g)
+        stageSubmittedToJson(stageSubmitted, g, options)
       case stageCompleted: SparkListenerStageCompleted =>
-        stageCompletedToJson(stageCompleted, g)
+        stageCompletedToJson(stageCompleted, g, options)
       case taskStart: SparkListenerTaskStart =>
-        taskStartToJson(taskStart, g)
+        taskStartToJson(taskStart, g, options)
       case taskGettingResult: SparkListenerTaskGettingResult =>
-        taskGettingResultToJson(taskGettingResult, g)
+        taskGettingResultToJson(taskGettingResult, g, options)
       case taskEnd: SparkListenerTaskEnd =>
-        taskEndToJson(taskEnd, g)
+        taskEndToJson(taskEnd, g, options)
       case jobStart: SparkListenerJobStart =>
-        jobStartToJson(jobStart, g)
+        jobStartToJson(jobStart, g, options)
       case jobEnd: SparkListenerJobEnd =>
         jobEndToJson(jobEnd, g)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
@@ -112,12 +134,15 @@ private[spark] object JsonProtocol extends JsonUtils {
     }
   }
 
-  def stageSubmittedToJson(stageSubmitted: SparkListenerStageSubmitted, g: JsonGenerator): Unit = {
+  def stageSubmittedToJson(
+      stageSubmitted: SparkListenerStageSubmitted,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageSubmitted)
     g.writeFieldName("Stage Info")
     // SPARK-42205: don't log accumulables in start events:
-    stageInfoToJson(stageSubmitted.stageInfo, g, includeAccumulables = false)
+    stageInfoToJson(stageSubmitted.stageInfo, g, options, includeAccumulables = false)
     Option(stageSubmitted.properties).foreach { properties =>
       g.writeFieldName("Properties")
       propertiesToJson(properties, g)
@@ -125,38 +150,48 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeEndObject()
   }
 
-  def stageCompletedToJson(stageCompleted: SparkListenerStageCompleted, g: JsonGenerator): Unit = {
+  def stageCompletedToJson(
+      stageCompleted: SparkListenerStageCompleted,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.stageCompleted)
     g.writeFieldName("Stage Info")
-    stageInfoToJson(stageCompleted.stageInfo, g, includeAccumulables = true)
+    stageInfoToJson(stageCompleted.stageInfo, g, options, includeAccumulables = true)
     g.writeEndObject()
   }
 
-  def taskStartToJson(taskStart: SparkListenerTaskStart, g: JsonGenerator): Unit = {
+  def taskStartToJson(
+      taskStart: SparkListenerTaskStart,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskStart)
     g.writeNumberField("Stage ID", taskStart.stageId)
     g.writeNumberField("Stage Attempt ID", taskStart.stageAttemptId)
     g.writeFieldName("Task Info")
     // SPARK-42205: don't log accumulables in start events:
-    taskInfoToJson(taskStart.taskInfo, g, includeAccumulables = false)
+    taskInfoToJson(taskStart.taskInfo, g, options, includeAccumulables = false)
     g.writeEndObject()
   }
 
   def taskGettingResultToJson(
       taskGettingResult: SparkListenerTaskGettingResult,
-      g: JsonGenerator): Unit = {
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     val taskInfo = taskGettingResult.taskInfo
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskGettingResult)
     g.writeFieldName("Task Info")
     // SPARK-42205: don't log accumulables in "task getting result" events:
-    taskInfoToJson(taskInfo, g, includeAccumulables = false)
+    taskInfoToJson(taskInfo, g, options, includeAccumulables = false)
     g.writeEndObject()
   }
 
-  def taskEndToJson(taskEnd: SparkListenerTaskEnd, g: JsonGenerator): Unit = {
+  def taskEndToJson(
+      taskEnd: SparkListenerTaskEnd,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.taskEnd)
     g.writeNumberField("Stage ID", taskEnd.stageId)
@@ -165,7 +200,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeFieldName("Task End Reason")
     taskEndReasonToJson(taskEnd.reason, g)
     g.writeFieldName("Task Info")
-    taskInfoToJson(taskEnd.taskInfo, g, includeAccumulables = true)
+    taskInfoToJson(taskEnd.taskInfo, g, options, includeAccumulables = true)
     g.writeFieldName("Task Executor Metrics")
     executorMetricsToJson(taskEnd.taskExecutorMetrics, g)
     Option(taskEnd.taskMetrics).foreach { m =>
@@ -175,7 +210,10 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeEndObject()
   }
 
-  def jobStartToJson(jobStart: SparkListenerJobStart, g: JsonGenerator): Unit = {
+  def jobStartToJson(
+      jobStart: SparkListenerJobStart,
+      g: JsonGenerator,
+      options: JsonProtocolOptions): Unit = {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.jobStart)
     g.writeNumberField("Job ID", jobStart.jobId)
@@ -186,7 +224,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     // the job was submitted: it is technically possible for a stage to belong to multiple
     // concurrent jobs, so this situation can arise even without races occurring between
     // event logging and stage completion.
-    jobStart.stageInfos.foreach(stageInfoToJson(_, g, includeAccumulables = true))
+    jobStart.stageInfos.foreach(stageInfoToJson(_, g, options, includeAccumulables = true))
     g.writeEndArray()
     g.writeArrayFieldStart("Stage IDs")
     jobStart.stageIds.foreach(g.writeNumber)
@@ -277,6 +315,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationEnd)
     g.writeNumberField("Timestamp", applicationEnd.time)
+    applicationEnd.exitCode.foreach(exitCode => g.writeNumberField("ExitCode", exitCode))
     g.writeEndObject()
   }
 
@@ -385,6 +424,7 @@ private[spark] object JsonProtocol extends JsonUtils {
   def stageInfoToJson(
       stageInfo: StageInfo,
       g: JsonGenerator,
+      options: JsonProtocolOptions,
       includeAccumulables: Boolean): Unit = {
     g.writeStartObject()
     g.writeNumberField("Stage ID", stageInfo.stageId)
@@ -403,7 +443,10 @@ private[spark] object JsonProtocol extends JsonUtils {
     stageInfo.failureReason.foreach(g.writeStringField("Failure Reason", _))
     g.writeFieldName("Accumulables")
     if (includeAccumulables) {
-      accumulablesToJson(stageInfo.accumulables.values, g)
+      accumulablesToJson(
+        stageInfo.accumulables.values,
+        g,
+        includeTaskMetricsAccumulators = options.includeTaskMetricsAccumulators)
     } else {
       g.writeStartArray()
       g.writeEndArray()
@@ -417,6 +460,7 @@ private[spark] object JsonProtocol extends JsonUtils {
   def taskInfoToJson(
       taskInfo: TaskInfo,
       g: JsonGenerator,
+      options: JsonProtocolOptions,
       includeAccumulables: Boolean): Unit = {
     g.writeStartObject()
     g.writeNumberField("Task ID", taskInfo.taskId)
@@ -434,7 +478,10 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeBooleanField("Killed", taskInfo.killed)
     g.writeFieldName("Accumulables")
     if (includeAccumulables) {
-      accumulablesToJson(taskInfo.accumulables, g)
+      accumulablesToJson(
+        taskInfo.accumulables,
+        g,
+        includeTaskMetricsAccumulators = options.includeTaskMetricsAccumulators)
     } else {
       g.writeStartArray()
       g.writeEndArray()
@@ -442,13 +489,23 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeEndObject()
   }
 
-  private lazy val accumulableExcludeList = Set("internal.metrics.updatedBlockStatuses")
+  private[util] val accumulableExcludeList = Set(InternalAccumulator.UPDATED_BLOCK_STATUSES)
 
-  def accumulablesToJson(accumulables: Iterable[AccumulableInfo], g: JsonGenerator): Unit = {
+  private[this] val taskMetricAccumulableNames = TaskMetrics.empty.nameToAccums.keySet.toSet
+
+  def accumulablesToJson(
+      accumulables: Iterable[AccumulableInfo],
+      g: JsonGenerator,
+    includeTaskMetricsAccumulators: Boolean = true): Unit = {
     g.writeStartArray()
     accumulables
-        .filterNot(_.name.exists(accumulableExcludeList.contains))
-        .toList.sortBy(_.id).foreach(a => accumulableInfoToJson(a, g))
+        .filterNot { acc =>
+          acc.name.exists(accumulableExcludeList.contains) ||
+          (!includeTaskMetricsAccumulators && acc.name.exists(taskMetricAccumulableNames.contains))
+        }
+        .toList
+        .sortBy(_.id)
+        .foreach(a => accumulableInfoToJson(a, g))
     g.writeEndArray()
   }
 
@@ -596,6 +653,8 @@ private[spark] object JsonProtocol extends JsonUtils {
     g.writeNumberField("Executor Run Time", taskMetrics.executorRunTime)
     g.writeNumberField("Executor CPU Time", taskMetrics.executorCpuTime)
     g.writeNumberField("Peak Execution Memory", taskMetrics.peakExecutionMemory)
+    g.writeNumberField("Peak On Heap Execution Memory", taskMetrics.peakOnHeapExecutionMemory)
+    g.writeNumberField("Peak Off Heap Execution Memory", taskMetrics.peakOffHeapExecutionMemory)
     g.writeNumberField("Result Size", taskMetrics.resultSize)
     g.writeNumberField("JVM GC Time", taskMetrics.jvmGCTime)
     g.writeNumberField("Result Serialization Time", taskMetrics.resultSerializationTime)
@@ -957,11 +1016,12 @@ private[spark] object JsonProtocol extends JsonUtils {
     val jobId = json.get("Job ID").extractInt
     val submissionTime =
       jsonOption(json.get("Submission Time")).map(_.extractLong).getOrElse(-1L)
-    val stageIds = json.get("Stage IDs").extractElements.map(_.extractInt).toArray.toSeq
+    val stageIds =
+      json.get("Stage IDs").extractElements.map(_.extractInt).toArray.toImmutableArraySeq
     val properties = propertiesFromJson(json.get("Properties"))
     // The "Stage Infos" field was added in Spark 1.2.0
     val stageInfos = jsonOption(json.get("Stage Infos"))
-      .map(_.extractElements.map(stageInfoFromJson).toArray.toSeq).getOrElse {
+      .map(_.extractElements.map(stageInfoFromJson).toArray.toImmutableArraySeq).getOrElse {
         stageIds.map { id =>
           new StageInfo(id, 0, "unknown", 0, Seq.empty, Seq.empty, "unknown",
             resourceProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
@@ -1064,7 +1124,8 @@ private[spark] object JsonProtocol extends JsonUtils {
   }
 
   def applicationEndFromJson(json: JsonNode): SparkListenerApplicationEnd = {
-    SparkListenerApplicationEnd(json.get("Timestamp").extractLong)
+    val exitCode = jsonOption(json.get("ExitCode")).map(_.extractInt)
+    SparkListenerApplicationEnd(json.get("Timestamp").extractLong, exitCode)
   }
 
   def executorAddedFromJson(json: JsonNode): SparkListenerExecutorAdded = {
@@ -1093,9 +1154,10 @@ private[spark] object JsonProtocol extends JsonUtils {
       val stageId = json.get("Stage ID").extractInt
       val stageAttemptId = json.get("Stage Attempt ID").extractInt
       val updates =
-        json.get("Accumulator Updates").extractElements.map(accumulableInfoFromJson).toArray.toSeq
+        json.get("Accumulator Updates").extractElements.map(accumulableInfoFromJson)
+          .toArray.toImmutableArraySeq
       (taskId, stageId, stageAttemptId, updates)
-    }.toArray.toSeq
+    }.toArray.toImmutableArraySeq
     val executorUpdates = jsonOption(json.get("Executor Metrics Updated")).map { value =>
       value.extractElements.map { json =>
         val stageId = json.get("Stage ID").extractInt
@@ -1131,7 +1193,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     val numTasks = json.get("Number of Tasks").extractInt
     val rddInfos = json.get("RDD Info").extractElements.map(rddInfoFromJson).toArray
     val parentIds = jsonOption(json.get("Parent IDs"))
-      .map { l => l.extractElements.map(_.extractInt).toArray.toSeq }
+      .map { l => l.extractElements.map(_.extractInt).toArray.toImmutableArraySeq }
       .getOrElse(Seq.empty)
     val details = jsonOption(json.get("Details")).map(_.asText).getOrElse("")
     val submissionTime = jsonOption(json.get("Submission Time")).map(_.extractLong)
@@ -1179,7 +1241,7 @@ private[spark] object JsonProtocol extends JsonUtils {
     val failed = json.get("Failed").extractBoolean
     val killed = jsonOption(json.get("Killed")).exists(_.extractBoolean)
     val accumulables = jsonOption(json.get("Accumulables")).map(_.extractElements) match {
-      case Some(values) => values.map(accumulableInfoFromJson).toArray.toSeq
+      case Some(values) => values.map(accumulableInfoFromJson).toArray.toImmutableArraySeq
       case None => Seq.empty[AccumulableInfo]
     }
 
@@ -1224,7 +1286,7 @@ private[spark] object JsonProtocol extends JsonUtils {
           val id = BlockId(blockJson.get("Block ID").extractString)
           val status = blockStatusFromJson(blockJson.get("Status"))
           (id, status)
-        }.toArray.toSeq.asJava
+        }.toArray.toImmutableArraySeq.asJava
       } else {
         throw new IllegalArgumentException(s"unexpected json value $value for " +
           "accumulator " + name.get)
@@ -1250,6 +1312,10 @@ private[spark] object JsonProtocol extends JsonUtils {
     // The "Peak Execution Memory" field was added in Spark 3.0.0:
     metrics.setPeakExecutionMemory(
       jsonOption(json.get("Peak Execution Memory")).map(_.extractLong).getOrElse(0))
+    metrics.setPeakOnHeapExecutionMemory(
+      jsonOption(json.get("Peak On Heap Execution Memory")).map(_.extractLong).getOrElse(0))
+    metrics.setPeakOffHeapExecutionMemory(
+      jsonOption(json.get("Peak Off Heap Execution Memory")).map(_.extractLong).getOrElse(0))
     metrics.setResultSize(json.get("Result Size").extractLong)
     metrics.setJvmGCTime(json.get("JVM GC Time").extractLong)
     metrics.setResultSerializationTime(json.get("Result Serialization Time").extractLong)
@@ -1327,7 +1393,7 @@ private[spark] object JsonProtocol extends JsonUtils {
         val id = BlockId(blockJson.get("Block ID").extractString)
         val status = blockStatusFromJson(blockJson.get("Status"))
         (id, status)
-      }.toArray.toSeq)
+      }.toArray.toImmutableArraySeq)
     }
 
     metrics
@@ -1373,10 +1439,10 @@ private[spark] object JsonProtocol extends JsonUtils {
           jsonOption(json.get("Full Stack Trace")).map(_.asText).orNull
         // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
         val accumUpdates = jsonOption(json.get("Accumulator Updates"))
-          .map(_.extractElements.map(accumulableInfoFromJson).toArray.toSeq)
+          .map(_.extractElements.map(accumulableInfoFromJson).toArray.toImmutableArraySeq)
           .getOrElse(taskMetricsFromJson(json.get("Metrics")).accumulators().map(acc => {
-            acc.toInfo(Some(acc.value), None)
-          }).toArray.toSeq)
+            acc.toInfoUpdate
+          }).toArray.toImmutableArraySeq)
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` =>
@@ -1385,7 +1451,7 @@ private[spark] object JsonProtocol extends JsonUtils {
           .map(_.asText).getOrElse("unknown reason")
         // The "Accumulator Updates" field was added in Spark 2.4.0:
         val accumUpdates = jsonOption(json.get("Accumulator Updates"))
-          .map(_.extractElements.map(accumulableInfoFromJson).toArray.toSeq)
+          .map(_.extractElements.map(accumulableInfoFromJson).toArray.toImmutableArraySeq)
           .getOrElse(Seq[AccumulableInfo]())
         TaskKilled(killReason, accumUpdates)
       case `taskCommitDenied` =>
@@ -1443,7 +1509,7 @@ private[spark] object JsonProtocol extends JsonUtils {
       .map(RDDOperationScope.fromJson)
     val callsite = jsonOption(json.get("Callsite")).map(_.asText).getOrElse("")
     val parentIds = jsonOption(json.get("Parent IDs"))
-      .map { l => l.extractElements.map(_.extractInt).toArray.toSeq }
+      .map { l => l.extractElements.map(_.extractInt).toArray.toImmutableArraySeq }
       .getOrElse(Seq.empty)
     val storageLevel = storageLevelFromJson(json.get("Storage Level"))
     // The "Barrier" field was added in Spark 3.0.0:

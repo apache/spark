@@ -102,7 +102,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 CREATE TEMPORARY VIEW tempView1 AS VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st)
 -- !query analysis
-CreateViewCommand `tempView1`, VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st), false, false, LocalTempView, true
+CreateViewCommand `tempView1`, VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st), false, false, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias T
       +- LocalRelation [id#x, st#x]
 
@@ -112,7 +112,14 @@ SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1,
 -- !query analysis
 Aggregate [nvl(st#x.col1, value)], [nvl(st#x.col1, value) AS nvl(st.col1, value)#x, count(1) AS FROM#xL]
 +- SubqueryAlias tempview1
-   +- View (`tempView1`, [id#x,st#x])
+   +- View (`tempView1`, [id#x, st#x])
       +- Project [cast(id#x as int) AS id#x, cast(st#x as struct<col1:string,col2:string>) AS st#x]
          +- SubqueryAlias T
             +- LocalRelation [id#x, st#x]
+
+
+-- !query
+SELECT nullif(SUM(id), 0) from range(5)
+-- !query analysis
+Aggregate [nullif(sum(id#xL), 0) AS nullif(sum(id), 0)#xL]
++- Range (0, 5, step=1)

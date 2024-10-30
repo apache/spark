@@ -67,35 +67,35 @@
     map_concat(col_objs)
 
   out: |
-    main:29: error: No overload variant of "array" matches argument types "List[Column]", "List[Column]"  [call-overload]
+    main:29: error: No overload variant of "array" matches argument types "list[Column]", "list[Column]"  [call-overload]
     main:29: note: Possible overload variants:
     main:29: note:     def array(*cols: Union[Column, str]) -> Column
-    main:29: note:     def [ColumnOrName_] array(Union[List[ColumnOrName_], Tuple[ColumnOrName_, ...]]) -> Column
-    main:30: error: No overload variant of "create_map" matches argument types "List[Column]", "List[Column]"  [call-overload]
+    main:29: note:     def array(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:30: error: No overload variant of "create_map" matches argument types "list[Column]", "list[Column]"  [call-overload]
     main:30: note: Possible overload variants:
     main:30: note:     def create_map(*cols: Union[Column, str]) -> Column
-    main:30: note:     def [ColumnOrName_] create_map(Union[List[ColumnOrName_], Tuple[ColumnOrName_, ...]]) -> Column
-    main:31: error: No overload variant of "map_concat" matches argument types "List[Column]", "List[Column]"  [call-overload]
+    main:30: note:     def create_map(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:31: error: No overload variant of "map_concat" matches argument types "list[Column]", "list[Column]"  [call-overload]
     main:31: note: Possible overload variants:
     main:31: note:     def map_concat(*cols: Union[Column, str]) -> Column
-    main:31: note:     def [ColumnOrName_] map_concat(Union[List[ColumnOrName_], Tuple[ColumnOrName_, ...]]) -> Column
-    main:32: error: No overload variant of "struct" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:31: note:     def map_concat(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:32: error: No overload variant of "struct" matches argument types "list[str]", "list[str]"  [call-overload]
     main:32: note: Possible overload variants:
     main:32: note:     def struct(*cols: Union[Column, str]) -> Column
-    main:32: note:     def [ColumnOrName_] struct(Union[List[ColumnOrName_], Tuple[ColumnOrName_, ...]]) -> Column
-    main:33: error: No overload variant of "array" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:32: note:     def struct(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:33: error: No overload variant of "array" matches argument types "list[str]", "list[str]"  [call-overload]
     main:33: note: Possible overload variants:
     main:33: note:     def array(*cols: Union[Column, str]) -> Column
-    main:33: note:     def [ColumnOrName_] array(Union[List[ColumnOrName_], Tuple[ColumnOrName_, ...]]) -> Column
-    main:34: error: No overload variant of "create_map" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:33: note:     def array(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:34: error: No overload variant of "create_map" matches argument types "list[str]", "list[str]"  [call-overload]
     main:34: note: Possible overload variants:
     main:34: note:     def create_map(*cols: Union[Column, str]) -> Column
-    main:34: note:     def [ColumnOrName_] create_map(Union[List[ColumnOrName_], Tuple[ColumnOrName_, ...]]) -> Column
-    main:35: error: No overload variant of "map_concat" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:34: note:     def create_map(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:35: error: No overload variant of "map_concat" matches argument types "list[str]", "list[str]"  [call-overload]
     main:35: note: Possible overload variants:
     main:35: note:     def map_concat(*cols: Union[Column, str]) -> Column
-    main:35: note:     def [ColumnOrName_] map_concat(Union[List[ColumnOrName_], Tuple[ColumnOrName_, ...]]) -> Column
-    main:36: error: No overload variant of "struct" matches argument types "List[str]", "List[str]"  [call-overload]
+    main:35: note:     def map_concat(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column
+    main:36: error: No overload variant of "struct" matches argument types "list[str]", "list[str]"  [call-overload]
     main:36: note: Possible overload variants:
     main:36: note:     def struct(*cols: Union[Column, str]) -> Column
-    main:36: note:     def [ColumnOrName_] struct(Union[List[ColumnOrName_], Tuple[ColumnOrName_, ...]]) -> Column
+    main:36: note:     def struct(Union[Sequence[Union[Column, str]], tuple[Union[Column, str], ...]], /) -> Column

@@ -25,22 +25,20 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-import org.scalatest.matchers.must.Matchers
-
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.ThreadUtils
 
 // Tests for PythonWorkerFactory.
-class PythonWorkerFactorySuite extends SparkFunSuite with Matchers with SharedSparkContext {
+class PythonWorkerFactorySuite extends SparkFunSuite with SharedSparkContext {
 
   test("createSimpleWorker() fails with a timeout error if worker does not connect back") {
     // It verifies that server side times out in accept(), if the worker does not connect back.
     // E.g. the worker might fail at the beginning before it tries to connect back.
 
     val workerFactory = new PythonWorkerFactory(
-      "python3", "pyspark.testing.non_existing_worker_module", Map.empty
+      "python3", "pyspark.testing.non_existing_worker_module", Map.empty, false
     )
 
     // Create the worker in a separate thread so that if there is a bug where it does not

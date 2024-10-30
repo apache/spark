@@ -124,7 +124,7 @@ private[continuous] class EpochCoordinator(
   extends ThreadSafeRpcEndpoint with Logging {
 
   private val epochBacklogQueueSize =
-    session.sqlContext.conf.continuousStreamingEpochBacklogQueueSize
+    session.sessionState.conf.continuousStreamingEpochBacklogQueueSize
 
   private var queryWritesStopped: Boolean = false
 

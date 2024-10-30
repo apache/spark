@@ -170,40 +170,44 @@ class AppStatusStoreSuite extends SparkFunSuite {
           assert(actualQuantiles === expectedQuantiles)
         }
 
-        assertQuantiles(_.executorDeserializeTime, summary.executorDeserializeTime)
-        assertQuantiles(_.executorDeserializeCpuTime, summary.executorDeserializeCpuTime)
-        assertQuantiles(_.executorRunTime, summary.executorRunTime)
-        assertQuantiles(_.executorRunTime, summary.executorRunTime)
-        assertQuantiles(_.executorCpuTime, summary.executorCpuTime)
-        assertQuantiles(_.resultSize, summary.resultSize)
-        assertQuantiles(_.jvmGCTime, summary.jvmGcTime)
-        assertQuantiles(_.resultSerializationTime, summary.resultSerializationTime)
-        assertQuantiles(_.memoryBytesSpilled, summary.memoryBytesSpilled)
-        assertQuantiles(_.diskBytesSpilled, summary.diskBytesSpilled)
-        assertQuantiles(_.peakExecutionMemory, summary.peakExecutionMemory)
-        assertQuantiles(_.inputMetrics.bytesRead, summary.inputMetrics.bytesRead)
-        assertQuantiles(_.inputMetrics.recordsRead, summary.inputMetrics.recordsRead)
-        assertQuantiles(_.outputMetrics.bytesWritten, summary.outputMetrics.bytesWritten)
-        assertQuantiles(_.outputMetrics.recordsWritten, summary.outputMetrics.recordsWritten)
-        assertQuantiles(_.shuffleReadMetrics.remoteBlocksFetched,
+        assertQuantiles(_.executorDeserializeTime.toDouble, summary.executorDeserializeTime)
+        assertQuantiles(_.executorDeserializeCpuTime.toDouble, summary.executorDeserializeCpuTime)
+        assertQuantiles(_.executorRunTime.toDouble, summary.executorRunTime)
+        assertQuantiles(_.executorRunTime.toDouble, summary.executorRunTime)
+        assertQuantiles(_.executorCpuTime.toDouble, summary.executorCpuTime)
+        assertQuantiles(_.resultSize.toDouble, summary.resultSize)
+        assertQuantiles(_.jvmGCTime.toDouble, summary.jvmGcTime)
+        assertQuantiles(_.resultSerializationTime.toDouble, summary.resultSerializationTime)
+        assertQuantiles(_.memoryBytesSpilled.toDouble, summary.memoryBytesSpilled)
+        assertQuantiles(_.diskBytesSpilled.toDouble, summary.diskBytesSpilled)
+        assertQuantiles(_.peakExecutionMemory.toDouble, summary.peakExecutionMemory)
+        assertQuantiles(_.inputMetrics.bytesRead.toDouble, summary.inputMetrics.bytesRead)
+        assertQuantiles(_.inputMetrics.recordsRead.toDouble, summary.inputMetrics.recordsRead)
+        assertQuantiles(_.outputMetrics.bytesWritten.toDouble, summary.outputMetrics.bytesWritten)
+        assertQuantiles(_.outputMetrics.recordsWritten.toDouble,
+          summary.outputMetrics.recordsWritten)
+        assertQuantiles(_.shuffleReadMetrics.remoteBlocksFetched.toDouble,
           summary.shuffleReadMetrics.remoteBlocksFetched)
-        assertQuantiles(_.shuffleReadMetrics.localBlocksFetched,
+        assertQuantiles(_.shuffleReadMetrics.localBlocksFetched.toDouble,
           summary.shuffleReadMetrics.localBlocksFetched)
-        assertQuantiles(_.shuffleReadMetrics.fetchWaitTime,
+        assertQuantiles(_.shuffleReadMetrics.fetchWaitTime.toDouble,
           summary.shuffleReadMetrics.fetchWaitTime)
-        assertQuantiles(_.shuffleReadMetrics.remoteBytesRead,
+        assertQuantiles(_.shuffleReadMetrics.remoteBytesRead.toDouble,
           summary.shuffleReadMetrics.remoteBytesRead)
-        assertQuantiles(_.shuffleReadMetrics.remoteBytesReadToDisk,
+        assertQuantiles(_.shuffleReadMetrics.remoteBytesReadToDisk.toDouble,
           summary.shuffleReadMetrics.remoteBytesReadToDisk)
         assertQuantiles(
-          t => t.shuffleReadMetrics.localBytesRead + t.shuffleReadMetrics.remoteBytesRead,
+          t => t.shuffleReadMetrics.localBytesRead + t.shuffleReadMetrics.remoteBytesRead.toDouble,
           summary.shuffleReadMetrics.readBytes)
         assertQuantiles(
-          t => t.shuffleReadMetrics.localBlocksFetched + t.shuffleReadMetrics.remoteBlocksFetched,
+          t => t.shuffleReadMetrics.localBlocksFetched +
+            t.shuffleReadMetrics.remoteBlocksFetched.toDouble,
           summary.shuffleReadMetrics.totalBlocksFetched)
-        assertQuantiles(_.shuffleWriteMetrics.bytesWritten, summary.shuffleWriteMetrics.writeBytes)
-        assertQuantiles(_.shuffleWriteMetrics.writeTime, summary.shuffleWriteMetrics.writeTime)
-        assertQuantiles(_.shuffleWriteMetrics.recordsWritten,
+        assertQuantiles(_.shuffleWriteMetrics.bytesWritten.toDouble,
+          summary.shuffleWriteMetrics.writeBytes)
+        assertQuantiles(_.shuffleWriteMetrics.writeTime.toDouble,
+          summary.shuffleWriteMetrics.writeTime)
+        assertQuantiles(_.shuffleWriteMetrics.recordsWritten.toDouble,
           summary.shuffleWriteMetrics.writeRecords)
       } finally {
         appStore.close()

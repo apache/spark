@@ -29,11 +29,13 @@ import org.scalatestplus.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.tags.WebBrowserTest
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 /**
  * Selenium tests for the Spark Streaming Web UI.
  */
+@WebBrowserTest
 class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with TestSuiteBase {
 
   implicit var webDriver: WebDriver = _

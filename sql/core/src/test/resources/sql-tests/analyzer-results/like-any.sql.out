@@ -10,7 +10,7 @@ CreateViewCommand `like_any_table`, SELECT * FROM (VALUES
   ('google', '%oo%'),
   ('facebook', '%oo%'),
   ('linkedin', '%in'))
-  as t1(company, pat), false, true, LocalTempView, true
+  as t1(company, pat), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [company#x, pat#x]
       +- SubqueryAlias t1
          +- Project [col1#x AS company#x, col2#x AS pat#x]
@@ -23,7 +23,7 @@ SELECT company FROM like_any_table WHERE company LIKE ANY ('%oo%', '%in', 'fa%')
 Project [company#x]
 +- Filter likeany(company#x, %oo%, %in, fa%)
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -37,7 +37,7 @@ SELECT company FROM like_any_table WHERE company LIKE ANY ('microsoft', '%yoo%')
 Project [company#x]
 +- Filter likeany(company#x, microsoft, %yoo%)
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -60,7 +60,7 @@ FROM like_any_table
 -- !query analysis
 Project [company#x, CASE WHEN likeany(company#x, %oo%, %in, fa%) THEN Y ELSE N END AS is_available#x, CASE WHEN (likeany(company#x, %oo%, fa%) OR likeany(company#x, %in, ms%)) THEN Y ELSE N END AS mix#x]
 +- SubqueryAlias like_any_table
-   +- View (`like_any_table`, [company#x,pat#x])
+   +- View (`like_any_table`, [company#x, pat#x])
       +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
          +- Project [company#x, pat#x]
             +- SubqueryAlias t1
@@ -74,7 +74,7 @@ SELECT company FROM like_any_table WHERE company LIKE ANY ('%zz%', pat)
 Project [company#x]
 +- Filter (company#x LIKE %zz% OR company#x LIKE pat#x)
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -88,7 +88,7 @@ SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', '%in', 'f
 Project [company#x]
 +- Filter notlikeany(company#x, %oo%, %in, fa%)
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -102,7 +102,7 @@ SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('microsoft', '%yo
 Project [company#x]
 +- Filter notlikeany(company#x, microsoft, %yoo%)
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -116,7 +116,7 @@ SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', 'fa%')
 Project [company#x]
 +- Filter notlikeany(company#x, %oo%, fa%)
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -130,7 +130,7 @@ SELECT company FROM like_any_table WHERE NOT company LIKE ANY ('%oo%', 'fa%')
 Project [company#x]
 +- Filter NOT likeany(company#x, %oo%, fa%)
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -144,7 +144,7 @@ SELECT company FROM like_any_table WHERE company LIKE ANY ('%oo%', NULL)
 Project [company#x]
 +- Filter (company#x LIKE %oo% OR company#x LIKE cast(null as string))
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -158,7 +158,7 @@ SELECT company FROM like_any_table WHERE company NOT LIKE ANY ('%oo%', NULL)
 Project [company#x]
 +- Filter (NOT company#x LIKE %oo% OR NOT company#x LIKE cast(null as string))
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -172,7 +172,7 @@ SELECT company FROM like_any_table WHERE company LIKE ANY (NULL, NULL)
 Project [company#x]
 +- Filter (company#x LIKE cast(null as string) OR company#x LIKE cast(null as string))
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1
@@ -186,7 +186,7 @@ SELECT company FROM like_any_table WHERE company NOT LIKE ANY (NULL, NULL)
 Project [company#x]
 +- Filter (NOT company#x LIKE cast(null as string) OR NOT company#x LIKE cast(null as string))
    +- SubqueryAlias like_any_table
-      +- View (`like_any_table`, [company#x,pat#x])
+      +- View (`like_any_table`, [company#x, pat#x])
          +- Project [cast(company#x as string) AS company#x, cast(pat#x as string) AS pat#x]
             +- Project [company#x, pat#x]
                +- SubqueryAlias t1

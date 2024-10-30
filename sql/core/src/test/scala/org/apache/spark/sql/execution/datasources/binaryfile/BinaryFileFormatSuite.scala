@@ -27,7 +27,7 @@ import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.datasources.PartitionedFile
@@ -162,12 +162,14 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
   test("binary file data source do not support write operation") {
     val df = spark.read.format(BINARY_FILE).load(testDir)
     withTempDir { tmpDir =>
-      val thrown = intercept[UnsupportedOperationException] {
-        df.write
-          .format(BINARY_FILE)
-          .save(s"$tmpDir/test_save")
-      }
-      assert(thrown.getMessage.contains("Write is not supported for binary file data source"))
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          df.write
+            .format(BINARY_FILE)
+            .save(s"$tmpDir/test_save")
+        },
+        condition = "_LEGACY_ERROR_TEMP_2075",
+        parameters = Map.empty)
     }
   }
 
@@ -344,7 +346,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
   }
 
   test("fail fast and do not attempt to read if a file is too big") {
-    assert(spark.conf.get(SOURCES_BINARY_FILE_MAX_LENGTH) === Int.MaxValue)
+    assert(sqlConf.getConf(SOURCES_BINARY_FILE_MAX_LENGTH) === Int.MaxValue)
     withTempPath { file =>
       val path = file.getPath
       val content = "123".getBytes
@@ -366,7 +368,8 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
           checkAnswer(readContent(), expected)
         }
       }
-      assert(caught.getMessage.contains("exceeds the max length allowed"))
+      assert(caught.getCondition.startsWith("FAILED_READ_FILE"))
+      assert(caught.getCause.getMessage.contains("exceeds the max length allowed"))
     }
   }
 

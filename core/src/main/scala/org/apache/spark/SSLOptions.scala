@@ -45,6 +45,7 @@ import org.apache.spark.network.util.MapConfigProvider
  * @param keyStore            a path to the key-store file
  * @param keyStorePassword    a password to access the key-store file
  * @param privateKey          a PKCS#8 private key file in PEM format
+ * @param privateKeyPassword  a password to access the privateKey file
  * @param keyPassword         a password to access the private key in the key-store
  * @param keyStoreType        the type of the key-store
  * @param needClientAuth      set true if SSL needs client authentication
@@ -79,13 +80,14 @@ private[spark] case class SSLOptions(
     trustStoreReloadIntervalMs: Int = 10000,
     openSslEnabled: Boolean = false,
     protocol: Option[String] = None,
-    enabledAlgorithms: Set[String] = Set.empty)
+    enabledAlgorithms: Set[String] = Set.empty,
+    privateKeyPassword: Option[String] = None)
     extends Logging {
 
   /**
    * Creates a Jetty SSL context factory according to the SSL settings represented by this object.
    */
-  def createJettySslContextFactory(): Option[SslContextFactory] = {
+  def createJettySslContextFactoryServer(): Option[SslContextFactory.Server] = {
     if (enabled) {
       val sslContextFactory = new SslContextFactory.Server()
 
@@ -170,6 +172,7 @@ private[spark] case class SSLOptions(
     trustStorePassword.foreach(confMap.put(s"$nsp.trustStorePassword", _))
     protocol.foreach(confMap.put(s"$nsp.protocol", _))
     confMap.put(s"$nsp.enabledAlgorithms", enabledAlgorithms.mkString(","))
+    privateKeyPassword.foreach(confMap.put(s"$nsp.privateKeyPassword", _))
 
     new MapConfigProvider(confMap)
   }
@@ -178,8 +181,8 @@ private[spark] case class SSLOptions(
   override def toString: String = s"SSLOptions{enabled=$enabled, port=$port, " +
       s"keyStore=$keyStore, keyStorePassword=${keyStorePassword.map(_ => "xxx")}, " +
       s"privateKey=$privateKey, keyPassword=${keyPassword.map(_ => "xxx")}, " +
-      s"keyStoreType=$keyStoreType, needClientAuth=$needClientAuth, " +
-      s"certChain=$certChain, trustStore=$trustStore, " +
+      s"privateKeyPassword=${privateKeyPassword.map(_ => "xxx")}, keyStoreType=$keyStoreType, " +
+      s"needClientAuth=$needClientAuth, certChain=$certChain, trustStore=$trustStore, " +
       s"trustStorePassword=${trustStorePassword.map(_ => "xxx")}, " +
       s"trustStoreReloadIntervalMs=$trustStoreReloadIntervalMs, " +
       s"trustStoreReloadingEnabled=$trustStoreReloadingEnabled, openSSLEnabled=$openSslEnabled, " +
@@ -197,7 +200,8 @@ private[spark] object SSLOptions extends Logging {
    * $ - `[ns].keyStore` - a path to the key-store file; can be relative to the current directory
    * $ - `[ns].keyStorePassword` - a password to the key-store file
    * $ - `[ns].privateKey` - a PKCS#8 private key file in PEM format
-   * $ - `[ns].keyPassword` - a password to the private key
+   * $ - `[ns].privateKeyPassword` - a password for the above key
+   * $ - `[ns].keyPassword` - a password to the private key in the key store
    * $ - `[ns].keyStoreType` - the type of the key-store
    * $ - `[ns].needClientAuth` - whether SSL needs client authentication
    * $ - `[ns].certChain` - an X.509 certificate chain file in PEM format
@@ -260,6 +264,10 @@ private[spark] object SSLOptions extends Logging {
     val privateKey = conf.getOption(s"$ns.privateKey").map(new File(_))
         .orElse(defaults.flatMap(_.privateKey))
 
+    val privateKeyPassword = conf.getWithSubstitution(s"$ns.privateKeyPassword")
+      .orElse(Option(conf.getenv(ENV_RPC_SSL_PRIVATE_KEY_PASSWORD)).filter(_.trim.nonEmpty))
+      .orElse(defaults.flatMap(_.privateKeyPassword))
+
     val keyPassword = conf.getWithSubstitution(s"$ns.keyPassword")
         .orElse(Option(hadoopConf.getPassword(s"$ns.keyPassword")).map(new String(_)))
         .orElse(Option(conf.getenv(ENV_RPC_SSL_KEY_PASSWORD)).filter(_.trim.nonEmpty))
@@ -320,24 +328,29 @@ private[spark] object SSLOptions extends Logging {
       trustStoreReloadIntervalMs,
       openSslEnabled,
       protocol,
-      enabledAlgorithms)
+      enabledAlgorithms,
+      privateKeyPassword)
   }
 
   // Config names and environment variables for propagating SSL passwords
   val SPARK_RPC_SSL_KEY_PASSWORD_CONF = "spark.ssl.rpc.keyPassword"
+  val SPARK_RPC_SSL_PRIVATE_KEY_PASSWORD_CONF = "spark.ssl.rpc.privateKeyPassword"
   val SPARK_RPC_SSL_KEY_STORE_PASSWORD_CONF = "spark.ssl.rpc.keyStorePassword"
   val SPARK_RPC_SSL_TRUST_STORE_PASSWORD_CONF = "spark.ssl.rpc.trustStorePassword"
   val SPARK_RPC_SSL_PASSWORD_FIELDS: Seq[String] = Seq(
     SPARK_RPC_SSL_KEY_PASSWORD_CONF,
+    SPARK_RPC_SSL_PRIVATE_KEY_PASSWORD_CONF,
     SPARK_RPC_SSL_KEY_STORE_PASSWORD_CONF,
     SPARK_RPC_SSL_TRUST_STORE_PASSWORD_CONF
   )
 
   val ENV_RPC_SSL_KEY_PASSWORD = "_SPARK_SSL_RPC_KEY_PASSWORD"
+  val ENV_RPC_SSL_PRIVATE_KEY_PASSWORD = "_SPARK_SSL_RPC_PRIVATE_KEY_PASSWORD"
   val ENV_RPC_SSL_KEY_STORE_PASSWORD = "_SPARK_SSL_RPC_KEY_STORE_PASSWORD"
   val ENV_RPC_SSL_TRUST_STORE_PASSWORD = "_SPARK_SSL_RPC_TRUST_STORE_PASSWORD"
   val SPARK_RPC_SSL_PASSWORD_ENVS: Seq[String] = Seq(
     ENV_RPC_SSL_KEY_PASSWORD,
+    ENV_RPC_SSL_PRIVATE_KEY_PASSWORD,
     ENV_RPC_SSL_KEY_STORE_PASSWORD,
     ENV_RPC_SSL_TRUST_STORE_PASSWORD
   )

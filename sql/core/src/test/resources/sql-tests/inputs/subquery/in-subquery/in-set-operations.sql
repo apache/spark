@@ -1,5 +1,6 @@
 -- A test suite for set-operations in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
+--ONLY_IF spark
 
 create temporary view t1 as select * from values
   ("val1a", 6S, 8, 10L, float(15.0), 20D, 20E2BD, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),

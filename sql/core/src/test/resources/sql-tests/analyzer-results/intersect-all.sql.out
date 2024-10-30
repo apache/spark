@@ -18,7 +18,7 @@ CreateViewCommand `tab1`, SELECT * FROM VALUES
     (2, 3),
     (null, null),
     (null, null)
-    AS tab1(k, v), false, false, LocalTempView, true
+    AS tab1(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias tab1
          +- LocalRelation [k#x, v#x]
@@ -41,7 +41,7 @@ CreateViewCommand `tab2`, SELECT * FROM VALUES
     (3, 4),
     (null, null),
     (null, null)
-    AS tab2(k, v), false, false, LocalTempView, true
+    AS tab2(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias tab2
          +- LocalRelation [k#x, v#x]
@@ -55,14 +55,14 @@ SELECT * FROM tab2
 Intersect All true
 :- Project [k#x, v#x]
 :  +- SubqueryAlias tab1
-:     +- View (`tab1`, [k#x,v#x])
+:     +- View (`tab1`, [k#x, v#x])
 :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias tab1
 :                 +- LocalRelation [k#x, v#x]
 +- Project [k#x, v#x]
    +- SubqueryAlias tab2
-      +- View (`tab2`, [k#x,v#x])
+      +- View (`tab2`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab2
@@ -77,7 +77,7 @@ SELECT * FROM tab1 WHERE k = 1
 Intersect All true
 :- Project [k#x, v#x]
 :  +- SubqueryAlias tab1
-:     +- View (`tab1`, [k#x,v#x])
+:     +- View (`tab1`, [k#x, v#x])
 :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias tab1
@@ -85,7 +85,7 @@ Intersect All true
 +- Project [k#x, v#x]
    +- Filter (k#x = 1)
       +- SubqueryAlias tab1
-         +- View (`tab1`, [k#x,v#x])
+         +- View (`tab1`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias tab1
@@ -101,14 +101,14 @@ Intersect All true
 :- Project [k#x, v#x]
 :  +- Filter (k#x > 2)
 :     +- SubqueryAlias tab1
-:        +- View (`tab1`, [k#x,v#x])
+:        +- View (`tab1`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab1
 :                    +- LocalRelation [k#x, v#x]
 +- Project [k#x, v#x]
    +- SubqueryAlias tab2
-      +- View (`tab2`, [k#x,v#x])
+      +- View (`tab2`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab2
@@ -123,7 +123,7 @@ SELECT * FROM tab2 WHERE k > 3
 Intersect All true
 :- Project [k#x, v#x]
 :  +- SubqueryAlias tab1
-:     +- View (`tab1`, [k#x,v#x])
+:     +- View (`tab1`, [k#x, v#x])
 :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias tab1
@@ -131,7 +131,7 @@ Intersect All true
 +- Project [k#x, v#x]
    +- Filter (k#x > 3)
       +- SubqueryAlias tab2
-         +- View (`tab2`, [k#x,v#x])
+         +- View (`tab2`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias tab2
@@ -147,7 +147,7 @@ Intersect All true
 :- Project [cast(k#x as bigint) AS k#xL, cast(v#x as bigint) AS v#xL]
 :  +- Project [k#x, v#x]
 :     +- SubqueryAlias tab1
-:        +- View (`tab1`, [k#x,v#x])
+:        +- View (`tab1`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab1
@@ -219,21 +219,21 @@ Intersect All true
 :- Intersect All true
 :  :- Project [k#x, v#x]
 :  :  +- SubqueryAlias tab2
-:  :     +- View (`tab2`, [k#x,v#x])
+:  :     +- View (`tab2`, [k#x, v#x])
 :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :           +- Project [k#x, v#x]
 :  :              +- SubqueryAlias tab2
 :  :                 +- LocalRelation [k#x, v#x]
 :  +- Project [k#x, v#x]
 :     +- SubqueryAlias tab1
-:        +- View (`tab1`, [k#x,v#x])
+:        +- View (`tab1`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab1
 :                    +- LocalRelation [k#x, v#x]
 +- Project [k#x, v#x]
    +- SubqueryAlias tab2
-      +- View (`tab2`, [k#x,v#x])
+      +- View (`tab2`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab2
@@ -253,14 +253,14 @@ Union false, false
 :- Except false
 :  :- Project [k#x, v#x]
 :  :  +- SubqueryAlias tab1
-:  :     +- View (`tab1`, [k#x,v#x])
+:  :     +- View (`tab1`, [k#x, v#x])
 :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :           +- Project [k#x, v#x]
 :  :              +- SubqueryAlias tab1
 :  :                 +- LocalRelation [k#x, v#x]
 :  +- Project [k#x, v#x]
 :     +- SubqueryAlias tab2
-:        +- View (`tab2`, [k#x,v#x])
+:        +- View (`tab2`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab2
@@ -268,14 +268,14 @@ Union false, false
 +- Intersect All true
    :- Project [k#x, v#x]
    :  +- SubqueryAlias tab1
-   :     +- View (`tab1`, [k#x,v#x])
+   :     +- View (`tab1`, [k#x, v#x])
    :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
    :           +- Project [k#x, v#x]
    :              +- SubqueryAlias tab1
    :                 +- LocalRelation [k#x, v#x]
    +- Project [k#x, v#x]
       +- SubqueryAlias tab2
-         +- View (`tab2`, [k#x,v#x])
+         +- View (`tab2`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias tab2
@@ -295,14 +295,14 @@ Except false
 :- Except false
 :  :- Project [k#x, v#x]
 :  :  +- SubqueryAlias tab1
-:  :     +- View (`tab1`, [k#x,v#x])
+:  :     +- View (`tab1`, [k#x, v#x])
 :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :           +- Project [k#x, v#x]
 :  :              +- SubqueryAlias tab1
 :  :                 +- LocalRelation [k#x, v#x]
 :  +- Project [k#x, v#x]
 :     +- SubqueryAlias tab2
-:        +- View (`tab2`, [k#x,v#x])
+:        +- View (`tab2`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab2
@@ -310,14 +310,14 @@ Except false
 +- Intersect All true
    :- Project [k#x, v#x]
    :  +- SubqueryAlias tab1
-   :     +- View (`tab1`, [k#x,v#x])
+   :     +- View (`tab1`, [k#x, v#x])
    :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
    :           +- Project [k#x, v#x]
    :              +- SubqueryAlias tab1
    :                 +- LocalRelation [k#x, v#x]
    +- Project [k#x, v#x]
       +- SubqueryAlias tab2
-         +- View (`tab2`, [k#x,v#x])
+         +- View (`tab2`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias tab2
@@ -344,28 +344,28 @@ Intersect All true
 :  :- Except false
 :  :  :- Project [k#x, v#x]
 :  :  :  +- SubqueryAlias tab1
-:  :  :     +- View (`tab1`, [k#x,v#x])
+:  :  :     +- View (`tab1`, [k#x, v#x])
 :  :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :  :           +- Project [k#x, v#x]
 :  :  :              +- SubqueryAlias tab1
 :  :  :                 +- LocalRelation [k#x, v#x]
 :  :  +- Project [k#x, v#x]
 :  :     +- SubqueryAlias tab2
-:  :        +- View (`tab2`, [k#x,v#x])
+:  :        +- View (`tab2`, [k#x, v#x])
 :  :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :              +- Project [k#x, v#x]
 :  :                 +- SubqueryAlias tab2
 :  :                    +- LocalRelation [k#x, v#x]
 :  +- Project [k#x, v#x]
 :     +- SubqueryAlias tab1
-:        +- View (`tab1`, [k#x,v#x])
+:        +- View (`tab1`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab1
 :                    +- LocalRelation [k#x, v#x]
 +- Project [k#x, v#x]
    +- SubqueryAlias tab2
-      +- View (`tab2`, [k#x,v#x])
+      +- View (`tab2`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab2
@@ -393,13 +393,13 @@ Intersect All true
 :     +- Project [k#x, v#x]
 :        +- Join Inner, (k#x = k#x)
 :           :- SubqueryAlias tab1
-:           :  +- View (`tab1`, [k#x,v#x])
+:           :  +- View (`tab1`, [k#x, v#x])
 :           :     +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           :        +- Project [k#x, v#x]
 :           :           +- SubqueryAlias tab1
 :           :              +- LocalRelation [k#x, v#x]
 :           +- SubqueryAlias tab2
-:              +- View (`tab2`, [k#x,v#x])
+:              +- View (`tab2`, [k#x, v#x])
 :                 +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :                    +- Project [k#x, v#x]
 :                       +- SubqueryAlias tab2
@@ -409,13 +409,13 @@ Intersect All true
       +- Project [k#x, v#x]
          +- Join Inner, (k#x = k#x)
             :- SubqueryAlias tab1
-            :  +- View (`tab1`, [k#x,v#x])
+            :  +- View (`tab1`, [k#x, v#x])
             :     +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             :        +- Project [k#x, v#x]
             :           +- SubqueryAlias tab1
             :              +- LocalRelation [k#x, v#x]
             +- SubqueryAlias tab2
-               +- View (`tab2`, [k#x,v#x])
+               +- View (`tab2`, [k#x, v#x])
                   +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                      +- Project [k#x, v#x]
                         +- SubqueryAlias tab2
@@ -443,13 +443,13 @@ Intersect All true
 :     +- Project [k#x, v#x]
 :        +- Join Inner, (k#x = k#x)
 :           :- SubqueryAlias tab1
-:           :  +- View (`tab1`, [k#x,v#x])
+:           :  +- View (`tab1`, [k#x, v#x])
 :           :     +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           :        +- Project [k#x, v#x]
 :           :           +- SubqueryAlias tab1
 :           :              +- LocalRelation [k#x, v#x]
 :           +- SubqueryAlias tab2
-:              +- View (`tab2`, [k#x,v#x])
+:              +- View (`tab2`, [k#x, v#x])
 :                 +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :                    +- Project [k#x, v#x]
 :                       +- SubqueryAlias tab2
@@ -459,13 +459,13 @@ Intersect All true
       +- Project [v#x AS k#x, k#x AS v#x]
          +- Join Inner, (k#x = k#x)
             :- SubqueryAlias tab1
-            :  +- View (`tab1`, [k#x,v#x])
+            :  +- View (`tab1`, [k#x, v#x])
             :     +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             :        +- Project [k#x, v#x]
             :           +- SubqueryAlias tab1
             :              +- LocalRelation [k#x, v#x]
             +- SubqueryAlias tab2
-               +- View (`tab2`, [k#x,v#x])
+               +- View (`tab2`, [k#x, v#x])
                   +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
                      +- Project [k#x, v#x]
                         +- SubqueryAlias tab2
@@ -480,14 +480,14 @@ SELECT k FROM tab2 GROUP BY k
 Intersect All true
 :- Aggregate [v#x], [v#x]
 :  +- SubqueryAlias tab1
-:     +- View (`tab1`, [k#x,v#x])
+:     +- View (`tab1`, [k#x, v#x])
 :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias tab1
 :                 +- LocalRelation [k#x, v#x]
 +- Aggregate [k#x], [k#x]
    +- SubqueryAlias tab2
-      +- View (`tab2`, [k#x,v#x])
+      +- View (`tab2`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab2
@@ -514,28 +514,28 @@ Intersect All true
 :  :- Except false
 :  :  :- Project [k#x, v#x]
 :  :  :  +- SubqueryAlias tab1
-:  :  :     +- View (`tab1`, [k#x,v#x])
+:  :  :     +- View (`tab1`, [k#x, v#x])
 :  :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :  :           +- Project [k#x, v#x]
 :  :  :              +- SubqueryAlias tab1
 :  :  :                 +- LocalRelation [k#x, v#x]
 :  :  +- Project [k#x, v#x]
 :  :     +- SubqueryAlias tab2
-:  :        +- View (`tab2`, [k#x,v#x])
+:  :        +- View (`tab2`, [k#x, v#x])
 :  :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :              +- Project [k#x, v#x]
 :  :                 +- SubqueryAlias tab2
 :  :                    +- LocalRelation [k#x, v#x]
 :  +- Project [k#x, v#x]
 :     +- SubqueryAlias tab1
-:        +- View (`tab1`, [k#x,v#x])
+:        +- View (`tab1`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab1
 :                    +- LocalRelation [k#x, v#x]
 +- Project [k#x, v#x]
    +- SubqueryAlias tab2
-      +- View (`tab2`, [k#x,v#x])
+      +- View (`tab2`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab2
@@ -556,28 +556,28 @@ Intersect false
 :  :- Except false
 :  :  :- Project [k#x, v#x]
 :  :  :  +- SubqueryAlias tab1
-:  :  :     +- View (`tab1`, [k#x,v#x])
+:  :  :     +- View (`tab1`, [k#x, v#x])
 :  :  :        +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :  :           +- Project [k#x, v#x]
 :  :  :              +- SubqueryAlias tab1
 :  :  :                 +- LocalRelation [k#x, v#x]
 :  :  +- Project [k#x, v#x]
 :  :     +- SubqueryAlias tab2
-:  :        +- View (`tab2`, [k#x,v#x])
+:  :        +- View (`tab2`, [k#x, v#x])
 :  :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :  :              +- Project [k#x, v#x]
 :  :                 +- SubqueryAlias tab2
 :  :                    +- LocalRelation [k#x, v#x]
 :  +- Project [k#x, v#x]
 :     +- SubqueryAlias tab1
-:        +- View (`tab1`, [k#x,v#x])
+:        +- View (`tab1`, [k#x, v#x])
 :           +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias tab1
 :                    +- LocalRelation [k#x, v#x]
 +- Project [k#x, v#x]
    +- SubqueryAlias tab2
-      +- View (`tab2`, [k#x,v#x])
+      +- View (`tab2`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias tab2
@@ -593,7 +593,7 @@ SetCommand (spark.sql.legacy.setopsPrecedence.enabled,Some(false))
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW tab3 AS VALUES (decimal(1)), (decimal(2)) tbl3(v)
 -- !query analysis
-CreateViewCommand `tab3`, VALUES (decimal(1)), (decimal(2)) tbl3(v), false, true, LocalTempView, true
+CreateViewCommand `tab3`, VALUES (decimal(1)), (decimal(2)) tbl3(v), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias tbl3
       +- LocalRelation [v#x]
 

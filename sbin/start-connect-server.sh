@@ -30,7 +30,7 @@ fi
 CLASS="org.apache.spark.sql.connect.service.SparkConnectServer"
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  echo "Usage: ./sbin/start-connect-server.sh [options]"
+  echo "Usage: ./sbin/start-connect-server.sh [--wait] [options]"
 
   "${SPARK_HOME}"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   exit 1
@@ -38,4 +38,8 @@ fi
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
 
+if [ "$1" == "--wait" ]; then
+  shift
+  export SPARK_NO_DAEMONIZE=1
+fi
 exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Spark Connect server" "$@"

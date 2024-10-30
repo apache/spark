@@ -19,7 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.Locale
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PARSE_MODE
 
 sealed trait ParseMode {
   /**
@@ -47,12 +48,19 @@ object ParseMode extends Logging {
   /**
    * Returns the parse mode from the given string.
    */
-  def fromString(mode: String): ParseMode = mode.toUpperCase(Locale.ROOT) match {
-    case PermissiveMode.name => PermissiveMode
-    case DropMalformedMode.name => DropMalformedMode
-    case FailFastMode.name => FailFastMode
-    case _ =>
-      logWarning(s"$mode is not a valid parse mode. Using ${PermissiveMode.name}.")
-      PermissiveMode
+  def fromString(mode: String): ParseMode = Option(mode).map {
+    v => v.toUpperCase(Locale.ROOT) match {
+      case PermissiveMode.name => PermissiveMode
+      case DropMalformedMode.name => DropMalformedMode
+      case FailFastMode.name => FailFastMode
+      case _ =>
+        logWarning(log"${MDC(PARSE_MODE, v)} is not a valid parse mode. " +
+          log"Using ${MDC(PARSE_MODE, PermissiveMode.name)}.")
+        PermissiveMode
+    }
+  }.getOrElse {
+    logWarning(log"mode is null and not a valid parse mode. " +
+      log"Using ${MDC(PARSE_MODE, PermissiveMode.name)}.")
+    PermissiveMode
   }
 }

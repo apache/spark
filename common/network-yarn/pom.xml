@@ -173,27 +173,29 @@
             <id>unpack</id>
             <phase>package</phase>
             <configuration>
-                <target>
-                    <echo message="Shade netty native libraries to ${spark.shade.native.packageName}" />
-                    <unzip src="${shuffle.jar}" dest="${project.build.directory}/exploded/" />
-                    <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_x86_64.so"
-                          tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_x86_64.so" />
-                    <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_kqueue_x86_64.jnilib"
-                          tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_kqueue_x86_64.jnilib" />
-                    <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_aarch_64.so"
-                          tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_aarch_64.so" />
-                    <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_kqueue_aarch_64.jnilib"
-                          tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_kqueue_aarch_64.jnilib" />
-                    <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_linux_x86_64.so"
-                          tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_linux_x86_64.so" />
-                    <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_linux_aarch_64.so"
-                          tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_linux_aarch_64.so" />
-                    <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_osx_x86_64.jnilib"
-                          tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_osx_x86_64.jnilib" />
-                    <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_osx_aarch_64.jnilib"
-                          tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_osx_aarch_64.jnilib" />
-                    <jar destfile="${shuffle.jar}" basedir="${project.build.directory}/exploded" />
-                </target>
+              <target>
+                <echo message="Shade netty native libraries to ${spark.shade.native.packageName}" />
+                <unzip src="${shuffle.jar}" dest="${project.build.directory}/exploded/" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_x86_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_x86_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_kqueue_x86_64.jnilib"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_kqueue_x86_64.jnilib" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_aarch_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_aarch_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_kqueue_aarch_64.jnilib"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_kqueue_aarch_64.jnilib" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_riscv64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_riscv64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_linux_x86_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_linux_x86_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_linux_aarch_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_linux_aarch_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_osx_x86_64.jnilib"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_osx_x86_64.jnilib" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_osx_aarch_64.jnilib"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_osx_aarch_64.jnilib" />
+                <jar destfile="${shuffle.jar}" basedir="${project.build.directory}/exploded" />
+              </target>
             </configuration>
             <goals>
               <goal>run</goal>

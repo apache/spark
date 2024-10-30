@@ -97,7 +97,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[SparkException] {
           Literal.default(errType)
         },
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map("message" -> s"No default value for type: ${toSQLType(errType)}.")
       )
     })
@@ -476,5 +476,32 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       Literal.create(UTF8String.fromString("Spark SQL"), ObjectType(classOf[UTF8String])),
       UTF8String.fromString("Spark SQL"))
+  }
+
+  // A generic internal row that throws exception when accessing null values
+  class NullAccessForbiddenGenericInternalRow(override val values: Array[Any])
+    extends GenericInternalRow(values) {
+    override def get(ordinal: Int, dataType: DataType): AnyRef = {
+      if (values(ordinal) == null) {
+        throw new RuntimeException(s"Should not access null field at $ordinal!")
+      }
+      super.get(ordinal, dataType)
+    }
+  }
+
+  test("SPARK-46634: literal validation should not drill down to null fields") {
+    val exceptionInternalRow = new NullAccessForbiddenGenericInternalRow(Array(null, 1))
+    val schema = StructType.fromDDL("id INT, age INT")
+    // This should not fail because it should check whether the field is null before drilling down
+    Literal.validateLiteralValue(exceptionInternalRow, schema)
+  }
+
+  test("SPARK-46604: Literal support immutable ArraySeq") {
+    import org.apache.spark.util.ArrayImplicits._
+    val immArraySeq = Array(1.0, 4.0).toImmutableArraySeq
+    val expected = toCatalyst(immArraySeq)
+    checkEvaluation(Literal(immArraySeq), expected)
+    checkEvaluation(Literal.create(immArraySeq), expected)
+    checkEvaluation(Literal.create(immArraySeq, ArrayType(DoubleType)), expected)
   }
 }

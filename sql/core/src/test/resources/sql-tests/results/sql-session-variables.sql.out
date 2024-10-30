@@ -82,7 +82,7 @@ struct<>
 -- !query
 SELECT 'Expect: INT, NULL', typeof(var1), var1
 -- !query schema
-struct<Expect: INT, NULL:string,typeof(variablereference(system.session.var1=CAST(NULL AS INT)) AS var1):string,var1:int>
+struct<Expect: INT, NULL:string,typeof(variablereference(system.session.var1=CAST(NULL AS INT))):string,var1:int>
 -- !query output
 Expect: INT, NULL	int	NULL
 
@@ -98,7 +98,7 @@ struct<>
 -- !query
 SELECT 'Expect: DOUBLE, NULL', typeof(var1), var1
 -- !query schema
-struct<Expect: DOUBLE, NULL:string,typeof(variablereference(system.session.var1=CAST(NULL AS DOUBLE)) AS var1):string,var1:double>
+struct<Expect: DOUBLE, NULL:string,typeof(variablereference(system.session.var1=CAST(NULL AS DOUBLE))):string,var1:double>
 -- !query output
 Expect: DOUBLE, NULL	double	NULL
 
@@ -122,7 +122,7 @@ struct<>
 -- !query
 SELECT 'Expect: TIMESTAMP, NULL', typeof(var1), var1
 -- !query schema
-struct<Expect: TIMESTAMP, NULL:string,typeof(variablereference(system.session.var1=CAST(NULL AS TIMESTAMP)) AS var1):string,var1:timestamp>
+struct<Expect: TIMESTAMP, NULL:string,typeof(variablereference(system.session.var1=CAST(NULL AS TIMESTAMP))):string,var1:timestamp>
 -- !query output
 Expect: TIMESTAMP, NULL	timestamp	NULL
 
@@ -168,7 +168,7 @@ struct<>
 
 
 -- !query
-DECLARE VARIABLE var1 INT
+DECLARE VAR var1 INT
 -- !query schema
 struct<>
 -- !query output
@@ -184,7 +184,7 @@ NULL
 
 
 -- !query
-DROP TEMPORARY VARIABLE var1
+DROP TEMPORARY VAR var1
 -- !query schema
 struct<>
 -- !query output
@@ -943,7 +943,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'hello'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -990,7 +989,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INT\"",
     "targetType" : "\"SMALLINT\"",
     "value" : "100000"
@@ -1104,7 +1102,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"DOUBLE\"",
     "targetType" : "\"INT\"",
     "value" : "1.0E10D"
@@ -1171,7 +1168,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'hello'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -2138,7 +2134,7 @@ struct<var1:int>
 -- !query
 SELECT sum(var1) FROM VALUES(1)
 -- !query schema
-struct<sum(variablereference(system.session.var1=1) AS var1):bigint>
+struct<sum(variablereference(system.session.var1=1)):bigint>
 -- !query output
 1
 
@@ -2146,7 +2142,7 @@ struct<sum(variablereference(system.session.var1=1) AS var1):bigint>
 -- !query
 SELECT var1 + SUM(0) FROM VALUES(1)
 -- !query schema
-struct<(variablereference(system.session.var1=1) AS var1 + sum(0)):bigint>
+struct<(variablereference(system.session.var1=1) + sum(0)):bigint>
 -- !query output
 1
 
@@ -2154,7 +2150,7 @@ struct<(variablereference(system.session.var1=1) AS var1 + sum(0)):bigint>
 -- !query
 SELECT substr('12345', var1, 1)
 -- !query schema
-struct<substr(12345, variablereference(system.session.var1=1) AS var1, 1):string>
+struct<substr(12345, variablereference(system.session.var1=1), 1):string>
 -- !query output
 1
 
@@ -2202,7 +2198,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT array(1, 2, 4)[var1]
 -- !query schema
-struct<array(1, 2, 4)[variablereference(system.session.var1=1) AS var1]:int>
+struct<array(1, 2, 4)[variablereference(system.session.var1=1)]:int>
 -- !query output
 2
 
@@ -2295,6 +2291,38 @@ DROP VIEW IF EXISTS V
 struct<>
 -- !query output
 
+
+
+-- !query
+DROP TEMPORARY VARIABLE var1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET VARIABLE title = 'variable references -- test constant folding'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var1 STRING DEFAULT 'a INT'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT from_json('{"a": 1}', var1)
+-- !query schema
+struct<from_json({"a": 1}):struct<a:int>>
+-- !query output
+{"a":1}
 
 
 -- !query

@@ -19,7 +19,7 @@ import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.pandasutils import have_tabulate, tabulate_requirement_message
 
@@ -72,7 +72,11 @@ class SeriesConversionMixin:
         self.assert_eq(pser.to_markdown(), psser.to_markdown())
 
 
-class SeriesConversionTests(SeriesConversionMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesConversionTests(
+    SeriesConversionMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

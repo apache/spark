@@ -25,7 +25,8 @@ import scala.collection.mutable.HashMap
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{JobExecutionStatus, SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.config.Status.LIVE_UI_LOCAL_STORE_DIR
 import org.apache.spark.status.AppStatusUtils.getQuantilesValue
 import org.apache.spark.status.api.v1
@@ -371,7 +372,7 @@ private[spark] class AppStatusStore(
               Double.NaN
             }
           }
-        }.toIndexedSeq
+        }
       }
     }
 
@@ -860,11 +861,11 @@ private[spark] object AppStatusStore extends Logging {
     def createStorePath(rootDir: String): Option[File] = {
       try {
         val localDir = Utils.createDirectory(rootDir, "spark-ui")
-        logInfo(s"Created spark ui store directory at $rootDir")
+        logInfo(log"Created spark ui store directory at ${MDC(PATH, rootDir)}")
         Some(localDir)
       } catch {
         case e: IOException =>
-          logError(s"Failed to create spark ui store path in $rootDir.", e)
+          logError(log"Failed to create spark ui store path in ${MDC(PATH, rootDir)}.", e)
           None
       }
     }

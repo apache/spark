@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -120,10 +121,15 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
 
   test("Create table with unknown compression") {
     Seq(true, false).foreach { isPartitioned =>
-      val exception = intercept[IllegalArgumentException] {
-        checkCompressionCodec("aa", isPartitioned)
-      }
-      assert(exception.getMessage.contains("Codec [aa] is not available"))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          checkCompressionCodec("aa", isPartitioned)
+        },
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        parameters = Map(
+          "codecName" -> "aa",
+          "availableCodecs" -> ("brotli, uncompressed, lzo, snappy, " +
+            "lz4_raw, none, zstd, lz4, gzip")))
     }
   }
 }

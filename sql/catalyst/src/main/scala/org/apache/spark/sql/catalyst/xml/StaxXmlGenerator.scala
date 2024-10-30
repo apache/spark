@@ -22,11 +22,11 @@ import javax.xml.stream.XMLOutputFactory
 
 import scala.collection.Map
 
-import com.sun.xml.txw2.output.IndentingXMLStreamWriter
 import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, MapData, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -48,6 +48,13 @@ class StaxXmlGenerator(
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
 
+  private val timestampNTZFormatter = TimestampFormatter(
+    options.timestampNTZFormatInWrite,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = false,
+    forTimestampNTZ = true)
+
   private val dateFormatter = DateFormatter(
     options.dateFormatInWrite,
     options.locale,
@@ -58,6 +65,7 @@ class StaxXmlGenerator(
     val factory = XMLOutputFactory.newInstance()
     // to_xml disables structure validation to allow multiple root tags
     factory.setProperty(WstxOutputProperties.P_OUTPUT_VALIDATE_STRUCTURE, validateStructure)
+    factory.setProperty(WstxOutputProperties.P_OUTPUT_VALIDATE_NAMES, options.validateName)
     val xmlWriter = factory.createXMLStreamWriter(writer)
     if (!indentDisabled) {
       val indentingXmlWriter = new IndentingXMLStreamWriter(xmlWriter)
@@ -160,12 +168,14 @@ class StaxXmlGenerator(
 
   def writeElement(dt: DataType, v: Any, options: XmlOptions): Unit = (dt, v) match {
     case (_, null) | (NullType, _) => gen.writeCharacters(options.nullValue)
-    case (StringType, v: UTF8String) => gen.writeCharacters(v.toString)
-    case (StringType, v: String) => gen.writeCharacters(v)
+    case (_: StringType, v: UTF8String) => gen.writeCharacters(v.toString)
+    case (_: StringType, v: String) => gen.writeCharacters(v)
     case (TimestampType, v: Timestamp) =>
       gen.writeCharacters(timestampFormatter.format(v.toInstant()))
     case (TimestampType, v: Long) =>
       gen.writeCharacters(timestampFormatter.format(v))
+    case (TimestampNTZType, v: Long) =>
+      gen.writeCharacters(timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(v)))
     case (DateType, v: Int) =>
       gen.writeCharacters(dateFormatter.format(v))
     case (IntegerType, v: Int) => gen.writeCharacters(v.toString)
@@ -209,8 +219,12 @@ class StaxXmlGenerator(
       }
 
     case (_, _) =>
-      throw new IllegalArgumentException(
-        s"Failed to convert value $v (class of ${v.getClass}) in type $dt to XML.")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3238",
+        messageParameters = scala.collection.immutable.Map(
+          "v" -> v.toString,
+          "class" -> v.getClass.toString,
+          "dt" -> dt.toString))
   }
 
   def writeMapData(mapType: MapType, map: MapData): Unit = {

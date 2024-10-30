@@ -19,14 +19,18 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 
+import scala.util.Using
 import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
@@ -60,23 +64,14 @@ object JDBCRDD extends Logging {
 
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
-    val conn: Connection = dialect.createConnectionFactory(options)(-1)
-    try {
-      val statement = conn.prepareStatement(query)
-      try {
+    Using.resource(dialect.createConnectionFactory(options)(-1)) { conn =>
+      Using.resource(conn.prepareStatement(query)) { statement =>
         statement.setQueryTimeout(options.queryTimeout)
-        val rs = statement.executeQuery()
-        try {
-          JdbcUtils.getSchema(rs, dialect, alwaysNullable = true,
+        Using.resource(statement.executeQuery()) { rs =>
+          JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
             isTimestampNTZ = options.preferTimestampNTZ)
-        } finally {
-          rs.close()
         }
-      } finally {
-        statement.close()
       }
-    } finally {
-      conn.close()
     }
   }
 
@@ -157,7 +152,7 @@ object JDBCRDD extends Logging {
  * Both the driver code and the workers must be able to access the database; the driver
  * needs to fetch the schema while the workers need to fetch the data.
  */
-private[jdbc] class JDBCRDD(
+class JDBCRDD(
     sc: SparkContext,
     getConnection: Int => Connection,
     schema: StructType,
@@ -171,12 +166,48 @@ private[jdbc] class JDBCRDD(
     limit: Int,
     sortOrders: Array[String],
     offset: Int)
-  extends RDD[InternalRow](sc, Nil) {
+  extends RDD[InternalRow](sc, Nil) with DataSourceMetricsMixin with ExternalEngineDatasourceRDD {
+
+  /**
+   * Execution time of the query issued to JDBC connection
+   */
+  val queryExecutionTimeMetric: SQLMetric = SQLMetrics.createNanoTimingMetric(
+    sparkContext,
+    name = "JDBC query execution time")
+
+  private lazy val dialect = JdbcDialects.get(url)
+
+  def generateJdbcQuery(partition: Option[JDBCPartition]): String = {
+    // H2's JDBC driver does not support the setSchema() method.  We pass a
+    // fully-qualified table name in the SELECT statement.  I don't know how to
+    // talk about a table in a completely portable way.
+    var builder = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withPredicates(predicates, partition.getOrElse(JDBCPartition(whereClause = null, idx = 1)))
+      .withColumns(columns)
+      .withSortOrders(sortOrders)
+      .withLimit(limit)
+      .withOffset(offset)
+
+    groupByColumns.foreach { groupByKeys =>
+      builder = builder.withGroupByColumns(groupByKeys)
+    }
+
+    sample.foreach { tableSampleInfo =>
+      builder = builder.withTableSample(tableSampleInfo)
+    }
+
+    builder.build()
+  }
 
   /**
    * Retrieve the list of partitions corresponding to this RDD.
    */
   override def getPartitions: Array[Partition] = partitions
+
+  override def getExternalEngineQuery: String = {
+    generateJdbcQuery(partition = None)
+  }
 
   /**
    * Runs the SQL query against the JDBC driver.
@@ -227,7 +258,6 @@ private[jdbc] class JDBCRDD(
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection(part.idx)
-    val dialect = JdbcDialects.get(url)
     import scala.jdk.CollectionConverters._
     dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
 
@@ -237,7 +267,7 @@ private[jdbc] class JDBCRDD(
     options.sessionInitStatement match {
       case Some(sql) =>
         val statement = conn.prepareStatement(sql)
-        logInfo(s"Executing sessionInitStatement: $sql")
+        logInfo(log"Executing sessionInitStatement: ${MDC(SQL_TEXT, sql)}")
         try {
           statement.setQueryTimeout(options.queryTimeout)
           statement.execute()
@@ -247,36 +277,29 @@ private[jdbc] class JDBCRDD(
       case None =>
     }
 
-    // H2's JDBC driver does not support the setSchema() method.  We pass a
-    // fully-qualified table name in the SELECT statement.  I don't know how to
-    // talk about a table in a completely portable way.
-
-    var builder = dialect
-      .getJdbcSQLQueryBuilder(options)
-      .withColumns(columns)
-      .withPredicates(predicates, part)
-      .withSortOrders(sortOrders)
-      .withLimit(limit)
-      .withOffset(offset)
-
-    groupByColumns.foreach { groupByKeys =>
-      builder = builder.withGroupByColumns(groupByKeys)
-    }
-
-    sample.foreach { tableSampleInfo =>
-      builder = builder.withTableSample(tableSampleInfo)
-    }
-
-    val sqlText = builder.build()
+    val sqlText = generateJdbcQuery(Some(part))
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
     stmt.setQueryTimeout(options.queryTimeout)
+
+    val startTime = System.nanoTime
     rs = stmt.executeQuery()
+    val endTime = System.nanoTime
+
+    val executionTime = endTime - startTime
+    queryExecutionTimeMetric.add(executionTime)
+
     val rowsIterator =
       JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
+  }
+
+  override def getMetrics: Seq[(String, SQLMetric)] = {
+    Seq(
+      "queryExecutionTime" -> queryExecutionTimeMetric
+    )
   }
 }

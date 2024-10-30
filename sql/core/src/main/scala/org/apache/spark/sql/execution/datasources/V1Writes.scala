@@ -102,8 +102,8 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     val requiredOrdering = write.requiredOrdering.map(_.transform {
       case a: Attribute => attrMap.getOrElse(a, a)
     }.asInstanceOf[SortOrder])
-    val outputOrdering = query.outputOrdering
-    val orderingMatched = isOrderingMatched(requiredOrdering, outputOrdering)
+    val outputOrdering = empty2NullPlan.outputOrdering
+    val orderingMatched = isOrderingMatched(requiredOrdering.map(_.child), outputOrdering)
     if (orderingMatched) {
       empty2NullPlan
     } else {
@@ -213,9 +213,9 @@ object V1WritesUtils {
     }
   }
 
-  def getWriteFilesOpt(child: SparkPlan): Option[WriteFilesExec] = {
+  def getWriteFilesOpt(child: SparkPlan): Option[WriteFilesExecBase] = {
     child.collectFirst {
-      case w: WriteFilesExec => w
+      case w: WriteFilesExecBase => w
     }
   }
 }

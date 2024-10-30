@@ -31,6 +31,7 @@ Spark SQL is Apache Spark's module for working with structured data. This guide 
    * [Scalar User-Defined Functions (UDFs)](sql-ref-functions-udf-scalar.html)
    * [User-Defined Aggregate Functions (UDAFs)](sql-ref-functions-udf-aggregate.html)
    * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
+   * [Function Invocation](sql-ref-function-invocation.html)
  * [Identifiers](sql-ref-identifier.html)
  * [IDENTIFIER clause](sql-ref-identifier-clause.html)
  * [Literals](sql-ref-literals.html)

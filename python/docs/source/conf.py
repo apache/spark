@@ -12,6 +12,7 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
+from datetime import datetime
 import sys
 import os
 import shutil
@@ -124,7 +125,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'PySpark'
-copyright = ''
+# We have our custom "spark_footer.html" template, using copyright for the current year.
+copyright = f"Copyright @ {datetime.now().year}"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -178,6 +180,7 @@ pygments_style = 'sphinx'
 # Look at the first line of the docstring for function and method signatures.
 autodoc_docstring_signature = True
 autosummary_generate = True
+autodoc_typehints = "none"
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -186,7 +189,11 @@ autosummary_generate = True
 html_theme = 'pydata_sphinx_theme'
 
 html_context = {
-    "switcher_json_url": "_static/versions.json",
+    # When releasing a new Spark version, please update the file
+    # "site/static/versions.json" under the code repository "spark-website"
+    # (item should be added in order), and also set the local environment
+    # variable "RELEASE_VERSION".
+    "switcher_json_url": "https://spark.apache.org/static/versions.json",
     "switcher_template_url": "https://spark.apache.org/docs/{version}/api/python/index.html",
 }
 
@@ -194,11 +201,25 @@ html_context = {
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    "navbar_end": ["version-switcher", "theme-switcher"],
+    "header_links_before_dropdown": 6,
+    "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
+    "footer_start": ["spark_footer", "sphinx-version"],
     "logo": {
-        "image_light": "_static/spark-logo-light.png",
-        "image_dark": "_static/spark-logo-dark.png",
-    }
+        "image_light": "https://spark.apache.org/images/spark-logo.png",
+        "image_dark": "https://spark.apache.org/images/spark-logo-rev.svg",
+    },
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/apache/spark",
+            "icon": "fa-brands fa-github",
+        },
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/pyspark",
+            "icon": "fa-solid fa-box",
+        },
+    ]
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
@@ -213,7 +234,7 @@ html_theme_options = {
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = "../../../docs/img/spark-logo-reverse.png"
+html_logo = "https://spark.apache.org/images/spark-logo-rev.svg"
 
 # The name of an image file (within the static path) to use as a favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32

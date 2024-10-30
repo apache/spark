@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.TaskContext
+import java.util
+
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.sql.catalyst.InternalRow
@@ -210,7 +212,7 @@ class TungstenAggregationIterator(
           if (buffer == null) {
             // failed to allocate the first page
             // scalastyle:off throwerror
-            throw new SparkOutOfMemoryError("No enough memory for aggregation")
+            throw new SparkOutOfMemoryError("_LEGACY_ERROR_TEMP_3302", new util.HashMap())
             // scalastyle:on throwerror
           }
         }
@@ -461,7 +463,7 @@ class TungstenAggregationIterator(
       hashMap.free()
       resultCopy
     } else {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "This method should not be called when groupingExpressions is not empty.")
     }
   }

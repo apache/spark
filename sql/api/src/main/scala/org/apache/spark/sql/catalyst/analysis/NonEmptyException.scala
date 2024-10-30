@@ -20,17 +20,17 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoted
 
-
 /**
- * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception
- * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
+ * Thrown by a catalog when an item already exists. The analyzer will rethrow the exception as an
+ * [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-case class NonEmptyNamespaceException private(
-    override val message: String,
+case class NonEmptyNamespaceException(
+    namespace: Array[String],
+    details: String,
     override val cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause) {
+    extends AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_3103",
+      messageParameters = Map("namespace" -> quoted(namespace), "details" -> details)) {
 
-  def this(namespace: Array[String]) = {
-    this(s"Namespace '${quoted(namespace)}' is non empty.")
-  }
+  def this(namespace: Array[String]) = this(namespace, "", None)
 }

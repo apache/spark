@@ -66,9 +66,11 @@ first and then compute its top eigenvalues and eigenvectors locally on the drive
 This requires a single pass with $O(n^2)$ storage on each executor and on the driver, and
 $O(n^2 k)$ time on the driver.
 * Otherwise, we compute $(A^T A) v$ in a distributive way and send it to
-<a href="http://www.caam.rice.edu/software/ARPACK/">ARPACK</a> to
+[ARPACK][arpack] to
 compute $(A^T A)$'s top eigenvalues and eigenvectors on the driver node. This requires $O(k)$
 passes, $O(n)$ storage on each executor, and $O(n k)$ storage on the driver.
+
+[arpack]: https://web.archive.org/web/20210503024933/http://www.caam.rice.edu/software/ARPACK
 
 ### SVD Example
  

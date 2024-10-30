@@ -30,7 +30,8 @@ import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, MAX_SIZE}
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
@@ -288,8 +289,9 @@ private[spark] class LiveListenerBusMetrics(conf: SparkConf)
         if (perListenerClassTimers.size == maxTimed) {
           if (maxTimed != 0) {
             // Explicitly disabled.
-            logError(s"Not measuring processing time for listener class $className because a " +
-              s"maximum of $maxTimed listener classes are already timed.")
+            logError(log"Not measuring processing time for listener class " +
+              log"${MDC(CLASS_NAME, className)} because a " +
+              log"maximum of ${MDC(MAX_SIZE, maxTimed)} listener classes are already timed.")
           }
           None
         } else {

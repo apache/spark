@@ -54,7 +54,7 @@
     df.select(["name", "age"])
     df.select([col("name"), col("age")])
 
-    df.select(["name", col("age")])  # E: Argument 1 to "select" of "DataFrame" has incompatible type "List[object]"; expected "Union[List[Column], List[str]]"  [arg-type]
+    df.select(["name", col("age")])  # E: Argument 1 to "select" of "DataFrame" has incompatible type "list[object]"; expected "Union[list[Column], list[str]]"  [arg-type]
 
 
 - case: groupBy
@@ -71,7 +71,7 @@
     df.groupby(["name", "age"])
     df.groupBy([col("name"), col("age")])
     df.groupby([col("name"), col("age")])
-    df.groupBy(["name", col("age")])  # E: Argument 1 to "groupBy" of "DataFrame" has incompatible type "List[object]"; expected "Union[List[Column], List[str], List[int]]"  [arg-type]
+    df.groupBy(["name", col("age")])  # E: Argument 1 to "groupBy" of "DataFrame" has incompatible type "list[object]"; expected "Union[list[Column], list[str], list[int]]"  [arg-type]
 
 
 - case: rollup
@@ -88,7 +88,7 @@
     df.rollup([col("name"), col("age")])
 
 
-    df.rollup(["name", col("age")])  # E: Argument 1 to "rollup" of "DataFrame" has incompatible type "List[object]"; expected "Union[List[Column], List[str]]"  [arg-type]
+    df.rollup(["name", col("age")])  # E: Argument 1 to "rollup" of "DataFrame" has incompatible type "list[object]"; expected "Union[list[Column], list[str]]"  [arg-type]
 
 
 - case: cube
@@ -105,7 +105,7 @@
     df.cube([col("name"), col("age")])
 
 
-    df.cube(["name", col("age")])  # E: Argument 1 to "cube" of "DataFrame" has incompatible type "List[object]"; expected "Union[List[Column], List[str]]"  [arg-type]
+    df.cube(["name", col("age")])  # E: Argument 1 to "cube" of "DataFrame" has incompatible type "list[object]"; expected "Union[list[Column], list[str]]"  [arg-type]
 
 
 - case: dropColumns

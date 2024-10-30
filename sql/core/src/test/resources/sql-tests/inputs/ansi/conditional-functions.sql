@@ -18,4 +18,21 @@ SELECT case when c2 >= 0 then 1 else 1/0 end from conditional_t;
 SELECT case when 1 < 2 then 1 else 1/0 end;
 SELECT case when 1 > 2 then 1/0 else 1 end;
 
+SELECT nullifzero(0),
+  nullifzero(cast(0 as tinyint)),
+  nullifzero(cast(0 as bigint)),
+  nullifzero('0'),
+  nullifzero(0.0),
+  nullifzero(1),
+  nullifzero(null);
+
+SELECT nullifzero('abc');
+
+SELECT zeroifnull(null),
+  zeroifnull(1),
+  zeroifnull(cast(1 as tinyint)),
+  zeroifnull(cast(1 as bigint));
+
+SELECT zeroifnull('abc');
+
 DROP TABLE conditional_t;

@@ -10,7 +10,7 @@ CreateViewCommand `grouping`, SELECT * FROM VALUES
   ("1", "2", "3", 1),
   ("4", "5", "6", 1),
   ("7", "8", "9", 1)
-  as grouping(a, b, c, d), false, false, LocalTempView, true
+  as grouping(a, b, c, d), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x, c#x, d#x]
       +- SubqueryAlias grouping
          +- LocalRelation [a#x, b#x, c#x, d#x]
@@ -23,7 +23,7 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [a#x, b#x, c#x, count(d#x) AS c
 +- Expand [[a#x, b#x, c#x, d#x, null, null, null, 7]], [a#x, b#x, c#x, d#x, a#x, b#x, c#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
       +- SubqueryAlias grouping
-         +- View (`grouping`, [a#x,b#x,c#x,d#x])
+         +- View (`grouping`, [a#x, b#x, c#x, d#x])
             +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping
@@ -37,7 +37,7 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [a#x, b#x, c#x, count(d#x) AS c
 +- Expand [[a#x, b#x, c#x, d#x, a#x, null, null, 3]], [a#x, b#x, c#x, d#x, a#x, b#x, c#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
       +- SubqueryAlias grouping
-         +- View (`grouping`, [a#x,b#x,c#x,d#x])
+         +- View (`grouping`, [a#x, b#x, c#x, d#x])
             +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping
@@ -51,7 +51,7 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [a#x, b#x, c#x, count(d#x) AS c
 +- Expand [[a#x, b#x, c#x, d#x, null, null, c#x, 6]], [a#x, b#x, c#x, d#x, a#x, b#x, c#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
       +- SubqueryAlias grouping
-         +- View (`grouping`, [a#x,b#x,c#x,d#x])
+         +- View (`grouping`, [a#x, b#x, c#x, d#x])
             +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping
@@ -251,7 +251,7 @@ Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [CASE WHEN isnull(a#x) THEN cou
 +- Expand [[a#x, b#x, c#x, d#x, a#x, null, null, 3], [a#x, b#x, c#x, d#x, null, b#x, null, 5], [a#x, b#x, c#x, d#x, null, null, c#x, 6]], [a#x, b#x, c#x, d#x, a#x, b#x, c#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
       +- SubqueryAlias grouping
-         +- View (`grouping`, [a#x,b#x,c#x,d#x])
+         +- View (`grouping`, [a#x, b#x, c#x, d#x])
             +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
                +- Project [a#x, b#x, c#x, d#x]
                   +- SubqueryAlias grouping

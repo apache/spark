@@ -181,7 +181,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[AnalysisException] {
             sql("TRUNCATE TABLE v0")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`spark_catalog`.`default`.`v0`",
             "operation" -> "TRUNCATE TABLE"),
@@ -198,7 +198,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[AnalysisException] {
             sql("TRUNCATE TABLE v1")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`v1`",
             "operation" -> "TRUNCATE TABLE"),
@@ -206,14 +206,14 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         )
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"TRUNCATE TABLE $v2")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`global_temp`.`v2`",
             "operation" -> "TRUNCATE TABLE"),
@@ -245,7 +245,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         checkCachedRelation("v1", Seq(Row(0, 0, 0)))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
         sql(s"INSERT INTO $t PARTITION (width = 10, length = 10) SELECT 10")
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")

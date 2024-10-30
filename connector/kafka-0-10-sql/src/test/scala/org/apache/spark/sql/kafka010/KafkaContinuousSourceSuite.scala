@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.clients.producer.ProducerRecord
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.datasources.v2.ContinuousScanExec
@@ -27,6 +28,8 @@ import org.apache.spark.sql.streaming.Trigger
 // Run tests in KafkaSourceSuiteBase in continuous execution mode.
 class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest {
   import testImplicits._
+
+  override val streamingTimeout = 90.seconds
 
   test("read Kafka transactional messages: read_committed") {
     val table = "kafka_continuous_source_test"

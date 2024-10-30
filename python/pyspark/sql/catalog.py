@@ -19,6 +19,7 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
+from pyspark.errors import PySparkTypeError
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
@@ -26,7 +27,7 @@ from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
-    from pyspark.sql.types import DataType
+    from pyspark.sql._typing import DataTypeOrString
 
 
 class CatalogMetadata(NamedTuple):
@@ -64,6 +65,7 @@ class Column(NamedTuple):
     nullable: bool
     isPartition: bool
     isBucket: bool
+    isCluster: bool
 
 
 class Function(NamedTuple):
@@ -662,6 +664,7 @@ class Catalog:
                     nullable=jcolumn.nullable(),
                     isPartition=jcolumn.isPartition(),
                     isBucket=jcolumn.isBucket(),
+                    isCluster=jcolumn.isCluster(),
                 )
             )
         return columns
@@ -756,7 +759,7 @@ class Catalog:
         source: Optional[str] = None,
         schema: Optional[StructType] = None,
         **options: str,
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the external table.
@@ -788,7 +791,7 @@ class Catalog:
         schema: Optional[StructType] = None,
         description: Optional[str] = None,
         **options: str,
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """Creates a table based on the dataset in a data source.
 
         .. versionadded:: 2.2.0
@@ -835,7 +838,7 @@ class Catalog:
         Creating an external table
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="createTable") as d:
         ...     _ = spark.catalog.createTable(
         ...         "tbl2", schema=spark.range(1).schema, path=d, source='parquet')
         >>> _ = spark.sql("DROP TABLE tbl2")
@@ -851,7 +854,13 @@ class Catalog:
             df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
-                raise TypeError("schema should be StructType")
+                raise PySparkTypeError(
+                    errorClass="NOT_STRUCT",
+                    messageParameters={
+                        "arg_name": "schema",
+                        "arg_type": type(schema).__name__,
+                    },
+                )
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
             df = self._jcatalog.createTable(tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession)
@@ -933,7 +942,7 @@ class Catalog:
         return self._jcatalog.dropGlobalTempView(viewName)
 
     def registerFunction(
-        self, name: str, f: Callable[..., Any], returnType: Optional["DataType"] = None
+        self, name: str, f: Callable[..., Any], returnType: Optional["DataTypeOrString"] = None
     ) -> "UserDefinedFunctionLike":
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
@@ -1112,7 +1121,7 @@ class Catalog:
         The example below caches a table, and then removes the data.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="refreshTable") as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         ...     _ = spark.sql(
         ...         "CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
@@ -1163,7 +1172,7 @@ class Catalog:
         the partitioned table. After that, it recovers the partitions.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="recoverPartitions") as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         ...     spark.range(1).selectExpr(
         ...         "id as key", "id as value").write.partitionBy("key").mode("overwrite").save(d)
@@ -1202,7 +1211,7 @@ class Catalog:
         The example below caches a table, and then removes the data.
 
         >>> import tempfile
-        >>> with tempfile.TemporaryDirectory() as d:
+        >>> with tempfile.TemporaryDirectory(prefix="refreshByPath") as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         ...     _ = spark.sql(
         ...         "CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
@@ -1229,14 +1238,6 @@ class Catalog:
         >>> _ = spark.sql("DROP TABLE tbl1")
         """
         self._jcatalog.refreshByPath(path)
-
-    def _reset(self) -> None:
-        """(Internal use only) Drop all existing databases (except "default"), tables,
-        partitions and functions, and set the current database to "default".
-
-        This is mainly used for tests.
-        """
-        self._jsparkSession.sessionState().catalog().reset()
 
 
 def _test() -> None:

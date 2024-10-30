@@ -27,6 +27,7 @@ import io.fabric8.kubernetes.api.model._
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Mounts the Hadoop configuration - either a pre-defined config map, or a local configuration
@@ -47,7 +48,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
   private lazy val confFiles: Seq[File] = {
     val dir = new File(confDir.get)
     if (dir.isDirectory) {
-      dir.listFiles.filter(_.isFile).toSeq
+      dir.listFiles.filter(_.isFile).toImmutableArraySeq
     } else {
       Nil
     }
@@ -115,7 +116,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (confDir.isDefined) {
       val fileMap = confFiles.map { file =>
-        (file.getName(), Files.toString(file, StandardCharsets.UTF_8))
+        (file.getName(), Files.asCharSource(file, StandardCharsets.UTF_8).read())
       }.toMap.asJava
 
       Seq(new ConfigMapBuilder()

@@ -2,58 +2,58 @@
 UDF with mixed input types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 long/nullable int/string to string:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to string wholestage off             67             73           8          1.5         670.3       1.0X
-long/nullable int/string to string wholestage on              56             63           7          1.8         559.5       1.2X
+long/nullable int/string to string wholestage off            129            165          50          0.8        1291.3       1.0X
+long/nullable int/string to string wholestage on              64             74           6          1.6         638.6       2.0X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 long/nullable int/string to option:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to option wholestage off             38             38           0          2.6         383.9       1.0X
-long/nullable int/string to option wholestage on              37             40           5          2.7         373.3       1.0X
+long/nullable int/string to option wholestage off             47             66          28          2.2         465.1       1.0X
+long/nullable int/string to option wholestage on              34             39           6          2.9         343.2       1.4X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 long/nullable int/string to primitive:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------
-long/nullable int/string to primitive wholestage off             29             30           0          3.4         293.8       1.0X
-long/nullable int/string to primitive wholestage on              31             34           5          3.2         312.3       0.9X
+long/nullable int/string to primitive wholestage off             30             31           1          3.3         299.6       1.0X
+long/nullable int/string to primitive wholestage on              28             29           2          3.6         280.4       1.1X
 
 
 ================================================================================================
 UDF with primitive types
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 long/nullable int to string:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-long/nullable int to string wholestage off             33             34           2          3.0         331.8       1.0X
-long/nullable int to string wholestage on              33             35           2          3.0         333.5       1.0X
+long/nullable int to string wholestage off             30             31           2          3.4         297.4       1.0X
+long/nullable int to string wholestage on              28             35           5          3.5         283.9       1.0X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 long/nullable int to option:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-long/nullable int to option wholestage off             23             23           0          4.4         228.1       1.0X
-long/nullable int to option wholestage on              23             24           1          4.3         232.0       1.0X
+long/nullable int to option wholestage off             22             26           6          4.6         219.3       1.0X
+long/nullable int to option wholestage on              21             23           1          4.7         214.0       1.0X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 long/nullable int to primitive:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-long/nullable int to primitive wholestage off             19             20           3          5.4         185.5       1.0X
-long/nullable int to primitive wholestage on              19             24          10          5.2         191.1       1.0X
+long/nullable int to primitive wholestage off             18             19           1          5.6         179.0       1.0X
+long/nullable int to primitive wholestage on              18             19           1          5.6         179.7       1.0X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 UDF identity overhead:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Baseline                                             12             13           0          8.4         119.2       1.0X
-With identity UDF                                    16             17           1          6.1         163.9       0.7X
+Baseline                                             13             19           8          7.9         125.8       1.0X
+With identity UDF                                    16             18           2          6.2         160.4       0.8X
 
 

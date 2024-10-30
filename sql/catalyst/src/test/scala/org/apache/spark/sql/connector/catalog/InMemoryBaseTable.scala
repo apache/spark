@@ -194,6 +194,10 @@ abstract class InMemoryBaseTable(
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }
+      case ClusterByTransform(columnNames) =>
+        columnNames.map { colName =>
+          extractor(colName.fieldNames, cleanedSchema, row)._1
+        }
     }.toImmutableArraySeq
   }
 
@@ -605,7 +609,7 @@ object InMemoryBaseTable {
 }
 
 class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
-    with InputPartition with HasPartitionKey with Serializable {
+    with InputPartition with HasPartitionKey with HasPartitionStatistics with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
   val deletes = new mutable.ArrayBuffer[Int]()
 
@@ -617,6 +621,9 @@ class BufferedRows(val key: Seq[Any] = Seq.empty) extends WriterCommitMessage
   def keyString(): String = key.toArray.mkString("/")
 
   override def partitionKey(): InternalRow = PartitionInternalRow(key.toArray)
+  override def sizeInBytes(): OptionalLong = OptionalLong.of(100L)
+  override def numRows(): OptionalLong = OptionalLong.of(rows.size)
+  override def filesCount(): OptionalLong = OptionalLong.of(100L)
 
   def clear(): Unit = rows.clear()
 }

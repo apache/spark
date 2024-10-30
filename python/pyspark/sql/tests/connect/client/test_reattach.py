@@ -18,6 +18,7 @@
 import os
 import unittest
 
+from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -25,6 +26,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import eventually
 
 
+@unittest.skipIf(is_remote_only(), "Requires JVM access")
 class SparkConnectReattachTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSparkTestUtils):
     @classmethod
     def setUpClass(cls):
@@ -84,10 +86,10 @@ class SparkConnectReattachTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOn
         # query1 and query2 could get either an:
         # OPERATION_CANCELED if it happens fast - when closing the session interrupted the queries,
         # and that error got pushed to the client buffers before the client got disconnected.
-        # OPERATION_ABANDONED if it happens slow - when closing the session interrupted the client
-        # RPCs before it pushed out the error above. The client would then get an
+        # INVALID_HANDLE.SESSION_CLOSED if it happens slow - when closing the session interrupted
+        # the client RPCs before it pushed out the error above. The client would then get an
         # INVALID_CURSOR.DISCONNECTED, which it will retry with a ReattachExecute, and then get an
-        # INVALID_HANDLE.OPERATION_ABANDONED.
+        # INVALID_HANDLE.SESSION_CLOSED.
 
         def check_error(q):
             try:
@@ -97,14 +99,10 @@ class SparkConnectReattachTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOn
 
         e = check_error(query1)
         self.assertIsNotNone(e, "An exception has to be thrown")
-        self.assertTrue(
-            "OPERATION_CANCELED" in str(e) or "INVALID_HANDLE.OPERATION_ABANDONED" in str(e)
-        )
+        self.assertTrue("OPERATION_CANCELED" in str(e) or "INVALID_HANDLE.SESSION_CLOSED" in str(e))
         e = check_error(query2)
         self.assertIsNotNone(e, "An exception has to be thrown")
-        self.assertTrue(
-            "OPERATION_CANCELED" in str(e) or "INVALID_HANDLE.OPERATION_ABANDONED" in str(e)
-        )
+        self.assertTrue("OPERATION_CANCELED" in str(e) or "INVALID_HANDLE.SESSION_CLOSED" in str(e))
 
         # query3 has not been submitted before, so it should now fail with SESSION_CLOSED
         e = check_error(query3)

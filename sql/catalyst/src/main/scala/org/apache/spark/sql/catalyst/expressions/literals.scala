@@ -32,7 +32,7 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffse
 import java.util
 import java.util.Objects
 
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 import scala.math.{BigDecimal, BigInt}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
@@ -42,6 +42,7 @@ import org.json4s.JsonAST._
 
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LITERAL, NULL_LITERAL, TRUE_OR_FALSE_LITERAL}
 import org.apache.spark.sql.catalyst.types._
@@ -53,7 +54,6 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.collection.ImmutableBitSet
@@ -91,6 +91,7 @@ object Literal {
     case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)
     case a: mutable.ArraySeq[_] => apply(a.array)
+    case a: immutable.ArraySeq[_] => apply(a.unsafeArray)
     case a: Array[_] =>
       val elementType = componentTypeToDataType(a.getClass.getComponentType())
       val dataType = ArrayType(elementType)
@@ -195,15 +196,17 @@ object Literal {
     case TimestampNTZType => create(0L, TimestampNTZType)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
-    case StringType => Literal("")
+    case st: StringType => Literal(UTF8String.fromString(""), st)
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
-      create(InternalRow.fromSeq(
-        struct.fields.map(f => default(f.dataType).value).toImmutableArraySeq), struct)
+      create(new GenericInternalRow(
+        struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
+    case VariantType =>
+      create(VariantExpressionEvalUtils.castToVariant(0, IntegerType), VariantType)
     case other =>
       throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
   }
@@ -236,13 +239,15 @@ object Literal {
           }
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
-        case PhysicalStringType => v.isInstanceOf[UTF8String]
+        case _: PhysicalStringType => v.isInstanceOf[UTF8String]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {
             val row = v.asInstanceOf[InternalRow]
             st.fields.map(_.dataType).zipWithIndex.forall {
-              case (fieldDataType, i) => doValidate(row.get(i, fieldDataType), fieldDataType)
+              case (fieldDataType, i) =>
+                // Do not need to validate null values.
+                row.isNullAt(i) || doValidate(row.get(i, fieldDataType), fieldDataType)
             }
           }
         case _ => false
@@ -318,7 +323,7 @@ object LongLiteral {
  */
 object StringLiteral {
   def unapply(a: Any): Option[String] = a match {
-    case Literal(s: UTF8String, StringType) => Some(s.toString)
+    case Literal(s: UTF8String, _: StringType) => Some(s.toString)
     case _ => None
   }
 }
@@ -436,47 +441,53 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = CodeGenerator.javaType(dataType)
-    if (value == null) {
-      ExprCode.forNullValue(dataType)
-    } else {
-      def toExprCode(code: String): ExprCode = {
-        ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
-      }
-      dataType match {
-        case BooleanType | IntegerType | DateType | _: YearMonthIntervalType =>
-          toExprCode(value.toString)
-        case FloatType =>
-          value.asInstanceOf[Float] match {
-            case v if v.isNaN =>
-              toExprCode("Float.NaN")
-            case Float.PositiveInfinity =>
-              toExprCode("Float.POSITIVE_INFINITY")
-            case Float.NegativeInfinity =>
-              toExprCode("Float.NEGATIVE_INFINITY")
-            case _ =>
-              toExprCode(s"${value}F")
-          }
-        case DoubleType =>
-          value.asInstanceOf[Double] match {
-            case v if v.isNaN =>
-              toExprCode("Double.NaN")
-            case Double.PositiveInfinity =>
-              toExprCode("Double.POSITIVE_INFINITY")
-            case Double.NegativeInfinity =>
-              toExprCode("Double.NEGATIVE_INFINITY")
-            case _ =>
-              toExprCode(s"${value}D")
-          }
-        case ByteType | ShortType =>
-          ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
-          toExprCode(s"${value}L")
-        case _ =>
-          val constRef = ctx.addReferenceObj("literal", value, javaType)
-          ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
+    def gen(ctx: CodegenContext, ev: ExprCode, dataType: DataType): ExprCode = {
+      val javaType = CodeGenerator.javaType(dataType)
+      if (value == null) {
+        ExprCode.forNullValue(dataType)
+      } else {
+        def toExprCode(code: String): ExprCode = {
+          ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
+        }
+
+        dataType match {
+          case BooleanType | IntegerType | DateType | _: YearMonthIntervalType =>
+            toExprCode(value.toString)
+          case FloatType =>
+            value.asInstanceOf[Float] match {
+              case v if v.isNaN =>
+                toExprCode("Float.NaN")
+              case Float.PositiveInfinity =>
+                toExprCode("Float.POSITIVE_INFINITY")
+              case Float.NegativeInfinity =>
+                toExprCode("Float.NEGATIVE_INFINITY")
+              case _ =>
+                toExprCode(s"${value}F")
+            }
+          case DoubleType =>
+            value.asInstanceOf[Double] match {
+              case v if v.isNaN =>
+                toExprCode("Double.NaN")
+              case Double.PositiveInfinity =>
+                toExprCode("Double.POSITIVE_INFINITY")
+              case Double.NegativeInfinity =>
+                toExprCode("Double.NEGATIVE_INFINITY")
+              case _ =>
+                toExprCode(s"${value}D")
+            }
+          case ByteType | ShortType =>
+            ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
+          case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
+            toExprCode(s"${value}L")
+          case udt: UserDefinedType[_] =>
+            gen(ctx, ev, udt.sqlType)
+          case _ =>
+            val constRef = ctx.addReferenceObj("literal", value, javaType)
+            ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
+        }
       }
     }
+    gen(ctx, ev, dataType)
   }
 
   override def sql: String = (value, dataType) match {
@@ -485,6 +496,10 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: UTF8String, StringType) =>
       // Escapes all backslashes and single quotes.
       "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    case (v: UTF8String, st: StringType) =>
+      // Escapes all backslashes and single quotes.
+      "'" + v.toString.replace("\\", "\\\\").replace("'", "\\'") +
+        "'" + st.typeName.substring(6)
     case (v: Byte, ByteType) => s"${v}Y"
     case (v: Short, ShortType) => s"${v}S"
     case (v: Long, LongType) => s"${v}L"
@@ -543,6 +558,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           s"${Literal(kv._1, mapType.keyType).sql}, ${Literal(kv._2, mapType.valueType).sql}"
         }
       s"MAP(${keysAndValues.mkString(", ")})"
+    case (v: VariantVal, variantType: VariantType) => s"PARSE_JSON('${v.toJson(timeZoneId)}')"
     case _ => value.toString
   }
 }

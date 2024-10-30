@@ -27,7 +27,8 @@ import scala.jdk.CollectionConverters._
 import org.apache.kafka.clients.producer.KafkaProducer
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PRODUCER_ID
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
 import org.apache.spark.sql.kafka010.{PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, PRODUCER_CACHE_TIMEOUT}
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, ThreadUtils, Utils}
@@ -96,7 +97,8 @@ private[producer] class InternalKafkaProducerPool(
         case Some(entry) if entry.producer.id == producer.id =>
           entry.handleReturned(clock.nanoTime())
         case _ =>
-          logWarning(s"Released producer ${producer.id} is not a member of the cache. Closing.")
+          logWarning(log"Released producer ${MDC(PRODUCER_ID, producer.id)} is not " +
+            log"a member of the cache. Closing.")
           producer.close()
       }
     }

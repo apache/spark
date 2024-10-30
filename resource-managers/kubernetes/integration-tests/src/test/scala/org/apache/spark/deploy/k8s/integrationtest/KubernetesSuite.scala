@@ -45,8 +45,8 @@ import org.apache.spark.internal.config._
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
-  with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite with Logging
-  with Eventually with Matchers {
+  with VolumeSuite with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite
+  with Logging with Eventually with Matchers {
 
 
   import KubernetesSuite._
@@ -129,7 +129,7 @@ class KubernetesSuite extends SparkFunSuite
         val tagFile = new File(path)
         require(tagFile.isFile,
           s"No file found for image tag at ${tagFile.getAbsolutePath}.")
-        Files.toString(tagFile, Charsets.UTF_8).trim
+        Files.asCharSource(tagFile, Charsets.UTF_8).read().trim
       }
       .orElse(sys.props.get(CONFIG_KEY_IMAGE_TAG))
       .getOrElse {
@@ -589,7 +589,8 @@ class KubernetesSuite extends SparkFunSuite
     assert(pod.getMetadata.getLabels.get("label2") === "label2-value")
     assert(pod.getMetadata.getAnnotations.get("annotation1") === "annotation1-value")
     assert(pod.getMetadata.getAnnotations.get("annotation2") === "annotation2-value")
-    val appId = pod.getMetadata.getAnnotations.get("yunikorn.apache.org/app-id")
+    val appIdLabel = pod.getMetadata.getLabels.get("customAppIdLabelKey")
+    val appIdAnnotation = pod.getMetadata.getAnnotations.get("customAppIdAnnotation")
 
     val container = pod.getSpec.getContainers.get(0)
     val envVars = container
@@ -601,7 +602,8 @@ class KubernetesSuite extends SparkFunSuite
       .toMap
     assert(envVars("ENV1") === "VALUE1")
     assert(envVars("ENV2") === "VALUE2")
-    assert(appId === envVars(ENV_APPLICATION_ID))
+    assert(appIdLabel === envVars(ENV_APPLICATION_ID))
+    assert(appIdAnnotation === envVars(ENV_APPLICATION_ID))
   }
 
   private def deleteDriverPod(): Unit = {
@@ -642,6 +644,7 @@ class KubernetesSuite extends SparkFunSuite
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
   val localTestTag = Tag("local")
+  val pvTestTag = Tag("pv")
   val schedulingTestTag = Tag("schedule")
   val decomTestTag = Tag("decom")
   val rTestTag = Tag("r")

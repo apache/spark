@@ -25,6 +25,8 @@ import pandas
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 import numpy as np
+
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -91,12 +93,12 @@ class TypeHintTestsMixin:
         self.assertEqual(inferred.dtype, np.float64)
         self.assertEqual(inferred.spark_type, DoubleType())
 
-        def func() -> "pd.DataFrame[np.float_, str]":
+        def func() -> "pd.DataFrame[np.float64, str]":
             pass
 
         expected = StructType([StructField("c0", DoubleType()), StructField("c1", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.unicode_])
+        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
         self.assertEqual(inferred.spark_type, expected)
 
         def func() -> "pandas.DataFrame[float]":
@@ -119,10 +121,10 @@ class TypeHintTestsMixin:
 
         expected = StructType([StructField("c0", DoubleType()), StructField("c1", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.unicode_])
+        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
         self.assertEqual(inferred.spark_type, expected)
 
-        def func() -> pd.DataFrame[np.float_]:
+        def func() -> pd.DataFrame[np.float64]:
             pass
 
         expected = StructType([StructField("c0", DoubleType())])
@@ -165,12 +167,12 @@ class TypeHintTestsMixin:
         assert not ps._series_has_class_getitem
 
     def test_infer_schema_with_names_pandas_instances(self):
-        def func() -> 'pd.DataFrame["a" : np.float_, "b":str]':  # noqa: F405
+        def func() -> 'pd.DataFrame["a" : np.float64, "b":str]':  # noqa: F405
             pass
 
         expected = StructType([StructField("a", DoubleType()), StructField("b", StringType())])
         inferred = infer_return_type(func)
-        self.assertEqual(inferred.dtypes, [np.float64, np.unicode_])
+        self.assertEqual(inferred.dtypes, [np.float64, np.str_])
         self.assertEqual(inferred.spark_type, expected)
 
         def func() -> "pd.DataFrame['a': float, 'b': int]":  # noqa: F405
@@ -215,7 +217,7 @@ class TypeHintTestsMixin:
 
     def test_infer_schema_with_names_pandas_instances_negative(self):
         def try_infer_return_type():
-            def f() -> 'pd.DataFrame["a" : np.float_ : 1, "b":str:2]':  # noqa: F405
+            def f() -> 'pd.DataFrame["a" : np.float64 : 1, "b":str:2]':  # noqa: F405
                 pass
 
             infer_return_type(f)
@@ -281,7 +283,7 @@ class TypeHintTestsMixin:
         self.assertRaisesRegex(TypeError, "not understood", try_infer_return_type)
 
         def try_infer_return_type():
-            def f() -> 'ps.DataFrame["a" : np.float_ : 1, "b":str:2]':  # noqa: F405
+            def f() -> 'ps.DataFrame["a" : np.float64 : 1, "b":str:2]':  # noqa: F405
                 pass
 
             infer_return_type(f)
@@ -312,7 +314,6 @@ class TypeHintTestsMixin:
             # binary
             np.character: (np.character, BinaryType()),
             np.bytes_: (np.bytes_, BinaryType()),
-            np.string_: (np.bytes_, BinaryType()),
             bytes: (np.bytes_, BinaryType()),
             # integer
             np.int8: (np.int8, ByteType()),
@@ -326,8 +327,8 @@ class TypeHintTestsMixin:
             np.float64: (np.float64, DoubleType()),
             float: (np.float64, DoubleType()),
             # string
-            np.unicode_: (np.unicode_, StringType()),
-            str: (np.unicode_, StringType()),
+            np.str_: (np.str_, StringType()),
+            str: (np.str_, StringType()),
             # bool
             bool: (np.bool_, BooleanType()),
             # datetime
@@ -360,8 +361,8 @@ class TypeHintTestsMixin:
                 (np.dtype("object"), ArrayType(spark_type)),
             )
 
-            # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-            if sys.version_info >= (3, 8):
+            # For NumPy typing, NumPy version should be 1.21+
+            if LooseVersion(np.__version__) >= LooseVersion("1.21"):
                 import numpy.typing as ntp
 
                 self.assertEqual(

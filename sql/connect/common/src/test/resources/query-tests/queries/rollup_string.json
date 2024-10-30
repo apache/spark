@@ -1,0 +1,42 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "aggregate": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "groupType": "GROUP_TYPE_ROLLUP",
+    "groupingExpressions": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "a",
+        "planId": "0"
+      }
+    }, {
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "b",
+        "planId": "0"
+      }
+    }],
+    "aggregateExpressions": [{
+      "alias": {
+        "expr": {
+          "unresolvedFunction": {
+            "functionName": "count",
+            "arguments": [{
+              "literal": {
+                "integer": 1
+              }
+            }]
+          }
+        },
+        "name": ["count"]
+      }
+    }]
+  }
+}

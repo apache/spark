@@ -154,12 +154,12 @@ USE SCHEMA `not_exist`
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 {
   "errorClass" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42704",
   "messageParameters" : {
-    "schemaName" : "`not_exist`"
+    "schemaName" : "`spark_catalog`.`not_exist`"
   }
 }
 

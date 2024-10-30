@@ -24,6 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.types._
 
 /** A static class for testing purpose. */
@@ -102,7 +103,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       exception = intercept[AnalysisException] {
         CallMethodViaReflection(Seq.empty).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
@@ -113,7 +114,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       exception = intercept[AnalysisException] {
         CallMethodViaReflection(Seq(Literal(staticClassName))).checkInputDataTypes()
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`reflect`",
         "expectedNum" -> "> 1",
@@ -140,7 +141,7 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "3",
+          "paramIndex" -> ordinalNumber(2),
           "requiredType" -> toSQLType(
             TypeCollection(BooleanType, ByteType, ShortType,
               IntegerType, LongType, FloatType, DoubleType, StringType)),

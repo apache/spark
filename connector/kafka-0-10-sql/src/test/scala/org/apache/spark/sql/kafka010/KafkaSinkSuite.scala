@@ -557,7 +557,7 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
 
   test("batch - unsupported save modes") {
     testUnsupportedSaveModes((mode) =>
-      Seq(s"cannot be written with ${mode.name} mode", "does not support truncate"))
+      Seq(s"cannot be written in the \"${mode.name}\" mode", "does not support truncate"))
   }
 
   test("generic - write big data with small producer buffer") {

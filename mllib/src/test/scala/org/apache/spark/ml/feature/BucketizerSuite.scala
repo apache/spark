@@ -419,6 +419,34 @@ class BucketizerSuite extends MLTest with DefaultReadWriteTest {
       ("inputCols", Array("feature1", "feature2")),
       ("outputCols", Array("result1", "result2")))
   }
+
+  test("Bucketizer nested input column") {
+    // Check a set of valid feature values.
+    val splits = Array(-0.5, 0.0, 0.5)
+    val validData = Array(-0.5, -0.3, 0.0, 0.2)
+    val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0)
+    val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
+      .select(struct(col("feature")).as("nest"), col("expected"))
+
+    val bucketizer1: Bucketizer = new Bucketizer()
+      .setInputCol("nest.feature")
+      .setOutputCol("result")
+      .setSplits(splits)
+
+    val bucketizer2: Bucketizer = new Bucketizer()
+      .setInputCols(Array("nest.feature"))
+      .setOutputCols(Array("result"))
+      .setSplitsArray(Array(splits))
+
+    for (bucketizer <- Seq(bucketizer1, bucketizer2)) {
+      val resultDF = bucketizer.transform(dataFrame).select("result", "expected")
+      resultDF.collect().foreach {
+        case Row(x: Double, y: Double) =>
+          assert(x === y,
+            s"The feature value is not correct after bucketing.  Expected $y but found $x")
+      }
+    }
+  }
 }
 
 private object BucketizerSuite extends SparkFunSuite {

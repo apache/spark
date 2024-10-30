@@ -1,0 +1,20 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cs:string collate UTF8_LCASE\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "s"
+      }
+    }]
+  }
+}

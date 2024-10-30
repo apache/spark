@@ -71,7 +71,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite {
     partitionSizesInMergedFile = null
     conf = new SparkConf()
       .set("spark.app.id", "example.spark.app")
-      .set("spark.shuffle.unsafe.file.output.buffer", "16k")
+      .set("spark.shuffle.localDisk.file.output.buffer", "16k")
     when(blockResolver.getDataFile(anyInt, anyLong)).thenReturn(mergedOutputFile)
     when(blockResolver.createTempFile(any(classOf[File])))
       .thenAnswer { invocationOnMock =>

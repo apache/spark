@@ -73,9 +73,7 @@ Project [a#x, b#x]
 -- !query
 select a from values ("one", current_timestamp) as data(a, b)
 -- !query analysis
-Project [a#x]
-+- SubqueryAlias data
-   +- LocalRelation [a#x, b#x]
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -117,7 +115,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from values ("one", 2.0), ("two") as data(a, b)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
   "sqlState" : "42000",
@@ -159,7 +157,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select * from values ("one"), ("two") as data(a, b)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_INLINE_TABLE.NUM_COLUMNS_MISMATCH",
   "sqlState" : "42000",
@@ -246,3 +244,15 @@ select * from values (10 + try_divide(5, 0))
 -- !query analysis
 Project [col1#x]
 +- LocalRelation [col1#x]
+
+
+-- !query
+select count(distinct ct) from values now(), now(), now() as data(ct)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

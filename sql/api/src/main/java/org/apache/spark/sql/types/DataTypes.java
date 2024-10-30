@@ -100,6 +100,11 @@ public class DataTypes {
   public static final DataType NullType = NullType$.MODULE$;
 
   /**
+   * Gets the VariantType object.
+   */
+  public static final DataType VariantType = VariantType$.MODULE$;
+
+  /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
    * The field of {@code containsNull} is set to {@code true}.
    */
@@ -253,5 +258,23 @@ public class DataTypes {
     }
 
     return StructType$.MODULE$.apply(fields);
+  }
+
+  /**
+   * Creates a CharType with the given length.
+   *
+   * @since 4.0.0
+   */
+  public static CharType createCharType(int length) {
+    return new CharType(length);
+  }
+
+  /**
+   * Creates a VarcharType with the given length.
+   *
+   * @since 4.0.0
+   */
+  public static VarcharType createVarcharType(int length) {
+    return new VarcharType(length);
   }
 }

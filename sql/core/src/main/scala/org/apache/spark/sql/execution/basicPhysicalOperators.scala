@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -866,15 +866,15 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.doExecute should never be called")
+    throw SparkException.internalError("SubqueryExec.doExecute should never be called")
   }
 
   override def executeTake(n: Int): Array[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.executeTake should never be called")
+    throw SparkException.internalError("SubqueryExec.executeTake should never be called")
   }
 
   override def executeTail(n: Int): Array[InternalRow] = {
-    throw new IllegalStateException("SubqueryExec.executeTail should never be called")
+    throw SparkException.internalError("SubqueryExec.executeTail should never be called")
   }
 
   override def stringArgs: Iterator[Any] = Iterator(name, child) ++ Iterator(s"[id=#$id]")

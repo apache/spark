@@ -67,8 +67,8 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
 
   @Override
   public ByteBuffer read(WriteAheadLogRecordHandle handle) {
-    if (handle instanceof JavaWriteAheadLogSuiteHandle) {
-      int reqdIndex = ((JavaWriteAheadLogSuiteHandle) handle).index;
+    if (handle instanceof JavaWriteAheadLogSuiteHandle javaWriteAheadLogSuiteHandle) {
+      int reqdIndex = javaWriteAheadLogSuiteHandle.index;
       for (Record record: records) {
         if (record.index == reqdIndex) {
           return record.buffer;

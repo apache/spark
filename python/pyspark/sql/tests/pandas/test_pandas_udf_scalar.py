@@ -25,7 +25,7 @@ from decimal import Decimal
 from typing import cast
 
 from pyspark import TaskContext
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import (
@@ -47,6 +47,8 @@ from pyspark.sql.types import (
     DateType,
     BinaryType,
     YearMonthIntervalType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
@@ -58,7 +60,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest, assertDataFrameEqual
+from pyspark.testing.utils import assertDataFrameEqual
 
 if have_pandas:
     import pandas as pd
@@ -544,7 +546,7 @@ class ScalarPandasUDFTestsMixin:
                 )
 
     def test_vectorized_udf_nested_struct(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_nested_struct()
 
     def check_vectorized_udf_nested_struct(self):
@@ -631,7 +633,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected.collect(), res.collect())
 
     def test_vectorized_udf_exception(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_exception()
 
     def check_vectorized_udf_exception(self):
@@ -648,7 +650,7 @@ class ScalarPandasUDFTestsMixin:
                 df.select(raise_exception(col("id"))).collect()
 
     def test_vectorized_udf_invalid_length(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_invalid_length()
 
     def check_vectorized_udf_invalid_length(self):
@@ -723,7 +725,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected, actual)
 
     def test_vectorized_udf_wrong_return_type(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_wrong_return_type()
 
     def check_vectorized_udf_wrong_return_type(self):
@@ -735,7 +737,7 @@ class ScalarPandasUDFTestsMixin:
                 pandas_udf(lambda x: x, ArrayType(YearMonthIntervalType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_vectorized_udf_return_scalar()
 
     def check_vectorized_udf_return_scalar(self):
@@ -747,6 +749,49 @@ class ScalarPandasUDFTestsMixin:
         for f in [scalar_f, iter_f]:
             with self.assertRaisesRegex(Exception, "Return.*type.*Series"):
                 df.select(f(col("id"))).collect()
+
+    def test_udf_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        from pyspark.sql.functions import col
+
+        scalar_f = pandas_udf(lambda u: str(u), StringType())
+        iter_f = pandas_udf(
+            lambda it: map(lambda u: str(u), it), StringType(), PandasUDFType.SCALAR_ITER
+        )
+
+        for f in [scalar_f, iter_f]:
+            with self.assertRaises(AnalysisException) as ae:
+                df.select(f(col("v"))).collect()
+
+            self.check_error(
+                exception=ae.exception,
+                errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+                messageParameters={
+                    "sqlExpr": '"<lambda>(v)"',
+                    "dataType": "VARIANT",
+                },
+            )
+
+    def test_udf_with_variant_output(self):
+        # Corresponds to a JSON string of {"a": "b"}.
+        returned_variant = VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))
+        scalar_f = pandas_udf(lambda x: returned_variant, VariantType())
+        iter_f = pandas_udf(
+            lambda it: map(lambda x: returned_variant, it), VariantType(), PandasUDFType.SCALAR_ITER
+        )
+
+        for f in [scalar_f, iter_f]:
+            with self.assertRaises(AnalysisException) as ae:
+                self.spark.range(0, 10).select(f()).collect()
+
+            self.check_error(
+                exception=ae.exception,
+                errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+                messageParameters={
+                    "sqlExpr": '"<lambda>()"',
+                    "dataType": "VARIANT",
+                },
+            )
 
     def test_vectorized_udf_decorator(self):
         df = self.spark.range(10)
@@ -764,15 +809,17 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_empty_partition(self):
-        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
+        df = self.spark.createDataFrame([Row(id=1)]).repartition(2)
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             f = pandas_udf(lambda x: x, LongType(), udf_type)
             res = df.select(f(col("id")))
             self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_struct_with_empty_partition(self):
-        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2)).withColumn(
-            "name", lit("John Doe")
+        df = (
+            self.spark.createDataFrame([Row(id=1)])
+            .repartition(2)
+            .withColumn("name", lit("John Doe"))
         )
 
         @pandas_udf("first string, last string")
@@ -1039,7 +1086,7 @@ class ScalarPandasUDFTestsMixin:
             self.assertTrue(result1["plus_ten(rand)"].equals(result1["rand"] + 10))
 
     def test_nondeterministic_vectorized_udf_in_aggregate(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_nondeterministic_analysis_exception()
 
     def check_nondeterministic_analysis_exception(self):
@@ -1100,7 +1147,7 @@ class ScalarPandasUDFTestsMixin:
             )
 
     def test_scalar_iter_udf_close(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_scalar_iter_udf_close()
 
     def check_scalar_iter_udf_close(self):
@@ -1135,7 +1182,7 @@ class ScalarPandasUDFTestsMixin:
                     assert generator_exit_caught, "Generator exit exception was not caught."
                     open(tmp_file, "a").close()
 
-            with QuietTest(self.sc):
+            with self.quiet():
                 with self.sql_conf(
                     {
                         "spark.sql.execution.arrow.maxRecordsPerBatch": 1,
@@ -1321,8 +1368,9 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(expected_multi, df_multi_2.collect())
 
     def test_mixed_udf_and_sql(self):
-        from pyspark.sql.connect.column import Column as ConnectColumn
+        self._test_mixed_udf_and_sql(Column)
 
+    def _test_mixed_udf_and_sql(self, col_type):
         df = self.spark.range(0, 1).toDF("v")
 
         # Test mixture of UDFs, Pandas UDFs and SQL expression.
@@ -1333,7 +1381,7 @@ class ScalarPandasUDFTestsMixin:
             return x + 1
 
         def f2(x):
-            assert type(x) in (Column, ConnectColumn)
+            assert isinstance(x, col_type)
             return x + 10
 
         @pandas_udf("int")

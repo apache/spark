@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -262,7 +263,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
 
           val evalTypes = validUdfs.map(_.evalType).toSet
           if (evalTypes.size != 1) {
-            throw new IllegalStateException(
+            throw SparkException.internalError(
               "Expected udfs have the same evalType but got different evalTypes: " +
               evalTypes.mkString(","))
           }
@@ -274,7 +275,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
                  | PythonEvalType.SQL_ARROW_BATCHED_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
-              throw new IllegalStateException("Unexpected UDF evalType")
+              throw SparkException.internalError("Unexpected UDF evalType")
           }
 
           attributeMap ++= validUdfs.map(canonicalizeDeterministic).zip(resultAttrs)
@@ -286,7 +287,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] {
       // Other cases are disallowed as they are ambiguous or would require a cartesian
       // product.
       udfs.map(canonicalizeDeterministic).filterNot(attributeMap.contains).foreach { udf =>
-        throw new IllegalStateException(
+        throw SparkException.internalError(
           s"Invalid PythonUDF $udf, requires attributes from more than one child.")
       }
 

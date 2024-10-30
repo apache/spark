@@ -20,12 +20,11 @@ from pyspark.sql.tests.pandas.test_pandas_udf_window import WindowPandasUDFTests
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PandasUDFWindowParityTests(WindowPandasUDFTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-43734): Expression "<lambda>(v)" within a window function doesn't raise a
-    #  AnalysisException
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_invalid_args(self):
-        self.check_invalid_args()
+class PandasUDFWindowParityTests(
+    WindowPandasUDFTestsMixin,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

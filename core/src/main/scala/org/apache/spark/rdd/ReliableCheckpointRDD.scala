@@ -29,7 +29,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -172,7 +173,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
 
     val checkpointDurationMs =
       TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - checkpointStartTimeNs)
-    logInfo(s"Checkpointing took $checkpointDurationMs ms.")
+    logInfo(log"Checkpointing took ${MDC(TOTAL_TIME, checkpointDurationMs)} ms.")
 
     val newRDD = new ReliableCheckpointRDD[T](
       sc, checkpointDirPath.toString, originalRDD.partitioner)
@@ -219,7 +220,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     } (catchBlock = {
       val deleted = fs.delete(tempOutputPath, false)
       if (!deleted) {
-        logInfo(s"Failed to delete tempOutputPath $tempOutputPath.")
+        logInfo(log"Failed to delete tempOutputPath ${MDC(TEMP_OUTPUT_PATH, tempOutputPath)}.")
       }
     }, finallyBlock = {
       serializeStream.close()
@@ -227,14 +228,15 @@ private[spark] object ReliableCheckpointRDD extends Logging {
 
     if (!fs.rename(tempOutputPath, finalOutputPath)) {
       if (!fs.exists(finalOutputPath)) {
-        logInfo(s"Deleting tempOutputPath $tempOutputPath")
+        logInfo(log"Deleting tempOutputPath ${MDC(TEMP_OUTPUT_PATH, tempOutputPath)}")
         fs.delete(tempOutputPath, false)
         throw SparkCoreErrors.checkpointFailedToSaveError(ctx.attemptNumber(), finalOutputPath)
       } else {
         // Some other copy of this task must've finished before us and renamed it
-        logInfo(s"Final output path $finalOutputPath already exists; not overwriting it")
+        logInfo(log"Final output path" +
+          log" ${MDC(FINAL_OUTPUT_PATH, finalOutputPath)} already exists; not overwriting it")
         if (!fs.delete(tempOutputPath, false)) {
-          logWarning(s"Error deleting ${tempOutputPath}")
+          logWarning(log"Error deleting ${MDC(PATH, tempOutputPath)}")
         }
       }
     }
@@ -261,7 +263,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       logDebug(s"Written partitioner to $partitionerFilePath")
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error writing partitioner $partitioner to $checkpointDirPath")
+        logWarning(log"Error writing partitioner ${MDC(PARTITIONER, partitioner)} to " +
+          log"${MDC(PATH, checkpointDirPath)}")
     }
   }
 
@@ -298,8 +301,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         logDebug("No partitioner file", e)
         None
       case NonFatal(e) =>
-        logWarning(s"Error reading partitioner from $checkpointDirPath, " +
-            s"partitioner will not be recovered which may lead to performance loss", e)
+        logWarning(log"Error reading partitioner from ${MDC(PATH, checkpointDirPath)}, " +
+          log"partitioner will not be recovered which may lead to performance loss", e)
         None
     }
   }

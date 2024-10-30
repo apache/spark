@@ -114,7 +114,7 @@ public interface SparkAppHandle {
    *
    * @since 1.6.0
    */
-  public interface Listener {
+  interface Listener {
 
     /**
      * Callback for changes in the handle's state.

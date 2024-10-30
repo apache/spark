@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
@@ -35,7 +36,7 @@ import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, Parquet
 import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
@@ -44,11 +45,11 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.execution.ExplainMode
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.{ExpressionUtils, LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -76,6 +77,7 @@ import org.apache.spark.util.ArrayImplicits._
  * within the test.
  */
 abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
+  import testImplicits.toRichColumn
 
   protected def createParquetFilters(
       schema: MessageType,
@@ -903,6 +905,76 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     assert(parquetFilters.createFilter(sources.LessThan("cdecimal3", decimal)).isDefined)
     assertResult(None) {
       parquetFilters.createFilter(sources.LessThan("cdecimal3", decimal1))
+    }
+  }
+
+  test("don't push down filters that would result in overflows") {
+    val schema = StructType(Seq(
+      StructField("cbyte", ByteType),
+      StructField("cshort", ShortType),
+      StructField("cint", IntegerType)
+    ))
+
+    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+    val parquetFilters = createParquetFilters(parquetSchema)
+
+    for {
+      column <- Seq("cbyte", "cshort", "cint")
+      value <- Seq(JLong.MAX_VALUE, JLong.MIN_VALUE).map(JLong.valueOf)
+    } {
+      val filters = Seq(
+        sources.LessThan(column, value),
+        sources.LessThanOrEqual(column, value),
+        sources.GreaterThan(column, value),
+        sources.GreaterThanOrEqual(column, value),
+        sources.EqualTo(column, value),
+        sources.EqualNullSafe(column, value),
+        sources.Not(sources.EqualTo(column, value)),
+        sources.In(column, Array(value))
+      )
+      for (filter <- filters) {
+        assert(parquetFilters.createFilter(filter).isEmpty,
+          s"Row group filter $filter shouldn't be pushed down.")
+      }
+    }
+  }
+
+  test("don't push down filters when value type doesn't match column type") {
+    val schema = StructType(Seq(
+      StructField("cbyte", ByteType),
+      StructField("cshort", ShortType),
+      StructField("cint", IntegerType),
+      StructField("clong", LongType),
+      StructField("cfloat", FloatType),
+      StructField("cdouble", DoubleType),
+      StructField("cboolean", BooleanType),
+      StructField("cstring", StringType),
+      StructField("cdate", DateType),
+      StructField("ctimestamp", TimestampType),
+      StructField("cbinary", BinaryType),
+      StructField("cdecimal", DecimalType(10, 0))
+    ))
+
+    val parquetSchema = new SparkToParquetSchemaConverter(conf).convert(schema)
+    val parquetFilters = createParquetFilters(parquetSchema)
+
+    val filters = Seq(
+      sources.LessThan("cbyte", String.valueOf("1")),
+      sources.LessThan("cshort", JBigDecimal.valueOf(1)),
+      sources.LessThan("cint", JFloat.valueOf(JFloat.NaN)),
+      sources.LessThan("clong", String.valueOf("1")),
+      sources.LessThan("cfloat", JDouble.valueOf(1.0D)),
+      sources.LessThan("cdouble", JFloat.valueOf(1.0F)),
+      sources.LessThan("cboolean", String.valueOf("true")),
+      sources.LessThan("cstring", Integer.valueOf(1)),
+      sources.LessThan("cdate", Timestamp.valueOf("2018-01-01 00:00:00")),
+      sources.LessThan("ctimestamp", Date.valueOf("2018-01-01")),
+      sources.LessThan("cbinary", Integer.valueOf(1)),
+      sources.LessThan("cdecimal", Integer.valueOf(1234))
+    )
+    for (filter <- filters) {
+      assert(parquetFilters.createFilter(filter).isEmpty,
+        s"Row group filter $filter shouldn't be pushed down.")
     }
   }
 
@@ -1883,10 +1955,12 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
            """.stripMargin)
 
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          val e = intercept[SparkException] {
+          val ex = intercept[SparkException] {
             sql(s"select a from $tableName where b > 0").collect()
           }
-          assert(e.getCause.isInstanceOf[RuntimeException] && e.getCause.getMessage.contains(
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCause.isInstanceOf[SparkRuntimeException])
+          assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))
         }
 
@@ -2137,6 +2211,24 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
+
+  test("SPARK-47120: subquery literal filter pushdown") {
+    withTable("t1", "t2") {
+      sql("create table t1(d date) using parquet")
+      sql("create table t2(d date) using parquet")
+      sql("insert into t1 values date'2021-01-01'")
+      sql("insert into t2 values (null)")
+      Seq("=", ">", ">=", "<", "<=", "!=").foreach { op =>
+        checkAnswer(sql(s"select * from t1 where 1=1 and d $op (select d from t2)"), Seq.empty)
+      }
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+        "org.apache.spark.sql.catalyst.optimizer.NullPropagation") {
+        Seq("=", ">", ">=", "<", "<=", "!=").foreach { op =>
+          checkAnswer(sql(s"select * from t1 where d ${op} null"), Seq.empty)
+        }
+      }
+    }
+  }
 }
 
 @ExtendedSQLTest
@@ -2168,8 +2260,8 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
         SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key -> pushdownDsList) {
         val query = df
-          .select(output.map(e => Column(e)): _*)
-          .where(Column(predicate))
+          .select(output.map(ExpressionUtils.column): _*)
+          .where(ExpressionUtils.column(predicate))
 
         val nestedOrAttributes = predicate.collectFirst {
           case g: GetStructField => g
@@ -2185,7 +2277,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
           case PhysicalOperation(_, filters,
-          LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+            LogicalRelationWithTable(relation: HadoopFsRelation, _)) =>
             maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)
@@ -2247,8 +2339,8 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
       val query = df
-        .select(output.map(e => Column(e)): _*)
-        .where(Column(predicate))
+        .select(output.map(ExpressionUtils.column): _*)
+        .where(ExpressionUtils.column(predicate))
 
       query.queryExecution.optimizedPlan.collectFirst {
         case PhysicalOperation(_, filters,
@@ -2273,8 +2365,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
 
           checker(stripSparkFilter(query), expected)
 
-        case _ =>
-          throw new AnalysisException("Can not match ParquetTable in the query.")
+        case _ => assert(false, "Can not match ParquetTable in the query.")
       }
     }
   }

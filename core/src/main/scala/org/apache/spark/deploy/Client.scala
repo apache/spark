@@ -31,7 +31,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.master.DriverState.DriverState
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
@@ -60,7 +61,7 @@ private class ClientEndpoint(
       t => t match {
         case ie: InterruptedException => // Exit normally
         case e: Throwable =>
-          logError(e.getMessage, e)
+          logError(log"${MDC(ERROR, e.getMessage)}", e)
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
       })
 
@@ -134,7 +135,8 @@ private class ClientEndpoint(
       masterEndpoint.ask[T](message).onComplete {
         case Success(v) => self.send(v)
         case Failure(e) =>
-          logWarning(s"Error sending messages to master $masterEndpoint", e)
+          logWarning(log"Error sending messages to master " +
+            log"${MDC(MASTER_URL, masterEndpoint)}", e)
       }(forwardMessageExecutionContext)
     }
   }
@@ -162,42 +164,43 @@ private class ClientEndpoint(
       // logs again when waitAppCompletion is set to true
       if (!driverStatusReported) {
         driverStatusReported = true
-        logInfo(s"State of $submittedDriverID is ${state.get}")
+        logInfo(log"State of ${MDC(DRIVER_ID, submittedDriverID)}" +
+          log" is ${MDC(DRIVER_STATE, state.get)}")
         // Worker node, if present
         (workerId, workerHostPort, state) match {
           case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
-            logInfo(s"Driver running on $hostPort ($id)")
+            logInfo(log"Driver running on ${MDC(HOST, hostPort)} (${MDC(WORKER_ID, id)})")
           case _ =>
         }
       }
       // Exception, if present
       exception match {
         case Some(e) =>
-          logError(s"Exception from cluster was: $e")
-          e.printStackTrace()
+          logError("Exception from cluster", e)
           System.exit(-1)
         case _ =>
           state.get match {
             case DriverState.FINISHED | DriverState.FAILED |
                  DriverState.ERROR | DriverState.KILLED =>
-              logInfo(s"State of driver $submittedDriverID is ${state.get}, " +
-                s"exiting spark-submit JVM.")
+              logInfo(log"State of driver ${MDC(DRIVER_ID, submittedDriverID)}" +
+                log" is ${MDC(DRIVER_STATE, state.get)}, exiting spark-submit JVM.")
               System.exit(0)
             case _ =>
               if (!waitAppCompletion) {
-                logInfo(s"spark-submit not configured to wait for completion, " +
-                  s"exiting spark-submit JVM.")
+                logInfo("spark-submit not configured to wait for completion, " +
+                  " exiting spark-submit JVM.")
                 System.exit(0)
               } else {
-                logDebug(s"State of driver $submittedDriverID is ${state.get}, " +
-                  s"continue monitoring driver status.")
+                logDebug(log"State of driver ${MDC(DRIVER_ID, submittedDriverID)}" +
+                  log" is ${MDC(DRIVER_STATE, state.get)}, " +
+                  log"continue monitoring driver status.")
               }
           }
       }
     } else if (exception.exists(e => Utils.responseFromBackup(e.getMessage))) {
       logDebug(s"The status response is reported from a backup spark instance. So, ignored.")
     } else {
-        logError(s"ERROR: Cluster master did not recognize $submittedDriverID")
+        logError(log"ERROR: Cluster master did not recognize ${MDC(DRIVER_ID, submittedDriverID)}")
         System.exit(-1)
     }
   }
@@ -226,7 +229,7 @@ private class ClientEndpoint(
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (!lostMasters.contains(remoteAddress)) {
-      logError(s"Error connecting to master $remoteAddress.")
+      logError(log"Error connecting to master ${MDC(HOST_PORT, remoteAddress)}.")
       lostMasters += remoteAddress
       // Note that this heuristic does not account for the fact that a Master can recover within
       // the lifetime of this client. Thus, once a Master is lost it is lost to us forever. This
@@ -240,8 +243,7 @@ private class ClientEndpoint(
 
   override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
     if (!lostMasters.contains(remoteAddress)) {
-      logError(s"Error connecting to master ($remoteAddress).")
-      logError(s"Cause was: $cause")
+      logError(log"Error connecting to master (${MDC(HOST_PORT, remoteAddress)}).", cause)
       lostMasters += remoteAddress
       if (lostMasters.size >= masterEndpoints.size) {
         logError("No master is available, exiting.")
@@ -251,8 +253,7 @@ private class ClientEndpoint(
   }
 
   override def onError(cause: Throwable): Unit = {
-    logError(s"Error processing messages, exiting.")
-    cause.printStackTrace()
+    logError("Error processing messages, exiting.", cause)
     System.exit(-1)
   }
 

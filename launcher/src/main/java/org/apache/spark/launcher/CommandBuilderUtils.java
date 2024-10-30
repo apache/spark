@@ -21,6 +21,9 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Helper methods for command builders.
@@ -30,6 +33,11 @@ class CommandBuilderUtils {
   static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
+  // This should be consistent with org.apache.spark.internal.config.SECRET_REDACTION_PATTERN
+  // We maintain this copy to avoid depending on `core` module.
+  static final String SECRET_REDACTION_PATTERN = "(?i)secret|password|token|access[.]?key";
+  static final Pattern redactPattern = Pattern.compile(SECRET_REDACTION_PATTERN);
+  static final Pattern keyValuePattern = Pattern.compile("-D(.+?)=(.+)");
 
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
@@ -143,59 +151,61 @@ class CommandBuilderUtils {
         escapeNext = false;
       } else if (inOpt) {
         switch (c) {
-        case '\\':
-          if (inSingleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            escapeNext = true;
+          case '\\' -> {
+            if (inSingleQuote) {
+              opt.appendCodePoint(c);
+            } else {
+              escapeNext = true;
+            }
           }
-          break;
-        case '\'':
-          if (inDoubleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            inSingleQuote = !inSingleQuote;
+          case '\'' -> {
+            if (inDoubleQuote) {
+              opt.appendCodePoint(c);
+            } else {
+              inSingleQuote = !inSingleQuote;
+            }
           }
-          break;
-        case '"':
-          if (inSingleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            inDoubleQuote = !inDoubleQuote;
+          case '"' -> {
+            if (inSingleQuote) {
+              opt.appendCodePoint(c);
+            } else {
+              inDoubleQuote = !inDoubleQuote;
+            }
           }
-          break;
-        default:
-          if (!Character.isWhitespace(c) || inSingleQuote || inDoubleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            opts.add(opt.toString());
-            opt.setLength(0);
-            inOpt = false;
-            hasData = false;
+          default -> {
+            if (!Character.isWhitespace(c) || inSingleQuote || inDoubleQuote) {
+              opt.appendCodePoint(c);
+            } else {
+              opts.add(opt.toString());
+              opt.setLength(0);
+              inOpt = false;
+              hasData = false;
+            }
           }
         }
       } else {
         switch (c) {
-        case '\'':
-          inSingleQuote = true;
-          inOpt = true;
-          hasData = true;
-          break;
-        case '"':
-          inDoubleQuote = true;
-          inOpt = true;
-          hasData = true;
-          break;
-        case '\\':
-          escapeNext = true;
-          inOpt = true;
-          hasData = true;
-          break;
-        default:
-          if (!Character.isWhitespace(c)) {
+          case '\'' -> {
+            inSingleQuote = true;
             inOpt = true;
             hasData = true;
-            opt.appendCodePoint(c);
+          }
+          case '"' -> {
+            inDoubleQuote = true;
+            inOpt = true;
+            hasData = true;
+          }
+          case '\\' -> {
+            escapeNext = true;
+            inOpt = true;
+            hasData = true;
+          }
+          default -> {
+            if (!Character.isWhitespace(c)) {
+              inOpt = true;
+              hasData = true;
+              opt.appendCodePoint(c);
+            }
           }
         }
       }
@@ -256,12 +266,8 @@ class CommandBuilderUtils {
     for (int i = 0; i < arg.length(); i++) {
       int cp = arg.codePointAt(i);
       switch (cp) {
-      case '"':
-        quoted.append('"');
-        break;
-
-      default:
-        break;
+        case '"' -> quoted.append('"');
+        default -> {}
       }
       quoted.appendCodePoint(cp);
     }
@@ -328,4 +334,23 @@ class CommandBuilderUtils {
     return libdir.getAbsolutePath();
   }
 
+  /**
+   * Redact a command-line argument's value part which matches `-Dkey=value` pattern.
+   * Note that this should be consistent with `org.apache.spark.util.Utils.redactCommandLineArgs`.
+   */
+  static List<String> redactCommandLineArgs(List<String> args) {
+    return args.stream().map(CommandBuilderUtils::redact).collect(Collectors.toList());
+  }
+
+  /**
+   * Redact a command-line argument's value part which matches `-Dkey=value` pattern.
+   */
+  static String redact(String arg) {
+    Matcher m = keyValuePattern.matcher(arg);
+    if (m.find() && redactPattern.matcher(m.group(1)).find()) {
+      return String.format("-D%s=%s", m.group(1), "*********(redacted)");
+    } else {
+      return arg;
+    }
+  }
 }

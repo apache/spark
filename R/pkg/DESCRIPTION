@@ -21,7 +21,7 @@ Suggests:
     testthat,
     e1071,
     survival,
-    arrow (>= 1.0.0)
+    arrow (>= 10.0.0)
 Collate:
     'schema.R'
     'generics.R'
@@ -57,6 +57,7 @@ Collate:
     'types.R'
     'utils.R'
     'window.R'
+    'zzz.R'
 RoxygenNote: 7.1.2
 VignetteBuilder: knitr
 NeedsCompilation: no

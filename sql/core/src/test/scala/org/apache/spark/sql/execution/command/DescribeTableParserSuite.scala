@@ -78,7 +78,7 @@ class DescribeTableParserSuite extends AnalysisTest {
     val sql = "DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"
     checkError(
       exception = parseException(parsePlan)(sql),
-      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
+      condition = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_PARTITION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,

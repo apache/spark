@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -80,11 +80,8 @@ public class CatalogLoadingSuite {
     SparkException exc = Assertions.assertThrows(CatalogNotFoundException.class,
         () -> Catalogs.load("missing", conf));
 
-    Assertions.assertTrue(
-      exc.getMessage().contains("plugin class not found: spark.sql.catalog.missing is not defined"),
-      "Should complain that implementation is not configured");
-    Assertions.assertTrue(exc.getMessage().contains("missing"),
-      "Should identify the catalog by name");
+    Assertions.assertEquals(exc.getCondition(), "CATALOG_NOT_FOUND");
+    Assertions.assertEquals(exc.getMessageParameters().get("catalogName"), "`missing`");
   }
 
   @Test

@@ -14,6 +14,20 @@ Project [try_add(2147483647, 1) AS try_add(2147483647, 1)#x]
 
 
 -- !query
+SELECT try_add(2147483647, decimal(1))
+-- !query analysis
+Project [try_add(2147483647, cast(1 as decimal(10,0))) AS try_add(2147483647, 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_add(2147483647, "1")
+-- !query analysis
+Project [try_add(2147483647, 1) AS try_add(2147483647, 1)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT try_add(-2147483648, -1)
 -- !query analysis
 Project [try_add(-2147483648, -1) AS try_add(-2147483648, -1)#x]
@@ -141,7 +155,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"INTERVAL '2' YEAR\"",
     "inputType" : "\"INTERVAL YEAR\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
     "sqlExpr" : "\"INTERVAL '2' YEAR + INTERVAL '02' SECOND\""
   },
@@ -212,6 +226,20 @@ Project [try_divide(1, (1.0 / 0.0)) AS try_divide(1, (1.0 / 0.0))#x]
 
 
 -- !query
+SELECT try_divide(1, decimal(0))
+-- !query analysis
+Project [try_divide(1, cast(0 as decimal(10,0))) AS try_divide(1, 0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_divide(1, "0")
+-- !query analysis
+Project [try_divide(1, 0) AS try_divide(1, 0)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query analysis
 Project [try_divide(INTERVAL '2' YEAR, 2) AS try_divide(INTERVAL '2' YEAR, 2)#x]
@@ -262,6 +290,20 @@ Project [try_subtract(1, 1) AS try_subtract(1, 1)#x]
 
 -- !query
 SELECT try_subtract(2147483647, -1)
+-- !query analysis
+Project [try_subtract(2147483647, -1) AS try_subtract(2147483647, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_subtract(2147483647, decimal(-1))
+-- !query analysis
+Project [try_subtract(2147483647, cast(-1 as decimal(10,0))) AS try_subtract(2147483647, -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_subtract(2147483647, "-1")
 -- !query analysis
 Project [try_subtract(2147483647, -1) AS try_subtract(2147483647, -1)#x]
 +- OneRowRelation
@@ -346,6 +388,20 @@ Project [try_multiply(2, 3) AS try_multiply(2, 3)#x]
 
 -- !query
 SELECT try_multiply(2147483647, -2)
+-- !query analysis
+Project [try_multiply(2147483647, -2) AS try_multiply(2147483647, -2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_multiply(2147483647, decimal(-2))
+-- !query analysis
+Project [try_multiply(2147483647, cast(-2 as decimal(10,0))) AS try_multiply(2147483647, -2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_multiply(2147483647, "-2")
 -- !query analysis
 Project [try_multiply(2147483647, -2) AS try_multiply(2147483647, -2)#x]
 +- OneRowRelation

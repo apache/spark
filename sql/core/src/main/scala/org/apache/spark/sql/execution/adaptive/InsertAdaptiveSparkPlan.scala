@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable
 
+import org.apache.spark.internal.LogKeys.{CONFIG, SUB_QUERY}
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -67,8 +69,8 @@ case class InsertAdaptiveSparkPlan(
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
           case SubqueryAdaptiveNotSupportedException(subquery) =>
-            logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
-              s"but is not supported for sub-query: $subquery.")
+            logWarning(log"${MDC(CONFIG, SQLConf.ADAPTIVE_EXECUTION_ENABLED.key)} is enabled " +
+              log"but is not supported for sub-query: ${MDC(SUB_QUERY, subquery)}.")
             plan
         }
       } else {
@@ -89,8 +91,7 @@ case class InsertAdaptiveSparkPlan(
   //   - The query may need to add exchanges. It's an overkill to run `EnsureRequirements` here, so
   //     we just check `SparkPlan.requiredChildDistribution` and see if it's possible that the
   //     the query needs to add exchanges later.
-  //   - The query contains nested `AdaptiveSparkPlanExec`.
-  //   - The query contains `InMemoryTableScanExec`.
+  //   - The query contains `InMemoryTableScanExec` that is AQE-ed.
   //   - The query contains sub-query.
   private def shouldApplyAQE(plan: SparkPlan, isSubquery: Boolean): Boolean = {
     conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
@@ -103,8 +104,6 @@ case class InsertAdaptiveSparkPlan(
         // update correctly.
         case i: InMemoryTableScanExec
             if i.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => true
-        case _: InMemoryTableScanExec
-            if conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING) => true
         case p => p.expressions.exists(_.exists {
           case _: SubqueryExpression => true
           case _ => false

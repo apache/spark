@@ -18,7 +18,7 @@
 import sys
 from typing import Tuple
 
-from pyspark.rdd import RDD
+from pyspark import RDD
 from pyspark.sql import SparkSession
 
 

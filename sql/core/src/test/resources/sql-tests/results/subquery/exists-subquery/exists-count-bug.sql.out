@@ -82,6 +82,15 @@ struct<c1:int,c2:int>
 
 
 -- !query
+select * from t1 where exists (select count(*) from t2 where t1.c1 = 100)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
 set spark.sql.optimizer.decorrelateExistsSubqueryLegacyIncorrectCountHandling.enabled = true
 -- !query schema
 struct<key:string,value:string>
@@ -132,6 +141,14 @@ struct<c1:int,c2:int>
 -- !query output
 0	1
 1	2
+
+
+-- !query
+select * from t1 where exists (select count(*) from t2 where t1.c1 = 100)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+
 
 
 -- !query

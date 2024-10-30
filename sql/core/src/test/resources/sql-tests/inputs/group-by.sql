@@ -248,11 +248,6 @@ FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a;
 
-
-SELECT mode(a), mode(b) FROM testData;
-SELECT a, mode(b) FROM testData GROUP BY a ORDER BY a;
-
-
 -- SPARK-44846: PushFoldableIntoBranches in complex grouping expressions cause bindReference error
 SELECT c * 2 AS d
 FROM (
@@ -265,13 +260,81 @@ FROM (
      ) t3
 GROUP BY c;
 
--- SPARK-45034: Support deterministic mode function
-SELECT mode(col) FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, false) FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, true) FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, 'true') FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, null) FROM VALUES (-10), (0), (10) AS tab(col);
-SELECT mode(col, b) FROM VALUES (-10, false), (0, false), (10, false) AS tab(col, b);
-SELECT mode(col) FROM VALUES (map(1, 'a')) AS tab(col);
-SELECT mode(col, false) FROM VALUES (map(1, 'a')) AS tab(col);
-SELECT mode(col, true) FROM VALUES (map(1, 'a')) AS tab(col);
+-- SPARK-45599: Check that "weird" doubles group and sort as desired.
+SELECT col1, count(*) AS cnt
+FROM VALUES
+  (0.0),
+  (-0.0),
+  (double('NaN')),
+  (double('NaN')),
+  (double('Infinity')),
+  (double('Infinity')),
+  (-double('Infinity')),
+  (-double('Infinity'))
+GROUP BY col1
+ORDER BY col1
+;
+
+-- SC-170296: Verify that group by works when MapType is inside complex type for column type
+-- ARRAY<MAP<INT,INT>>
+SELECT count(*)
+FROM VALUES (ARRAY(MAP(1, 2, 2, 3), MAP(1, 3))), (ARRAY(MAP(2, 3), MAP(1, 3))), (ARRAY(MAP(2, 3, 1, 2), MAP(1, 3))) as t(a)
+GROUP BY a;
+
+-- STRUCT<b:MAP<INT,INT>>
+SELECT count(*)
+FROM VALUES (named_struct('b', map(1, 2, 2, 3))), (named_struct('b', map(1, 3))), (named_struct('b', map(2, 3, 1, 2))) as t(a)
+GROUP BY a;
+
+SELECT count(*)
+FROM VALUES (named_struct('b', map(1, 2, 2, 3))), (named_struct('b', map(1, 3))), (named_struct('b', map(2, 3, 1, 2))) as t(a)
+GROUP BY a.b;
+
+-- STRUCT<b:ARRAY<MAP<INT,INT>>>
+SELECT count(*)
+FROM VALUES (named_struct('b', array(map(1, 2, 2, 3), map(1, 3)))), (named_struct('b', array(map(2, 3), map(1, 3)))), (named_struct('b', array(map(2, 3, 1, 2), map(1, 3)))) as t(a)
+GROUP BY a;
+
+-- ARRAY<STRUCT<b:MAP<INT,INT>>>
+SELECT count(*)
+FROM VALUES (ARRAY(named_struct('b', map(1, 2, 2, 3)), named_struct('b', map(1, 3)))), (ARRAY(named_struct('b', map(2, 3)), named_struct('b', map(1, 3)))), (ARRAY(named_struct('b', map(2, 3, 1, 2)), named_struct('b', map(1, 3)))) as t(a)
+group BY a;
+
+-- MAP<ARRAY<INT>,INT>
+SELECT count(*)
+FROM VALUES (map(array(1, 2), 2, array(2, 3), 3)), (map(array(1, 3), 3)), (map(array(2, 3), 3, array(1, 2), 2)) as t(a)
+group BY a;
+
+SELECT count(*)
+FROM VALUES (map(array(1, 2, 3), 3)), (map(array(3, 2, 1), 3)) as t(a)
+group BY a;
+
+-- ARRAY<MAP<ARRAY<INT>,INT>>
+SELECT count(*)
+FROM VALUES (ARRAY(map(array(1, 2), 2, array(2, 3), 3))), (ARRAY(MAP(ARRAY(1, 3), 3))), (ARRAY(map(array(2, 3), 3, array(1, 2), 2))) as t(a)
+group BY a;
+
+-- MAP<STRUCT<b:INT>,INT>
+SELECT count(*)
+FROM VALUES (map(named_struct('b', 1), 2, named_struct('b', 2), 3)), (map(named_struct('b', 1), 3)), (map(named_struct('b', 2), 3, named_struct('b', 1), 2)) as t(a)
+group BY a;
+
+-- STRUCT<b:MAP<STRUCT<c:INT>,INT>>
+SELECT count(*)
+FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
+group BY a;
+
+SELECT count(*)
+FROM VALUES (named_struct('b', map(named_struct('c', 1), 2, named_struct('c', 2), 3))), (named_struct('b', map(named_struct('c', 1), 3))), (named_struct('b', map(named_struct('c', 2), 3, named_struct('c', 1), 2))) as t(a)
+group BY a.b;
+
+-- Map valueType contains MapType (possibly nested)
+-- MAP<INT, MAP<INT,INT>>
+SELECT count(*)
+FROM VALUES (Map(1, Map(1,2), 2, Map(2, 3, 1, 2))), (Map(2, Map(1, 2, 2,3), 1, Map(1, 2))), (Map(1, Map(1,2), 2, Map(2, 4))) as t(a)
+GROUP BY a;
+
+-- MAP<INT, ARRAY<MAP<INT,INT>>>
+SELECT count(*)
+FROM VALUES (Map(1, Array(Map(1,2)), 2, Array(Map(2, 3, 1, 2)))), (Map(2, Array(Map(1, 2, 2,3)), 1, Array(Map(1, 2)))), (Map(1, Array(Map(1,2)), 2, Array(Map(2, 4)))) as t(a)
+GROUP BY a;

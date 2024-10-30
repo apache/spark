@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- Should read CDATA as raw string -->
+<ROWSET>
+    <![CDATA[ <ROW> ignored row </ROW> ]]>
+    <ROW><![CDATA[ <a>1</a> ]]></ROW>
+    <ROW><![CDATA[ 2 ]]></ROW>
+    <ROW><![CDATA[ <ROW>3</ROW> ]]></ROW>
+    <ROW><![CDATA[ 4 ]]></ROW>
+    <ROW><![CDATA[ <ROW>5</ROW> ]]></ROW>
+    <![CDATA[ <ROW> ignored row </ROW> ]]>
+</ROWSET>

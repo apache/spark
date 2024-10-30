@@ -29,28 +29,18 @@ class SparkPandasIndexingError(Exception):
     pass
 
 
-def code_change_hint(pandas_function: Optional[str], spark_target_function: Optional[str]) -> str:
-    if pandas_function is not None and spark_target_function is not None:
-        return "You are trying to use pandas function {}, use spark function {}".format(
-            pandas_function, spark_target_function
-        )
-    elif pandas_function is not None and spark_target_function is None:
-        return (
-            "You are trying to use pandas function {}, checkout the spark "
-            "user guide to find a relevant function"
-        ).format(pandas_function)
-    elif pandas_function is None and spark_target_function is not None:
-        return "Use spark function {}".format(spark_target_function)
-    else:  # both none
-        return "Checkout the spark user guide to find a relevant function"
+def code_change_hint(pandas_function: str, spark_target_function: str) -> str:
+    return "You are trying to use pandas function {}, use spark function {}".format(
+        pandas_function, spark_target_function
+    )
 
 
 class SparkPandasNotImplementedError(NotImplementedError):
     def __init__(
         self,
-        pandas_function: Optional[str] = None,
-        spark_target_function: Optional[str] = None,
-        description: str = "",
+        pandas_function: str,
+        spark_target_function: str,
+        description: str,
     ):
         self.pandas_source = pandas_function
         self.spark_target = spark_target_function

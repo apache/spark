@@ -93,6 +93,7 @@ private[spark] object UI {
     .createWithDefault(true)
 
   val UI_THREAD_DUMPS_ENABLED = ConfigBuilder("spark.ui.threadDumpsEnabled")
+    .doc("Whether to show a link for executor thread dumps in Stages and Executor pages.")
     .version("1.2.0")
     .booleanConf
     .createWithDefault(true)
@@ -104,6 +105,7 @@ private[spark] object UI {
     .createWithDefault(true)
 
   val UI_HEAP_HISTOGRAM_ENABLED = ConfigBuilder("spark.ui.heapHistogramEnabled")
+    .doc("Whether to show a link for executor heap histogram in Executor page.")
     .version("3.5.0")
     .booleanConf
     .createWithDefault(true)
@@ -114,7 +116,7 @@ private[spark] object UI {
       "For master/worker/driver metrics, you need to configure `conf/metrics.properties`.")
     .version("3.0.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val UI_X_XSS_PROTECTION = ConfigBuilder("spark.ui.xXssProtection")
     .doc("Value for HTTP X-XSS-Protection response header")
@@ -239,7 +241,22 @@ private[spark] object UI {
     .version("3.1.0")
     .stringConf
     .transform(_.toUpperCase(Locale.ROOT))
+    .checkValues(Set("ALLOW", "LOCAL", "DENY"))
     .createWithDefault("LOCAL")
+
+  val MASTER_UI_TITLE = ConfigBuilder("spark.master.ui.title")
+    .version("4.0.0")
+    .doc("Specifies the title of the Master UI page. If unset, `Spark Master at <MasterURL>` " +
+      "is used by default.")
+    .stringConf
+    .createOptional
+
+  val MASTER_UI_VISIBLE_ENV_VAR_PREFIXES = ConfigBuilder("spark.master.ui.visibleEnvVarPrefixes")
+    .doc("Comma-separated list of key-prefix strings to show environment variables")
+    .version("4.0.0")
+    .stringConf
+    .toSequence
+    .createWithDefault(Seq.empty[String])
 
   val UI_SQL_GROUP_SUB_EXECUTION_ENABLED = ConfigBuilder("spark.ui.groupSQLSubExecutionEnabled")
     .doc("Whether to group sub executions together in SQL UI when they belong to the same " +
@@ -247,4 +264,11 @@ private[spark] object UI {
     .version("3.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val UI_JETTY_STOP_TIMEOUT = ConfigBuilder("spark.ui.jettyStopTimeout")
+    .internal()
+    .doc("Timeout for Jetty servers started in UIs, such as SparkUI, HistoryUI, etc, to stop.")
+    .version("4.0.0")
+    .timeConf(TimeUnit.MILLISECONDS)
+    .createWithDefaultString("30s")
 }

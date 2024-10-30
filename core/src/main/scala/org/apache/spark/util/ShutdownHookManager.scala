@@ -19,12 +19,17 @@ package org.apache.spark.util
 
 import java.io.File
 import java.util.PriorityQueue
+import java.util.concurrent.TimeUnit
 
 import scala.util.Try
 
 import org.apache.hadoop.fs.FileSystem
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.config.SPARK_SHUTDOWN_TIMEOUT_MS
+
 
 /**
  * Various utility methods used by Spark.
@@ -61,10 +66,11 @@ private[spark] object ShutdownHookManager extends Logging {
     // shutdownDeletePaths as we are traversing through it.
     shutdownDeletePaths.toArray.foreach { dirPath =>
       try {
-        logInfo("Deleting directory " + dirPath)
+        logInfo(log"Deleting directory ${MDC(LogKeys.PATH, dirPath)}")
         Utils.deleteRecursively(new File(dirPath))
       } catch {
-        case e: Exception => logError(s"Exception while deleting Spark temp dir: $dirPath", e)
+        case e: Exception =>
+          logError(log"Exception while deleting Spark temp dir: ${MDC(PATH, dirPath)}", e)
       }
     }
   }
@@ -104,7 +110,7 @@ private[spark] object ShutdownHookManager extends Logging {
       }
     }
     if (retval) {
-      logInfo("path = " + file + ", already present as root for deletion.")
+      logInfo(log"path = ${MDC(LogKeys.FILE_NAME, file)}, already present as root for deletion.")
     }
     retval
   }
@@ -177,8 +183,19 @@ private [util] class SparkShutdownHookManager {
     val hookTask = new Runnable() {
       override def run(): Unit = runAll()
     }
-    org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
-      hookTask, FileSystem.SHUTDOWN_HOOK_PRIORITY + 30)
+    val priority = FileSystem.SHUTDOWN_HOOK_PRIORITY + 30
+    // The timeout property must be passed as a Java system property because this
+    // is initialized before Spark configurations are registered as system
+    // properties later in initialization.
+    val timeout = new SparkConf().get(SPARK_SHUTDOWN_TIMEOUT_MS)
+
+    timeout.fold {
+      org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
+        hookTask, priority)
+    } { t =>
+      org.apache.hadoop.util.ShutdownHookManager.get().addShutdownHook(
+        hookTask, priority, t, TimeUnit.MILLISECONDS)
+    }
   }
 
   def runAll(): Unit = {

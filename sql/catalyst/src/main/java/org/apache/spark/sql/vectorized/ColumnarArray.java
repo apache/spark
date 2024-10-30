@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.expressions.SpecializedGettersReader;
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData;
@@ -48,26 +49,43 @@ public final class ColumnarArray extends ArrayData {
     return length;
   }
 
+  /**
+   * Sets all the appropriate null bits in the input UnsafeArrayData.
+   *
+   * @param arrayData The UnsafeArrayData to set the null bits for
+   * @return The UnsafeArrayData with the null bits set
+   */
+  private UnsafeArrayData setNullBits(UnsafeArrayData arrayData) {
+    if (data.hasNull()) {
+      for (int i = 0; i < length; i++) {
+        if (data.isNullAt(offset + i)) {
+          arrayData.setNullAt(i);
+        }
+      }
+    }
+    return arrayData;
+  }
+
   @Override
   public ArrayData copy() {
     DataType dt = data.dataType();
 
     if (dt instanceof BooleanType) {
-      return UnsafeArrayData.fromPrimitiveArray(toBooleanArray());
+      return setNullBits(UnsafeArrayData.fromPrimitiveArray(toBooleanArray()));
     } else if (dt instanceof ByteType) {
-      return UnsafeArrayData.fromPrimitiveArray(toByteArray());
+      return setNullBits(UnsafeArrayData.fromPrimitiveArray(toByteArray()));
     } else if (dt instanceof ShortType) {
-      return UnsafeArrayData.fromPrimitiveArray(toShortArray());
+      return setNullBits(UnsafeArrayData.fromPrimitiveArray(toShortArray()));
     } else if (dt instanceof IntegerType || dt instanceof DateType
             || dt instanceof YearMonthIntervalType) {
-      return UnsafeArrayData.fromPrimitiveArray(toIntArray());
+      return setNullBits(UnsafeArrayData.fromPrimitiveArray(toIntArray()));
     } else if (dt instanceof LongType || dt instanceof TimestampType
             || dt instanceof DayTimeIntervalType) {
-      return UnsafeArrayData.fromPrimitiveArray(toLongArray());
+      return setNullBits(UnsafeArrayData.fromPrimitiveArray(toLongArray()));
     } else if (dt instanceof FloatType) {
-      return UnsafeArrayData.fromPrimitiveArray(toFloatArray());
+      return setNullBits(UnsafeArrayData.fromPrimitiveArray(toFloatArray()));
     } else if (dt instanceof DoubleType) {
-      return UnsafeArrayData.fromPrimitiveArray(toDoubleArray());
+      return setNullBits(UnsafeArrayData.fromPrimitiveArray(toDoubleArray()));
     } else {
       return new GenericArrayData(toObjectArray(dt)).copy(); // ensure the elements are copied.
     }
@@ -187,8 +205,12 @@ public final class ColumnarArray extends ArrayData {
   }
 
   @Override
-  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+  public void update(int ordinal, Object value) {
+    throw SparkUnsupportedOperationException.apply();
+  }
 
   @Override
-  public void setNullAt(int ordinal) { throw new UnsupportedOperationException(); }
+  public void setNullAt(int ordinal) {
+    throw SparkUnsupportedOperationException.apply();
+  }
 }

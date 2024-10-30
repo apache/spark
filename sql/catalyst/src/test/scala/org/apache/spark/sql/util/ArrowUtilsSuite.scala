@@ -21,7 +21,7 @@ import java.time.ZoneId
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
 import org.apache.spark.sql.types._
 
@@ -50,15 +50,17 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(DateType)
     roundtrip(YearMonthIntervalType())
     roundtrip(DayTimeIntervalType())
-    val tsExMsg = intercept[IllegalStateException] {
-      roundtrip(TimestampType)
-    }
-    assert(tsExMsg.getMessage.contains("timezoneId"))
+    checkError(
+      exception = intercept[SparkException] {
+        roundtrip(TimestampType)
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Missing timezoneId where it is mandatory."))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         ArrowUtils.fromArrowType(new ArrowType.Int(8, false))
       },
-      errorClass = "UNSUPPORTED_ARROWTYPE",
+      condition = "UNSUPPORTED_ARROWTYPE",
       parameters = Map("typeName" -> "Int(8, false)")
     )
   }

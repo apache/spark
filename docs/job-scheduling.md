@@ -40,7 +40,7 @@ different options to manage allocation, depending on the cluster manager.
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
 this approach, each application is given a maximum amount of resources it can use and holds onto them
 for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
-and [YARN](running-on-yarn.html) modes.
+and [YARN](running-on-yarn.html) modes, as well as the [K8s](running-on-kubernetes.html) mode.
 Resource allocation can be configured as follows, based on the cluster type:
 
 * **Standalone mode:** By default, applications submitted to the standalone mode cluster will run in
@@ -53,7 +53,11 @@ Resource allocation can be configured as follows, based on the cluster type:
   on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
   (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
   property) control the resources per executor. For more information, see the
-  [YARN Spark Properties](running-on-yarn.html).
+  [YARN Spark Properties](running-on-yarn.html#spark-properties).
+* **K8s:** The same as the situation with Yarn, please refer to the description of Yarn above. Furthermore,
+  Spark on K8s offers higher priority versions of `spark.kubernetes.executor.limit.cores` and
+  `spark.kubernetes.executor.request.cores` than `spark.executor.cores`. For more information, see the
+  [K8s Spark Properties](running-on-kubernetes.html#spark-properties).
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
@@ -69,10 +73,6 @@ useful if multiple applications share resources in your Spark cluster.
 This feature is disabled by default and available on all coarse-grained cluster managers, i.e.
 [standalone mode](spark-standalone.html), [YARN mode](running-on-yarn.html) and [K8s mode](running-on-kubernetes.html).
 
-
-### Caveats
-
-- In [standalone mode](spark-standalone.html), without explicitly setting `spark.executor.cores`, each executor will get all the available cores of a worker. In this case, when dynamic allocation enabled, spark will possibly acquire much more executors than expected. When you want to use dynamic allocation in [standalone mode](spark-standalone.html), you are recommended to explicitly set cores for each executor before the issue [SPARK-30299](https://issues.apache.org/jira/browse/SPARK-30299) got fixed.
 
 ### Configuration and Setup
 
@@ -95,6 +95,12 @@ In YARN mode, follow the instructions [here](running-on-yarn.html#configuring-th
 All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and
 `spark.shuffle.service.*` namespaces. For more detail, see the
 [configurations page](configuration.html#dynamic-allocation).
+
+
+### Caveats
+
+- In [standalone mode](spark-standalone.html), without explicitly setting `spark.executor.cores`, each executor will get all the available cores of a worker. In this case, when dynamic allocation enabled, spark will possibly acquire much more executors than expected. When you want to use dynamic allocation in [standalone mode](spark-standalone.html), you are recommended to explicitly set cores for each executor before the issue [SPARK-30299](https://issues.apache.org/jira/browse/SPARK-30299) got fixed.
+- In [K8s mode](running-on-kubernetes.html), we can not use this feature by setting `spark.shuffle.service.enabled` to `true` due to Spark on K8s doesn't yet support the external shuffle service.
 
 ### Resource Allocation Policy
 

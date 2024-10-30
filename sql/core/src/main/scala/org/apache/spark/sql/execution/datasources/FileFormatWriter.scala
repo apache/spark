@@ -20,15 +20,15 @@ package org.apache.spark.sql.execution.datasources
 import java.util.{Date, UUID}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
-import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -37,10 +37,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -272,19 +270,20 @@ object FileFormatWriter extends Logging {
       val ret = f
       val commitMsgs = ret.map(_.commitMsg)
 
-      logInfo(s"Start to commit write Job ${description.uuid}.")
+      logInfo(log"Start to commit write Job ${MDC(LogKeys.UUID, description.uuid)}.")
       val (_, duration) = Utils
         .timeTakenMs { committer.commitJob(job, commitMsgs.toImmutableArraySeq) }
-      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
+      logInfo(log"Write Job ${MDC(LogKeys.UUID, description.uuid)} committed. " +
+        log"Elapsed time: ${MDC(LogKeys.ELAPSED_TIME, duration)} ms.")
 
       processStats(
         description.statsTrackers, ret.map(_.summary.stats).toImmutableArraySeq, duration)
-      logInfo(s"Finished processing stats for write job ${description.uuid}.")
+      logInfo(log"Finished processing stats for write job ${MDC(LogKeys.UUID, description.uuid)}.")
 
       // return a set of all the partition paths that were updated during this job
       ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
     } catch { case cause: Throwable =>
-      logError(s"Aborting job ${description.uuid}.", cause)
+      logError(log"Aborting job ${MDC(WRITE_JOB_UUID, description.uuid)}.", cause)
       committer.abortJob(job)
       throw cause
     }
@@ -384,44 +383,42 @@ object FileFormatWriter extends Logging {
 
     committer.setupTask(taskAttemptContext)
 
-    val dataWriter =
-      if (sparkPartitionId != 0 && !iterator.hasNext) {
-        // In case of empty job, leave first partition to save meta for file format like parquet.
-        new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
-      } else if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
-        new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
-      } else {
-        concurrentOutputWriterSpec match {
-          case Some(spec) =>
-            new DynamicPartitionDataConcurrentWriter(
-              description, taskAttemptContext, committer, spec)
-          case _ =>
-            new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
-        }
-      }
+    var dataWriter: FileFormatDataWriter = null
 
-    try {
-      Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-        // Execute the task to write rows out and commit the task.
-        dataWriter.writeWithIterator(iterator)
-        dataWriter.commit()
-      })(catchBlock = {
-        // If there is an error, abort the task
+    Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+      dataWriter =
+        if (sparkPartitionId != 0 && !iterator.hasNext) {
+          // In case of empty job, leave first partition to save meta for file format like parquet.
+          new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
+        } else if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
+          new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+        } else {
+          concurrentOutputWriterSpec match {
+            case Some(spec) =>
+              new DynamicPartitionDataConcurrentWriter(
+                description, taskAttemptContext, committer, spec)
+            case _ =>
+              new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
+          }
+        }
+
+      // Execute the task to write rows out and commit the task.
+      dataWriter.writeWithIterator(iterator)
+      dataWriter.commit()
+    })(catchBlock = {
+      // If there is an error, abort the task
+      if (dataWriter != null) {
         dataWriter.abort()
-        logError(s"Job $jobId aborted.")
-      }, finallyBlock = {
+      } else {
+        committer.abortTask(taskAttemptContext)
+      }
+      logError(log"Job: ${MDC(JOB_ID, jobId)}, Task: ${MDC(TASK_ID, taskId)}, " +
+        log"Task attempt ${MDC(TASK_ATTEMPT_ID, taskAttemptId)} aborted.")
+    }, finallyBlock = {
+      if (dataWriter != null) {
         dataWriter.close()
-      })
-    } catch {
-      case e: FetchFailedException =>
-        throw e
-      case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
-        // If any output file to write already exists, it does not make sense to re-run this task.
-        // We throw the exception and let Executor throw ExceptionFailure to abort the job.
-        throw new TaskOutputFileAlreadyExistException(f)
-      case t: Throwable =>
-        throw QueryExecutionErrors.taskFailedWhileWritingRowsError(description.path, t)
-    }
+      }
+    })
   }
 
   /**

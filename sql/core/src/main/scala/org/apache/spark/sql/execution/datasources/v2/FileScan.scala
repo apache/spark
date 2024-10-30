@@ -21,7 +21,8 @@ import java.util.{Locale, OptionalLong}
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{PATH, REASON}
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
@@ -163,9 +164,9 @@ trait FileScan extends Scan
     if (splitFiles.length == 1) {
       val path = splitFiles(0).toPath
       if (!isSplitable(path) && splitFiles(0).length >
-        sparkSession.sparkContext.getConf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
-        logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
-          s"partition, the reason is: ${getFileUnSplittableReason(path)}")
+        sparkSession.sparkContext.conf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
+        logWarning(log"Loading one large unsplittable file ${MDC(PATH, path.toString)} with only " +
+          log"one partition, the reason is: ${MDC(REASON, getFileUnSplittableReason(path))}")
       }
     }
 

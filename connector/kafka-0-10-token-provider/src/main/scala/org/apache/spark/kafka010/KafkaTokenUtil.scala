@@ -18,7 +18,8 @@
 package org.apache.spark.kafka010
 
 import java.{util => ju}
-import java.text.SimpleDateFormat
+import java.time.{Instant, ZoneId}
+import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
 
 import scala.jdk.CollectionConverters._
@@ -46,6 +47,10 @@ import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 private[spark] object KafkaTokenUtil extends Logging {
   val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
   private val TOKEN_SERVICE_PREFIX = "kafka.server.delegation.token"
+  private val DATE_TIME_FORMATTER =
+    DateTimeFormatter
+      .ofPattern("yyyy-MM-dd'T'HH:mm")
+      .withZone(ZoneId.systemDefault())
 
   private[kafka010] def getTokenService(identifier: String): Text =
     new Text(s"$TOKEN_SERVICE_PREFIX.$identifier")
@@ -220,7 +225,6 @@ private[spark] object KafkaTokenUtil extends Logging {
 
   private def printToken(token: DelegationToken): Unit = {
     if (log.isDebugEnabled) {
-      val dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm")
       logDebug("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
         "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
       val tokenInfo = token.tokenInfo
@@ -229,9 +233,9 @@ private[spark] object KafkaTokenUtil extends Logging {
         REDACTION_REPLACEMENT_TEXT,
         tokenInfo.owner,
         tokenInfo.renewersAsString,
-        dateFormat.format(tokenInfo.issueTimestamp),
-        dateFormat.format(tokenInfo.expiryTimestamp),
-        dateFormat.format(tokenInfo.maxTimestamp)))
+        DATE_TIME_FORMATTER.format(Instant.ofEpochMilli(tokenInfo.issueTimestamp)),
+        DATE_TIME_FORMATTER.format(Instant.ofEpochMilli(tokenInfo.expiryTimestamp)),
+        DATE_TIME_FORMATTER.format(Instant.ofEpochMilli(tokenInfo.maxTimestamp))))
     }
   }
 

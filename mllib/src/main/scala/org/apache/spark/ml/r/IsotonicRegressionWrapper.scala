@@ -28,6 +28,7 @@ import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.regression.{IsotonicRegression, IsotonicRegressionModel}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.util.ArrayImplicits._
 
 private[r] class IsotonicRegressionWrapper private (
     val pipeline: PipelineModel,
@@ -68,7 +69,7 @@ private[r] object IsotonicRegressionWrapper
     val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
-    require(features.size == 1)
+    require(features.length == 1)
 
     // assemble and fit the pipeline
     val isotonicRegression = new IsotonicRegression()
@@ -96,9 +97,11 @@ private[r] object IsotonicRegressionWrapper
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("features" -> instance.features.toSeq)
+        ("features" -> instance.features.toImmutableArraySeq)
       val rMetadataJson: String = compact(render(rMetadata))
-      sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
+      // Note that we should write single file. If there are more than one row
+      // it produces more partitions.
+      sparkSession.createDataFrame(Seq(Tuple1(rMetadataJson))).write.text(rMetadataPath)
 
       instance.pipeline.save(pipelinePath)
     }
@@ -111,7 +114,8 @@ private[r] object IsotonicRegressionWrapper
       val rMetadataPath = new Path(path, "rMetadata").toString
       val pipelinePath = new Path(path, "pipeline").toString
 
-      val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+      val rMetadataStr = sparkSession.read.text(rMetadataPath)
+        .first().getString(0)
       val rMetadata = parse(rMetadataStr)
       val features = (rMetadata \ "features").extract[Array[String]]
 

@@ -416,3 +416,7 @@ FROM (
 ) map_output
 SELECT TRANSFORM(a, b)
   USING 'cat' AS (a, b);
+
+SELECT TRANSFORM (a, b)
+  USING 'cat' AS (a CHAR(10), b VARCHAR(10))
+FROM VALUES('apache', 'spark') t(a, b);

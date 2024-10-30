@@ -34,6 +34,8 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
+import org.apache.spark.SparkIllegalArgumentException;
+
 /**
  * Utility class for all XPath UDFs. Each UDF instance should keep an instance of this class.
  *
@@ -200,7 +202,7 @@ public class UDFXPathUtil {
     @Override
     public void mark(int readAheadLimit) throws IOException {
       if (readAheadLimit < 0) {
-        throw new IllegalArgumentException("Read-ahead limit < 0");
+        throw new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_3200");
       }
       ensureOpen();
       mark = next;

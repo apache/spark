@@ -20,26 +20,11 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class GroupbyStatMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
+class GroupbyStatTestingFuncMixin:
     # TODO: All statistical functions should leverage this utility
     def _test_stat_func(self, func, check_exact=True):
         pdf, psdf = self.pdf, self.psdf
@@ -57,112 +42,28 @@ class GroupbyStatMixin:
                 check_exact=check_exact,
             )
 
-    def test_basic_stat_funcs(self):
-        self._test_stat_func(
-            lambda groupby_obj: groupby_obj.var(numeric_only=True), check_exact=False
+
+class GroupbyStatMixin(GroupbyStatTestingFuncMixin):
+    @property
+    def pdf(self):
+        return pd.DataFrame(
+            {
+                "A": [1, 2, 1, 2],
+                "B": [3.1, 4.1, 4.1, 3.1],
+                "C": ["a", "b", "b", "a"],
+                "D": [True, False, False, True],
+            }
         )
 
-        pdf, psdf = self.pdf, self.psdf
-
-        # Unlike pandas', the median in pandas-on-Spark is an approximated median based upon
-        # approximate percentile computation because computing median across a large dataset
-        # is extremely expensive.
-        expected = ps.DataFrame({"B": [3.1, 3.1], "D": [0, 0]}, index=pd.Index([1, 2], name="A"))
-        self.assert_eq(
-            psdf.groupby("A").median().sort_index(),
-            expected,
-        )
-        self.assert_eq(
-            psdf.groupby("A").median(numeric_only=None).sort_index(),
-            expected,
-        )
-        self.assert_eq(
-            psdf.groupby("A").median(numeric_only=False).sort_index(),
-            expected,
-        )
-        self.assert_eq(
-            psdf.groupby("A")["B"].median().sort_index(),
-            expected.B,
-        )
-        with self.assertRaises(TypeError):
-            psdf.groupby("A")["C"].mean()
-
-        with self.assertRaisesRegex(
-            TypeError, "Unaccepted data types of aggregation columns; numeric or bool expected."
-        ):
-            psdf.groupby("A")[["C"]].std()
-
-        with self.assertRaisesRegex(
-            TypeError, "Unaccepted data types of aggregation columns; numeric or bool expected."
-        ):
-            psdf.groupby("A")[["C"]].sem()
-
-        self.assert_eq(
-            psdf.groupby("A").std().sort_index(),
-            pdf.groupby("A").std(numeric_only=True).sort_index(),
-            check_exact=False,
-        )
-        self.assert_eq(
-            psdf.groupby("A").sem().sort_index(),
-            pdf.groupby("A").sem(numeric_only=True).sort_index(),
-            check_exact=False,
-        )
-
-        # TODO: fix bug of `sum` and re-enable the test below
-        # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
-        self.assert_eq(
-            psdf.groupby("A").sum().sort_index(),
-            pdf.groupby("A").sum().sort_index(),
-            check_exact=False,
-        )
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
 
     def test_mean(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean(numeric_only=True))
         psdf = self.psdf
         with self.assertRaises(TypeError):
             psdf.groupby("A")["C"].mean()
-
-    def test_quantile(self):
-        dfs = [
-            pd.DataFrame(
-                [["a", 1], ["a", 2], ["a", 3], ["b", 1], ["b", 3], ["b", 5]], columns=["key", "val"]
-            ),
-            pd.DataFrame(
-                [["a", True], ["a", True], ["a", False], ["b", True], ["b", True], ["b", False]],
-                columns=["key", "val"],
-            ),
-        ]
-        for df in dfs:
-            psdf = ps.from_pandas(df)
-            # q accept float and int between 0 and 1
-            for i in [0, 0.1, 0.5, 1]:
-                self.assert_eq(
-                    df.groupby("key").quantile(q=i, interpolation="lower"),
-                    psdf.groupby("key").quantile(q=i),
-                    almost=True,
-                )
-                self.assert_eq(
-                    df.groupby("key")["val"].quantile(q=i, interpolation="lower"),
-                    psdf.groupby("key")["val"].quantile(q=i),
-                    almost=True,
-                )
-            # raise ValueError when q not in [0, 1]
-            with self.assertRaises(ValueError):
-                psdf.groupby("key").quantile(q=1.1)
-            with self.assertRaises(ValueError):
-                psdf.groupby("key").quantile(q=-0.1)
-            with self.assertRaises(ValueError):
-                psdf.groupby("key").quantile(q=2)
-            with self.assertRaises(ValueError):
-                psdf.groupby("key").quantile(q=np.nan)
-            # raise TypeError when q type mismatch
-            with self.assertRaises(TypeError):
-                psdf.groupby("key").quantile(q="0.1")
-            # raise NotImplementedError when q is list like type
-            with self.assertRaises(NotImplementedError):
-                psdf.groupby("key").quantile(q=(0.1, 0.5))
-            with self.assertRaises(NotImplementedError):
-                psdf.groupby("key").quantile(q=[0.1, 0.5])
 
     def test_min(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.min())
@@ -197,88 +98,6 @@ class GroupbyStatMixin:
             psdf.groupby("A").sum(min_count=3).sort_index(),
         )
 
-    def test_first(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.first())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=None))
-        self._test_stat_func(lambda groupby_obj: groupby_obj.first(numeric_only=True))
-
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [-1.5, np.nan, -3.2, 0.1],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(
-            pdf.groupby("A").first().sort_index(), psdf.groupby("A").first().sort_index()
-        )
-        self.assert_eq(
-            pdf.groupby("A").first(min_count=1).sort_index(),
-            psdf.groupby("A").first(min_count=1).sort_index(),
-        )
-        self.assert_eq(
-            pdf.groupby("A").first(min_count=2).sort_index(),
-            psdf.groupby("A").first(min_count=2).sort_index(),
-        )
-
-    def test_last(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.last())
-        self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=None))
-        self._test_stat_func(lambda groupby_obj: groupby_obj.last(numeric_only=True))
-
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [-1.5, np.nan, -3.2, 0.1],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.groupby("A").last().sort_index(), psdf.groupby("A").last().sort_index())
-        self.assert_eq(
-            pdf.groupby("A").last(min_count=1).sort_index(),
-            psdf.groupby("A").last(min_count=1).sort_index(),
-        )
-        self.assert_eq(
-            pdf.groupby("A").last(min_count=2).sort_index(),
-            psdf.groupby("A").last(min_count=2).sort_index(),
-        )
-
-    def test_nth(self):
-        for n in [0, 1, 2, 128, -1, -2, -128]:
-            self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
-
-        with self.assertRaisesRegex(NotImplementedError, "slice or list"):
-            self.psdf.groupby("B").nth(slice(0, 2))
-        with self.assertRaisesRegex(NotImplementedError, "slice or list"):
-            self.psdf.groupby("B").nth([0, 1, -1])
-        with self.assertRaisesRegex(TypeError, "Invalid index"):
-            self.psdf.groupby("B").nth("x")
-
-    def test_prod(self):
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2, 1],
-                "B": [3.1, 4.1, 4.1, 3.1, 0.1],
-                "C": ["a", "b", "b", "a", "c"],
-                "D": [True, False, False, True, False],
-                "E": [-1, -2, 3, -4, -2],
-                "F": [-1.5, np.nan, -3.2, 0.1, 0],
-                "G": [np.nan, np.nan, np.nan, np.nan, np.nan],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-
-        for n in [0, 1, 2, 128, -1, -2, -128]:
-            self._test_stat_func(
-                lambda groupby_obj: groupby_obj.prod(numeric_only=True, min_count=n),
-                check_exact=False,
-            )
-            self.assert_eq(
-                pdf.groupby("A").prod(min_count=n, numeric_only=True).sort_index(),
-                psdf.groupby("A").prod(min_count=n).sort_index(),
-                almost=True,
-            )
-
     def test_median(self):
         psdf = ps.DataFrame(
             {
@@ -303,54 +122,12 @@ class GroupbyStatMixin:
         with self.assertRaisesRegex(TypeError, "accuracy must be an integer; however"):
             psdf.groupby("a").median(accuracy="a")
 
-    def test_ddof(self):
-        pdf = pd.DataFrame(
-            {
-                "a": [1, 1, 1, 1, 2, 2, 2, 3, 3, 3] * 3,
-                "b": [2, 3, 1, 4, 6, 9, 8, 10, 7, 5] * 3,
-                "c": [3, 5, 2, 5, 1, 2, 6, 4, 3, 6] * 3,
-            },
-            index=np.random.rand(10 * 3),
-        )
-        psdf = ps.from_pandas(pdf)
 
-        for ddof in [-1, 0, 1, 2, 3]:
-            # std
-            self.assert_eq(
-                pdf.groupby("a").std(ddof=ddof).sort_index(),
-                psdf.groupby("a").std(ddof=ddof).sort_index(),
-                check_exact=False,
-            )
-            self.assert_eq(
-                pdf.groupby("a")["b"].std(ddof=ddof).sort_index(),
-                psdf.groupby("a")["b"].std(ddof=ddof).sort_index(),
-                check_exact=False,
-            )
-            # var
-            self.assert_eq(
-                pdf.groupby("a").var(ddof=ddof).sort_index(),
-                psdf.groupby("a").var(ddof=ddof).sort_index(),
-                check_exact=False,
-            )
-            self.assert_eq(
-                pdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
-                psdf.groupby("a")["b"].var(ddof=ddof).sort_index(),
-                check_exact=False,
-            )
-            # sem
-            self.assert_eq(
-                pdf.groupby("a").sem(ddof=ddof).sort_index(),
-                psdf.groupby("a").sem(ddof=ddof).sort_index(),
-                check_exact=False,
-            )
-            self.assert_eq(
-                pdf.groupby("a")["b"].sem(ddof=ddof).sort_index(),
-                psdf.groupby("a")["b"].sem(ddof=ddof).sort_index(),
-                check_exact=False,
-            )
-
-
-class GroupbyStatTests(GroupbyStatMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbyStatTests(
+    GroupbyStatMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

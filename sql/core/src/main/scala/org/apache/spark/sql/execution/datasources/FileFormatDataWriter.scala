@@ -18,17 +18,21 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileAlreadyExistsException, Path}
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.TaskOutputFileAlreadyExistException
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CONFIG, NUM_CONCURRENT_WRITER}
 import org.apache.spark.internal.io.{FileCommitProtocol, FileNameSpec}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -76,14 +80,28 @@ abstract class FileFormatDataWriter(
     releaseCurrentWriter()
   }
 
+  private def enrichWriteError[T](path: => String)(f: => T): T = try {
+    f
+  } catch {
+    case e: FetchFailedException =>
+      throw e
+    case f: FileAlreadyExistsException if SQLConf.get.fastFailFileFormatOutput =>
+      // If any output file to write already exists, it does not make sense to re-run this task.
+      // We throw the exception and let Executor throw ExceptionFailure to abort the job.
+      throw new TaskOutputFileAlreadyExistException(f)
+    case t: Throwable => throw QueryExecutionErrors.taskFailedWhileWritingRowsError(path, t)
+  }
+
   /** Writes a record. */
   def write(record: InternalRow): Unit
 
-  def writeWithMetrics(record: InternalRow, count: Long): Unit = {
+  final def writeWithMetrics(record: InternalRow, count: Long): Unit = {
     if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
       CustomMetrics.updateMetrics(currentMetricsValues.toImmutableArraySeq, customMetrics)
     }
-    write(record)
+    enrichWriteError(Option(currentWriter).map(_.path()).getOrElse(description.path)) {
+      write(record)
+    }
   }
 
   /** Write an iterator of records. */
@@ -102,7 +120,7 @@ abstract class FileFormatDataWriter(
    * to the driver and used to update the catalog. Other information will be sent back to the
    * driver too and used to e.g. update the metrics in UI.
    */
-  override def commit(): WriteTaskResult = {
+  final override def commit(): WriteTaskResult = enrichWriteError(description.path) {
     releaseResources()
     val (taskCommitMessage, taskCommitTime) = Utils.timeTakenMs {
       committer.commitTask(taskAttemptContext)
@@ -113,7 +131,7 @@ abstract class FileFormatDataWriter(
     WriteTaskResult(taskCommitMessage, summary)
   }
 
-  def abort(): Unit = {
+  final def abort(): Unit = enrichWriteError(description.path) {
     try {
       releaseResources()
     } finally {
@@ -121,7 +139,7 @@ abstract class FileFormatDataWriter(
     }
   }
 
-  override def close(): Unit = {}
+  final override def close(): Unit = {}
 }
 
 /** FileFormatWriteTask for empty partitions */
@@ -541,9 +559,11 @@ class DynamicPartitionDataConcurrentWriter(
         new WriterStatus(currentWriter, recordsInFile, fileCounter))
       if (concurrentWriters.size >= concurrentOutputWriterSpec.maxWriters && !sorted) {
         // Fall back to sort-based sequential writer mode.
-        logInfo(s"Number of concurrent writers ${concurrentWriters.size} reaches the threshold. " +
-          "Fall back from concurrent writers to sort-based sequential writer. You may change " +
-          s"threshold with configuration ${SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key}")
+        logInfo(log"Number of concurrent writers " +
+          log"${MDC(NUM_CONCURRENT_WRITER, concurrentWriters.size)} reaches the threshold. " +
+          log"Fall back from concurrent writers to sort-based sequential writer. You may change " +
+          log"threshold with configuration " +
+          log"${MDC(CONFIG, SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS.key)}")
         sorted = true
       }
     }

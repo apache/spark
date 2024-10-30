@@ -21,14 +21,14 @@ import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
 import org.apache.kafka.common.TopicPartition
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
 /**
  * Utilities for converting Kafka related objects to and from json.
  */
 private object JsonUtils {
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   /**
    * Read TopicPartitions from json string
@@ -96,10 +96,8 @@ private object JsonUtils {
    */
   def partitionOffsets(partitionOffsets: Map[TopicPartition, Long]): String = {
     val result = new HashMap[String, HashMap[Int, Long]]()
-    implicit val order = new Ordering[TopicPartition] {
-      override def compare(x: TopicPartition, y: TopicPartition): Int = {
-        Ordering.Tuple2[String, Int].compare((x.topic, x.partition), (y.topic, y.partition))
-      }
+    implicit val order: Ordering[TopicPartition] = (x: TopicPartition, y: TopicPartition) => {
+      Ordering.Tuple2[String, Int].compare((x.topic, x.partition), (y.topic, y.partition))
     }
     val partitions = partitionOffsets.keySet.toSeq.sorted  // sort for more determinism
     partitions.foreach { tp =>

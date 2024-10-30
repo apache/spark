@@ -2,7 +2,7 @@
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW view1 AS SELECT 2 AS i1
 -- !query analysis
-CreateViewCommand `view1`, SELECT 2 AS i1, false, true, LocalTempView, true
+CreateViewCommand `view1`, SELECT 2 AS i1, false, true, LocalTempView, UNSUPPORTED, true
    +- Project [2 AS i1#x]
       +- OneRowRelation
 
@@ -84,7 +84,7 @@ DropTempViewCommand view1
 -- !query
 CREATE OR REPLACE GLOBAL TEMPORARY VIEW view1 as SELECT 1 as i1
 -- !query analysis
-CreateViewCommand `view1`, SELECT 1 as i1, false, true, GlobalTempView, true
+CreateViewCommand `view1`, SELECT 1 as i1, false, true, GlobalTempView, UNSUPPORTED, true
    +- Project [1 AS i1#x]
       +- OneRowRelation
 

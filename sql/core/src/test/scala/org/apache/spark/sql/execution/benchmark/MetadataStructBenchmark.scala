@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.datasources.FileFormat
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.functions.{concat, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -39,7 +39,7 @@ object MetadataStructBenchmark extends SqlBasedBenchmark {
       spark.range(0, NUM_ROWS, 1, 1).toDF("id")
         .withColumn("num1", $"id" + 10)
         .withColumn("num2", $"id" / 10)
-        .withColumn("str", lit("a sample string ") + $"id".cast("string"))
+        .withColumn("str", concat(lit("a sample string "), $"id".cast("string")))
         .write.format(format).save(dir.getAbsolutePath)
       val df = spark.read.format(format).load(dir.getAbsolutePath)
       f(df)

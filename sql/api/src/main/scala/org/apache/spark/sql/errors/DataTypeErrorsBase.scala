@@ -20,7 +20,7 @@ import java.util.Locale
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils}
-import org.apache.spark.sql.types.{AbstractDataType, DataType, TypeCollection}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] trait DataTypeErrorsBase {
@@ -50,6 +50,7 @@ private[sql] trait DataTypeErrorsBase {
 
   def toSQLType(t: AbstractDataType): String = t match {
     case TypeCollection(types) => types.map(toSQLType).mkString("(", " or ", ")")
+    case u: UserDefinedType[_] => s"UDT(${toSQLType(u.sqlType)})"
     case dt: DataType => quoteByDefault(dt.sql)
     case at => quoteByDefault(at.simpleString.toUpperCase(Locale.ROOT))
   }
@@ -94,5 +95,9 @@ private[sql] trait DataTypeErrorsBase {
 
   def getQueryContext(context: QueryContext): Array[QueryContext] = {
     if (context == null) Array.empty else Array(context)
+  }
+
+  def toDSOption(option: String): String = {
+    quoteByDefault(option)
   }
 }

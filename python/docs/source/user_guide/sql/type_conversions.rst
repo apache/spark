@@ -64,6 +64,9 @@ are listed below:
     * - spark.sql.timestampType
       - If set to `TIMESTAMP_NTZ`, the default timestamp type is ``TimestampNTZType``. Otherwise, the default timestamp type is TimestampType.
       - ""
+    * - spark.sql.execution.pandas.inferPandasDictAsMap
+      - When enabled, Pandas dictionaries are inferred as MapType. Otherwise, they are inferred as StructType.
+      - False
 
 All Conversions
 ---------------

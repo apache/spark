@@ -26,7 +26,6 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.testing.utils import QuietTest
 
 if have_pyarrow:
     import pyarrow as pa
@@ -91,7 +90,7 @@ class MapInArrowTestsMixin(object):
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
     def test_other_than_recordbatch_iter(self):
-        with QuietTest(self.sc):
+        with self.quiet():
             self.check_other_than_recordbatch_iter()
 
     def check_other_than_recordbatch_iter(self):
@@ -104,14 +103,14 @@ class MapInArrowTestsMixin(object):
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be iterator "
-            "of pyarrow.RecordBatch, but is int.",
+            "of pyarrow.RecordBatch, but is int",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(not_iter, "a int").count())
 
         with self.assertRaisesRegex(
             PythonException,
             "Return type of the user-defined function should be iterator "
-            "of pyarrow.RecordBatch, but is iterator of int.",
+            "of pyarrow.RecordBatch, but is iterator of int",
         ):
             (self.spark.range(10, numPartitions=3).mapInArrow(bad_iter_elem, "a int").count())
 
@@ -145,6 +144,31 @@ class MapInArrowTestsMixin(object):
         actual = df2.join(df2).collect()
         expected = df1.join(df1).collect()
         self.assertEqual(sorted(actual), sorted(expected))
+
+    def test_map_in_arrow_with_barrier_mode(self):
+        df = self.spark.range(10)
+
+        def func1(iterator):
+            from pyspark import TaskContext, BarrierTaskContext
+
+            tc = TaskContext.get()
+            assert tc is not None
+            assert not isinstance(tc, BarrierTaskContext)
+            for batch in iterator:
+                yield batch
+
+        df.mapInArrow(func1, "id long", False).collect()
+
+        def func2(iterator):
+            from pyspark import TaskContext, BarrierTaskContext
+
+            tc = TaskContext.get()
+            assert tc is not None
+            assert isinstance(tc, BarrierTaskContext)
+            for batch in iterator:
+                yield batch
+
+        df.mapInArrow(func2, "id long", True).collect()
 
 
 class MapInArrowTests(MapInArrowTestsMixin, ReusedSQLTestCase):

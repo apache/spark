@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FooEnum.FooEnum
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
@@ -490,17 +490,22 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-29026: schemaFor for trait without companion object throws exception ") {
-    val e = intercept[UnsupportedOperationException] {
-      schemaFor[TraitProductWithoutCompanion]
-    }
-    assert(e.getMessage.contains("Unable to find constructor"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        schemaFor[TraitProductWithoutCompanion]
+      },
+      condition = "_LEGACY_ERROR_TEMP_2144",
+      parameters = Map("tpe" -> "org.apache.spark.sql.catalyst.TraitProductWithoutCompanion"))
   }
 
   test("SPARK-29026: schemaFor for trait with no-constructor companion throws exception ") {
-    val e = intercept[UnsupportedOperationException] {
-      schemaFor[TraitProductWithNoConstructorCompanion]
-    }
-    assert(e.getMessage.contains("Unable to find constructor"))
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        schemaFor[TraitProductWithNoConstructorCompanion]
+      },
+      condition = "_LEGACY_ERROR_TEMP_2144",
+      parameters = Map("tpe" ->
+        "org.apache.spark.sql.catalyst.TraitProductWithNoConstructorCompanion"))
   }
 
   test("SPARK-27625: annotated data types") {

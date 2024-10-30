@@ -25,7 +25,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.ml.feature._
 import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TempDirectory
-import org.apache.spark.sql.{SparkSession, SQLContext, SQLImplicits}
+import org.apache.spark.sql.{SparkSession, SQLImplicits}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -65,11 +65,11 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
    * A helper object for importing SQL implicits.
    *
    * Note that the alternative of importing `spark.implicits._` is not possible here.
-   * This is because we create the `SQLContext` immediately before the first test is run,
+   * This is because we create the `SparkSession` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.spark.sqlContext
+    protected override def session: SparkSession = self.spark
   }
 
   private[spark] def standardize(instances: Array[Instance]): Array[Instance] = {

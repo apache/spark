@@ -24,7 +24,7 @@ import java.nio.ByteBuffer
 import scala.io.Source
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.{IntParam, Utils}
 
@@ -61,7 +61,7 @@ object RawTextSender extends Logging {
     countBuf.flip()
 
     val serverSocket = new ServerSocket(port)
-    logInfo("Listening on port " + port)
+    logInfo(log"Listening on port ${MDC(LogKeys.PORT, port)}")
 
     while (true) {
       val socket = serverSocket.accept()

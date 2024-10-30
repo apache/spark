@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.util.{LinkedList, List => JList, Map => JMap}
+import java.util.{HashSet, LinkedList, List => JList, Map => JMap, Set => JSet}
 
 import scala.beans.{BeanProperty, BooleanBeanProperty}
 import scala.reflect.{classTag, ClassTag}
@@ -37,6 +37,8 @@ class GenericCollectionBean {
   @BeanProperty var listOfListOfStrings: JList[JList[String]] = _
   @BeanProperty var mapOfDummyBeans: JMap[String, DummyBean] = _
   @BeanProperty var linkedListOfStrings: LinkedList[String] = _
+  @BeanProperty var hashSetOfString: HashSet[String] = _
+  @BeanProperty var setOfSetOfStrings: JSet[JSet[String]] = _
 }
 
 class LeafBean {
@@ -139,9 +141,16 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
     assert(schema === expected)
   }
 
-  test("resolve type parameters for map and list") {
+  test("resolve type parameters for map, list and set") {
     val encoder = JavaTypeInference.encoderFor(classOf[GenericCollectionBean])
     val expected = JavaBeanEncoder(ClassTag(classOf[GenericCollectionBean]), Seq(
+      encoderField(
+        "hashSetOfString",
+        IterableEncoder(
+          ClassTag(classOf[HashSet[_]]),
+          StringEncoder,
+          containsNull = true,
+          lenientSerialization = false)),
       encoderField(
         "linkedListOfStrings",
         IterableEncoder(
@@ -166,7 +175,18 @@ class JavaTypeInferenceSuite extends SparkFunSuite {
           ClassTag(classOf[JMap[_, _]]),
           StringEncoder,
           expectedDummyBeanEncoder,
-          valueContainsNull = true))))
+          valueContainsNull = true)),
+      encoderField(
+        "setOfSetOfStrings",
+        IterableEncoder(
+          ClassTag(classOf[JSet[_]]),
+          IterableEncoder(
+            ClassTag(classOf[JSet[_]]),
+            StringEncoder,
+            containsNull = true,
+            lenientSerialization = false),
+          containsNull = true,
+          lenientSerialization = false))))
     assert(encoder === expected)
   }
 

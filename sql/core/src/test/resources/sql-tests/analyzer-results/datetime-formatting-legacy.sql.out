@@ -16,7 +16,7 @@ CreateViewCommand `v`, select col from values
  (timestamp '1996-04-01 00:33:33.123Australia/Darwin'),
  (timestamp '2018-11-17 13:33:33.123Z'),
  (timestamp '2020-01-01 01:33:33.123Asia/Shanghai'),
- (timestamp '2100-01-01 01:33:33.123America/Los_Angeles') t(col), false, false, LocalTempView, true
+ (timestamp '2100-01-01 01:33:33.123America/Los_Angeles') t(col), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [col#x]
       +- SubqueryAlias t
          +- LocalRelation [col#x]

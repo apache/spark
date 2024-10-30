@@ -218,7 +218,7 @@ class Word2VecModel private[ml] (
   @Since("1.5.0")
   @transient lazy val getVectors: DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
-    val wordVec = wordVectors.getVectors.view.mapValues(vec => Vectors.dense(vec.map(_.toDouble)))
+    val wordVec = wordVectors.getVectors.transform((_, vec) => Vectors.dense(vec.map(_.toDouble)))
     spark.createDataFrame(wordVec.toSeq).toDF("word", "vector")
   }
 
@@ -352,7 +352,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
   class Word2VecModelWriter(instance: Word2VecModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
 
       val wordVectors = instance.wordVectors.getVectors
       val dataPath = new Path(path, "data").toString
@@ -407,7 +407,7 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       val spark = sparkSession
       import spark.implicits._
 
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
 
       val dataPath = new Path(path, "data").toString

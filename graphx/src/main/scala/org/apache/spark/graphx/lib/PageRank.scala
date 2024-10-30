@@ -22,7 +22,8 @@ import scala.reflect.ClassTag
 import breeze.linalg.{Vector => BV}
 
 import org.apache.spark.graphx._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.NUM_ITERATIONS
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 
 /**
@@ -197,7 +198,7 @@ object PageRank extends Logging {
       rankGraph = runUpdate(rankGraph, personalized, resetProb, src)
       rankGraph.cache()
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
-      logInfo(s"PageRank finished iteration $iteration.")
+      logInfo(log"PageRank finished iteration ${MDC(NUM_ITERATIONS, iteration)}.")
       prevRankGraph.vertices.unpersist()
       prevRankGraph.edges.unpersist()
       iteration += 1
@@ -289,7 +290,7 @@ object PageRank extends Logging {
       rankGraph = runUpdate(rankGraph, personalized, resetProb, src)
       rankGraph.cache()
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
-      logInfo(s"PageRank finished iteration $iteration.")
+      logInfo(log"PageRank finished iteration ${MDC(NUM_ITERATIONS, iteration)}.")
       prevRankGraph.vertices.unpersist()
       prevRankGraph.edges.unpersist()
       iteration += 1
@@ -334,10 +335,10 @@ object PageRank extends Logging {
     require(sources.nonEmpty, s"The list of sources must be non-empty," +
       s" but got ${sources.mkString("[", ",", "]")}")
 
-    val zero = Vectors.sparse(sources.size, List()).asBreeze
+    val zero = Vectors.sparse(sources.length, List()).asBreeze
     // map of vid -> vector where for each vid, the _position of vid in source_ is set to 1.0
     val sourcesInitMap = sources.zipWithIndex.map { case (vid, i) =>
-      val v = Vectors.sparse(sources.size, Array(i), Array(1.0)).asBreeze
+      val v = Vectors.sparse(sources.length, Array(i), Array(1.0)).asBreeze
       (vid, v)
     }.toMap
 
@@ -376,7 +377,7 @@ object PageRank extends Logging {
       prevRankGraph.vertices.unpersist()
       prevRankGraph.edges.unpersist()
 
-      logInfo(s"Parallel Personalized PageRank finished iteration $i.")
+      logInfo(log"Parallel Personalized PageRank finished iteration ${MDC(NUM_ITERATIONS, i)}.")
 
       i += 1
     }

@@ -30,7 +30,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Dataset, Encoders}
-import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
@@ -467,7 +467,7 @@ class StreamingQueryManagerSuite extends StreamTest {
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
         queryToStop.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
-          case r: StreamingDataSourceV2Relation =>
+          case r: StreamingDataSourceV2ScanRelation =>
             r.stream.asInstanceOf[MemoryStream[Int]].addData(0)
         }
       } else {

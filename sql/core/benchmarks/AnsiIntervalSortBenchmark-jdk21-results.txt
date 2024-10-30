@@ -1,28 +1,28 @@
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 year month interval one column:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ----------------------------------------------------------------------------------------------------------------------------
-year month interval one column enable radix           51693          52535         964          1.9         516.9       1.0X
-year month interval one column disable radix          61757          63586        2128          1.6         617.6       0.8X
+year month interval one column enable radix           23157          23546         354          4.3         231.6       1.0X
+year month interval one column disable radix          33035          33049          14          3.0         330.3       0.7X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 year month interval two columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------
-year month interval two columns enable radix           65305          70025        1893          1.5         653.0       1.0X
-year month interval two columns disable radix          61716          65073         NaN          1.6         617.2       1.1X
+year month interval two columns enable radix           33726          33825          89          3.0         337.3       1.0X
+year month interval two columns disable radix          33759          34063         472          3.0         337.6       1.0X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 day time interval one columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-day time interval one columns enable radix           43943          46020        1982          2.3         439.4       1.0X
-day time interval one columns disable radix          58408          60639         NaN          1.7         584.1       0.8X
+day time interval one columns enable radix           23123          23169          61          4.3         231.2       1.0X
+day time interval one columns disable radix          34121          34201          96          2.9         341.2       0.7X
 
-OpenJDK 64-Bit Server VM 21+35 on Linux 5.15.0-1046-azure
-Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+OpenJDK 64-Bit Server VM 21.0.4+7-LTS on Linux 6.5.0-1025-azure
+AMD EPYC 7763 64-Core Processor
 day time interval two columns:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-day time interval two columns enable radix           59992          60623         709          1.7         599.9       1.0X
-day time interval two columns disable radix          65037          70084        2092          1.5         650.4       0.9X
+day time interval two columns enable radix           35022          35250         212          2.9         350.2       1.0X
+day time interval two columns disable radix          35240          35498         224          2.8         352.4       1.0X
 

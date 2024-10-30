@@ -24,69 +24,68 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
 private[sql] object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
-  private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
+  private def checkOverflow(res: Int, x: Byte, y: Byte, op: String, hint: String): Unit = {
     if (res > Byte.MaxValue || res < Byte.MinValue) {
-      throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y)
+      throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y, hint)
     }
   }
 
   override def plus(x: Byte, y: Byte): Byte = {
     val tmp = x + y
-    checkOverflow(tmp, x, y, "+")
+    checkOverflow(tmp, x, y, "+", "try_add")
     tmp.toByte
   }
 
   override def minus(x: Byte, y: Byte): Byte = {
     val tmp = x - y
-    checkOverflow(tmp, x, y, "-")
+    checkOverflow(tmp, x, y, "-", "try_subtract")
     tmp.toByte
   }
 
   override def times(x: Byte, y: Byte): Byte = {
     val tmp = x * y
-    checkOverflow(tmp, x, y, "*")
+    checkOverflow(tmp, x, y, "*", "try_multiply")
     tmp.toByte
   }
 
   override def negate(x: Byte): Byte = {
-    if (x == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw QueryExecutionErrors.unaryMinusCauseOverflowError(x)
-    }
-    (-x).toByte
+    MathUtils.negateExact(x)
   }
 }
 
 
 private[sql] object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
-  private def checkOverflow(res: Int, x: Short, y: Short, op: String): Unit = {
+  private def checkOverflow(
+      res: Int,
+      x: Short,
+      y: Short,
+      op: String,
+      hint: String = "unknown_function"): Unit = {
     if (res > Short.MaxValue || res < Short.MinValue) {
-      throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y)
+      throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(x, op, y, hint)
     }
   }
 
   override def plus(x: Short, y: Short): Short = {
     val tmp = x + y
-    checkOverflow(tmp, x, y, "+")
+    checkOverflow(tmp, x, y, "+", "try_add")
     tmp.toShort
   }
 
   override def minus(x: Short, y: Short): Short = {
     val tmp = x - y
-    checkOverflow(tmp, x, y, "-")
+    checkOverflow(tmp, x, y, "-", "try_subtract")
     tmp.toShort
   }
 
   override def times(x: Short, y: Short): Short = {
     val tmp = x * y
-    checkOverflow(tmp, x, y, "*")
+    checkOverflow(tmp, x, y, "*", "try_multiply")
     tmp.toShort
   }
 
   override def negate(x: Short): Short = {
-    if (x == Short.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
-      throw QueryExecutionErrors.unaryMinusCauseOverflowError(x)
-    }
-    (-x).toShort
+    MathUtils.negateExact(x)
   }
 }
 

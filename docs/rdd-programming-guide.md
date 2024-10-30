@@ -46,7 +46,7 @@ Spark applications in Python can either be run with the `bin/spark-submit` scrip
 
 {% highlight python %}
     install_requires=[
-        'pyspark=={site.SPARK_VERSION}'
+        'pyspark=={{site.SPARK_VERSION}}'
     ]
 {% endhighlight %}
 
@@ -214,13 +214,13 @@ can be passed to the `--repositories` argument. For example, to run
 `bin/pyspark` on exactly four cores, use:
 
 {% highlight bash %}
-$ ./bin/pyspark --master local[4]
+$ ./bin/pyspark --master "local[4]"
 {% endhighlight %}
 
 Or, to also add `code.py` to the search path (in order to later be able to `import code`), use:
 
 {% highlight bash %}
-$ ./bin/pyspark --master local[4] --py-files code.py
+$ ./bin/pyspark --master "local[4]" --py-files code.py
 {% endhighlight %}
 
 For a complete list of options, run `pyspark --help`. Behind the scenes,
@@ -260,19 +260,19 @@ can be passed to the `--repositories` argument. For example, to run `bin/spark-s
 four cores, use:
 
 {% highlight bash %}
-$ ./bin/spark-shell --master local[4]
+$ ./bin/spark-shell --master "local[4]"
 {% endhighlight %}
 
 Or, to also add `code.jar` to its classpath, use:
 
 {% highlight bash %}
-$ ./bin/spark-shell --master local[4] --jars code.jar
+$ ./bin/spark-shell --master "local[4]" --jars code.jar
 {% endhighlight %}
 
 To include a dependency using Maven coordinates:
 
 {% highlight bash %}
-$ ./bin/spark-shell --master local[4] --packages "org.example:example:0.1"
+$ ./bin/spark-shell --master "local[4]" --packages "org.example:example:0.1"
 {% endhighlight %}
 
 For a complete list of options, run `spark-shell --help`. Behind the scenes,
@@ -378,7 +378,7 @@ resulting Java objects using [pickle](https://github.com/irmen/pickle/). When sa
 PySpark does the reverse. It unpickles Python objects into Java objects and then converts them to Writables. The following
 Writables are automatically converted:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Writable Type</th><th>Python Type</th></tr></thead>
 <tr><td>Text</td><td>str</td></tr>
 <tr><td>IntWritable</td><td>int</td></tr>
@@ -776,12 +776,12 @@ for other languages.
 
 </div>
 
-### Understanding closures <a name="ClosuresLink"></a>
+### Understanding closures
 One of the harder things about Spark is understanding the scope and life cycle of variables and methods when executing code across a cluster. RDD operations that modify variables outside of their scope can be a frequent source of confusion. In the example below we'll look at code that uses `foreach()` to increment a counter, but similar issues can occur for other operations as well.
 
 #### Example
 
-Consider the naive RDD element sum below, which may behave differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = local[n]`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN):
+Consider the naive RDD element sum below, which may behave differently depending on whether execution is happening within the same JVM. A common example of this is when running Spark in `local` mode (`--master = "local[n]"`) versus deploying a Spark application to a cluster (e.g. via spark-submit to YARN):
 
 <div class="codetabs">
 
@@ -877,10 +877,12 @@ The most common ones are distributed "shuffle" operations, such as grouping or a
 by a key.
 
 In Scala, these operations are automatically available on RDDs containing
-[Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) objects
+[Tuple2][tuple2] objects
 (the built-in tuples in the language, created by simply writing `(a, b)`). The key-value pair operations are available in the
 [PairRDDFunctions](api/scala/org/apache/spark/rdd/PairRDDFunctions.html) class,
 which automatically wraps around an RDD of tuples.
+
+[tuple2]: https://www.scala-lang.org/api/{{site.SCALA_VERSION}}/scala/Tuple2.html
 
 For example, the following code uses the `reduceByKey` operation on key-value pairs to count how
 many times each line of text occurs in a file:
@@ -909,7 +911,7 @@ The most common ones are distributed "shuffle" operations, such as grouping or a
 by a key.
 
 In Java, key-value pairs are represented using the
-[scala.Tuple2](http://www.scala-lang.org/api/{{site.SCALA_VERSION}}/index.html#scala.Tuple2) class
+[scala.Tuple2][tuple2] class
 from the Scala standard library. You can simply call `new Tuple2(a, b)` to create a tuple, and access
 its fields later with `tuple._1()` and `tuple._2()`.
 
@@ -954,7 +956,7 @@ and pair RDD functions doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th style="width:25%">Transformation</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>map</b>(<i>func</i>) </td>
@@ -1069,7 +1071,7 @@ and pair RDD functions doc
  [Java](api/java/index.html?org/apache/spark/api/java/JavaPairRDD.html))
 for details.
 
-<table class="table table-striped">
+<table>
 <thead><tr><th>Action</th><th>Meaning</th></tr></thead>
 <tr>
   <td> <b>reduce</b>(<i>func</i>) </td>
@@ -1120,7 +1122,7 @@ for details.
 <tr>
   <td> <b>foreach</b>(<i>func</i>) </td>
   <td> Run a function <i>func</i> on each element of the dataset. This is usually done for side effects such as updating an <a href="#accumulators">Accumulator</a> or interacting with external storage systems.
-  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures-a-nameclosureslinka">Understanding closures </a> for more details.</td>
+  <br /><b>Note</b>: modifying variables other than Accumulators outside of the <code>foreach()</code> may result in undefined behavior. See <a href="#understanding-closures">Understanding closures</a> for more details.</td>
 </tr>
 </table>
 
@@ -1214,7 +1216,7 @@ to `persist()`. The `cache()` method is a shorthand for using the default storag
 which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
 storage levels is:
 
-<table class="table table-striped">
+<table>
 <thead><tr><th style="width:23%">Storage Level</th><th>Meaning</th></tr></thead>
 <tr>
   <td> MEMORY_ONLY </td>
@@ -1319,7 +1321,7 @@ method. The code below shows this:
 
 {% highlight python %}
 >>> broadcastVar = sc.broadcast([1, 2, 3])
-<pyspark.broadcast.Broadcast object at 0x102789f10>
+<pyspark.core.broadcast.Broadcast object at 0x102789f10>
 
 >>> broadcastVar.value
 [1, 2, 3]

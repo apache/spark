@@ -57,7 +57,17 @@
     <suppress checks="MethodName"
               files="sql/api/src/main/java/org/apache/spark/sql/streaming/GroupStateTimeout.java"/>
     <suppress checks="MethodName"
+              files="sql/api/src/main/java/org/apache/spark/sql/streaming/TimeMode.java"/>
+    <suppress checks="MethodName"
               files="sql/api/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
     <suppress checks="LineLength"
               files="src/main/java/org/apache/spark/sql/api/java/*"/>
+    <suppress checks="IllegalImport"
+              files="src/test/java/org/apache/spark/sql/hive/test/Complex.java"/>
+    <suppress checks="Header"
+      files="src/main/java/org/apache/spark/network/util/LimitedInputStream.java" />
+    <suppress checks="Header"
+      files="src/test/java/org/apache/spark/util/collection/TestTimSort.java" />
+    <suppress checks=".*"
+              files="src/main/java/org/apache/spark/sql/execution/streaming/state/StateMessage.java"/>
 </suppressions>

@@ -13,11 +13,11 @@ SELECT
 -- !query analysis
 Project [scalar-subquery#x [] AS scalarsubquery()#xL, scalar-subquery#x [] AS scalarsubquery()#xL, scalar-subquery#x [] AS scalarsubquery()#xL]
 :  :- Aggregate [min(id#xL) AS min(id)#xL]
-:  :  +- Range (0, 10, step=1, splits=None)
+:  :  +- Range (0, 10, step=1)
 :  :- Aggregate [sum(id#xL) AS sum(id)#xL]
-:  :  +- Range (0, 10, step=1, splits=None)
+:  :  +- Range (0, 10, step=1)
 :  +- Aggregate [count(distinct id#xL) AS count(DISTINCT id)#xL]
-:     +- Range (0, 10, step=1, splits=None)
+:     +- Range (0, 10, step=1)
 +- OneRowRelation
 
 
@@ -40,15 +40,15 @@ WithCTE
 :  +- SubqueryAlias tmp
 :     +- Intersect false
 :        :- Project [id#xL]
-:        :  +- Range (0, 2, step=1, splits=None)
+:        :  +- Range (0, 2, step=1)
 :        +- Project [id#xL]
-:           +- Range (0, 4, step=1, splits=None)
+:           +- Range (0, 4, step=1)
 +- Project [id#xL]
    +- Filter (id#xL > scalar-subquery#x [])
       :  +- Aggregate [max(id#xL) AS max(id)#xL]
       :     +- SubqueryAlias tmp
       :        +- CTERelationRef xxxx, true, [id#xL], false
-      +- Range (0, 3, step=1, splits=None)
+      +- Range (0, 3, step=1)
 
 
 -- !query

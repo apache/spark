@@ -18,6 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -192,8 +193,8 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     if ($(predictionCol).nonEmpty) {
       transformImpl(dataset)
     } else {
-      this.logWarning(s"$uid: Predictor.transform() does nothing" +
-        " because no output columns were set.")
+      logWarning(log"${MDC(LogKeys.UUID, uid)}: Predictor.transform() does nothing because " +
+        log"no output columns were set.")
       dataset.toDF()
     }
   }

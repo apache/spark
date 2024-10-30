@@ -20,7 +20,8 @@ package org.apache.spark.util.logging
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 
 /**
  * Defines the policy based on which [[org.apache.spark.util.logging.RollingFileAppender]] will
@@ -53,8 +54,9 @@ private[spark] class TimeBasedRollingPolicy(
 
   import TimeBasedRollingPolicy._
   if (checkIntervalConstraint && rolloverIntervalMillis < MINIMUM_INTERVAL_SECONDS * 1000L) {
-    logWarning(s"Rolling interval [${rolloverIntervalMillis/1000L} seconds] is too small. " +
-      s"Setting the interval to the acceptable minimum of $MINIMUM_INTERVAL_SECONDS seconds.")
+    logWarning(log"Rolling interval [${MDC(TIME_UNITS, rolloverIntervalMillis)} " +
+      log"ms] is too small. Setting the interval to the acceptable minimum of " +
+      log"${MDC(MIN_TIME, MINIMUM_INTERVAL_SECONDS * 1000)} ms.")
     rolloverIntervalMillis = MINIMUM_INTERVAL_SECONDS * 1000L
   }
 
@@ -103,8 +105,9 @@ private[spark] class SizeBasedRollingPolicy(
 
   import SizeBasedRollingPolicy._
   if (checkSizeConstraint && rolloverSizeBytes < MINIMUM_SIZE_BYTES) {
-    logWarning(s"Rolling size [$rolloverSizeBytes bytes] is too small. " +
-      s"Setting the size to the acceptable minimum of $MINIMUM_SIZE_BYTES bytes.")
+    logWarning(log"Rolling size [${MDC(NUM_BYTES, rolloverSizeBytes)} bytes] is too small. " +
+      log"Setting the size to the acceptable minimum of ${MDC(MIN_SIZE, MINIMUM_SIZE_BYTES)} " +
+      log"bytes.")
     rolloverSizeBytes = MINIMUM_SIZE_BYTES
   }
 

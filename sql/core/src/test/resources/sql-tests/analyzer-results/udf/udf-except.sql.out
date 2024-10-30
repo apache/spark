@@ -12,7 +12,7 @@ CreateViewCommand `t1`, select * from values
   ("two", 2),
   ("three", 3),
   ("one", NULL)
-  as t1(k, v), false, false, LocalTempView, true
+  as t1(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias t1
          +- LocalRelation [k#x, v#x]
@@ -33,7 +33,7 @@ CreateViewCommand `t2`, select * from values
   ("one", 5),
   ("one", NULL),
   (NULL, 5)
-  as t2(k, v), false, false, LocalTempView, true
+  as t2(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias t2
          +- LocalRelation [k#x, v#x]
@@ -45,14 +45,14 @@ SELECT udf(k), udf(v) FROM t1 EXCEPT SELECT udf(k), udf(v) FROM t2
 Except false
 :- Project [cast(udf(cast(k#x as string)) as string) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
 :  +- SubqueryAlias t1
-:     +- View (`t1`, [k#x,v#x])
+:     +- View (`t1`, [k#x, v#x])
 :        +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias t1
 :                 +- LocalRelation [k#x, v#x]
 +- Project [cast(udf(cast(k#x as string)) as string) AS udf(k)#x, cast(udf(cast(v#x as string)) as int) AS udf(v)#x]
    +- SubqueryAlias t2
-      +- View (`t2`, [k#x,v#x])
+      +- View (`t2`, [k#x, v#x])
          +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias t2
@@ -65,7 +65,7 @@ SELECT * FROM t1 EXCEPT SELECT * FROM t1 where udf(v) <> 1 and v <> udf(2)
 Except false
 :- Project [k#x, v#x]
 :  +- SubqueryAlias t1
-:     +- View (`t1`, [k#x,v#x])
+:     +- View (`t1`, [k#x, v#x])
 :        +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias t1
@@ -73,7 +73,7 @@ Except false
 +- Project [k#x, v#x]
    +- Filter (NOT (cast(udf(cast(v#x as string)) as int) = 1) AND NOT (v#x = cast(udf(cast(2 as string)) as int)))
       +- SubqueryAlias t1
-         +- View (`t1`, [k#x,v#x])
+         +- View (`t1`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias t1
@@ -87,7 +87,7 @@ Except false
 :- Project [k#x, v#x]
 :  +- Filter (NOT (cast(udf(cast(v#x as string)) as int) = 1) AND NOT (v#x = cast(udf(cast(22 as string)) as int)))
 :     +- SubqueryAlias t1
-:        +- View (`t1`, [k#x,v#x])
+:        +- View (`t1`, [k#x, v#x])
 :           +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias t1
@@ -95,7 +95,7 @@ Except false
 +- Project [k#x, v#x]
    +- Filter (NOT (cast(udf(cast(v#x as string)) as int) = 2) AND (v#x >= cast(udf(cast(3 as string)) as int)))
       +- SubqueryAlias t1
-         +- View (`t1`, [k#x,v#x])
+         +- View (`t1`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias t1
@@ -112,13 +112,13 @@ Except false
 :  +- Filter (k#x = k#x)
 :     +- Join Inner
 :        :- SubqueryAlias t1
-:        :  +- View (`t1`, [k#x,v#x])
+:        :  +- View (`t1`, [k#x, v#x])
 :        :     +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :        :        +- Project [k#x, v#x]
 :        :           +- SubqueryAlias t1
 :        :              +- LocalRelation [k#x, v#x]
 :        +- SubqueryAlias t2
-:           +- View (`t2`, [k#x,v#x])
+:           +- View (`t2`, [k#x, v#x])
 :              +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :                 +- Project [k#x, v#x]
 :                    +- SubqueryAlias t2
@@ -127,13 +127,13 @@ Except false
    +- Filter ((k#x = k#x) AND NOT (k#x = cast(udf(cast(one as string)) as string)))
       +- Join Inner
          :- SubqueryAlias t1
-         :  +- View (`t1`, [k#x,v#x])
+         :  +- View (`t1`, [k#x, v#x])
          :     +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
          :        +- Project [k#x, v#x]
          :           +- SubqueryAlias t1
          :              +- LocalRelation [k#x, v#x]
          +- SubqueryAlias t2
-            +- View (`t2`, [k#x,v#x])
+            +- View (`t2`, [k#x, v#x])
                +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias t2
@@ -147,14 +147,14 @@ Except false
 :- Project [k#x, v#x]
 :  +- Filter ((v#x >= cast(udf(cast(1 as string)) as int)) AND NOT (cast(udf(cast(v#x as string)) as int) = 22))
 :     +- SubqueryAlias t2
-:        +- View (`t2`, [k#x,v#x])
+:        +- View (`t2`, [k#x, v#x])
 :           +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias t2
 :                    +- LocalRelation [k#x, v#x]
 +- Project [k#x, v#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [k#x,v#x])
+      +- View (`t1`, [k#x, v#x])
          +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias t1
@@ -171,13 +171,13 @@ Except false
 :  :  +- Aggregate [min(cast(udf(cast(k#x as string)) as string)) AS min(udf(k))#x]
 :  :     +- Filter (k#x = outer(k#x))
 :  :        +- SubqueryAlias t2
-:  :           +- View (`t2`, [k#x,v#x])
+:  :           +- View (`t2`, [k#x, v#x])
 :  :              +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :  :                 +- Project [k#x, v#x]
 :  :                    +- SubqueryAlias t2
 :  :                       +- LocalRelation [k#x, v#x]
 :  +- SubqueryAlias t1
-:     +- View (`t1`, [k#x,v#x])
+:     +- View (`t1`, [k#x, v#x])
 :        +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :           +- Project [k#x, v#x]
 :              +- SubqueryAlias t1
@@ -185,14 +185,14 @@ Except false
 +- Project [scalar-subquery#x [] AS abs_min_t2#x]
    :  +- Aggregate [cast(udf(cast(min(k#x) as string)) as string) AS udf(min(k))#x]
    :     +- SubqueryAlias t2
-   :        +- View (`t2`, [k#x,v#x])
+   :        +- View (`t2`, [k#x, v#x])
    :           +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
    :              +- Project [k#x, v#x]
    :                 +- SubqueryAlias t2
    :                    +- LocalRelation [k#x, v#x]
    +- Filter (k#x = cast(udf(cast(one as string)) as string))
       +- SubqueryAlias t1
-         +- View (`t1`, [k#x,v#x])
+         +- View (`t1`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias t1
@@ -218,13 +218,13 @@ Except false
 :     :  +- Aggregate [cast(udf(cast(max(cast(udf(cast(v#x as string)) as int)) as string)) as int) AS udf(max(udf(v)))#x]
 :     :     +- Filter (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(outer(k#x) as string)) as string))
 :     :        +- SubqueryAlias t2
-:     :           +- View (`t2`, [k#x,v#x])
+:     :           +- View (`t2`, [k#x, v#x])
 :     :              +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :     :                 +- Project [k#x, v#x]
 :     :                    +- SubqueryAlias t2
 :     :                       +- LocalRelation [k#x, v#x]
 :     +- SubqueryAlias t1
-:        +- View (`t1`, [k#x,v#x])
+:        +- View (`t1`, [k#x, v#x])
 :           +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
 :              +- Project [k#x, v#x]
 :                 +- SubqueryAlias t1
@@ -234,13 +234,13 @@ Except false
       :  +- Aggregate [min(cast(udf(cast(v#x as string)) as int)) AS min(udf(v))#x]
       :     +- Filter (k#x = outer(k#x))
       :        +- SubqueryAlias t2
-      :           +- View (`t2`, [k#x,v#x])
+      :           +- View (`t2`, [k#x, v#x])
       :              +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
       :                 +- Project [k#x, v#x]
       :                    +- SubqueryAlias t2
       :                       +- LocalRelation [k#x, v#x]
       +- SubqueryAlias t1
-         +- View (`t1`, [k#x,v#x])
+         +- View (`t1`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias t1

@@ -18,12 +18,13 @@
 package org.apache.spark.ui
 
 import java.util.Date
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
+import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, WEB_URL}
 import org.apache.spark.internal.config.DRIVER_LOG_LOCAL_DIR
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._
@@ -155,7 +156,7 @@ private[spark] class SparkUI private (
       serverInfo = Some(server)
     } catch {
       case e: Exception =>
-        logError(s"Failed to bind $className", e)
+        logError(log"Failed to bind ${MDC(CLASS_NAME, className)}", e)
         System.exit(1)
     }
   }
@@ -163,7 +164,7 @@ private[spark] class SparkUI private (
   /** Stop the server behind this web interface. Only valid after bind(). */
   override def stop(): Unit = {
     super.stop()
-    logInfo(s"Stopped Spark web UI at $webUrl")
+    logInfo(log"Stopped Spark web UI at ${MDC(WEB_URL, webUrl)}")
   }
 
   override def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T = {

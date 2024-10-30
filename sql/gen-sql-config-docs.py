@@ -56,7 +56,7 @@ def generate_sql_configs_table_html(sql_configs, path):
     The table will look something like this:
 
     ```html
-    <table class="table">
+    <table class="spark-config">
     <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
 
     <tr>
@@ -76,7 +76,7 @@ def generate_sql_configs_table_html(sql_configs, path):
     with open(path, 'w') as f:
         f.write(dedent(
             """
-            <table class="table">
+            <table class="spark-config">
             <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
             """
         ))

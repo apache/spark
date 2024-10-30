@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -58,8 +59,9 @@ object V2ScanPartitioningAndOrdering extends Rule[LogicalPlan] with SQLConfHelpe
           }
         case _: UnknownPartitioning => None
         case p =>
-          logWarning(s"Spark ignores the partitioning ${p.getClass.getSimpleName}." +
-            " Please use KeyGroupedPartitioning for better performance")
+          logWarning(
+            log"Spark ignores the partitioning ${MDC(CLASS_NAME, p.getClass.getSimpleName)}. " +
+              log"Please use KeyGroupedPartitioning for better performance")
           None
       }
 

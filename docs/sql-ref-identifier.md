@@ -30,7 +30,7 @@ An identifier is a string used to identify a database object such as a table, vi
 ```sql
 { letter | digit | '_' } [ , ... ]
 ```
-**Note:** If `spark.sql.ansi.enabled` is set to true, ANSI SQL reserved keywords cannot be used as identifiers. For more details, please refer to [ANSI Compliance](sql-ref-ansi-compliance.html).
+**Note:** If `spark.sql.ansi.enforceReservedKeywords` is set to true, ANSI SQL reserved keywords cannot be used as identifiers. For more details, please refer to [ANSI Compliance](sql-ref-ansi-compliance.html).
 
 #### Delimited Identifier
 

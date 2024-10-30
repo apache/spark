@@ -167,7 +167,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
   private var kconf: KubernetesDriverConf = _
   private var createdPodArgumentCaptor: ArgumentCaptor[Pod] = _
-  private var createdResourcesArgumentCaptor: ArgumentCaptor[HasMetadata] = _
+  private var createdResourcesArgumentCaptor: ArgumentCaptor[Array[HasMetadata]] = _
 
   before {
     MockitoAnnotations.openMocks(this).close()
@@ -179,7 +179,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     when(podsWithNamespace.withName(POD_NAME)).thenReturn(namedPods)
 
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
-    createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
+    createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[Array[HasMetadata]])
     when(podsWithNamespace.resource(fullExpectedPod())).thenReturn(namedPods)
     when(resourceList.forceConflicts()).thenReturn(resourceList)
     when(namedPods.serverSideApply()).thenReturn(podWithOwnerReference())
@@ -189,7 +189,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     when(loggingPodStatusWatcher.watchOrStop(sId)).thenReturn(true)
     doReturn(resourceList)
       .when(kubernetesClient)
-      .resourceList(createdResourcesArgumentCaptor.capture())
+      .resourceList(createdResourcesArgumentCaptor.capture(): _*)
   }
 
   test("The client should configure the pod using the builder.") {
@@ -210,7 +210,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
+    val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
     assert(otherCreatedResources.size === 2)
     val secrets = otherCreatedResources.toArray.filter(_.isInstanceOf[Secret]).toSeq
     assert(secrets === ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES)
@@ -246,7 +246,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
+    val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
 
     // 2 for pre-resource creation/update, 1 for resource creation, 1 for config map
     assert(otherCreatedResources.size === 4)
@@ -326,7 +326,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
+    val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues.asScala.flatten
 
     val configMaps = otherCreatedResources.toArray
       .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])

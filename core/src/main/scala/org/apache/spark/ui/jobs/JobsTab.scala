@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import javax.servlet.http.HttpServletRequest
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.config.SCHEDULER_MODE
@@ -52,7 +52,7 @@ private[ui] class JobsTab(parent: SparkUI, store: AppStatusStore)
       Option(request.getParameter("id")).map(_.toInt).foreach { id =>
         store.asOption(store.job(id)).foreach { job =>
           if (job.status == JobExecutionStatus.RUNNING) {
-            sc.foreach(_.cancelJob(id))
+            sc.foreach(_.cancelJob(id, "killed via Web UI"))
             // Do a quick pause here to give Spark time to kill the job so it shows up as
             // killed after the refresh. Note that this will block the serving thread so the
             // time should be limited in duration.

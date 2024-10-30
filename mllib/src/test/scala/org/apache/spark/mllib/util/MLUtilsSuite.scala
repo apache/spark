@@ -93,7 +93,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, StandardCharsets.UTF_8)
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(lines)
     val path = tempDir.toURI.toString
 
     val pointsWithNumFeatures = loadLibSVMFile(sc, path, 6).collect()
@@ -126,7 +126,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, StandardCharsets.UTF_8)
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(lines)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -143,7 +143,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, StandardCharsets.UTF_8)
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(lines)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -198,7 +198,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(foldedRdds.length === folds)
         foldedRdds.foreach { case (training, validation) =>
           val result = validation.union(training).collect().sorted
-          val validationSize = validation.collect().size.toFloat
+          val validationSize = validation.collect().length.toFloat
           assert(validationSize > 0, "empty validation data")
           val p = 1 / folds.toFloat
           // Within 3 standard deviations of the mean
@@ -210,7 +210,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
             s"Validation data ($validationSize) smaller than expected ($lowerBound)" )
           assert(validationSize < upperBound,
             s"Validation data ($validationSize) larger than expected ($upperBound)" )
-          assert(training.collect().size > 0, "empty training data")
+          assert(training.collect().length > 0, "empty training data")
           assert(result ===  collectedData,
             "Each training+validation set combined should contain all of the data.")
         }

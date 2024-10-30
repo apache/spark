@@ -45,7 +45,7 @@ case class DropNamespaceExec(
           throw QueryCompilationErrors.cannotDropNonemptyNamespaceError(namespace)
       }
     } else if (!ifExists) {
-      throw QueryCompilationErrors.noSuchNamespaceError(ns)
+      throw QueryCompilationErrors.noSuchNamespaceError(catalog.name() +: ns)
     }
 
     Seq.empty

@@ -21,18 +21,19 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Literal, UnspecifiedFrame}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Literal, UnspecifiedFrame}
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Expand, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 
-class PropagateEmptyRelationSuite extends PlanTest {
+class   PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("PropagateEmptyRelation", Once,
+      Batch("PropagateEmptyRelation", FixedPoint(1),
         CombineUnions,
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
@@ -45,7 +46,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   object OptimizeWithoutPropagateEmptyRelation extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("OptimizeWithoutPropagateEmptyRelation", Once,
+      Batch("OptimizeWithoutPropagateEmptyRelation", FixedPoint(1),
         CombineUnions,
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
@@ -216,8 +217,61 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .where($"a" =!= 200)
       .orderBy($"a".asc)
 
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation(output, isStreaming = true)
+    withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer = LocalRelation(output, isStreaming = true)
+      comparePlans(optimized, correctAnswer)
+    }
+
+    withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "false") {
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer = relation
+        .where(false)
+        .where($"a" > 1)
+        .select($"a")
+        .where($"a" =!= 200)
+        .orderBy($"a".asc).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-47305 correctly tag isStreaming when propagating empty relation " +
+    "with the plan containing batch and streaming") {
+    val data = Seq(Row(1))
+
+    val outputForStream = Seq($"a".int)
+    val schemaForStream = DataTypeUtils.fromAttributes(outputForStream)
+    val converterForStream = CatalystTypeConverters.createToCatalystConverter(schemaForStream)
+
+    val outputForBatch = Seq($"b".int)
+    val schemaForBatch = DataTypeUtils.fromAttributes(outputForBatch)
+    val converterForBatch = CatalystTypeConverters.createToCatalystConverter(schemaForBatch)
+
+    val streamingRelation = LocalRelation(
+      outputForStream,
+      data.map(converterForStream(_).asInstanceOf[InternalRow]),
+      isStreaming = true)
+    val batchRelation = LocalRelation(
+      outputForBatch,
+      data.map(converterForBatch(_).asInstanceOf[InternalRow]),
+      isStreaming = false)
+
+    val query = streamingRelation
+      .join(batchRelation.where(false).select($"b"), LeftOuter,
+        Some(EqualTo($"a", $"b")))
+
+    val analyzedQuery = query.analyze
+
+    val optimized = Optimize.execute(analyzedQuery)
+    // This is to deal with analysis for join condition. We expect the analyzed plan to contain
+    // filter and projection in batch relation, and know they will go away after optimization.
+    // The point to check here is that the node is replaced with "empty" LocalRelation, but the
+    // flag `isStreaming` is properly propagated.
+    val correctAnswer = analyzedQuery transform {
+      case Project(_, Filter(_, l: LocalRelation)) => l.copy(data = Seq.empty)
+    }
 
     comparePlans(optimized, correctAnswer)
   }

@@ -17,9 +17,9 @@
 
 package org.apache.spark.ui.jobs
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.{Node, Text}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}

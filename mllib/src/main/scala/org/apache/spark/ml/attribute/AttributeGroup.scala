@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.{Metadata, MetadataBuilder, StructField}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Attributes that describe a vector ML column.
@@ -165,7 +166,7 @@ class AttributeGroup private (
       case o: AttributeGroup =>
         (name == o.name) &&
           (numAttributes == o.numAttributes) &&
-          (attributes.map(_.toSeq) == o.attributes.map(_.toSeq))
+          (attributes.map(_.toImmutableArraySeq) == o.attributes.map(_.toImmutableArraySeq))
       case _ =>
         false
     }
@@ -175,7 +176,7 @@ class AttributeGroup private (
     var sum = 17
     sum = 37 * sum + name.hashCode
     sum = 37 * sum + numAttributes.hashCode
-    sum = 37 * sum + attributes.map(_.toSeq).hashCode
+    sum = 37 * sum + attributes.map(_.toImmutableArraySeq).hashCode
     sum
   }
 

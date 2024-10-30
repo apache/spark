@@ -16,19 +16,19 @@
 #
 import unittest
 
-import pyspark.pandas as ps
 from pyspark.pandas.tests.data_type_ops.test_timedelta_ops import TimedeltaOpsTestsMixin
-from pyspark.pandas.tests.connect.data_type_ops.testing_utils import OpsTestBase
+from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TimedeltaOpsParityTests(
-    TimedeltaOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
+    TimedeltaOpsTestsMixin,
+    PandasOnSparkTestUtils,
+    OpsTestBase,
+    ReusedConnectTestCase,
 ):
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
+    pass
 
 
 if __name__ == "__main__":

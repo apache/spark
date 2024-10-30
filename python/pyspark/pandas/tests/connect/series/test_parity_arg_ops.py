@@ -21,7 +21,11 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
-class SeriesParityArgOpsTests(SeriesArgOpsMixin, PandasOnSparkTestUtils, ReusedConnectTestCase):
+class SeriesParityArgOpsTests(
+    SeriesArgOpsMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
+):
     pass
 
 

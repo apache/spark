@@ -16,7 +16,16 @@
  */
 package org.apache.spark.deploy.k8s
 
-private[spark] object Constants {
+import org.apache.spark.annotation.{DeveloperApi, Stable}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * This is used in both K8s module and Spark K8s Operator.
+ */
+@Stable
+@DeveloperApi
+object Constants {
 
   // Labels
   val SPARK_VERSION_LABEL = "spark-version"
@@ -63,6 +72,8 @@ private[spark] object Constants {
   val ENV_EXECUTOR_ID = "SPARK_EXECUTOR_ID"
   val ENV_EXECUTOR_POD_IP = "SPARK_EXECUTOR_POD_IP"
   val ENV_EXECUTOR_POD_NAME = "SPARK_EXECUTOR_POD_NAME"
+  val ENV_EXECUTOR_ATTRIBUTE_APP_ID = "SPARK_EXECUTOR_ATTRIBUTE_APP_ID"
+  val ENV_EXECUTOR_ATTRIBUTE_EXECUTOR_ID = "SPARK_EXECUTOR_ATTRIBUTE_EXECUTOR_ID"
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"

@@ -28,9 +28,11 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.security.HadoopDelegationTokenProvider
+import org.apache.spark.util.Utils
 
 private[deploy] class HadoopFSDelegationTokenProvider
     extends HadoopDelegationTokenProvider with Logging {
@@ -77,7 +79,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
       nextRenewalDate
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to get token from service $serviceName", e)
+        logWarning(log"Failed to get token from service ${MDC(SERVICE_NAME, serviceName)}", e)
         None
     }
   }
@@ -115,11 +117,12 @@ private[deploy] class HadoopFSDelegationTokenProvider
     filesystems.foreach { fs =>
       if (fsToExclude.contains(fs.getUri.getHost)) {
         // YARN RM skips renewing token with empty renewer
-        logInfo(s"getting token for: $fs with empty renewer to skip renewal")
-        fs.addDelegationTokens("", creds)
+        logInfo(log"getting token for: ${MDC(FILE_SYSTEM, fs)} with empty renewer to skip renewal")
+        Utils.tryLogNonFatalError { fs.addDelegationTokens("", creds) }
       } else {
-        logInfo(s"getting token for: $fs with renewer $renewer")
-        fs.addDelegationTokens(renewer, creds)
+        logInfo(log"getting token for: ${MDC(FILE_SYSTEM, fs)} with" +
+          log" renewer ${MDC(TOKEN_RENEWER, renewer)}")
+        Utils.tryLogNonFatalError { fs.addDelegationTokens(renewer, creds) }
       }
     }
 
@@ -145,7 +148,11 @@ private[deploy] class HadoopFSDelegationTokenProvider
         val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
         val tokenKind = token.getKind.toString
         val interval = newExpiration - getIssueDate(tokenKind, identifier)
-        logInfo(s"Renewal interval is $interval for token $tokenKind")
+        logInfo(log"Renewal interval is ${MDC(TOTAL_TIME, interval)} for" +
+          log" token ${MDC(TOKEN_KIND, tokenKind)}")
+        // The token here is only used to obtain renewal intervals. We should cancel it in
+        // a timely manner to avoid causing additional pressure on the server.
+        token.cancel(hadoopConf)
         interval
       }.toOption
     }
@@ -156,17 +163,20 @@ private[deploy] class HadoopFSDelegationTokenProvider
     val now = System.currentTimeMillis()
     val issueDate = identifier.getIssueDate
     if (issueDate > now) {
-      logWarning(s"Token $kind has set up issue date later than current time. (provided: " +
-        s"$issueDate / current timestamp: $now) Please make sure clocks are in sync between " +
-        "machines. If the issue is not a clock mismatch, consult token implementor to check " +
-        "whether issue date is valid.")
+      logWarning(log"Token ${MDC(TOKEN_KIND, kind)} has set up issue date later than " +
+        log"current time (provided: " +
+        log"${MDC(ISSUE_DATE, issueDate)} / current timestamp: ${MDC(CURRENT_TIME, now)}). " +
+        log"Please make sure clocks are in sync between " +
+        log"machines. If the issue is not a clock mismatch, consult token implementor to check " +
+        log"whether issue date is valid.")
       issueDate
     } else if (issueDate > 0L) {
       issueDate
     } else {
-      logWarning(s"Token $kind has not set up issue date properly. (provided: $issueDate) " +
-        s"Using current timestamp ($now) as issue date instead. Consult token implementor to fix " +
-        "the behavior.")
+      logWarning(log"Token ${MDC(TOKEN_KIND, kind)} has not set up issue date properly " +
+        log"(provided: ${MDC(ISSUE_DATE, issueDate)}). " +
+        log"Using current timestamp (${MDC(CURRENT_TIME, now)} as issue date instead. " +
+        log"Consult token implementor to fix the behavior.")
       now
     }
   }

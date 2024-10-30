@@ -20,19 +20,28 @@ package org.apache.spark.sql.jdbc
 import java.net.ServerSocket
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 
+import scala.concurrent.TimeoutException
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import com.spotify.docker.client._
-import com.spotify.docker.client.DockerClient.{ListContainersParam, LogsParam}
-import com.spotify.docker.client.exceptions.ImageNotFoundException
-import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
-import org.scalatest.concurrent.Eventually
+import com.github.dockerjava.api.DockerClient
+import com.github.dockerjava.api.async.{ResultCallback, ResultCallbackTemplate}
+import com.github.dockerjava.api.command.{CreateContainerResponse, PullImageResultCallback}
+import com.github.dockerjava.api.exception.NotFoundException
+import com.github.dockerjava.api.model._
+import com.github.dockerjava.core.{DefaultDockerClientConfig, DockerClientImpl}
+import com.github.dockerjava.zerodep.ZerodepDockerHttpClient
+import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONTAINER, STATUS}
+import org.apache.spark.internal.MDC
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.DockerUtils
+import org.apache.spark.util.{DockerUtils, Utils}
+import org.apache.spark.util.Utils.timeStringAsSeconds
 
 abstract class DatabaseOnDocker {
   /**
@@ -88,20 +97,27 @@ abstract class DatabaseOnDocker {
    * Optional step before container starts
    */
   def beforeContainerStart(
-      hostConfigBuilder: HostConfig.Builder,
-      containerConfigBuilder: ContainerConfig.Builder): Unit = {}
+      hostConfigBuilder: HostConfig,
+      containerConfigBuilder: ContainerConfig): Unit = {}
 }
 
 abstract class DockerJDBCIntegrationSuite
-  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
+  extends QueryTest with SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
-  val connectionTimeout = timeout(5.minutes)
   val keepContainer =
     sys.props.getOrElse("spark.test.docker.keepContainer", "false").toBoolean
   val removePulledImage =
     sys.props.getOrElse("spark.test.docker.removePulledImage", "true").toBoolean
+  protected val imagePullTimeout: Long =
+    timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.imagePullTimeout", "5min"))
+  protected val startContainerTimeout: Long =
+    timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
+  protected val connectionTimeout: PatienceConfiguration.Timeout = {
+    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min")
+    timeout(timeStringAsSeconds(timeoutStr).seconds)
+  }
 
   private var docker: DockerClient = _
   // Configure networking (necessary for boot2docker / Docker Machine)
@@ -111,56 +127,89 @@ abstract class DockerJDBCIntegrationSuite
     sock.close()
     port
   }
-  private var containerId: String = _
+  private var container: CreateContainerResponse = _
   private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
   override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
     super.beforeAll()
     try {
-      docker = DefaultDockerClient.fromEnv.build()
+      val config = DefaultDockerClientConfig.createDefaultConfigBuilder.build
+      val httpClient = new ZerodepDockerHttpClient.Builder()
+        .dockerHost(config.getDockerHost)
+        .sslConfig(config.getSSLConfig)
+        .build()
+      docker = DockerClientImpl.getInstance(config, httpClient)
       // Check that Docker is actually up
       try {
-        docker.ping()
+        docker.pingCmd().exec()
       } catch {
         case NonFatal(e) =>
           log.error("Exception while connecting to Docker. Check whether Docker is running.")
           throw e
       }
-      // Ensure that the Docker image is installed:
       try {
-        docker.inspectImage(db.imageName)
+        // Ensure that the Docker image is installed:
+        docker.inspectImageCmd(db.imageName).exec()
       } catch {
-        case e: ImageNotFoundException =>
+        case e: NotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
-          docker.pull(db.imageName)
-          pulled = true
+          val callback = new PullImageResultCallback {
+            override def onNext(item: PullResponseItem): Unit = {
+              super.onNext(item)
+              val status = item.getStatus
+              if (status != null && status != "Downloading" && status != "Extracting") {
+                logInfo(s"$status ${item.getId}")
+              }
+            }
+          }
+
+          val (success, time) = Utils.timeTakenMs(
+            docker.pullImageCmd(db.imageName)
+              .exec(callback)
+              .awaitCompletion(imagePullTimeout, TimeUnit.SECONDS))
+
+          if (success) {
+            pulled = success
+            logInfo(s"Successfully pulled image ${db.imageName} in $time ms")
+          } else {
+            throw new TimeoutException(
+              s"Timeout('$imagePullTimeout secs') waiting for image ${db.imageName} to be pulled")
+          }
       }
-      val hostConfigBuilder = HostConfig.builder()
-        .privileged(db.privileged)
-        .networkMode("bridge")
-        .ipcMode(if (db.usesIpc) "host" else "")
-        .portBindings(
-          Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
+
+      val hostConfig = HostConfig
+        .newHostConfig()
+        .withNetworkMode("bridge")
+        .withPrivileged(db.privileged)
+        .withPortBindings(PortBinding.parse(s"$externalPort:${db.jdbcPort}"))
+
+      if (db.usesIpc) {
+        hostConfig.withIpcMode("host")
+      }
+
+      val containerConfig = new ContainerConfig()
+
+      db.beforeContainerStart(hostConfig, containerConfig)
+
       // Create the database container:
-      val containerConfigBuilder = ContainerConfig.builder()
-        .image(db.imageName)
-        .networkDisabled(false)
-        .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
-        .exposedPorts(s"${db.jdbcPort}/tcp")
-      if (db.getEntryPoint.isDefined) {
-        containerConfigBuilder.entrypoint(db.getEntryPoint.get)
-      }
-      if (db.getStartupProcessName.isDefined) {
-        containerConfigBuilder.cmd(db.getStartupProcessName.get)
-      }
-      db.beforeContainerStart(hostConfigBuilder, containerConfigBuilder)
-      containerConfigBuilder.hostConfig(hostConfigBuilder.build())
-      val config = containerConfigBuilder.build()
-      // Create the database container:
-      containerId = docker.createContainer(config).id
+      val createContainerCmd = docker.createContainerCmd(db.imageName)
+        .withHostConfig(hostConfig)
+        .withExposedPorts(ExposedPort.tcp(db.jdbcPort))
+        .withEnv(db.env.map { case (k, v) => s"$k=$v" }.toList.asJava)
+        .withNetworkDisabled(false)
+
+
+      db.getEntryPoint.foreach(ep => createContainerCmd.withEntrypoint(ep))
+      db.getStartupProcessName.foreach(n => createContainerCmd.withCmd(n))
+
+      container = createContainerCmd.exec()
       // Start the container and wait until the database can accept JDBC connections:
-      docker.startContainer(containerId)
+      docker.startContainerCmd(container.getId).exec()
+      eventually(timeout(startContainerTimeout.seconds), interval(1.second)) {
+        val response = docker.inspectContainerCmd(container.getId).exec()
+        assert(response.getState.getRunning)
+      }
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
       var conn: Connection = null
       eventually(connectionTimeout, interval(1.second)) {
@@ -174,6 +223,8 @@ abstract class DockerJDBCIntegrationSuite
       }
     } catch {
       case NonFatal(e) =>
+        logError(log"Failed to initialize Docker container for " +
+          log"${MDC(CLASS_NAME, this.getClass.getName)}", e)
         try {
           afterAll()
         } finally {
@@ -206,36 +257,36 @@ abstract class DockerJDBCIntegrationSuite
   def dataPreparation(connection: Connection): Unit
 
   private def cleanupContainer(): Unit = {
-    if (docker != null && containerId != null && !keepContainer) {
+    if (docker != null && container != null && !keepContainer) {
       try {
-        docker.killContainer(containerId)
+        docker.killContainerCmd(container.getId).exec()
       } catch {
         case NonFatal(e) =>
-          val exitContainerIds =
-            docker.listContainers(ListContainersParam.withStatusExited()).asScala.map(_.id())
-          if (exitContainerIds.contains(containerId)) {
-            logWarning(s"Container $containerId already stopped")
-          } else {
-            logWarning(s"Could not stop container $containerId", e)
-          }
+          val response = docker.inspectContainerCmd(container.getId).exec()
+          logWarning(log"Container ${MDC(CONTAINER, container)} already stopped")
+          val status = Option(response).map(_.getState.getStatus).getOrElse("unknown")
+          logWarning(log"Could not stop container ${MDC(CONTAINER, container)} " +
+            log"at stage '${MDC(STATUS, status)}'", e)
       } finally {
         logContainerOutput()
-        docker.removeContainer(containerId)
+        docker.removeContainerCmd(container.getId).exec()
         if (removePulledImage && pulled) {
-          docker.removeImage(db.imageName)
+          docker.removeImageCmd(db.imageName).exec()
         }
       }
     }
   }
 
   private def logContainerOutput(): Unit = {
-    val logStream = docker.logs(containerId, LogsParam.stdout(), LogsParam.stderr())
-    try {
-      logInfo("\n\n===== CONTAINER LOGS FOR container Id: " + containerId + " =====")
-      logInfo(logStream.readFully())
-      logInfo("\n\n===== END OF CONTAINER LOGS FOR container Id: " + containerId + " =====")
-    } finally {
-      logStream.close()
-    }
+    logInfo("\n\n===== CONTAINER LOGS FOR container Id: " + container + " =====")
+    docker.logContainerCmd(container.getId)
+      .withStdOut(true)
+      .withStdErr(true)
+      .withFollowStream(true)
+      .withSince(0).exec(
+      new ResultCallbackTemplate[ResultCallback[Frame], Frame] {
+        override def onNext(f: Frame): Unit = logInfo(f.toString)
+      })
+    logInfo("\n\n===== END OF CONTAINER LOGS FOR container Id: " + container + " =====")
   }
 }

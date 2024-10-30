@@ -30,6 +30,8 @@ import scala.util.Random
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -48,6 +50,38 @@ import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
+// MaintenanceErrorOnCertainPartitionsProvider is a test-only provider that throws an
+// exception during maintenance for partitions 0 and 1 (these are arbitrary choices). It is
+// used to test that an exception in a single provider's maintenance does not affect other
+// providers that do not experience exceptions.
+class MaintenanceErrorOnCertainPartitionsProvider extends HDFSBackedStateStoreProvider {
+  private var id: StateStoreId = null
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
+    id = stateStoreId
+
+    super.init(
+      stateStoreId,
+      keySchema, valueSchema, keyStateEncoderSpec, useColumnFamilies,
+      storeConfs, hadoopConf, useMultipleValuesPerKey)
+  }
+
+  override def doMaintenance(): Unit = {
+    if (id.partitionId == 0 || id.partitionId == 1) {
+      throw new RuntimeException("Intentional maintenance failure")
+    }
+    super.doMaintenance()
+  }
+}
+
 class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
   import FakeStateStoreProviderWithMaintenanceError._
   private var id: StateStoreId = null
@@ -62,9 +96,11 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
       storeConfs: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
     id = stateStoreId
   }
 
@@ -72,7 +108,7 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
 
   override def close(): Unit = {}
 
-  override def getStore(version: Long): StateStore = null
+  override def getStore(version: Long, uniqueId: Option[String]): StateStore = null
 
   override def doMaintenance(): Unit = {
     Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
@@ -108,14 +144,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : cache will have one element
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
       checkVersion(loadedMaps, 1, Map(("a", 0) -> 1))
 
       // commit the ver 2 : cache will have two elements
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 2, earliestKey = 2, latestKey = 1)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> 2))
@@ -124,12 +160,94 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // commit the ver 3 : cache has already two elements and adding ver 3 incurs exceeding cache,
       // and ver 3 will be added but ver 1 will be evicted
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 3))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 3))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 2, earliestKey = 3, latestKey = 2)
       checkVersion(loadedMaps, 3, Map(("a", 0) -> 3))
       checkVersion(loadedMaps, 2, Map(("a", 0) -> 2))
     }
+  }
+
+  private def verifyStoreOperationUnsupported(operationName: String)(testFn: => Unit): Unit = {
+    if (operationName != "merge") {
+      val ex = intercept[SparkUnsupportedOperationException] {
+        testFn
+      }
+      checkError(
+        ex,
+        condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+        parameters = Map(
+          "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+    } else {
+      val ex = intercept[SparkUnsupportedOperationException] {
+        testFn
+      }
+      checkError(
+        ex,
+        condition = "STATE_STORE_UNSUPPORTED_OPERATION",
+        parameters = Map(
+          "operationType" -> operationName,
+          "entity" -> "HDFSBackedStateStoreProvider"
+        ),
+        matchPVals = true
+      )
+
+    }
+  }
+
+  test("get, put, remove etc operations on non-default col family should fail") {
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
+      minDeltasForSnapshot = 5)) { provider =>
+      val store = provider.getStore(0)
+      val keyRow = dataToKeyRow("a", 0)
+      val valueRow = dataToValueRow(1)
+      val colFamilyName = "test"
+      verifyStoreOperationUnsupported("put") {
+        store.put(keyRow, valueRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("remove") {
+        store.remove(keyRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("get") {
+        store.get(keyRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("merge") {
+        store.merge(keyRow, valueRow, colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("iterator") {
+        store.iterator(colFamilyName)
+      }
+
+      verifyStoreOperationUnsupported("prefixScan") {
+        store.prefixScan(keyRow, colFamilyName)
+      }
+    }
+  }
+
+  test("running with range scan encoder should fail") {
+    val ex = intercept[SparkUnsupportedOperationException] {
+      tryWithProviderResource(newStoreProvider(keySchemaWithRangeScan,
+        keyStateEncoderSpec = RangeKeyScanStateEncoderSpec(keySchemaWithRangeScan, Seq(0)),
+        useColumnFamilies = false)) { provider =>
+        provider.getStore(0)
+      }
+    }
+    checkError(
+      ex,
+      condition = "STATE_STORE_UNSUPPORTED_OPERATION",
+      parameters = Map(
+        "operationType" -> "Range scan",
+        "entity" -> "HDFSBackedStateStoreProvider"
+      ),
+      matchPVals = true
+    )
   }
 
   test("failure after committing with MAX_BATCHES_TO_RETAIN_IN_MEMORY set to 1") {
@@ -140,7 +258,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : cache will have one element
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 1, latestKey = 1)
       checkVersion(loadedMaps, 1, Map(("a", 0) -> 1))
@@ -150,7 +268,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       // this fact ensures cache miss will occur when this partition succeeds commit
       // but there's a failure afterwards so have to reprocess previous batch
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> 2))
@@ -166,7 +284,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       currentVersion += 1
 
       // make sure newly committed version is reflected to the cache (overwritten)
-      assert(getLatestData(provider) === Set(("a", 0) -> -2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> -2))
       loadedMaps = provider.getLoadedMaps()
       checkLoadedVersions(loadedMaps, count = 1, earliestKey = 2, latestKey = 2)
       checkVersion(loadedMaps, 2, Map(("a", 0) -> -2))
@@ -181,13 +299,13 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // commit the ver 1 : never cached
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 1))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 1))
       var loadedMaps = provider.getLoadedMaps()
       assert(loadedMaps.size() === 0)
 
       // commit the ver 2 : never cached
       currentVersion = incrementVersion(provider, currentVersion)
-      assert(getLatestData(provider) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
       loadedMaps = provider.getLoadedMaps()
       assert(loadedMaps.size() === 0)
     }
@@ -210,8 +328,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(!fileExists(provider, version = 1, isSnapshot = false)) // first file should be deleted
 
       // last couple of versions should be retrievable
-      assert(getData(provider, 20) === Set(("a", 0) -> 20))
-      assert(getData(provider, 19) === Set(("a", 0) -> 19))
+      assert(getData(provider, 20, useColumnFamilies = false) === Set(("a", 0) -> 20))
+      assert(getData(provider, 19, useColumnFamilies = false) === Set(("a", 0) -> 19))
     }
   }
 
@@ -247,14 +365,15 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         fileExists(provider, version, isSnapshot = true)).getOrElse(fail("snapshot file not found"))
 
       // Corrupt snapshot file and verify that it throws error
-      assert(getData(provider, snapshotVersion) === Set(("a", 0) -> snapshotVersion))
+      assert(getData(provider, snapshotVersion,
+        useColumnFamilies = false) === Set(("a", 0) -> snapshotVersion))
       corruptFile(provider, snapshotVersion, isSnapshot = true)
       var e = intercept[SparkException] {
-        getData(provider, snapshotVersion)
+        getData(provider, snapshotVersion, useColumnFamilies = false)
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
 
@@ -266,7 +385,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
       checkError(
         e,
-        errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
+        condition = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
         parameters = Map.empty
       )
 
@@ -276,8 +395,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         getData(provider, snapshotVersion - 1)
       }
       checkError(
-        e.getCause.asInstanceOf[SparkThrowable],
-        errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+        e,
+        condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
         parameters = Map(
           "fileToRead" -> s"${provider.stateStoreId.storeCheckpointLocation()}/1.delta",
           "clazz" -> s"${provider.toString()}"
@@ -303,6 +422,44 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
+  test("SPARK-48105: state store unload/close happens during the maintenance") {
+    tryWithProviderResource(
+      newStoreProvider(opId = Random.nextInt(), partition = 0, minDeltasForSnapshot = 1)) {
+      provider =>
+        val store = provider.getStore(0).asInstanceOf[provider.HDFSBackedStateStore]
+        val values = (1 to 20)
+        val keys = values.map(i => ("a" + i))
+        keys.zip(values).map{case (k, v) => put(store, k, 0, v)}
+        // commit state store with 20 keys.
+        store.commit()
+        // get the state store iterator: mimic the case which the iterator is hold in the
+        // maintenance thread.
+        val storeIterator = store.iterator()
+
+        // the store iterator should still be valid as the maintenance thread may have already
+        // hold it and is doing snapshotting even though the state store is unloaded.
+        val outputKeys = new mutable.ArrayBuffer[String]
+        val outputValues = new mutable.ArrayBuffer[Int]
+        var cnt = 0
+        while (storeIterator.hasNext) {
+          if (cnt == 10) {
+            // Mimic the case where the provider is loaded in another executor in the middle of
+            // iteration. When this happens, the provider will be unloaded and closed in
+            // current executor.
+            provider.close()
+          }
+          val unsafeRowPair = storeIterator.next()
+          val (key, _) = keyRowToData(unsafeRowPair.key)
+          outputKeys.append(key)
+          outputValues.append(valueRowToData(unsafeRowPair.value))
+
+          cnt = cnt + 1
+        }
+        assert(keys.sorted === outputKeys.sorted)
+        assert(values.sorted === outputValues.sorted)
+    }
+  }
+
   test("maintenance") {
     val conf = new SparkConf()
       .setMaster("local")
@@ -324,8 +481,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     def generateStoreVersions(): Unit = {
       for (i <- 1 to 20) {
-        val store = StateStore.get(storeProviderId1, keySchema, valueSchema, numColsPrefixKey = 0,
-          latestStoreVersion, storeConf, hadoopConf)
+        val store = StateStore.get(storeProviderId1, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema),
+          latestStoreVersion, None, useColumnFamilies = false, storeConf, hadoopConf)
         put(store, "a", 0, i)
         store.commit()
         latestStoreVersion += 1
@@ -378,8 +536,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           }
 
           // Reload the store and verify
-          StateStore.get(storeProviderId1, keySchema, valueSchema, numColsPrefixKey = 0,
-            latestStoreVersion, storeConf, hadoopConf)
+          StateStore.get(storeProviderId1, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            latestStoreVersion, None, useColumnFamilies = false, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeProviderId1))
 
           // If some other executor loads the store, then this instance should be unloaded
@@ -390,16 +549,18 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
           }
 
           // Reload the store and verify
-          StateStore.get(storeProviderId1, keySchema, valueSchema, numColsPrefixKey = 0,
-            latestStoreVersion, storeConf, hadoopConf)
+          StateStore.get(storeProviderId1, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            latestStoreVersion, None, useColumnFamilies = false, storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeProviderId1))
 
           // If some other executor loads the store, and when this executor loads other store,
           // then this executor should unload inactive instances immediately.
           coordinatorRef
             .reportActiveInstance(storeProviderId1, "other-host", "other-exec", Seq.empty)
-          StateStore.get(storeProviderId2, keySchema, valueSchema, numColsPrefixKey = 0,
-            0, storeConf, hadoopConf)
+          StateStore.get(storeProviderId2, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            0, None, useColumnFamilies = false, storeConf, hadoopConf)
           assert(!StateStore.isLoaded(storeProviderId1))
           assert(StateStore.isLoaded(storeProviderId2))
         }
@@ -434,8 +595,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     def generateStoreVersions(): Unit = {
       for (i <- 1 to 20) {
-        val store = StateStore.get(storeProviderId1, keySchema, valueSchema, numColsPrefixKey = 0,
-          latestStoreVersion, storeConf, hadoopConf)
+        val store = StateStore.get(storeProviderId1, keySchema, valueSchema,
+          NoPrefixKeyStateEncoderSpec(keySchema),
+          latestStoreVersion, None, useColumnFamilies = false, storeConf, hadoopConf)
         put(store, "a", 0, i)
         store.commit()
         latestStoreVersion += 1
@@ -493,9 +655,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       var currentVersion = 0
 
       currentVersion = updateVersionTo(provider, currentVersion, 2)
-      require(getLatestData(provider) === Set(("a", 0) -> 2))
+      require(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
       provider.doMaintenance()               // should not generate snapshot files
-      assert(getLatestData(provider) === Set(("a", 0) -> 2))
+      assert(getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 2))
 
       for (i <- 1 to currentVersion) {
         assert(fileExists(provider, i, isSnapshot = false))  // all delta files present
@@ -504,7 +666,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
       // After version 6, snapshotting should generate one snapshot file
       currentVersion = updateVersionTo(provider, currentVersion, 6)
-      require(getLatestData(provider) === Set(("a", 0) -> 6), "store not updated correctly")
+      require(getLatestData(provider, useColumnFamilies = false)
+        === Set(("a", 0) -> 6), "store not updated correctly")
       provider.doMaintenance()       // should generate snapshot files
 
       val snapshotVersion = (0 to 6).find { version =>
@@ -513,15 +676,17 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(snapshotVersion.nonEmpty, "snapshot file not generated")
       deleteFilesEarlierThanVersion(provider, snapshotVersion.get)
       assert(
-        getData(provider, snapshotVersion.get) === Set(("a", 0) -> snapshotVersion.get),
+        getData(provider, snapshotVersion.get, useColumnFamilies = false)
+          === Set(("a", 0) -> snapshotVersion.get),
         "snapshotting messed up the data of the snapshotted version")
       assert(
-        getLatestData(provider) === Set(("a", 0) -> 6),
+        getLatestData(provider, useColumnFamilies = false) === Set(("a", 0) -> 6),
         "snapshotting messed up the data of the final version")
 
       // After version 20, snapshotting should generate newer snapshot files
       currentVersion = updateVersionTo(provider, currentVersion, 20)
-      require(getLatestData(provider) === Set(("a", 0) -> 20), "store not updated correctly")
+      require(getLatestData(provider, useColumnFamilies = false)
+        === Set(("a", 0) -> 20), "store not updated correctly")
       provider.doMaintenance()       // do snapshot
 
       val latestSnapshotVersion = (0 to 20).filter(version =>
@@ -530,7 +695,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       assert(latestSnapshotVersion.get > snapshotVersion.get, "newer snapshot not generated")
 
       deleteFilesEarlierThanVersion(provider, latestSnapshotVersion.get)
-      assert(getLatestData(provider) === Set(("a", 0) -> 20), "snapshotting messed up the data")
+      assert(getLatestData(provider, useColumnFamilies = false)
+        === Set(("a", 0) -> 20), "snapshotting messed up the data")
     }
   }
 
@@ -563,8 +729,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // Getting the store should not create temp file
     val store0 = shouldNotCreateTempFile {
       StateStore.get(
-        storeId, keySchema, valueSchema, numColsPrefixKey = 0,
-        version = 0, storeConf, hadoopConf)
+        storeId, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema),
+        version = 0, None, useColumnFamilies = false, storeConf, hadoopConf)
     }
 
     // Put should create a temp file
@@ -580,8 +747,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // Remove should create a temp file
     val store1 = shouldNotCreateTempFile {
       StateStore.get(
-        storeId, keySchema, valueSchema, numColsPrefixKey = 0,
-        version = 1, storeConf, hadoopConf)
+        storeId, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema),
+        version = 1, None, useColumnFamilies = false, storeConf, hadoopConf)
     }
     remove(store1, _._1 == "a")
     assert(numTempFiles === 1)
@@ -595,8 +763,9 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     // Commit without any updates should create a delta file
     val store2 = shouldNotCreateTempFile {
       StateStore.get(
-        storeId, keySchema, valueSchema, numColsPrefixKey = 0,
-        version = 2, storeConf, hadoopConf)
+        storeId, keySchema, valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema),
+        version = 2, None, useColumnFamilies = false, storeConf, hadoopConf)
     }
     store2.commit()
     assert(numTempFiles === 0)
@@ -716,7 +885,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     var loadedMapSizeForVersion1: Long = -1L
     tryWithProviderResource(newStoreProvider()) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       store = provider.getStore(0)
       assert(!store.hasCommitted)
@@ -785,7 +954,15 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
   }
 
-  def newStoreProvider(storeId: StateStoreId, conf: Configuration): HDFSBackedStateStoreProvider = {
+  override def newStoreProvider(
+      storeId: StateStoreId,
+      useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
+    newStoreProvider(storeId.operatorId, storeId.partitionId, dir = storeId.checkpointRootLocation)
+  }
+
+  def newStoreProvider(
+      storeId: StateStoreId,
+      conf: Configuration): HDFSBackedStateStoreProvider = {
     newStoreProvider(
       storeId.operatorId,
       storeId.partitionId,
@@ -802,14 +979,17 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   }
 
   override def getLatestData(
-      storeProvider: HDFSBackedStateStoreProvider): Set[((String, Int), Int)] = {
-    getData(storeProvider, -1)
+      storeProvider: HDFSBackedStateStoreProvider,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    getData(storeProvider, -1, useColumnFamilies)
   }
 
   override def getData(
       provider: HDFSBackedStateStoreProvider,
-      version: Int): Set[((String, Int), Int)] = {
-    tryWithProviderResource(newStoreProvider(provider.stateStoreId)) { reloadedProvider =>
+      version: Int,
+      useColumnFamilies: Boolean = false): Set[((String, Int), Int)] = {
+    tryWithProviderResource(newStoreProvider(provider.stateStoreId,
+      useColumnFamilies)) { reloadedProvider =>
       if (version < 0) {
         reloadedProvider.latestIterator().map(rowPairToDataPair).toSet
       } else {
@@ -832,7 +1012,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
   def newStoreProvider(
       opId: Long,
       partition: Int,
-      numColsPrefixKey: Int = 0,
+      keyStateEncoderSpec: KeyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema),
+      keySchema: StructType = keySchema,
       dir: String = newDir(),
       minDeltasForSnapshot: Int = SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       numOfVersToRetainInMemory: Int = SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get,
@@ -843,14 +1024,25 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       StateStoreId(dir, opId, partition),
       keySchema,
       valueSchema,
-      numColsPrefixKey = numColsPrefixKey,
+      keyStateEncoderSpec,
+      useColumnFamilies = false,
       new StateStoreConf(sqlConf),
       hadoopConf)
     provider
   }
 
-  override def newStoreProvider(numPrefixCols: Int): HDFSBackedStateStoreProvider = {
-    newStoreProvider(opId = Random.nextInt(), partition = 0, numColsPrefixKey = numPrefixCols)
+  override def newStoreProvider(
+      keySchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
+    newStoreProvider(opId = Random.nextInt(), partition = 0,
+      keyStateEncoderSpec = keyStateEncoderSpec)
+  }
+
+  override def newStoreProvider(useColumnFamilies: Boolean): HDFSBackedStateStoreProvider = {
+    // TODO: remove multiple col families restriction when we add support for
+    // HDFSBackedStateStoreProvider
+    newStoreProvider(opId = Random.nextInt(), partition = 0)
   }
 
   def checkLoadedVersions(
@@ -896,10 +1088,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   protected val keySchema: StructType = StateStoreTestsHelper.keySchema
   protected val valueSchema: StructType = StateStoreTestsHelper.valueSchema
 
-  testWithAllCodec("get, put, remove, commit, and all data iterator") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
+  testWithAllCodec("get, put, remove, commit, and all data iterator") { colFamiliesEnabled =>
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled).isEmpty)
 
       val store = provider.getStore(0)
       assert(!store.hasCommitted)
@@ -912,7 +1104,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(get(store, "a", 0) === Some(1))
 
       assert(store.iterator().nonEmpty)
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled).isEmpty)
 
       // Make updates, commit and then verify state
       put(store, "b", 0, 2)
@@ -922,37 +1114,39 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
       assert(store.hasCommitted)
       assert(rowPairsToDataSet(store.iterator()) === Set(("b", 0) -> 2))
-      assert(getLatestData(provider) === Set(("b", 0) -> 2))
+      assert(getLatestData(provider,
+        useColumnFamilies = colFamiliesEnabled) === Set(("b", 0) -> 2))
 
       // Trying to get newer versions should fail
       var e = intercept[SparkException] {
         provider.getStore(2)
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("does not exist"))
+      assert(e.getMessage.contains("does not exist"))
 
       e = intercept[SparkException] {
-        getData(provider, 2)
+        getData(provider, 2, useColumnFamilies = colFamiliesEnabled)
       }
-      assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getMessage.contains("does not exist"))
+      assert(e.getMessage.contains("does not exist"))
 
       // New updates to the reloaded store with new version, and does not change old version
-      tryWithProviderResource(newStoreProvider(store.id)) { reloadedProvider =>
+      tryWithProviderResource(newStoreProvider(store.id, colFamiliesEnabled)) { reloadedProvider =>
         val reloadedStore = reloadedProvider.getStore(1)
         put(reloadedStore, "c", 0, 4)
         assert(reloadedStore.commit() === 2)
         assert(rowPairsToDataSet(reloadedStore.iterator()) === Set(("b", 0) -> 2, ("c", 0) -> 4))
-        assert(getLatestData(provider) === Set(("b", 0) -> 2, ("c", 0) -> 4))
-        assert(getData(provider, version = 1) === Set(("b", 0) -> 2))
+        assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled)
+          === Set(("b", 0) -> 2, ("c", 0) -> 4))
+        assert(getData(provider, version = 1, useColumnFamilies = colFamiliesEnabled)
+          === Set(("b", 0) -> 2))
       }
     }
   }
 
-  testWithAllCodec("prefix scan") {
-    tryWithProviderResource(newStoreProvider(numPrefixCols = 1)) { provider =>
+  testWithAllCodec("prefix scan") { colFamiliesEnabled =>
+    tryWithProviderResource(newStoreProvider(keySchema, PrefixKeyScanStateEncoderSpec(keySchema, 1),
+      colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       var store = provider.getStore(0)
 
@@ -1008,10 +1202,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  testWithAllCodec("numKeys metrics") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
+  testWithAllCodec(s"numKeys metrics") { colFamiliesEnabled =>
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled).isEmpty)
 
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
@@ -1024,7 +1218,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(rowPairsToDataSet(store.iterator()) ===
         Set(("a", 0) -> 1, ("b", 0) -> 2, ("c", 0) -> 3, ("d", 0) -> 4, ("e", 0) -> 5))
 
-      val reloadedProvider = newStoreProvider(store.id)
+      val reloadedProvider = newStoreProvider(store.id, colFamiliesEnabled)
       val reloadedStore = reloadedProvider.getStore(1)
       remove(reloadedStore, _._1 == "b")
       assert(reloadedStore.commit() === 2)
@@ -1034,10 +1228,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  testWithAllCodec("removing while iterating") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
+  testWithAllCodec(s"removing while iterating") { colFamiliesEnabled =>
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = colFamiliesEnabled).isEmpty)
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
       put(store, "b", 0, 2)
@@ -1056,8 +1250,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  testWithAllCodec("abort") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
+  testWithAllCodec(s"abort") { colFamiliesEnabled =>
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
       store.commit()
@@ -1070,21 +1264,39 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  testWithAllCodec("getStore with invalid versions") {
-    tryWithProviderResource(newStoreProvider()) { provider =>
-      def checkInvalidVersion(version: Int): Unit = {
+  testWithAllCodec(s"getStore with invalid versions") { colFamiliesEnabled =>
+    tryWithProviderResource(newStoreProvider(colFamiliesEnabled)) { provider =>
+      def checkInvalidVersion(version: Int, isHDFSBackedStoreProvider: Boolean): Unit = {
         val e = intercept[SparkException] {
           provider.getStore(version)
         }
-        checkError(
-          e,
-          errorClass = "CANNOT_LOAD_STATE_STORE.UNCATEGORIZED",
-          parameters = Map.empty
-        )
+        if (version < 0) {
+          checkError(
+            e,
+            condition = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+            parameters = Map("version" -> version.toString)
+          )
+        } else {
+          if (isHDFSBackedStoreProvider) {
+            checkError(
+              e,
+              condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+              parameters = Map("fileToRead" -> ".*", "clazz" -> ".*"),
+              matchPVals = true
+            )
+          } else {
+            checkError(
+              e,
+              condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+              parameters = Map("fileToRead" -> ".*"),
+              matchPVals = true
+            )
+          }
+        }
       }
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(1)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
 
       val store = provider.getStore(0)
       put(store, "a", 0, 1)
@@ -1094,8 +1306,8 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       val store1_ = provider.getStore(1)
       assert(rowPairsToDataSet(store1_.iterator()) === Set(("a", 0) -> 1))
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(2)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(2, provider.isInstanceOf[HDFSBackedStateStoreProvider])
 
       // Update store version with some data
       val store1 = provider.getStore(1)
@@ -1104,12 +1316,13 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       assert(store1.commit() === 2)
       assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1, ("b", 0) -> 1))
 
-      checkInvalidVersion(-1)
-      checkInvalidVersion(3)
+      checkInvalidVersion(-1, provider.isInstanceOf[HDFSBackedStateStoreProvider])
+      checkInvalidVersion(3, provider.isInstanceOf[HDFSBackedStateStoreProvider])
     }
   }
 
   testWithAllCodec("two concurrent StateStores - one for read-only and one for read-write") {
+    colFamiliesEnabled =>
     // During Streaming Aggregation, we have two StateStores per task, one used as read-only in
     // `StateStoreRestoreExec`, and one read-write used in `StateStoreSaveExec`. `StateStore.abort`
     // will be called for these StateStores if they haven't committed their results. We need to
@@ -1120,7 +1333,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val key1 = "a"
     val key2 = 0
 
-    tryWithProviderResource(newStoreProvider(storeId)) { provider0 =>
+    tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider0 =>
       // prime state
       val store = provider0.getStore(0)
 
@@ -1130,7 +1343,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
 
     // two state stores
-    tryWithProviderResource(newStoreProvider(storeId)) { provider1 =>
+    tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider1 =>
       val restoreStore = provider1.getReadStore(1)
       val saveStore = provider1.getStore(1)
 
@@ -1140,7 +1353,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
 
     // check that state is correct for next batch
-    tryWithProviderResource(newStoreProvider(storeId)) { provider2 =>
+    tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider2 =>
       val finalStore = provider2.getStore(2)
       assert(rowPairsToDataSet(finalStore.iterator()) === Set((key1, key2) -> 2))
     }
@@ -1160,7 +1373,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "a", 0, 0)
       val e = intercept[SparkException](quietly { store.commit() } )
 
-      assert(e.getErrorClass == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
+      assert(e.getCondition == "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT")
       if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
         assert(e.getMessage contains "RocksDBStateStore[id=(op=0,part=0)")
       } else {
@@ -1173,12 +1386,13 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
   // This test illustrates state store iterator behavior differences leading to SPARK-38320.
   testWithAllCodec("SPARK-38320 - state store iterator behavior differences") {
+    colFamiliesEnabled =>
     val ROCKSDB_STATE_STORE = "RocksDBStateStore"
     val dir = newDir()
     val storeId = StateStoreId(dir, 0L, 1)
     var version = 0L
 
-    tryWithProviderResource(newStoreProvider(storeId)) { provider =>
+    tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider =>
       val store = provider.getStore(version)
       logInfo(s"Running SPARK-38320 test with state store ${store.getClass.getName}")
 
@@ -1205,7 +1419,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
 
     // Reload the store from the commited version and repeat the above test.
-    tryWithProviderResource(newStoreProvider(storeId)) { provider =>
+    tryWithProviderResource(newStoreProvider(storeId, colFamiliesEnabled)) { provider =>
       assert(version > 0)
       val store = provider.getStore(version)
 
@@ -1258,11 +1472,13 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           // Verify that trying to get incorrect versions throw errors
           var e = intercept[SparkException] {
             StateStore.get(
-              storeId, keySchema, valueSchema, 0, -1, storeConf, hadoopConf)
+              storeId, keySchema, valueSchema,
+                NoPrefixKeyStateEncoderSpec(keySchema), -1, None, useColumnFamilies = false,
+                storeConf, hadoopConf)
           }
           checkError(
             e,
-            errorClass = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
+            condition = "CANNOT_LOAD_STATE_STORE.UNEXPECTED_VERSION",
             parameters = Map(
               "version" -> "-1"
             )
@@ -1270,11 +1486,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
           e = intercept[SparkException] {
             StateStore.get(
-              storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+              storeId, keySchema, valueSchema,
+              NoPrefixKeyStateEncoderSpec(keySchema),
+              1, None, useColumnFamilies = false,
+              storeConf, hadoopConf)
           }
           checkError(
-            e.getCause.asInstanceOf[SparkThrowable],
-            errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
+            e,
+            condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_DELTA_FILE_NOT_EXISTS",
             parameters = Map(
               "fileToRead" -> s"$dir/0/0/1.delta",
               "clazz" -> "HDFSStateStoreProvider\\[.+\\]"
@@ -1284,20 +1503,29 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
           // Increase version of the store and try to get again
           val store0 = StateStore.get(
-            storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
+            storeId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            0, None, useColumnFamilies = false,
+            storeConf, hadoopConf)
           assert(store0.version === 0)
           put(store0, "a", 0, 1)
           store0.commit()
 
           val store1 = StateStore.get(
-            storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+            storeId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            1, None, useColumnFamilies = false,
+            storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
           assert(store1.version === 1)
           assert(rowPairsToDataSet(store1.iterator()) === Set(("a", 0) -> 1))
 
           // Verify that you can also load older version
           val store0reloaded = StateStore.get(
-            storeId, keySchema, valueSchema, 0, 0, storeConf, hadoopConf)
+            storeId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            0, None, useColumnFamilies = false,
+            storeConf, hadoopConf)
           assert(store0reloaded.version === 0)
           assert(rowPairsToDataSet(store0reloaded.iterator()) === Set.empty)
 
@@ -1306,7 +1534,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
           assert(!StateStore.isLoaded(storeId))
 
           val store1reloaded = StateStore.get(
-            storeId, keySchema, valueSchema, 0, 1, storeConf, hadoopConf)
+            storeId, keySchema, valueSchema,
+            NoPrefixKeyStateEncoderSpec(keySchema),
+            1, None, useColumnFamilies = false,
+            storeConf, hadoopConf)
           assert(StateStore.isLoaded(storeId))
           assert(store1reloaded.version === 1)
           put(store1reloaded, "a", 0, 2)
@@ -1355,7 +1586,7 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   test("SPARK-35659: StateStore.put cannot put null value") {
     tryWithProviderResource(newStoreProvider()) { provider =>
       // Verify state before starting a new set of updates
-      assert(getLatestData(provider).isEmpty)
+      assert(getLatestData(provider, useColumnFamilies = false).isEmpty)
 
       val store = provider.getStore(0)
       val err = intercept[IllegalArgumentException] {
@@ -1379,40 +1610,57 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
-  test("SPARK-44438: maintenance task should be shutdown on error") {
-    val conf = new SparkConf()
-      .setMaster("local")
-      .setAppName("test")
+  test("SPARK-48997: maintenance threads with exceptions unload only themselves") {
     val sqlConf = getDefaultSQLConf(
       SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT.defaultValue.get,
       SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY.defaultValue.get
     )
     // Make maintenance interval small so that maintenance task is called right after scheduling.
     sqlConf.setConf(SQLConf.STREAMING_MAINTENANCE_INTERVAL, 100L)
-    // Use the `FakeStateStoreProviderWithMaintenanceError` to run the test
-    sqlConf.setConf(SQLConf.STATE_STORE_PROVIDER_CLASS,
-      classOf[FakeStateStoreProviderWithMaintenanceError].getName)
+    // Use the `MaintenanceErrorOnCertainPartitionsProvider` to run the test
+    sqlConf.setConf(
+      SQLConf.STATE_STORE_PROVIDER_CLASS,
+      classOf[MaintenanceErrorOnCertainPartitionsProvider].getName
+    )
 
-    quietly {
-      withSpark(new SparkContext(conf)) { sc =>
-        withCoordinatorRef(sc) { _ =>
-          FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.set(false)
-          val storeId = StateStoreProviderId(StateStoreId("firstDir", 0, 1), UUID.randomUUID)
-          val storeConf = StateStoreConf(sqlConf)
+    val conf = new SparkConf().setMaster("local").setAppName("test")
 
-          // get the state store and kick off the maintenance task
-          StateStore.get(storeId, null, null, 0, 0, storeConf, sc.hadoopConfiguration)
+    withSpark(new SparkContext(conf)) { sc =>
+      withCoordinatorRef(sc) { _ =>
+        // 0 and 1's maintenance will fail
+        val provider0Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 0), UUID.randomUUID)
+        val provider1Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 1), UUID.randomUUID)
+        val provider2Id =
+          StateStoreProviderId(StateStoreId("spark-48997", 0, 2), UUID.randomUUID)
 
-          eventually(timeout(30.seconds)) {
-            assert(!StateStore.isMaintenanceRunning)
-          }
+        // Create provider 2 first to start the maintenance task + pool
+        StateStore.get(
+          provider2Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, None, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          // SPARK-45002: The maintenance task thread failure should not invoke the
-          // SparkUncaughtExceptionHandler which could lead to the executor process
-          // getting killed.
-          assert(!FakeStateStoreProviderWithMaintenanceError.errorOnMaintenance.get)
+        // The following 2 calls to `get` will cause the associated maintenance to fail
+        StateStore.get(
+          provider0Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, None, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
 
-          StateStore.stop()
+        StateStore.get(
+          provider1Id,
+          keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
+          0, None, useColumnFamilies = false, new StateStoreConf(sqlConf), new Configuration()
+        )
+
+        // Wait for the maintenance task for all the providers to run: it should happen relatively
+        // quickly since the maintenance interval is small.
+        eventually(timeout(5.seconds)) {
+          assert(!StateStore.isLoaded(provider0Id))
+          assert(!StateStore.isLoaded(provider1Id))
+          assert(StateStore.isLoaded(provider2Id))
         }
       }
     }
@@ -1423,12 +1671,12 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     // By default, when there is an invalid pair of value row and value schema, it should throw
     val keyRow = dataToKeyRow("key", 1)
     val valueRow = dataToValueRow(2)
-    val e = intercept[InvalidUnsafeRowException] {
+    val e = intercept[StateStoreValueRowFormatValidationFailure] {
       // Here valueRow doesn't match with prefixKeySchema
       StateStoreProvider.validateStateRowFormat(
         keyRow, keySchema, valueRow, keySchema, getDefaultStoreConf())
     }
-    assert(e.getMessage.contains("The streaming query failed by state format invalidation"))
+    assert(e.getMessage.contains("The streaming query failed to validate written state"))
 
     // When sqlConf.stateStoreFormatValidationEnabled is set to false and
     // StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG is set to true,
@@ -1443,11 +1691,38 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       keyRow, keySchema, valueRow, keySchema, storeConf)
   }
 
+  test("test serialization and deserialization of NoPrefixKeyStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of PrefixKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = PrefixKeyScanStateEncoderSpec(keySchema, 1)
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("test serialization and deserialization of RangeKeyScanStateEncoderSpec") {
+    implicit val formats: DefaultFormats.type = DefaultFormats
+    val encoderSpec = RangeKeyScanStateEncoderSpec(keySchema, Seq(1))
+    val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
+    val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
+    assert(encoderSpec == deserializedEncoderSpec)
+  }
+
   /** Return a new provider with a random id */
   def newStoreProvider(): ProviderClass
 
   /** Return a new provider with the given id */
   def newStoreProvider(storeId: StateStoreId): ProviderClass
+
+  /** Return a new provider with the given id and multiple column families */
+  def newStoreProvider(storeId: StateStoreId, useColumnFamilies: Boolean): ProviderClass
 
   /** Return a new provider with the given id and configuration */
   def newStoreProvider(storeId: StateStoreId, conf: Configuration): ProviderClass
@@ -1456,16 +1731,24 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
   def newStoreProvider(minDeltasForSnapshot: Int, numOfVersToRetainInMemory: Int): ProviderClass
 
   /** Return a new provider with setting prefix key */
-  def newStoreProvider(numPrefixCols: Int): ProviderClass
+  def newStoreProvider(
+      keySchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean): ProviderClass
+
+  /** Return a new provider with useColumnFamilies set to true */
+  def newStoreProvider(useColumnFamilies: Boolean): ProviderClass
 
   /** Get the latest data referred to by the given provider but not using this provider */
-  def getLatestData(storeProvider: ProviderClass): Set[((String, Int), Int)]
+  def getLatestData(storeProvider: ProviderClass,
+    useColumnFamilies: Boolean): Set[((String, Int), Int)]
 
   /**
    * Get a specific version of data referred to by the given provider but not using
    * this provider
    */
-  def getData(storeProvider: ProviderClass, version: Int): Set[((String, Int), Int)]
+  def getData(storeProvider: ProviderClass, version: Int,
+    useColumnFamilies: Boolean): Set[((String, Int), Int)]
 
   protected def testQuietly(name: String)(f: => Unit): Unit = {
     test(name) {
@@ -1538,16 +1821,29 @@ object StateStoreTestsHelper {
     Seq(StructField("key1", StringType, true), StructField("key2", IntegerType, true)))
   val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
+  val keySchemaWithRangeScan: StructType = StructType(
+    Seq(StructField("key1", LongType, false), StructField("key2", StringType, false)))
+
   val keyProj = UnsafeProjection.create(Array[DataType](StringType, IntegerType))
+  val rangeScanProj = UnsafeProjection.create(Array[DataType](LongType, StringType))
   val prefixKeyProj = UnsafeProjection.create(Array[DataType](StringType))
+  val prefixKeyProjWithRangeScan = UnsafeProjection.create(Array[DataType](LongType))
   val valueProj = UnsafeProjection.create(Array[DataType](IntegerType))
 
   def dataToPrefixKeyRow(s: String): UnsafeRow = {
     prefixKeyProj.apply(new GenericInternalRow(Array[Any](UTF8String.fromString(s)))).copy()
   }
 
+  def dataToPrefixKeyRowWithRangeScan(ts: Long): UnsafeRow = {
+    prefixKeyProjWithRangeScan.apply(new GenericInternalRow(Array[Any](ts))).copy()
+  }
+
   def dataToKeyRow(s: String, i: Int): UnsafeRow = {
     keyProj.apply(new GenericInternalRow(Array[Any](UTF8String.fromString(s), i))).copy()
+  }
+
+  def dataToKeyRowWithRangeScan(ts: Long, s: String): UnsafeRow = {
+    rangeScanProj.apply(new GenericInternalRow(Array[Any](ts, UTF8String.fromString(s)))).copy()
   }
 
   def dataToValueRow(i: Int): UnsafeRow = {
@@ -1556,6 +1852,10 @@ object StateStoreTestsHelper {
 
   def keyRowToData(row: UnsafeRow): (String, Int) = {
     (row.getUTF8String(0).toString, row.getInt(1))
+  }
+
+  def keyRowWithRangeScanToData(row: UnsafeRow): (Long, String) = {
+    (row.getLong(0), row.getUTF8String(1).toString)
   }
 
   def valueRowToData(row: UnsafeRow): Int = {
@@ -1578,6 +1878,10 @@ object StateStoreTestsHelper {
 
   def put(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
     store.put(dataToKeyRow(key1, key2), dataToValueRow(value))
+  }
+
+  def merge(store: StateStore, key1: String, key2: Int, value: Int): Unit = {
+    store.merge(dataToKeyRow(key1, key2), dataToValueRow(value))
   }
 
   def get(store: ReadStateStore, key1: String, key2: Int): Option[Int] = {

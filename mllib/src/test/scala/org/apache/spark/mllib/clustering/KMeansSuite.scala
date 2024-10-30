@@ -160,7 +160,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     val center = Vectors.dense(1.0, 3.0, 4.0)
 
     var model = KMeans.train(data, k = 1, maxIterations = 1)
-    assert(model.clusterCenters.size === 1)
+    assert(model.clusterCenters.length === 1)
     assert(model.clusterCenters.head ~== center absTol 1E-5)
 
     model = KMeans.train(data, k = 1, maxIterations = 2)

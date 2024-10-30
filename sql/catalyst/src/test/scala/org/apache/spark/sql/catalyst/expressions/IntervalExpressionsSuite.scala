@@ -117,6 +117,16 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ExtractIntervalSeconds("61 seconds 1 microseconds"), Decimal(1000001, 8, 6))
   }
 
+  test("cast large seconds to decimal") {
+    checkEvaluation(
+      Cast(
+        Cast(Literal(Decimal("9223372036854.775807")), DayTimeIntervalType(3, 3)),
+        DecimalType(19, 6)
+      ),
+      Decimal("9223372036854.775807")
+    )
+  }
+
   test("multiply") {
     def check(
         interval: String,
@@ -256,7 +266,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
         Literal(days), Literal(hours), Literal(minutes),
         Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
-      checkExceptionInExpression[ArithmeticException](intervalExpr, EmptyRow, "")
+      checkExceptionInExpression[ArithmeticException](intervalExpr, EmptyRow, "ARITHMETIC_OVERFLOW")
     }
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
@@ -341,7 +351,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(
       (Period.ofMonths(2), Int.MaxValue) -> "overflow",
-      (Period.ofMonths(Int.MinValue), 10d) -> "not in range",
+      (Period.ofMonths(Int.MinValue), 10d) -> "out of range",
       (Period.ofMonths(-100), Float.NaN) -> "input is infinite or NaN",
       (Period.ofMonths(200), Double.PositiveInfinity) -> "input is infinite or NaN",
       (Period.ofMonths(-200), Float.NegativeInfinity) -> "input is infinite or NaN"

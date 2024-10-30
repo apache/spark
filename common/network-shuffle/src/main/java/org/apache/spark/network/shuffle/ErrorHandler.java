@@ -87,9 +87,9 @@ public interface ErrorHandler {
 
       // If the block is too late or the invalid block push or the attempt is not the latest one,
       // there is no need to retry it
-      return !(t instanceof BlockPushNonFatalFailure &&
+      return !(t instanceof BlockPushNonFatalFailure blockPushNonFatalFailure &&
         BlockPushNonFatalFailure
-          .shouldNotRetryErrorCode(((BlockPushNonFatalFailure) t).getReturnCode()));
+          .shouldNotRetryErrorCode(blockPushNonFatalFailure.getReturnCode()));
     }
 
     @Override

@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (1) AS GROUPING(a)
 -- !query analysis
-CreateViewCommand `t1`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, LocalTempView, true
+CreateViewCommand `t1`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x]
       +- SubqueryAlias GROUPING
          +- LocalRelation [a#x]
@@ -11,7 +11,7 @@ CreateViewCommand `t1`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, L
 -- !query
 CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES (1) AS GROUPING(a)
 -- !query analysis
-CreateViewCommand `t2`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, LocalTempView, true
+CreateViewCommand `t2`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x]
       +- SubqueryAlias GROUPING
          +- LocalRelation [a#x]
@@ -20,7 +20,7 @@ CreateViewCommand `t2`, SELECT * FROM VALUES (1) AS GROUPING(a), false, false, L
 -- !query
 CREATE TEMPORARY VIEW t3 AS SELECT * FROM VALUES (1), (1) AS GROUPING(a)
 -- !query analysis
-CreateViewCommand `t3`, SELECT * FROM VALUES (1), (1) AS GROUPING(a), false, false, LocalTempView, true
+CreateViewCommand `t3`, SELECT * FROM VALUES (1), (1) AS GROUPING(a), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x]
       +- SubqueryAlias GROUPING
          +- LocalRelation [a#x]
@@ -29,7 +29,7 @@ CreateViewCommand `t3`, SELECT * FROM VALUES (1), (1) AS GROUPING(a), false, fal
 -- !query
 CREATE TEMPORARY VIEW t4 AS SELECT * FROM VALUES (1), (1) AS GROUPING(a)
 -- !query analysis
-CreateViewCommand `t4`, SELECT * FROM VALUES (1), (1) AS GROUPING(a), false, false, LocalTempView, true
+CreateViewCommand `t4`, SELECT * FROM VALUES (1), (1) AS GROUPING(a), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [a#x]
       +- SubqueryAlias GROUPING
          +- LocalRelation [a#x]
@@ -43,7 +43,7 @@ SELECT udf(a) AS a, udf('b') AS tag FROM t2
 -- !query analysis
 CreateViewCommand `ta`, SELECT udf(a) AS a, udf('a') AS tag FROM t1
 UNION ALL
-SELECT udf(a) AS a, udf('b') AS tag FROM t2, false, false, LocalTempView, true, [udf]
+SELECT udf(a) AS a, udf('b') AS tag FROM t2, false, false, LocalTempView, UNSUPPORTED, true, [udf]
    +- Union false, false
       :- Project [cast(udf(cast(a#x as string)) as int) AS a#x, cast(udf(cast(a as string)) as string) AS tag#x]
       :  +- SubqueryAlias t1
@@ -69,7 +69,7 @@ SELECT udf(a) AS a, udf('b') AS tag FROM t4
 -- !query analysis
 CreateViewCommand `tb`, SELECT udf(a) AS a, udf('a') AS tag FROM t3
 UNION ALL
-SELECT udf(a) AS a, udf('b') AS tag FROM t4, false, false, LocalTempView, true, [udf]
+SELECT udf(a) AS a, udf('b') AS tag FROM t4, false, false, LocalTempView, UNSUPPORTED, true, [udf]
    +- Union false, false
       :- Project [cast(udf(cast(a#x as string)) as int) AS a#x, cast(udf(cast(a as string)) as string) AS tag#x]
       :  +- SubqueryAlias t3
@@ -93,7 +93,7 @@ SELECT tb.* FROM ta INNER JOIN tb ON ta.a = tb.a AND ta.tag = tb.tag
 Project [a#x, tag#x]
 +- Join Inner, ((a#x = a#x) AND (tag#x = tag#x))
    :- SubqueryAlias ta
-   :  +- View (`ta`, [a#x,tag#x])
+   :  +- View (`ta`, [a#x, tag#x])
    :     +- Project [cast(a#x as int) AS a#x, cast(tag#x as string) AS tag#x]
    :        +- Union false, false
    :           :- Project [cast(udf(cast(a#x as string)) as int) AS a#x, cast(udf(cast(a as string)) as string) AS tag#x]
@@ -111,7 +111,7 @@ Project [a#x, tag#x]
    :                          +- SubqueryAlias GROUPING
    :                             +- LocalRelation [a#x]
    +- SubqueryAlias tb
-      +- View (`tb`, [a#x,tag#x])
+      +- View (`tb`, [a#x, tag#x])
          +- Project [cast(a#x as int) AS a#x, cast(tag#x as string) AS tag#x]
             +- Union false, false
                :- Project [cast(udf(cast(a#x as string)) as int) AS a#x, cast(udf(cast(a as string)) as string) AS tag#x]

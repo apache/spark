@@ -3,15 +3,15 @@ py4j>=0.10.9.7
 
 # PySpark dependencies (optional)
 numpy>=1.21
-pyarrow>=4.0.0
+pyarrow>=10.0.0
 six==1.16.0
-pandas>=1.4.4
+pandas>=2.0.0
 scipy
-plotly
+plotly>=4.8
 mlflow>=2.3.1
 scikit-learn
 matplotlib
-memory-profiler==0.60.0
+memory-profiler>=0.61.0
 
 # PySpark test dependencies
 unittest-xml-reporting
@@ -21,7 +21,7 @@ openpyxl
 coverage
 
 # Linter
-mypy==0.982
+mypy==1.8.0
 pytest-mypy-plugins==1.9.3
 flake8==3.9.0
 # See SPARK-38680.
@@ -31,17 +31,23 @@ pandas-stubs<1.2.0.54
 mkdocs
 
 # Documentation (Python)
-pydata_sphinx_theme==0.13
+pydata_sphinx_theme>=0.13
 ipython
 nbsphinx
 numpydoc
 jinja2
-sphinx==4.2.0
+sphinx==4.5.0
+# With sphinx 4.5.0, we need to set the upperbound version of sphinxcontrib*, it should be removed after upgrading sphinx>=5
+sphinxcontrib-applehelp<=1.0.4
+sphinxcontrib-devhelp<=1.0.2
+sphinxcontrib-htmlhelp<=2.0.1
+sphinxcontrib-jsmath<=1.0.1
+sphinxcontrib-qthelp<=1.0.3
+sphinxcontrib-serializinghtml<=1.1.5
 sphinx-plotly-directive
 sphinx-copybutton
 docutils<0.18.0
-# See SPARK-38279.
-markupsafe==2.0.1
+markupsafe
 
 # Development scripts
 jira>=3.5.2
@@ -52,21 +58,23 @@ black==23.9.1
 py
 
 # Spark Connect (required)
-grpcio>=1.59.3
-grpcio-status>=1.59.3
-protobuf==4.25.1
-googleapis-common-protos>=1.56.4
+grpcio>=1.67.0
+grpcio-status>=1.67.0
+googleapis-common-protos>=1.65.0
 
 # Spark Connect python proto generation plugin (optional)
 mypy-protobuf==3.3.0
 googleapis-common-protos-stubs==2.2.0
 grpc-stubs==1.24.11
 
+# Debug for Spark and Spark Connect
+graphviz==0.20.3
+flameprof==0.4
+
 # TorchDistributor dependencies
-torch<=2.0.1
+torch
 torchvision
 torcheval
 
 # DeepspeedTorchDistributor dependencies
 deepspeed; sys_platform != 'darwin'
-

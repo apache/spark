@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -38,6 +39,8 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
 
   protected val isBarrier: Boolean
 
+  protected val profile: Option[ResourceProfile]
+
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
@@ -46,8 +49,9 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
 
   override protected def doExecute(): RDD[InternalRow] = {
     val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
-    val pythonFunction = func.asInstanceOf[PythonUDF].func
-    val chainedFunc = Seq(ChainedPythonFunctions(Seq(pythonFunction)))
+    val pythonUDF = func.asInstanceOf[PythonUDF]
+    val pythonFunction = pythonUDF.func
+    val chainedFunc = Seq((ChainedPythonFunctions(Seq(pythonFunction)), pythonUDF.resultId.id))
     val evaluatorFactory = new MapInBatchEvaluatorFactory(
       output,
       chainedFunc,
@@ -60,7 +64,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       pythonMetrics,
       jobArtifactUUID)
 
-    if (isBarrier) {
+    val rdd = if (isBarrier) {
       val rddBarrier = child.execute().barrier()
       if (conf.usePartitionEvaluator) {
         rddBarrier.mapPartitionsWithEvaluator(evaluatorFactory)
@@ -79,5 +83,6 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
         }
       }
     }
+    profile.map(rp => rdd.withResources(rp)).getOrElse(rdd)
   }
 }

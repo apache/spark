@@ -31,7 +31,8 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{APP_ID, APP_NAME, SUBMISSION_ID}
 import org.apache.spark.util.Utils
 
 /**
@@ -203,8 +204,9 @@ private[spark] class Client(
         }
       }
     } else {
-      logInfo(s"Deployed Spark application ${conf.appName} with application ID ${conf.appId} " +
-        s"and submission ID $sId into Kubernetes")
+      logInfo(log"Deployed Spark application ${MDC(APP_NAME, conf.appName)} with " +
+        log"application ID ${MDC(APP_ID, conf.appId)} and " +
+        log"submission ID ${MDC(SUBMISSION_ID, sId)} into Kubernetes")
     }
   }
 }

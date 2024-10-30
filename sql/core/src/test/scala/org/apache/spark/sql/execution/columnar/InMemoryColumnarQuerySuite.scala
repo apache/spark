@@ -150,7 +150,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
       spark.catalog.cacheTable("sizeTst")
       assert(
         spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
-          spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+          sqlConf.getConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
     }
   }
 
@@ -361,7 +361,7 @@ class InMemoryColumnarQuerySuite extends QueryTest
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
+    assert(cached.cacheBuilder.sizeInBytesStats.value === expectedAnswer.length * INT.defaultSize)
   }
 
    test("cached row count should be calculated") {
@@ -568,9 +568,10 @@ class InMemoryColumnarQuerySuite extends QueryTest
   }
 
   test("SPARK-39104: InMemoryRelation#isCachedColumnBuffersLoaded should be thread-safe") {
-    val plan = spark.range(1).queryExecution.executedPlan
+    val qe = spark.range(1).queryExecution
+    val plan = qe.executedPlan
     val serializer = new TestCachedBatchSerializer(true, 1)
-    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None)
+    val cachedRDDBuilder = CachedRDDBuilder(serializer, MEMORY_ONLY, plan, None, qe.logical)
 
     @volatile var isCachedColumnBuffersLoaded = false
     @volatile var stopped = false

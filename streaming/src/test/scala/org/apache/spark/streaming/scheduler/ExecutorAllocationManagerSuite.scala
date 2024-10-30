@@ -119,13 +119,13 @@ class ExecutorAllocationManagerSuite extends TestSuiteBase
       }
 
       // Batch proc time = batch interval, should increase allocation by 1
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis) {
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis.toDouble) {
         verifyTotalRequestedExecs(Some(3)) // one already allocated, increase allocation by 1
         verifyScaledDownExec(None)
       }
 
       // Batch proc time = batch interval * 2, should increase allocation by 2
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * 2) {
+      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * 2.0) {
         verifyTotalRequestedExecs(Some(4))
         verifyScaledDownExec(None)
       }

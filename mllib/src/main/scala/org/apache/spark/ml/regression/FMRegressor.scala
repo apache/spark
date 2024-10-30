@@ -270,12 +270,13 @@ private[ml] object FactorizationMachines {
 private[regression] trait FMRegressorParams extends FactorizationMachinesParams {
 }
 
+// scalastyle:off line.size.limit
 /**
  * Factorization Machines learning algorithm for regression.
  * It supports normal gradient descent and AdamW solver.
  *
- * The implementation is based upon:
- * <a href="https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf">
+ * The implementation is based on:
+ * <a href="https://web.archive.org/web/20191225211603/https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf">
  * S. Rendle. "Factorization machines" 2010</a>.
  *
  * FM is able to estimate interactions even in problems with huge sparsity
@@ -296,6 +297,7 @@ private[regression] trait FMRegressorParams extends FactorizationMachinesParams 
  * FM regression model uses MSE loss which can be solved by gradient descent method, and
  * regularization terms like L2 are usually added to the loss function to prevent overfitting.
  */
+// scalastyle:on line.size.limit
 @Since("3.0.0")
 class FMRegressor @Since("3.0.0") (
     @Since("3.0.0") override val uid: String)
@@ -502,10 +504,10 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
         factors: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.intercept, instance.linear, instance.factors)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
     }
   }
 
@@ -514,7 +516,7 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
     private val className = classOf[FMRegressionModel].getName
 
     override def load(path: String): FMRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
 

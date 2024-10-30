@@ -9,7 +9,7 @@ create temp view gstest1(a,b,v)
 CreateViewCommand `gstest1`, [(a,None), (b,None), (v,None)], values (1,1,10),(1,1,11),(1,2,12),(1,2,13),(1,3,14),
             (2,3,15),
             (3,3,16),(3,4,17),
-            (4,1,18),(4,1,19), false, false, LocalTempView, true
+            (4,1,18),(4,1,19), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x, col3#x]
 
 
@@ -86,7 +86,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_gr
 +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
    +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
       +- SubqueryAlias gstest1
-         +- View (`gstest1`, [a#x,b#x,v#x])
+         +- View (`gstest1`, [a#x, b#x, v#x])
             +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
                +- LocalRelation [col1#x, col2#x, col3#x]
 
@@ -100,7 +100,7 @@ Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
    +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
-            +- View (`gstest1`, [a#x,b#x,v#x])
+            +- View (`gstest1`, [a#x, b#x, v#x])
                +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
                   +- LocalRelation [col1#x, col2#x, col3#x]
 
@@ -114,7 +114,7 @@ Sort [b#x DESC NULLS LAST, a#x ASC NULLS FIRST], true
    +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
-            +- View (`gstest1`, [a#x,b#x,v#x])
+            +- View (`gstest1`, [a#x, b#x, v#x])
                +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
                   +- LocalRelation [col1#x, col2#x, col3#x]
 
@@ -128,7 +128,7 @@ Sort [(coalesce(a#x, 0) + coalesce(b#x, 0)) ASC NULLS FIRST, a#x ASC NULLS FIRST
    +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
-            +- View (`gstest1`, [a#x,b#x,v#x])
+            +- View (`gstest1`, [a#x, b#x, v#x])
                +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
                   +- LocalRelation [col1#x, col2#x, col3#x]
 
@@ -215,7 +215,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_gr
       +- Join Inner
          :- SubqueryAlias t1
          :  +- SubqueryAlias gstest1
-         :     +- View (`gstest1`, [a#x,b#x,v#x])
+         :     +- View (`gstest1`, [a#x, b#x, v#x])
          :        +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
          :           +- LocalRelation [col1#x, col2#x, col3#x]
          +- SubqueryAlias t2
@@ -234,7 +234,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_gr
       +- Join Inner, (a#x = a#x)
          :- SubqueryAlias t1
          :  +- SubqueryAlias gstest1
-         :     +- View (`gstest1`, [a#x,b#x,v#x])
+         :     +- View (`gstest1`, [a#x, b#x, v#x])
          :        +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
          :           +- LocalRelation [col1#x, col2#x, col3#x]
          +- SubqueryAlias t2
@@ -254,7 +254,7 @@ Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, cast((shiftright(spark_gr
          +- Join Inner, ((a#x = a#x) AND (b#x = b#x))
             :- SubqueryAlias t1
             :  +- SubqueryAlias gstest1
-            :     +- View (`gstest1`, [a#x,b#x,v#x])
+            :     +- View (`gstest1`, [a#x, b#x, v#x])
             :        +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
             :           +- LocalRelation [col1#x, col2#x, col3#x]
             +- SubqueryAlias t2
@@ -320,7 +320,7 @@ CreateViewCommand `int8_tbl`, SELECT * FROM VALUES
   (123L, 4567890123456789L),
   (4567890123456789L, 123L),
   (4567890123456789L, 4567890123456789L),
-  (4567890123456789L, -4567890123456789L) as int8_tbl(q1, q2), false, false, LocalTempView, true
+  (4567890123456789L, -4567890123456789L) as int8_tbl(q1, q2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [q1#xL, q2#xL]
       +- SubqueryAlias int8_tbl
          +- LocalRelation [q1#xL, q2#xL]
@@ -340,7 +340,7 @@ Sort [x#x ASC NULLS FIRST, q2#xL ASC NULLS FIRST], true
             +- Project [q1#xL, q2#xL, (q1#xL = cast(1 as bigint)) AS x#x]
                +- SubqueryAlias i1
                   +- SubqueryAlias int8_tbl
-                     +- View (`int8_tbl`, [q1#xL,q2#xL])
+                     +- View (`int8_tbl`, [q1#xL, q2#xL])
                         +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
                            +- Project [q1#xL, q2#xL]
                               +- SubqueryAlias int8_tbl
@@ -486,7 +486,7 @@ Sort [grouping(a)#x ASC NULLS FIRST, grouping(b)#x ASC NULLS FIRST, a#x ASC NULL
    +- Expand [[a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, b#x, 2]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
-            +- View (`gstest1`, [a#x,b#x,v#x])
+            +- View (`gstest1`, [a#x, b#x, v#x])
                +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
                   +- LocalRelation [col1#x, col2#x, col3#x]
 
@@ -500,7 +500,7 @@ Sort [grouping(a)#x ASC NULLS FIRST, grouping(b)#x ASC NULLS FIRST, a#x ASC NULL
    +- Expand [[a#x, b#x, v#x, a#x, b#x, 0], [a#x, b#x, v#x, a#x, null, 1], [a#x, b#x, v#x, null, b#x, 2], [a#x, b#x, v#x, null, null, 3]], [a#x, b#x, v#x, a#x, b#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x]
          +- SubqueryAlias gstest1
-            +- View (`gstest1`, [a#x,b#x,v#x])
+            +- View (`gstest1`, [a#x, b#x, v#x])
                +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
                   +- LocalRelation [col1#x, col2#x, col3#x]
 
@@ -597,7 +597,7 @@ Sort [grouping(a)#x ASC NULLS FIRST, grouping(b)#x ASC NULLS FIRST, max(v)#x ASC
    +- Expand [[a#x, b#x, v#x, a#x, b#x, null, null, null, null, 15], [a#x, b#x, v#x, null, null, (a#x + 1)#x, (b#x + 1)#x, null, null, 51], [a#x, b#x, v#x, null, null, null, null, (a#x + 2)#x, (b#x + 2)#x, 60]], [a#x, b#x, v#x, a#x, b#x, (a#x + 1)#x, (b#x + 1)#x, (a#x + 2)#x, (b#x + 2)#x, spark_grouping_id#xL]
       +- Project [a#x, b#x, v#x, a#x AS a#x, b#x AS b#x, (a#x + 1) AS (a#x + 1)#x, (b#x + 1) AS (b#x + 1)#x, (a#x + 2) AS (a#x + 2)#x, (b#x + 2) AS (b#x + 2)#x]
          +- SubqueryAlias gstest1
-            +- View (`gstest1`, [a#x,b#x,v#x])
+            +- View (`gstest1`, [a#x, b#x, v#x])
                +- Project [cast(col1#x as int) AS a#x, cast(col2#x as int) AS b#x, cast(col3#x as int) AS v#x]
                   +- LocalRelation [col1#x, col2#x, col3#x]
 

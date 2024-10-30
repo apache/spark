@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Expression, FunctionTableSubqueryArgumentExpression, Literal}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, Repartition, RepartitionByExpression, Sort, SubqueryAlias}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
@@ -41,6 +42,32 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       |        yield a, b, b - a
       |""".stripMargin
 
+  private val variantInputScript: String =
+    """
+      |class InputVariantUDTF:
+      |    def eval(self, a):
+      |        yield str(a)
+      |""".stripMargin
+
+  private val variantStr =
+    "VariantVal(VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97])))"
+
+  private val variantOutputScript: String =
+    """
+      |class SimpleOutputVariantUDTF:
+      |    from pyspark.sql.types import VariantVal
+      |    def eval(self):
+      |        yield {0}
+      |""".format(variantStr).stripMargin
+
+  private val arrayOfVariantOutputScript: String =
+    """
+      |class OutputArrayOfVariantUDTF:
+      |    from pyspark.sql.types import VariantVal
+      |    def eval(self):
+      |        yield [{0}]
+      |""".format(variantStr).stripMargin
+
   private val returnType: StructType = StructType.fromDDL("a int, b int, c int")
 
   private val pythonUDTF: UserDefinedPythonTableFunction =
@@ -48,15 +75,15 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val pythonUDTFCountSumLast: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      TestPythonUDTFCountSumLast.name, TestPythonUDTFCountSumLast.pythonScript, None)
+      UDTFCountSumLast.name, UDTFCountSumLast.pythonScript, None)
 
   private val pythonUDTFWithSinglePartition: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      TestPythonUDTFWithSinglePartition.name, TestPythonUDTFWithSinglePartition.pythonScript, None)
+      UDTFWithSinglePartition.name, UDTFWithSinglePartition.pythonScript, None)
 
   private val pythonUDTFPartitionByOrderBy: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      TestPythonUDTFPartitionBy.name, TestPythonUDTFPartitionBy.pythonScript, None)
+      UDTFPartitionByOrderBy.name, UDTFPartitionByOrderBy.pythonScript, None)
 
   private val arrowPythonUDTF: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
@@ -67,13 +94,112 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   private val pythonUDTFForwardStateFromAnalyze: UserDefinedPythonTableFunction =
     createUserDefinedPythonTableFunction(
-      TestPythonUDTFForwardStateFromAnalyze.name,
-      TestPythonUDTFForwardStateFromAnalyze.pythonScript, None)
+      UDTFForwardStateFromAnalyze.name,
+      UDTFForwardStateFromAnalyze.pythonScript, None)
+
+  private val variantInputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "InputVariantUDTF",
+      variantInputScript,
+      Some(StructType.fromDDL("o STRING"))
+    )
+
+  private val variantOutputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "SimpleOutputVariantUDTF",
+      variantOutputScript,
+      Some(StructType.fromDDL("v VARIANT"))
+    )
+
+  private val arrayOfVariantOutputUDTF: UserDefinedPythonTableFunction =
+    createUserDefinedPythonTableFunction(
+      "OutputArrayOfVariantUDTF",
+      arrayOfVariantOutputScript,
+      Some(StructType.fromDDL("v ARRAY<VARIANT>"))
+    )
 
   test("Simple PythonUDTF") {
     assume(shouldTestPythonUDFs)
     val df = pythonUDTF(spark, lit(1), lit(2))
     checkAnswer(df, Seq(Row(1, 2, -1), Row(1, 2, 1), Row(1, 2, 3)))
+  }
+
+  test("Simple variant input UDTF") {
+    assume(shouldTestPythonUDFs)
+    withTempView("t") {
+      spark.udtf.registerPython("variantInputUDTF", variantInputUDTF)
+      spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v").createOrReplaceTempView("t")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("select udtf.* from t, lateral variantInputUDTF(v) udtf").collect()
+        },
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> """"InputVariantUDTF\(outer\(v#\d+\)\)"""",
+          "dataType" -> "VARIANT"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = "variantInputUDTF(v) udtf",
+          start = 30,
+          stop = 53)))
+    }
+  }
+
+  test("Complex variant input UDTF") {
+    assume(shouldTestPythonUDFs)
+    withTempView("t") {
+      spark.udtf.registerPython("variantInputUDTF", variantInputUDTF)
+      spark.range(0, 10)
+        .selectExpr("map(id, parse_json(cast(id as string))) map_v")
+        .createOrReplaceTempView("t")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("select udtf.* from t, lateral variantInputUDTF(map_v) udtf").collect()
+        },
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> """"InputVariantUDTF\(outer\(map_v#\d+\)\)"""",
+          "dataType" -> "MAP<BIGINT, VARIANT>"),
+        matchPVals = true,
+        queryContext = Array(ExpectedContext(
+          fragment = "variantInputUDTF(map_v) udtf",
+          start = 30,
+          stop = 57)))
+    }
+  }
+
+  test("Simple variant output UDTF") {
+    assume(shouldTestPythonUDFs)
+      spark.udtf.registerPython("variantOutUDTF", variantOutputUDTF)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("select * from variantOutUDTF()").collect()
+        },
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"SimpleOutputVariantUDTF()\"",
+          "dataType" -> "VARIANT"),
+        context = ExpectedContext(
+          fragment = "variantOutUDTF()",
+          start = 14,
+          stop = 29))
+  }
+
+  test("Complex variant output UDTF") {
+    assume(shouldTestPythonUDFs)
+      spark.udtf.registerPython("arrayOfVariantOutUDTF", arrayOfVariantOutputUDTF)
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql("select * from arrayOfVariantOutUDTF()").collect()
+        },
+        condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"OutputArrayOfVariantUDTF()\"",
+          "dataType" -> "ARRAY<VARIANT>"),
+        context = ExpectedContext(
+          fragment = "arrayOfVariantOutUDTF()",
+          start = 14,
+          stop = 36))
   }
 
   test("PythonUDTF with lateral join") {
@@ -191,28 +317,15 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case other =>
         failure(other)
     }
-    withTable("t") {
-      sql("create table t(col array<int>) using parquet")
-      val query = "select * from explode(table(t))"
-      checkErrorMatchPVals(
-        exception = intercept[AnalysisException](sql(query)),
-        errorClass = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_TABLE_ARGUMENT",
-        sqlState = None,
-        parameters = Map("treeNode" -> "(?s).*"),
-        context = ExpectedContext(
-          fragment = "table(t)",
-          start = 22,
-          stop = 29))
-    }
 
-    spark.udtf.registerPython(TestPythonUDTFCountSumLast.name, pythonUDTFCountSumLast)
+    spark.udtf.registerPython(UDTFCountSumLast.name, pythonUDTFCountSumLast)
     var plan = sql(
       s"""
         |WITH t AS (
         |  VALUES (0, 1), (1, 2), (1, 3) t(partition_col, input)
         |)
         |SELECT count, total, last
-        |FROM ${TestPythonUDTFCountSumLast.name}(TABLE(t) WITH SINGLE PARTITION)
+        |FROM ${UDTFCountSumLast.name}(TABLE(t) WITH SINGLE PARTITION)
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: Repartition => r } match {
@@ -221,7 +334,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         failure(plan)
     }
 
-    spark.udtf.registerPython(TestPythonUDTFWithSinglePartition.name, pythonUDTFWithSinglePartition)
+    spark.udtf.registerPython(UDTFWithSinglePartition.name, pythonUDTFWithSinglePartition)
     plan = sql(
       s"""
         |WITH t AS (
@@ -230,7 +343,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
         |)
         |SELECT count, total, last
-        |FROM ${TestPythonUDTFWithSinglePartition.name}(0, TABLE(t))
+        |FROM ${UDTFWithSinglePartition.name}(0, TABLE(t))
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: Repartition => r } match {
@@ -239,7 +352,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         failure(plan)
     }
 
-    spark.udtf.registerPython(TestPythonUDTFPartitionBy.name, pythonUDTFPartitionByOrderBy)
+    spark.udtf.registerPython(UDTFPartitionByOrderBy.name, pythonUDTFPartitionByOrderBy)
     plan = sql(
       s"""
         |WITH t AS (
@@ -248,7 +361,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         |    SELECT id AS partition_col, 2 AS input FROM range(1, 21)
         |)
         |SELECT partition_col, count, total, last
-        |FROM ${TestPythonUDTFPartitionBy.name}(TABLE(t))
+        |FROM ${UDTFPartitionByOrderBy.name}(TABLE(t))
         |ORDER BY 1, 2
         |""".stripMargin).queryExecution.analyzed
     plan.collectFirst { case r: RepartitionByExpression => r } match {
@@ -353,14 +466,39 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-45402: Add UDTF API for 'analyze' to return a buffer to consume on class creation") {
     spark.udtf.registerPython(
-      TestPythonUDTFForwardStateFromAnalyze.name,
+      UDTFForwardStateFromAnalyze.name,
       pythonUDTFForwardStateFromAnalyze)
     withTable("t") {
       sql("create table t(col array<int>) using parquet")
-      val query = s"select * from ${TestPythonUDTFForwardStateFromAnalyze.name}('abc')"
+      val query = s"select * from ${UDTFForwardStateFromAnalyze.name}('abc')"
       checkAnswer(
         sql(query),
         Row("abc"))
     }
+  }
+
+  test("SPARK-48180: Analyzer bug with multiple ORDER BY items for input table argument") {
+    assume(shouldTestPythonUDFs)
+    spark.udtf.registerPython("testUDTF", pythonUDTF)
+    checkError(
+      exception = intercept[ParseException](sql(
+        """
+          |SELECT * FROM testUDTF(
+          |  TABLE(SELECT 1 AS device_id, 2 AS data_ds)
+          |  WITH SINGLE PARTITION
+          |  ORDER BY device_id, data_ds)
+          |""".stripMargin)),
+      condition = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" ->
+        ("The table function call includes a table argument with an invalid " +
+          "partitioning/ordering specification: the ORDER BY clause included multiple " +
+          "expressions without parentheses surrounding them; please add parentheses around these " +
+          "expressions and then retry the query again")),
+      context = ExpectedContext(
+        fragment = "TABLE(SELECT 1 AS device_id, 2 AS data_ds)\n  " +
+          "WITH SINGLE PARTITION\n  " +
+          "ORDER BY device_id, data_ds",
+        start = 27,
+        stop = 122))
   }
 }

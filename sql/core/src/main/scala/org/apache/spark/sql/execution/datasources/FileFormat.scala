@@ -189,6 +189,11 @@ trait FileFormat {
   def supportFieldName(name: String): Boolean = true
 
   /**
+   * Returns whether this format allows duplicated column names in the input query during writing.
+   */
+  def allowDuplicatedColumnNames: Boolean = false
+
+  /**
    * All fields the file format's _metadata struct defines.
    *
    * Each metadata struct field is either "constant" or "generated" (respectively defined/matched by
@@ -311,7 +316,7 @@ object FileFormat {
     // file split information yet, nor do we have a way to provide custom metadata column values.
     val validFieldNames = Set(FILE_PATH, FILE_NAME, FILE_SIZE, FILE_MODIFICATION_TIME)
     val extractors =
-      FileFormat.BASE_METADATA_EXTRACTORS.view.filterKeys(validFieldNames.contains).toMap
+      FileFormat.BASE_METADATA_EXTRACTORS.filter { case (k, _) => validFieldNames.contains(k) }
     assert(fieldNames.forall(validFieldNames.contains))
     val pf = PartitionedFile(
       partitionValues = partitionValues,

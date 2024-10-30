@@ -25,11 +25,12 @@ import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.logging.LogLevel;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 public class NettyLogger {
-  private static final Logger logger = LoggerFactory.getLogger(NettyLogger.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(NettyLogger.class);
 
   /** A Netty LoggingHandler which does not dump the message contents. */
   private static class NoContentLoggingHandler extends LoggingHandler {
@@ -40,15 +41,14 @@ public class NettyLogger {
 
     @Override
     protected String format(ChannelHandlerContext ctx, String eventName, Object arg) {
-      if (arg instanceof ByteBuf) {
-        return format(ctx, eventName) + " " + ((ByteBuf) arg).readableBytes() + "B";
-      } else if (arg instanceof ByteBufHolder) {
-        return format(ctx, eventName) + " " +
-          ((ByteBufHolder) arg).content().readableBytes() + "B";
-      } else if (arg instanceof InputStream) {
+      if (arg instanceof ByteBuf byteBuf) {
+        return format(ctx, eventName) + " " + byteBuf.readableBytes() + "B";
+      } else if (arg instanceof ByteBufHolder byteBufHolder) {
+        return format(ctx, eventName) + " " + byteBufHolder.content().readableBytes() + "B";
+      } else if (arg instanceof InputStream inputStream) {
         int available = -1;
         try {
-          available = ((InputStream) arg).available();
+          available = inputStream.available();
         } catch (IOException ex) {
           // Swallow, but return -1 to indicate an error happened
         }

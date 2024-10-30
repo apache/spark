@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW t AS SELECT 1.0 as a, 0.0 as b
 -- !query analysis
-CreateViewCommand `t`, SELECT 1.0 as a, 0.0 as b, false, false, LocalTempView, true
+CreateViewCommand `t`, SELECT 1.0 as a, 0.0 as b, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [1.0 AS a#x, 0.0 AS b#x]
       +- OneRowRelation
 
@@ -12,7 +12,7 @@ select a / b from t
 -- !query analysis
 Project [(a#x / b#x) AS (a / b)#x]
 +- SubqueryAlias t
-   +- View (`t`, [a#x,b#x])
+   +- View (`t`, [a#x, b#x])
       +- Project [cast(a#x as decimal(2,1)) AS a#x, cast(b#x as decimal(1,1)) AS b#x]
          +- Project [1.0 AS a#x, 0.0 AS b#x]
             +- OneRowRelation
@@ -23,7 +23,7 @@ select a % b from t
 -- !query analysis
 Project [(a#x % b#x) AS (a % b)#x]
 +- SubqueryAlias t
-   +- View (`t`, [a#x,b#x])
+   +- View (`t`, [a#x, b#x])
       +- Project [cast(a#x as decimal(2,1)) AS a#x, cast(b#x as decimal(1,1)) AS b#x]
          +- Project [1.0 AS a#x, 0.0 AS b#x]
             +- OneRowRelation
@@ -34,7 +34,7 @@ select pmod(a, b) from t
 -- !query analysis
 Project [pmod(a#x, b#x) AS pmod(a, b)#x]
 +- SubqueryAlias t
-   +- View (`t`, [a#x,b#x])
+   +- View (`t`, [a#x, b#x])
       +- Project [cast(a#x as decimal(2,1)) AS a#x, cast(b#x as decimal(1,1)) AS b#x]
          +- Project [1.0 AS a#x, 0.0 AS b#x]
             +- OneRowRelation

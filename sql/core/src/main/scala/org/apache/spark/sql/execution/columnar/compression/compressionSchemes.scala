@@ -22,6 +22,7 @@ import java.nio.ByteOrder
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.types.{PhysicalBooleanType, PhysicalByteType, PhysicalDataType, PhysicalDoubleType, PhysicalFloatType, PhysicalIntegerType, PhysicalLongType, PhysicalShortType, PhysicalStringType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -175,7 +176,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
   }
 
   override def supports(columnType: ColumnType[_]): Boolean = columnType match {
-    case INT | LONG | SHORT | BYTE | STRING | BOOLEAN => true
+    case INT | LONG | SHORT | BYTE | _: STRING | BOOLEAN => true
     case _ => false
   }
 
@@ -350,7 +351,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
           decompress0(columnVector, capacity, getInt, putInt)
         case _: PhysicalLongType =>
           decompress0(columnVector, capacity, getLong, putLong)
-        case _ => throw new IllegalStateException("Not supported type in RunLengthEncoding.")
+        case _ => throw SparkException.internalError("Not supported type in RunLengthEncoding.")
       }
     }
   }
@@ -372,7 +373,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
   }
 
   override def supports(columnType: ColumnType[_]): Boolean = columnType match {
-    case INT | LONG | STRING => true
+    case INT | LONG | _: STRING => true
     case _ => false
   }
 
@@ -520,7 +521,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
             }
             pos += 1
           }
-        case _ => throw new IllegalStateException("Not supported type in DictionaryEncoding.")
+        case _ => throw SparkException.internalError("Not supported type in DictionaryEncoding.")
       }
     }
   }

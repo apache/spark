@@ -202,7 +202,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
         coefficients = original.coefficients,
         intercept = original.intercept)
       val output = deserialized.transform(datasetWithDenseFeature)
-      assert(output.collect().size > 0) // simple assertion to ensure no exception thrown
+      assert(output.collect().length > 0) // simple assertion to ensure no exception thrown
     }
   }
 
@@ -962,8 +962,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
   }
 
   test("linear regression with weighted samples") {
-    val sqlContext = spark.sqlContext
-    import sqlContext.implicits._
+    val session = spark
+    import session.implicits._
     val numClasses = 0
     def modelEquals(m1: LinearRegressionModel, m2: LinearRegressionModel): Unit = {
       assert(m1.coefficients ~== m2.coefficients relTol 0.01)

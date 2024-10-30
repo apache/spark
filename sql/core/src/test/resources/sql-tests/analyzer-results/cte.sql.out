@@ -2,7 +2,7 @@
 -- !query
 create temporary view t as select * from values 0, 1, 2 as t(id)
 -- !query analysis
-CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, LocalTempView, true
+CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x]
       +- SubqueryAlias t
          +- LocalRelation [id#x]
@@ -11,7 +11,7 @@ CreateViewCommand `t`, select * from values 0, 1, 2 as t(id), false, false, Loca
 -- !query
 create temporary view t2 as select * from values 0, 1 as t(id)
 -- !query analysis
-CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalTempView, true
+CreateViewCommand `t2`, select * from values 0, 1 as t(id), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [id#x]
       +- SubqueryAlias t
          +- LocalRelation [id#x]
@@ -233,9 +233,10 @@ SELECT * FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "errorClass" : "DUPLICATED_CTE_NAMES",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "duplicateNames" : "'t'"
+    "duplicateNames" : "`t`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -688,9 +689,10 @@ with cte1 as (select 42), cte1 as (select 42) select * FROM cte1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0038",
+  "errorClass" : "DUPLICATED_CTE_NAMES",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "duplicateNames" : "'cte1'"
+    "duplicateNames" : "`cte1`"
   },
   "queryContext" : [ {
     "objectType" : "",

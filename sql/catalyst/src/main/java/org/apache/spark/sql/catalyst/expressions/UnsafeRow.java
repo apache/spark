@@ -21,12 +21,15 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
@@ -71,8 +74,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * Field types that hold fixed-length, store the value directly in an 8-byte word
    */
   public static boolean isFixedLength(DataType dt) {
-    if (dt instanceof UserDefinedType) {
-      return isFixedLength(((UserDefinedType<?>) dt).sqlType());
+    if (dt instanceof UserDefinedType udt) {
+      return isFixedLength(udt.sqlType());
     }
     PhysicalDataType pdt = PhysicalDataType.apply(dt);
     if (pdt instanceof PhysicalDecimalType) {
@@ -86,8 +89,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */
   public static boolean isMutable(DataType dt) {
-    if (dt instanceof UserDefinedType) {
-      return isMutable(((UserDefinedType<?>) dt).sqlType());
+    if (dt instanceof UserDefinedType udt) {
+      return isMutable(udt.sqlType());
     }
     PhysicalDataType pdt = PhysicalDataType.apply(dt);
     return pdt instanceof PhysicalPrimitiveType || pdt instanceof PhysicalDecimalType ||
@@ -154,6 +157,17 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
     assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
+    if (baseObject instanceof byte[] bytes) {
+      int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
+      if (offsetInByteArray < 0 || sizeInBytes < 0 ||
+          bytes.length < offsetInByteArray + sizeInBytes) {
+        throw new SparkIllegalArgumentException(
+          "INTERNAL_ERROR",
+          Map.of("message", "Invalid byte array backed UnsafeRow: byte array length=" +
+            bytes.length + ", offset=" + offsetInByteArray + ", byte size=" + sizeInBytes)
+        );
+      }
+    }
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
@@ -191,7 +205,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public void update(int ordinal, Object value) {
-    throw new UnsupportedOperationException();
+    throw SparkUnsupportedOperationException.apply();
   }
 
   @Override
@@ -521,9 +535,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    *                    buffer will not be used and may be null.
    */
   public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
-    if (baseObject instanceof byte[]) {
+    if (baseObject instanceof byte[] bytes) {
       int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
-      out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
+      out.write(bytes, offsetInByteArray, sizeInBytes);
     } else {
       int dataRemaining = sizeInBytes;
       long rowReadPosition = baseOffset;

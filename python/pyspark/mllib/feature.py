@@ -25,11 +25,11 @@ from typing import Dict, Hashable, Iterable, List, Optional, Tuple, Union, overl
 from py4j.protocol import Py4JJavaError
 
 from pyspark import since
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Vectors, _convert_to_vector
 from pyspark.mllib.util import JavaLoader, JavaSaveable
-from pyspark.context import SparkContext
+from pyspark.core.context import SparkContext
 from pyspark.mllib.linalg import Vector
 from pyspark.mllib.regression import LabeledPoint
 from py4j.java_collections import JavaMap
@@ -554,9 +554,9 @@ class PCA:
     ...     Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0])]
     >>> model = PCA(2).fit(sc.parallelize(data))
     >>> pcArray = model.transform(Vectors.sparse(5, [(1, 1.0), (3, 7.0)])).toArray()
-    >>> pcArray[0]
+    >>> float(pcArray[0])
     1.648...
-    >>> pcArray[1]
+    >>> float(pcArray[1])
     -4.013...
     """
 

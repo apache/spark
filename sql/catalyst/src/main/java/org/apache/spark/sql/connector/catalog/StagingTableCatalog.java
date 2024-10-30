@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.connector.write.BatchWrite;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
+import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -38,7 +39,7 @@ import org.apache.spark.sql.types.StructType;
  * SELECT and REPLACE TABLE AS SELECT operations are atomic. For example, when one runs a REPLACE
  * TABLE AS SELECT operation, if the catalog does not implement this trait, the planner will first
  * drop the table via {@link TableCatalog#dropTable(Identifier)}, then create the table via
- * {@link TableCatalog#createTable(Identifier, StructType, Transform[], Map)}, and then perform
+ * {@link TableCatalog#createTable(Identifier, Column[], Transform[], Map)}, and then perform
  * the write via {@link SupportsWrite#newWriteBuilder(LogicalWriteInfo)}.
  * However, if the write operation fails, the catalog will have already dropped the table, and the
  * planner cannot roll back the dropping of the table.
@@ -61,11 +62,13 @@ public interface StagingTableCatalog extends TableCatalog {
    * {@link #stageCreate(Identifier, Column[], Transform[], Map)} instead.
    */
   @Deprecated(since = "3.4.0")
-  StagedTable stageCreate(
+  default StagedTable stageCreate(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("stageCreate");
+  }
 
   /**
    * Stage the creation of a table, preparing it to be committed into the metastore.
@@ -80,7 +83,8 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param columns the column of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
-   * @return metadata for the new table
+   * @return metadata for the new table. This can be null if the catalog does not support atomic
+   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
@@ -98,13 +102,16 @@ public interface StagingTableCatalog extends TableCatalog {
    * returned table's {@link StagedTable#commitStagedChanges()} is called.
    * <p>
    * This is deprecated, please override
-   * {@link #stageReplace(Identifier, StructType, Transform[], Map)} instead.
+   * {@link #stageReplace(Identifier, Column[], Transform[], Map)} instead.
    */
-  StagedTable stageReplace(
+  @Deprecated(since = "3.4.0")
+  default StagedTable stageReplace(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws NoSuchNamespaceException, NoSuchTableException;
+      Map<String, String> properties) throws NoSuchNamespaceException, NoSuchTableException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("stageReplace");
+  }
 
   /**
    * Stage the replacement of a table, preparing it to be committed into the metastore when the
@@ -128,7 +135,8 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param columns the columns of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
-   * @return metadata for the new table
+   * @return metadata for the new table. This can be null if the catalog does not support atomic
+   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @throws NoSuchTableException If the table does not exist
@@ -149,11 +157,14 @@ public interface StagingTableCatalog extends TableCatalog {
    * This is deprecated, please override
    * {@link #stageCreateOrReplace(Identifier, Column[], Transform[], Map)} instead.
    */
-  StagedTable stageCreateOrReplace(
+  @Deprecated(since = "3.4.0")
+  default StagedTable stageCreateOrReplace(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws NoSuchNamespaceException;
+      Map<String, String> properties) throws NoSuchNamespaceException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("stageCreateOrReplace");
+  }
 
   /**
    * Stage the creation or replacement of a table, preparing it to be committed into the metastore
@@ -176,7 +187,8 @@ public interface StagingTableCatalog extends TableCatalog {
    * @param columns the columns of the new table
    * @param partitions transforms to use for partitioning data in the table
    * @param properties a string map of table properties
-   * @return metadata for the new table
+   * @return metadata for the new table. This can be null if the catalog does not support atomic
+   *         creation for this table. Spark will call {@link #loadTable(Identifier)} later.
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */

@@ -58,7 +58,7 @@ install_app() {
   local local_checksum="${local_tarball}.${checksum_suffix}"
   local remote_checksum="https://archive.apache.org/dist/${url_path}.${checksum_suffix}"
 
-  local curl_opts="--silent --show-error -L"
+  local curl_opts="--retry 3 --silent --show-error -L"
   local wget_opts="--no-verbose"
 
   if [ ! -f "$binary" ]; then
@@ -115,6 +115,10 @@ function version { echo "$@" | awk -F. '{ printf("%03d%03d%03d\n", $1,$2,$3); }'
 # install maven under the build/ folder if needed.
 install_mvn() {
   local MVN_VERSION=`grep "<maven.version>" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+  MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
+  if [ -f "$MVN_BIN" ]; then
+    return
+  fi
   MVN_BIN="$(command -v mvn)"
   if [ "$MVN_BIN" ]; then
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
@@ -146,30 +150,6 @@ install_mvn() {
   fi
 }
 
-# Determine the Scala version from the root pom.xml file, set the Scala URL,
-# and, with that, download the specific version of Scala necessary under
-# the build/ folder
-install_scala() {
-  # determine the Scala version used in Spark
-  local scala_binary_version=`grep "scala.binary.version" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
-  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | grep ${scala_binary_version} | head -n1 | awk -F '[<>]' '{print $3}'`
-  local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
-  local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.lightbend.com}
-  local SCALA_TARBALL="scala-${scala_version}.tgz"
-
-  install_app \
-    "${TYPESAFE_MIRROR}" \
-    "scala/${scala_version}/${SCALA_TARBALL}" \
-    "" \
-    "" \
-    ${SCALA_TARBALL} \
-    "scala-${scala_version}/bin/scala"
-
-  SCALA_COMPILER="$(cd "$(dirname "${scala_bin}")/../lib" && pwd)/scala-compiler.jar"
-  SCALA_LIBRARY="$(cd "$(dirname "${scala_bin}")/../lib" && pwd)/scala-library.jar"
-}
-
-install_scala
 install_mvn
 
 # Reset the current working directory

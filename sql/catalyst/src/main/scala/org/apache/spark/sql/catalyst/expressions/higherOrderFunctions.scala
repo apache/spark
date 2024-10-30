@@ -270,7 +270,7 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction with BinaryLike[Expr
    * in order to save null-check code.
    */
   protected def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any =
-    throw QueryExecutionErrors.notOverrideExpectedMethodsError("UnaryHigherOrderFunction",
+    throw QueryExecutionErrors.notOverrideExpectedMethodsError(this.getClass.getName,
       "eval", "nullSafeEval")
 
   override def eval(inputRow: InternalRow): Any = {
@@ -427,7 +427,7 @@ case class ArraySort(
             DataTypeMismatch(
               errorSubClass = "UNEXPECTED_INPUT_TYPE",
               messageParameters = Map(
-                "paramIndex" -> "1",
+                "paramIndex" -> ordinalNumber(0),
                 "requiredType" -> toSQLType(ArrayType),
                 "inputSql" -> toSQLExpr(argument),
                 "inputType" -> toSQLType(argument.dataType)
@@ -840,7 +840,7 @@ case class ArrayAggregate(
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
-              "paramIndex" -> "3",
+              "paramIndex" -> ordinalNumber(2),
               "requiredType" -> toSQLType(zero.dataType),
               "inputSql" -> toSQLExpr(merge),
               "inputType" -> toSQLType(merge.dataType)))
@@ -919,6 +919,8 @@ case class TransformKeys(
   @transient lazy val MapType(keyType, valueType, valueContainsNull) = argument.dataType
 
   override def dataType: MapType = MapType(function.dataType, valueType, valueContainsNull)
+
+  override def stateful: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = {
     TypeUtils.checkForMapKeyType(function.dataType)

@@ -20,8 +20,10 @@ package org.apache.spark.network.sasl;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 import org.apache.spark.network.util.JavaUtils;
 
@@ -29,7 +31,8 @@ import org.apache.spark.network.util.JavaUtils;
  * A class that manages shuffle secret used by the external shuffle service.
  */
 public class ShuffleSecretManager implements SecretKeyHolder {
-  private static final Logger logger = LoggerFactory.getLogger(ShuffleSecretManager.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ShuffleSecretManager.class);
 
   private final ConcurrentHashMap<String, String> shuffleSecretMap;
 
@@ -51,7 +54,8 @@ public class ShuffleSecretManager implements SecretKeyHolder {
     // Otherwise we have to specifically look at the application attempt in addition
     // to the applicationId since the secrets change between application attempts on yarn.
     shuffleSecretMap.put(appId, shuffleSecret);
-    logger.info("Registered shuffle secret for application {}", appId);
+    logger.info("Registered shuffle secret for application {}",
+      MDC.of(LogKeys.APP_ID$.MODULE$, appId));
   }
 
   /**
@@ -67,7 +71,8 @@ public class ShuffleSecretManager implements SecretKeyHolder {
    */
   public void unregisterApp(String appId) {
     shuffleSecretMap.remove(appId);
-    logger.info("Unregistered shuffle secret for application {}", appId);
+    logger.info("Unregistered shuffle secret for application {}",
+      MDC.of(LogKeys.APP_ID$.MODULE$, appId));
   }
 
   /**

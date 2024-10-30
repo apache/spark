@@ -28,7 +28,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 from pyspark.pandas.utils import is_testing
 
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -137,13 +137,14 @@ class FrameConstructorMixin:
             pd.DataFrame(data=data, index=pd.Index([1, 2, 3, 5, 6])),
         )
 
-        err_msg = "Cannot combine the series or dataframe"
-        with self.assertRaisesRegex(ValueError, err_msg):
-            # test ps.DataFrame with ps.Index
-            ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.Index([1, 2]))
-        with self.assertRaisesRegex(ValueError, err_msg):
-            # test ps.DataFrame with pd.Index
-            ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([3, 4]))
+        with ps.option_context("compute.ops_on_diff_frames", False):
+            err_msg = "Cannot combine the series or dataframe"
+            with self.assertRaisesRegex(ValueError, err_msg):
+                # test ps.DataFrame with ps.Index
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=ps.Index([1, 2]))
+            with self.assertRaisesRegex(ValueError, err_msg):
+                # test ps.DataFrame with pd.Index
+                ps.DataFrame(data=ps.DataFrame([1, 2]), index=pd.Index([3, 4]))
 
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test pd.DataFrame with pd.Index
@@ -195,14 +196,14 @@ class FrameConstructorMixin:
         with ps.option_context("compute.ops_on_diff_frames", True):
             # test with ps.DataFrame and pd.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=pd.Index([2, 3, 4, 5, 6])),
-                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+                ps.DataFrame(data=psdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
             )
 
             # test with ps.DataFrame and ps.Index
             self.assert_eq(
-                ps.DataFrame(data=psdf, index=ps.Index([2, 3, 4, 5, 6])),
-                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])),
+                ps.DataFrame(data=psdf, index=ps.Index([2, 3, 4, 5, 6])).sort_index(),
+                pd.DataFrame(data=pdf, index=pd.Index([2, 3, 4, 5, 6])).sort_index(),
             )
 
         # test String Index
@@ -269,11 +270,11 @@ class FrameConstructorMixin:
             ps.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
             pd.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
         )
 
         # test with pd.DataFrame and ps.DatetimeIndex
@@ -281,11 +282,11 @@ class FrameConstructorMixin:
             ps.DataFrame(
                 data=pdf,
                 index=ps.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
             pd.DataFrame(
                 data=pdf,
                 index=pd.DatetimeIndex(["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]),
-            ),
+            ).sort_index(),
         )
 
         with ps.option_context("compute.ops_on_diff_frames", True):
@@ -296,13 +297,13 @@ class FrameConstructorMixin:
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
                 pd.DataFrame(
                     data=pdf,
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
             )
 
             # test with ps.DataFrame and ps.DatetimeIndex
@@ -312,13 +313,13 @@ class FrameConstructorMixin:
                     index=ps.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
                 pd.DataFrame(
                     data=pdf,
                     index=pd.DatetimeIndex(
                         ["2022-08-31", "2022-09-02", "2022-09-03", "2022-09-05"]
                     ),
-                ),
+                ).sort_index(),
             )
 
         # test MultiIndex
@@ -572,7 +573,11 @@ class FrameConstructorMixin:
         self.assert_eq(psdf.astype(astype), pdf.astype(astype))
 
 
-class FrameConstructorTests(FrameConstructorMixin, ComparisonTestBase, SQLTestUtils):
+class FrameConstructorTests(
+    FrameConstructorMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

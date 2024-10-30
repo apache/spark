@@ -37,7 +37,7 @@ object MLUtil {
     val destFSPath = new FSPath(destPath)
     val fs = destFSPath.getFileSystem(hadoopConf)
 
-    fs.copyFromLocalFile(false, true, new FSPath(localPath.toString), destFSPath)
+    fs.copyFromLocalFile(false, true, new FSPath(localPath), destFSPath)
   }
 
 }

@@ -20,7 +20,10 @@ from pyspark.pandas.tests.data_type_ops.test_base import BaseTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class BaseParityTests(BaseTestsMixin, ReusedConnectTestCase):
+class BaseParityTests(
+    BaseTestsMixin,
+    ReusedConnectTestCase,
+):
     pass
 
 

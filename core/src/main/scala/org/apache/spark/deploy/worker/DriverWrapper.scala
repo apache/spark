@@ -21,7 +21,8 @@ import java.io.File
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.LogKeys.RPC_ADDRESS
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util._
 
@@ -43,7 +44,7 @@ object DriverWrapper extends Logging {
         val host: String = Utils.localHostName()
         val port: Int = sys.props.getOrElse(config.DRIVER_PORT.key, "0").toInt
         val rpcEnv = RpcEnv.create("Driver", host, port, conf, new SecurityManager(conf))
-        logInfo(s"Driver address: ${rpcEnv.address}")
+        logInfo(log"Driver address: ${MDC(RPC_ADDRESS, rpcEnv.address)}")
         rpcEnv.setupEndpoint("workerWatcher", new WorkerWatcher(rpcEnv, workerUrl))
 
         val currentLoader = Thread.currentThread.getContextClassLoader

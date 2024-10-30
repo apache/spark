@@ -20,7 +20,8 @@ package org.apache.spark.graphx
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx.util.PeriodicGraphCheckpointer
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.NUM_ITERATIONS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 
@@ -160,7 +161,7 @@ object Pregel extends Logging {
       messageCheckpointer.update(messages.asInstanceOf[RDD[(VertexId, A)]])
       isActiveMessagesNonEmpty = !messages.isEmpty()
 
-      logInfo("Pregel finished iteration " + i)
+      logInfo(log"Pregel finished iteration ${MDC(NUM_ITERATIONS, i)}")
 
       // Unpersist the RDDs hidden by newly-materialized RDDs
       oldMessages.unpersist()

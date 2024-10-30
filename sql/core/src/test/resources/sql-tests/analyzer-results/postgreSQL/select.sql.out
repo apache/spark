@@ -2,7 +2,7 @@
 -- !query
 create or replace temporary view onek2 as select * from onek
 -- !query analysis
-CreateViewCommand `onek2`, select * from onek, false, true, LocalTempView, true
+CreateViewCommand `onek2`, select * from onek, false, true, LocalTempView, UNSUPPORTED, true
    +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
       +- SubqueryAlias spark_catalog.default.onek
          +- Relation spark_catalog.default.onek[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
@@ -23,7 +23,7 @@ CreateViewCommand `INT8_TBL`, select * from values
   (cast('4567890123456789' as bigint),cast('123' as bigint)),
   (cast(+4567890123456789 as bigint),cast('4567890123456789' as bigint)),
   (cast('+4567890123456789' as bigint),cast('-4567890123456789' as bigint))
-  as INT8_TBL(q1, q2), false, true, LocalTempView, true
+  as INT8_TBL(q1, q2), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [q1#xL, q2#xL]
       +- SubqueryAlias INT8_TBL
          +- LocalRelation [q1#xL, q2#xL]
@@ -119,7 +119,7 @@ SELECT onek2.* FROM onek2 WHERE onek2.unique1 < 10
 Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
 +- Filter (unique1#x < 10)
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -135,7 +135,7 @@ Sort [unique1#x DESC NULLS LAST], true
 +- Project [unique1#x, stringu1#x]
    +- Filter (unique1#x < 20)
       +- SubqueryAlias onek2
-         +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+         +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
             +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
                +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                   +- SubqueryAlias spark_catalog.default.onek
@@ -149,7 +149,7 @@ SELECT onek2.unique1, onek2.stringu1 FROM onek2
 Project [unique1#x, stringu1#x]
 +- Filter (unique1#x > 980)
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -229,7 +229,7 @@ Union false, false
 :           +- OneRowRelation
 +- Project [q1#xL, cast(q2#xL as decimal(21,1)) AS q2#x]
    +- SubqueryAlias int8_tbl
-      +- View (`INT8_TBL`, [q1#xL,q2#xL])
+      +- View (`INT8_TBL`, [q1#xL, q2#xL])
          +- Project [cast(q1#xL as bigint) AS q1#xL, cast(q2#xL as bigint) AS q2#xL]
             +- Project [q1#xL, q2#xL]
                +- SubqueryAlias INT8_TBL
@@ -240,7 +240,7 @@ Union false, false
 CREATE OR REPLACE TEMPORARY VIEW foo AS
 SELECT * FROM (values(42),(3),(10),(7),(null),(null),(1)) as foo (f1)
 -- !query analysis
-CreateViewCommand `foo`, SELECT * FROM (values(42),(3),(10),(7),(null),(null),(1)) as foo (f1), false, true, LocalTempView, true
+CreateViewCommand `foo`, SELECT * FROM (values(42),(3),(10),(7),(null),(null),(1)) as foo (f1), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias foo
          +- Project [col1#x AS f1#x]
@@ -323,7 +323,7 @@ select * from onek2 where unique2 = 11 and stringu1 = 'ATAAAA'
 Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
 +- Filter ((unique2#x = 11) AND (stringu1#x = ATAAAA))
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -336,7 +336,7 @@ select unique2 from onek2 where unique2 = 11 and stringu1 = 'ATAAAA'
 Project [unique2#x]
 +- Filter ((unique2#x = 11) AND (stringu1#x = ATAAAA))
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -349,7 +349,7 @@ select * from onek2 where unique2 = 11 and stringu1 < 'B'
 Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
 +- Filter ((unique2#x = 11) AND (stringu1#x < B))
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -362,7 +362,7 @@ select unique2 from onek2 where unique2 = 11 and stringu1 < 'B'
 Project [unique2#x]
 +- Filter ((unique2#x = 11) AND (stringu1#x < B))
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -375,7 +375,7 @@ select unique2 from onek2 where unique2 = 11 and stringu1 < 'C'
 Project [unique2#x]
 +- Filter ((unique2#x = 11) AND (stringu1#x < C))
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -388,7 +388,7 @@ select unique2 from onek2 where unique2 = 11 and stringu1 < 'B'
 Project [unique2#x]
 +- Filter ((unique2#x = 11) AND (stringu1#x < B))
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -402,7 +402,7 @@ select unique1, unique2 from onek2
 Project [unique1#x, unique2#x]
 +- Filter (((unique2#x = 11) OR (unique1#x = 0)) AND (stringu1#x < B))
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek
@@ -416,7 +416,7 @@ select unique1, unique2 from onek2
 Project [unique1#x, unique2#x]
 +- Filter (((unique2#x = 11) AND (stringu1#x < B)) OR (unique1#x = 0))
    +- SubqueryAlias onek2
-      +- View (`onek2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+      +- View (`onek2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
          +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
             +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                +- SubqueryAlias spark_catalog.default.onek

@@ -227,7 +227,9 @@ object AvroSerdeSuite {
         isPositional(matchType),
         RebaseSpec(CORRECTED),
         new NoopFilters,
-        false)
+        false,
+        "",
+        -1)
   }
 
   /**

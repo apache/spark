@@ -164,7 +164,7 @@ message ExecutorStageSummaryWrapper {
 message ExecutorResourceRequest {
   optional string resource_name = 1;
   int64 amount = 2;
-  optional string discoveryScript = 3;
+  optional string discovery_script = 3;
   optional string vendor = 4;
 }
 
@@ -277,7 +277,7 @@ message RDDStorageInfoWrapper {
 }
 
 message ResourceProfileWrapper {
-  ResourceProfileInfo rpInfo = 1;
+  ResourceProfileInfo rp_info = 1;
 }
 
 message CachedQuantile {

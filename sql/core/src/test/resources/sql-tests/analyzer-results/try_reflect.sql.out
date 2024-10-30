@@ -110,7 +110,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"2.5\"",
     "inputType" : "\"DECIMAL(2,1)\"",
-    "paramIndex" : "3",
+    "paramIndex" : "third",
     "requiredType" : "(\"BOOLEAN\" or \"TINYINT\" or \"SMALLINT\" or \"INT\" or \"BIGINT\" or \"FLOAT\" or \"DOUBLE\" or \"STRING\")",
     "sqlExpr" : "\"reflect(java.lang.Math, round, 2.5)\""
   },

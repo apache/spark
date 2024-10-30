@@ -61,7 +61,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         List.fill(n)(ROW).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
         val file = TestUtils.listDirectory(dir).head
 
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null)
@@ -91,7 +91,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         data.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = TestUtils.listDirectory(dir).head
 
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null)
@@ -125,7 +125,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
         data.toDF("f").coalesce(1).write.parquet(dir.getCanonicalPath)
         val file = TestUtils.listDirectory(dir).head
 
-        val conf = sqlContext.conf
+        val conf = spark.sessionState.conf
         val reader = new VectorizedParquetRecordReader(
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         reader.initialize(file, null /* set columns to null to project all columns */)

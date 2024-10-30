@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.util.SparkClassUtils
 
@@ -27,11 +28,12 @@ import org.apache.spark.util.SparkClassUtils
  * with catalyst because they (amongst others) require access to Spark SQLs internal data
  * representation.
  *
- * This interface and its companion object provide an escape hatch for working with UDTs from within
- * the api project (e.g. Row.toJSON). The companion will try to bind to an implementation of the
- * interface in catalyst, if none is found it will bind to [[DefaultUDTUtils]].
+ * This interface and its companion object provide an escape hatch for working with UDTs from
+ * within the api project (e.g. Row.toJSON). The companion will try to bind to an implementation
+ * of the interface in catalyst, if none is found it will bind to [[DefaultUDTUtils]].
  */
 private[sql] trait UDTUtils {
+
   /**
    * Convert the UDT instance to something that is compatible with [[org.apache.spark.sql.Row]].
    * The returned value must conform to the schema of the UDT.
@@ -40,19 +42,20 @@ private[sql] trait UDTUtils {
 }
 
 private[sql] object UDTUtils extends UDTUtils {
-  private val delegate = try {
-    val cls = SparkClassUtils.classForName("org.apache.spark.sql.catalyst.util.UDTUtilsImpl")
-    cls.getConstructor().newInstance().asInstanceOf[UDTUtils]
-  } catch {
-    case NonFatal(_) =>
-      DefaultUDTUtils
-  }
+  private val delegate =
+    try {
+      val cls = SparkClassUtils.classForName("org.apache.spark.sql.catalyst.util.UDTUtilsImpl")
+      cls.getConstructor().newInstance().asInstanceOf[UDTUtils]
+    } catch {
+      case NonFatal(_) =>
+        DefaultUDTUtils
+    }
 
   override def toRow(value: Any, udt: UserDefinedType[Any]): Any = delegate.toRow(value, udt)
 }
 
 private[sql] object DefaultUDTUtils extends UDTUtils {
   override def toRow(value: Any, udt: UserDefinedType[Any]): Any = {
-    throw new UnsupportedOperationException()
+    throw SparkUnsupportedOperationException()
   }
 }

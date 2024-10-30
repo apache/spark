@@ -24,7 +24,8 @@ import scala.reflect.ClassTag
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
@@ -172,7 +173,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   private def canShuffleMergeBeEnabled(): Boolean = {
-    val isPushShuffleEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf,
+    val isPushShuffleEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.conf,
       // invoked at driver
       isDriver = true)
     if (isPushShuffleEnabled && rdd.isBarrier()) {
@@ -204,6 +205,21 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   private[spark] def setFinalizeTask(task: ScheduledFuture[_]): Unit = {
     finalizeTask = Option(task)
+  }
+
+  // Set the threshold to 1 billion which leads to an 128MB bitmap and
+  // the actual size of `HighlyCompressedMapStatus` can be much larger than 128MB.
+  // This may crash the driver with an OOM error.
+  if (numPartitions.toLong * partitioner.numPartitions.toLong > (1L << 30)) {
+    logWarning(
+      log"The number of shuffle blocks " +
+        log"(${MDC(NUM_PARTITIONS, numPartitions.toLong * partitioner.numPartitions.toLong)})" +
+        log" for shuffleId ${MDC(SHUFFLE_ID, shuffleId)} " +
+        log"for ${MDC(RDD_DESCRIPTION, _rdd)} " +
+        log"with ${MDC(NUM_PARTITIONS2, numPartitions)} partitions" +
+        log" is possibly too large, which could cause the driver to crash with an out-of-memory" +
+        log" error. Consider decreasing the number of partitions in this shuffle stage."
+    )
   }
 
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))

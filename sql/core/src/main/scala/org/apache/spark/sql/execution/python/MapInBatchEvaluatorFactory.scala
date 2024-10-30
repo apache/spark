@@ -29,16 +29,16 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 class MapInBatchEvaluatorFactory(
     output: Seq[Attribute],
-    chainedFunc: Seq[ChainedPythonFunctions],
+    chainedFunc: Seq[(ChainedPythonFunctions, Long)],
     outputTypes: StructType,
     batchSize: Int,
     pythonEvalType: Int,
     sessionLocalTimeZone: String,
     largeVarTypes: Boolean,
     pythonRunnerConf: Map[String, String],
-    pythonMetrics: Map[String, SQLMetric],
+    val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String])
-    extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
+  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] =
     new MapInBatchEvaluator
@@ -70,7 +70,8 @@ class MapInBatchEvaluatorFactory(
         largeVarTypes,
         pythonRunnerConf,
         pythonMetrics,
-        jobArtifactUUID).compute(batchIter, context.partitionId(), context)
+        jobArtifactUUID,
+        None).compute(batchIter, context.partitionId(), context)
 
       val unsafeProj = UnsafeProjection.create(output, output)
 

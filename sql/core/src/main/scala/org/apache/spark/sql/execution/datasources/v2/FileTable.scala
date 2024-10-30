@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFile
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.util.ArrayImplicits._
 
 abstract class FileTable(
     sparkSession: SparkSession,
@@ -99,7 +100,8 @@ abstract class FileTable(
     StructType(fields)
   }
 
-  override def partitioning: Array[Transform] = fileIndex.partitionSchema.names.toSeq.asTransforms
+  override def partitioning: Array[Transform] =
+    fileIndex.partitionSchema.names.toImmutableArraySeq.asTransforms
 
   override def properties: util.Map[String, String] = options.asCaseSensitiveMap
 
@@ -143,6 +145,19 @@ abstract class FileTable(
   private def globPaths: Boolean = {
     val entry = options.get(DataSource.GLOB_PATHS_KEY)
     Option(entry).map(_ == "true").getOrElse(true)
+  }
+
+  /**
+   * Merge the options of FileTable and the table operation while respecting the
+   * keys of the table operation.
+   *
+   * @param options The options of the table operation.
+   * @return
+   */
+  protected def mergedOptions(options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val finalOptions = this.options.asCaseSensitiveMap().asScala ++
+      options.asCaseSensitiveMap().asScala
+    new CaseInsensitiveStringMap(finalOptions.asJava)
   }
 }
 

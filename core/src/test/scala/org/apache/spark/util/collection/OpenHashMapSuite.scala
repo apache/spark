@@ -249,4 +249,34 @@ class OpenHashMapSuite extends SparkFunSuite with Matchers {
     map(null) = null
     assert(map.get(null) === Some(null))
   }
+
+  test("SPARK-45599: 0.0 and -0.0 should count distinctly; NaNs should count together") {
+    // Exactly these elements provided in roughly this order trigger a condition where lookups of
+    // 0.0 and -0.0 in the bitset happen to collide, causing their counts to be merged incorrectly
+    // and inconsistently if `==` is used to check for key equality.
+    val spark45599Repro = Seq(
+      Double.NaN,
+      2.0,
+      168.0,
+      Double.NaN,
+      Double.NaN,
+      -0.0,
+      153.0,
+      0.0
+    )
+
+    val map1 = new OpenHashMap[Double, Int]()
+    spark45599Repro.foreach(map1.changeValue(_, 1, {_ + 1}))
+    assert(map1(0.0) == 1)
+    assert(map1(-0.0) == 1)
+    assert(map1(Double.NaN) == 3)
+
+    val map2 = new OpenHashMap[Double, Int]()
+    // Simply changing the order in which the elements are added to the map should not change the
+    // counts for 0.0 and -0.0.
+    spark45599Repro.reverse.foreach(map2.changeValue(_, 1, {_ + 1}))
+    assert(map2(0.0) == 1)
+    assert(map2(-0.0) == 1)
+    assert(map2(Double.NaN) == 3)
+  }
 }

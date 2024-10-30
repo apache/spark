@@ -22,7 +22,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class FrameParityConstructorTests(
-    FrameConstructorMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+    FrameConstructorMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     pass
 

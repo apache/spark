@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 
 private[spark] trait SparkErrorUtils extends Logging {
   /**
@@ -74,7 +74,8 @@ private[spark] trait SparkErrorUtils extends Logging {
       } catch {
         case t: Throwable if (originalThrowable != null && originalThrowable != t) =>
           originalThrowable.addSuppressed(t)
-          logWarning(s"Suppressing exception in finally: ${t.getMessage}", t)
+          logWarning(
+            log"Suppressing exception in finally: ${MDC(LogKeys.MESSAGE, t.getMessage)}", t)
           throw originalThrowable
       }
     }

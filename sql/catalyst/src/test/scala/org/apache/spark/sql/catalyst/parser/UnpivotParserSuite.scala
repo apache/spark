@@ -31,15 +31,15 @@ class UnpivotParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
   }
 
-  private def intercept(sqlCommand: String, errorClass: Option[String], messages: String*): Unit =
-    interceptParseException(parsePlan)(sqlCommand, messages: _*)(errorClass)
+  private def intercept(sqlCommand: String, condition: Option[String], messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)(condition)
 
   test("unpivot - single value") {
     assertEqual(
       "SELECT * FROM t UNPIVOT (val FOR col in (a, b))",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
@@ -59,7 +59,7 @@ class UnpivotParserSuite extends AnalysisTest {
           sql,
           Unpivot(
             None,
-            Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+            Some(Seq(Seq($"a"), Seq($"b"))),
             Some(Seq(Some("A"), None)),
             "col",
             Seq("val"),
@@ -76,7 +76,7 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t UNPIVOT ((val1, val2) FOR col in ((a, b), (c, d)))",
       Unpivot(
         None,
-        Some(Seq(Seq($"a", $"b").map(UnresolvedAlias(_)), Seq($"c", $"d").map(UnresolvedAlias(_)))),
+        Some(Seq(Seq($"a", $"b"), Seq($"c", $"d"))),
         None,
         "col",
         Seq("val1", "val2"),
@@ -96,10 +96,7 @@ class UnpivotParserSuite extends AnalysisTest {
           sql,
           Unpivot(
             None,
-            Some(Seq(
-              Seq($"a", $"b").map(UnresolvedAlias(_)),
-              Seq($"c", $"d").map(UnresolvedAlias(_))
-            )),
+            Some(Seq(Seq($"a", $"b"), Seq($"c", $"d"))),
             Some(Seq(Some("first"), None)),
             "col",
             Seq("val1", "val2"),
@@ -132,7 +129,7 @@ class UnpivotParserSuite extends AnalysisTest {
           sql,
           Unpivot(
             None,
-            Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+            Some(Seq(Seq($"a"), Seq($"b"))),
             None,
             "col",
             Seq("val"),
@@ -169,7 +166,7 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t UNPIVOT EXCLUDE NULLS (val FOR col in (a, b))",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
@@ -184,7 +181,7 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t UNPIVOT INCLUDE NULLS (val FOR col in (a, b))",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
@@ -199,7 +196,7 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t1 UNPIVOT (val FOR col in (a, b)) JOIN t2",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
@@ -211,7 +208,7 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t1 JOIN t2 UNPIVOT (val FOR col in (a, b))",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
@@ -224,7 +221,7 @@ class UnpivotParserSuite extends AnalysisTest {
       table("t1").join(
         Unpivot(
           None,
-          Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+          Some(Seq(Seq($"a"), Seq($"b"))),
           None,
           "col",
           Seq("val"),
@@ -239,7 +236,7 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t1 UNPIVOT (val FOR col in (a, b)), t2",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
@@ -251,7 +248,7 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t1, t2 UNPIVOT (val FOR col in (a, b))",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
@@ -267,7 +264,7 @@ class UnpivotParserSuite extends AnalysisTest {
         table("t1").join(
           Unpivot(
             None,
-            Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+            Some(Seq(Seq($"a"), Seq($"b"))),
             None,
             "col",
             Seq("val"),
@@ -282,7 +279,7 @@ class UnpivotParserSuite extends AnalysisTest {
       table("t1").join(
         Unpivot(
           None,
-          Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+          Some(Seq(Seq($"a"), Seq($"b"))),
           None,
           "col",
           Seq("val"),
@@ -296,7 +293,7 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t1, t2 JOIN t3 UNPIVOT (val FOR col in (a, b))",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
@@ -311,7 +308,7 @@ class UnpivotParserSuite extends AnalysisTest {
         table("t1").join(
           Unpivot(
             None,
-            Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+            Some(Seq(Seq($"a"), Seq($"b"))),
             None,
             "col",
             Seq("val"),
@@ -326,13 +323,13 @@ class UnpivotParserSuite extends AnalysisTest {
       "SELECT * FROM t1 UNPIVOT (val FOR col in (a, b)) UNPIVOT (val FOR col in (a, b))",
       Unpivot(
         None,
-        Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+        Some(Seq(Seq($"a"), Seq($"b"))),
         None,
         "col",
         Seq("val"),
         Unpivot(
           None,
-          Some(Seq(Seq(UnresolvedAlias($"a")), Seq(UnresolvedAlias($"b")))),
+          Some(Seq(Seq($"a"), Seq($"b"))),
           None,
           "col",
           Seq("val"),

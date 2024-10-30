@@ -699,11 +699,13 @@ Spark's generalized linear regression interface also provides summary statistics
 fit of GLM models, including residuals, p-values, deviances, the Akaike information criterion, and
 others.
 
-[See here](http://data.princeton.edu/wws509/notes/) for a more comprehensive review of GLMs and their applications.
+[See here][glm] for a more comprehensive review of GLMs and their applications.
+
+[glm]: https://web.archive.org/web/20180217071524/http://data.princeton.edu/wws509/notes/
 
 ###  Available families
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th>Family</th>
@@ -1157,9 +1159,11 @@ regression with elastic net regularization.
 
 # Factorization Machines
 
-[Factorization Machines](https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf) are able to estimate interactions
+[Factorization Machines][fm] are able to estimate interactions
 between features even in problems with huge sparsity (like advertising and recommendation system).
 The `spark.ml` implementation supports factorization machines for binary classification and for regression.
+
+[fm]: https://web.archive.org/web/20191225211603/https://www.csie.ntu.edu.tw/~b97053/paper/Rendle2010FM.pdf
 
 Factorization machines formula is:
 
@@ -1224,7 +1228,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Input Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1251,7 +1255,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 ### Output Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1326,7 +1330,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1353,7 +1357,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Output Columns (Predictions)
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1407,7 +1411,7 @@ All output columns are optional; to exclude an output column, set its correspond
 
 #### Input Columns
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -1436,7 +1440,7 @@ Note that `GBTClassifier` currently only supports binary labels.
 
 #### Output Columns (Predictions)
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr>
       <th align="left">Param name</th>

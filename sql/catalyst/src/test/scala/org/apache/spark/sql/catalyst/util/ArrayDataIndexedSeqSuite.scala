@@ -58,7 +58,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
         exception = intercept[SparkException] {
           seq(index)
         },
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map(
           "message" -> s"Index $index must be between 0 and the length of the ArrayData."))
     }

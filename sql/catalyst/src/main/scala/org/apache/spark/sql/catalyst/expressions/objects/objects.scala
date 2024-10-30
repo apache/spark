@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.{Method, Modifier}
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.Builder
 import scala.jdk.CollectionConverters._
@@ -85,11 +86,29 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
 
   // Returns true if we can trust all values of the given DataType can be serialized.
   private def trustedSerializable(dt: DataType): Boolean = {
-    // Right now we conservatively block all ObjectType (Java objects) regardless of
-    // serializability, because the type-level info with java.io.Serializable and
-    // java.io.Externalizable marker interfaces are not strong guarantees.
+    // Right now we conservatively block all ObjectType (Java objects) except for
+    // it's `cls` equal to `Array[JavaBoxedPrimitive]` & `JavaBoxedPrimitive`
+    // regardless of serializability, because the type-level info with java.io.Serializable
+    // and java.io.Externalizable marker interfaces are not strong guarantees.
     // This restriction can be relaxed in the future to expose more optimizations.
-    !dt.existsRecursively(_.isInstanceOf[ObjectType])
+    !dt.existsRecursively {
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Boolean]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Byte]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Short]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Integer]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Long]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Float]] => false
+      case ObjectType(cls) if cls == classOf[Array[java.lang.Double]] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Boolean] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Byte] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Short] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Integer] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Long] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Float] => false
+      case ObjectType(cls) if cls == classOf[java.lang.Double] => false
+      case ObjectType(_) => true
+      case _ => false
+    }
   }
 
   /**
@@ -321,13 +340,14 @@ case class StaticInvoke(
     val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = $callFunc;
+          ${ev.value} = ($javaType) $callFunc;
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
+        val boxedJavaType = CodeGenerator.boxedType(dataType)
         s"""
-          ${CodeGenerator.boxedType(dataType)} $boxedResult = $callFunc;
+          $boxedJavaType $boxedResult = ($boxedJavaType) $callFunc;
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -335,7 +355,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = $callFunc;"
+      s"${ev.value} = ($javaType) $callFunc;"
     }
 
     val code = code"""
@@ -359,6 +379,15 @@ case class StaticInvoke(
       super.stringArgs.toSeq.dropRight(1).iterator
     }
   }
+
+  override def toString: String =
+    s"static_invoke(${
+      if (objectName.startsWith("org.apache.spark.")) {
+        cls.getSimpleName
+      } else {
+        objectName
+      }
+    }.$functionName(${arguments.mkString(", ")}))"
 }
 
 /**
@@ -508,7 +537,8 @@ case class Invoke(
     ev.copy(code = code)
   }
 
-  override def toString: String = s"$targetObject.$functionName"
+  override def toString: String =
+    s"invoke($targetObject.$functionName(${arguments.mkString(", ")}))"
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Invoke =
     copy(targetObject = newChildren.head, arguments = newChildren.tail)
@@ -628,7 +658,7 @@ case class NewInstance(
 
     ev.isNull = resultIsNull
 
-    val constructorCall = cls.getConstructors.size match {
+    val constructorCall = cls.getConstructors.length match {
       // If there are no constructors, the `new` method will fail. In
       // this case we can try to call the apply method constructor
       // that might be defined on the companion object.
@@ -903,13 +933,15 @@ case class MapObjects private(
     case ObjectType(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[scala.collection.Seq[_]].toSeq
     case ObjectType(cls) if cls.isArray =>
-      _.asInstanceOf[Array[_]].toSeq
+      _.asInstanceOf[Array[_]].toImmutableArraySeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       _.asInstanceOf[java.util.List[_]].asScala.toSeq
+    case ObjectType(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
+      _.asInstanceOf[java.util.Set[_]].asScala.toSeq
     case ObjectType(cls) if cls == classOf[Object] =>
       (inputCollection) => {
         if (inputCollection.getClass.isArray) {
-          inputCollection.asInstanceOf[Array[_]].toSeq
+          inputCollection.asInstanceOf[Array[_]].toImmutableArraySeq
         } else {
           inputCollection.asInstanceOf[scala.collection.Seq[_]]
         }
@@ -937,6 +969,14 @@ case class MapObjects private(
         builder.sizeHint(input.size)
         executeFuncOnCollection(input).foreach(builder += _)
         mutable.ArraySeq.make(builder.result())
+      }
+    case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
+      implicit val tag: ClassTag[Any] = elementClassTag()
+      input => {
+        val builder = mutable.ArrayBuilder.make[Any]
+        builder.sizeHint(input.size)
+        executeFuncOnCollection(input).foreach(builder += _)
+        immutable.ArraySeq.unsafeWrapArray(builder.result())
       }
     case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
@@ -969,6 +1009,34 @@ case class MapObjects private(
         (inputs) => {
           val results = executeFuncOnCollection(inputs)
           val builder = constructor(inputs.length).asInstanceOf[java.util.List[Any]]
+          results.foreach(builder.add(_))
+          builder
+        }
+      }
+    case Some(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
+      // Java set
+      if (cls == classOf[java.util.Set[_]] || cls == classOf[java.util.AbstractSet[_]]) {
+        // Specifying non concrete implementations of `java.util.Set`
+        executeFuncOnCollection(_).toSet.asJava
+      } else {
+        val constructors = cls.getConstructors()
+        val intParamConstructor = constructors.find { constructor =>
+          constructor.getParameterCount == 1 && constructor.getParameterTypes()(0) == classOf[Int]
+        }
+        val noParamConstructor = constructors.find { constructor =>
+          constructor.getParameterCount == 0
+        }
+
+        val constructor = intParamConstructor.map { intConstructor =>
+          (len: Int) => intConstructor.newInstance(len.asInstanceOf[Object])
+        }.getOrElse {
+          (_: Int) => noParamConstructor.get.newInstance()
+        }
+
+        // Specifying concrete implementations of `java.util.Set`
+        (inputs) => {
+          val results = executeFuncOnCollection(inputs)
+          val builder = constructor(inputs.length).asInstanceOf[java.util.Set[Any]]
           results.foreach(builder.add(_))
           builder
         }
@@ -1058,6 +1126,13 @@ case class MapObjects private(
           s"java.util.Iterator $it = ${genInputData.value}.iterator();",
           s"$it.next()"
         )
+      case ObjectType(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
+        val it = ctx.freshName("it")
+        (
+          s"${genInputData.value}.size()",
+          s"java.util.Iterator $it = ${genInputData.value}.iterator();",
+          s"$it.next()"
+        )
       case ArrayType(et, _) =>
         (
           s"${genInputData.value}.numElements()",
@@ -1108,7 +1183,20 @@ case class MapObjects private(
             s"(${cls.getName}) ${classOf[mutable.ArraySeq[_]].getName}$$." +
               s"MODULE$$.make($builder.result());"
           )
-
+        case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
+          val tag = ctx.addReferenceObj("tag", elementClassTag())
+          val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
+          val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
+          val builder = ctx.freshName("collectionBuilder")
+          (
+            s"""
+               ${classOf[Builder[_, _]].getName} $builder = $getBuilder;
+               $builder.sizeHint($dataLength);
+             """,
+            (genValue: String) => s"$builder.$$plus$$eq($genValue);",
+            s"(${cls.getName}) ${classOf[immutable.ArraySeq[_]].getName}$$." +
+              s"MODULE$$.unsafeWrapArray($builder.result());"
+          )
         case Some(cls) if classOf[scala.collection.Seq[_]].isAssignableFrom(cls) ||
           classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
           // Scala sequence or set
@@ -1129,6 +1217,19 @@ case class MapObjects private(
             if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
               cls == classOf[java.util.AbstractSequentialList[_]]) {
               s"${cls.getName} $builder = new java.util.ArrayList($dataLength);"
+            } else {
+              val param = Try(cls.getConstructor(Integer.TYPE)).map(_ => dataLength).getOrElse("")
+              s"${cls.getName} $builder = new ${cls.getName}($param);"
+            },
+            (genValue: String) => s"$builder.add($genValue);",
+            s"$builder;"
+          )
+        case Some(cls) if classOf[java.util.Set[_]].isAssignableFrom(cls) =>
+          // Java set
+          val builder = ctx.freshName("collectionBuilder")
+          (
+            if (cls == classOf[java.util.Set[_]] || cls == classOf[java.util.AbstractSet[_]]) {
+              s"${cls.getName} $builder = new java.util.HashSet($dataLength);"
             } else {
               val param = Try(cls.getConstructor(Integer.TYPE)).map(_ => dataLength).getOrElse("")
               s"${cls.getName} $builder = new ${cls.getName}($param);"
@@ -1442,7 +1543,7 @@ case class ExternalMapToCatalyst private(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
   private lazy val mapCatalystConverter: Any => (Array[Any], Array[Any]) = {
-    val rowBuffer = InternalRow.fromSeq(Array[Any](1).toImmutableArraySeq)
+    val rowBuffer = new GenericInternalRow(Array[Any](1))
     def rowWrapper(data: Any): InternalRow = {
       rowBuffer.update(0, data)
       rowBuffer
@@ -1845,16 +1946,12 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 
   override def flatArguments: Iterator[Any] = Iterator(child)
 
-  private val errMsg = "Null value appeared in non-nullable field:" +
-    walkedTypePath.mkString("\n", "\n", "\n") +
-    "If the schema is inferred from a Scala tuple/case class, or a Java bean, " +
-    "please try to use scala.Option[_] or other nullable types " +
-    "(e.g. java.lang.Integer instead of int/scala.Int)."
+  private val errMsg = walkedTypePath.mkString("\n", "\n", "\n")
 
   override def eval(input: InternalRow): Any = {
     val result = child.eval(input)
     if (result == null) {
-      throw new NullPointerException(errMsg)
+      throw QueryExecutionErrors.notNullAssertViolation(errMsg)
     }
     result
   }
@@ -1868,7 +1965,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
 
     val code = childGen.code + code"""
       if (${childGen.isNull}) {
-        throw new NullPointerException($errMsgField);
+        throw QueryExecutionErrors.notNullAssertViolation($errMsgField);
       }
      """
     ev.copy(code = code, isNull = FalseLiteral, value = childGen.value)
@@ -1945,8 +2042,6 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
 
   override val dataType: DataType = externalDataType
 
-  private lazy val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
-
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>
       (value: Any) => {
@@ -1979,14 +2074,12 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
     if (checkType(input)) {
       input
     } else {
-      throw new RuntimeException(s"${input.getClass.getName}$errMsg")
+      throw QueryExecutionErrors.invalidExternalTypeError(
+        input.getClass.getName, expected, child)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
-    // because errMsgField is used only when the type doesn't match.
-    val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val input = child.genCode(ctx)
     val obj = input.value
     def genCheckTypes(classes: Seq[Class[_]]): String = {
@@ -2012,6 +2105,13 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }
 
+    // Use unnamed reference that doesn't create a local field here to reduce the number of fields
+    // because errMsgField is used only when the type doesn't match.
+    val expectedTypeField = ctx.addReferenceObj(
+      "expectedTypeField", expected)
+    val childExpressionMsgField = ctx.addReferenceObj(
+      "childExpressionMsgField", child)
+
     val code = code"""
       ${input.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -2019,7 +2119,8 @@ case class ValidateExternalType(child: Expression, expected: DataType, externalD
         if ($typeCheck) {
           ${ev.value} = (${CodeGenerator.boxedType(dataType)}) $obj;
         } else {
-          throw new RuntimeException($obj.getClass().getName() + $errMsgField);
+          throw QueryExecutionErrors.invalidExternalTypeError(
+            $obj.getClass().getName(), $expectedTypeField, $childExpressionMsgField);
         }
       }
 

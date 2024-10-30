@@ -27,15 +27,13 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import org.apache.spark.api.java.Optional;
-import org.apache.spark.sql.streaming.GroupStateTimeout;
-import org.apache.spark.sql.streaming.OutputMode;
+import org.apache.spark.sql.streaming.*;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
 
 import com.google.common.base.Objects;
-import org.apache.spark.sql.streaming.TestGroupState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -112,6 +110,26 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testBeanWithSet() {
+    BeanWithSet bean = new BeanWithSet();
+    Set<Long> fields = asSet(1L, 2L, 3L);
+    bean.setFields(fields);
+    List<BeanWithSet> objects = Collections.singletonList(bean);
+
+    Dataset<BeanWithSet> ds = spark.createDataset(objects, Encoders.bean(BeanWithSet.class));
+    Dataset<Row> df = ds.toDF();
+
+    Dataset<BeanWithSet> mapped =
+            df.map((MapFunction<Row, BeanWithSet>) row -> {
+              BeanWithSet obj = new BeanWithSet();
+              obj.setFields(new HashSet<>(row.<Long>getList(row.fieldIndex("fields"))));
+              return obj;
+            }, Encoders.bean(BeanWithSet.class));
+
+    Assertions.assertEquals(objects, mapped.collectAsList());
+  }
+
+  @Test
   public void testCommonOperation() {
     List<String> data = Arrays.asList("hello", "world");
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
@@ -163,6 +181,39 @@ public class JavaDatasetSuite implements Serializable {
 
     int reduced = ds.reduce((ReduceFunction<Integer>) (v1, v2) -> v1 + v2);
     Assertions.assertEquals(6, reduced);
+  }
+
+  @Test
+  public void testInitialStateForTransformWithState() {
+    List<String> data = Arrays.asList("a", "xy", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    Dataset<Tuple2<Integer, String>> initialStateDS = spark.createDataset(
+      Arrays.asList(new Tuple2<Integer, String>(2, "pq")),
+      Encoders.tuple(Encoders.INT(), Encoders.STRING())
+    );
+
+    KeyValueGroupedDataset<Integer, Tuple2<Integer, String>> kvInitStateDS =
+      initialStateDS.groupByKey(
+        (MapFunction<Tuple2<Integer, String>, Integer>) f -> f._1, Encoders.INT());
+
+    KeyValueGroupedDataset<Integer, String> kvInitStateMappedDS = kvInitStateDS.mapValues(
+      (MapFunction<Tuple2<Integer, String>, String>) f -> f._2,
+      Encoders.STRING()
+    );
+
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    Dataset<String> transformWithStateMapped = grouped.transformWithState(
+      new TestStatefulProcessorWithInitialState(),
+      TimeMode.None(),
+      OutputMode.Append(),
+      kvInitStateMappedDS,
+      Encoders.STRING(),
+      Encoders.STRING());
+
+    Assertions.assertEquals(asSet("1a", "2pqxy", "3foobar"),
+      toSet(transformWithStateMapped.collectAsList()));
   }
 
   @Test
@@ -298,6 +349,24 @@ public class JavaDatasetSuite implements Serializable {
     Assertions.assertFalse(prevState.isUpdated());
     Assertions.assertTrue(prevState.isRemoved());
     Assertions.assertFalse(prevState.exists());
+  }
+
+  @Test
+  public void testTransformWithState() {
+    List<String> data = Arrays.asList("a", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    StatefulProcessor<Integer, String, String> testStatefulProcessor = new TestStatefulProcessor();
+    Dataset<String> transformWithStateMapped = grouped.transformWithState(
+      testStatefulProcessor,
+      TimeMode.None(),
+      OutputMode.Append(),
+      Encoders.STRING());
+
+    Assertions.assertEquals(asSet("1a", "3foobar"),
+      toSet(transformWithStateMapped.collectAsList()));
   }
 
   @Test
@@ -1987,6 +2056,31 @@ public class JavaDatasetSuite implements Serializable {
         .filter(col("a").geq(1));
     final List<Row> expected = Arrays.asList(create(1, "s1"), create(2, "s2"));
     Assertions.assertEquals(expected, df.collectAsList());
+  }
+
+  public static class BeanWithSet implements Serializable {
+    private Set<Long> fields;
+
+    public Set<Long> getFields() {
+      return fields;
+    }
+
+    public void setFields(Set<Long> fields) {
+      this.fields = fields;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      BeanWithSet that = (BeanWithSet) o;
+      return Objects.equal(fields, that.fields);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(fields);
+    }
   }
 
   public static class SpecificListsBean implements Serializable {

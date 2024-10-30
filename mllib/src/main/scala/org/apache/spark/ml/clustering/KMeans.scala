@@ -22,6 +22,8 @@ import scala.collection.mutable
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.LogKeys.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
+import org.apache.spark.internal.MDC
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
 import org.apache.spark.ml.linalg._
@@ -217,9 +219,8 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
     val instance = stage.asInstanceOf[KMeansModel]
-    val sc = sparkSession.sparkContext
     // Save metadata and Params
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
     // Save model data: cluster centers
     val data: Array[ClusterData] = instance.clusterCenters.zipWithIndex.map {
       case (center, idx) =>
@@ -270,7 +271,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val sparkSession = super.sparkSession
       import sparkSession.implicits._
 
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
 
       val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
@@ -449,14 +450,15 @@ class KMeans @Since("1.5.0") (
 
   private def trainWithBlock(dataset: Dataset[_], instr: Instrumentation) = {
     if (dataset.storageLevel != StorageLevel.NONE) {
-      instr.logWarning(s"Input vectors will be blockified to blocks, and " +
-        s"then cached during training. Be careful of double caching!")
+      instr.logWarning("Input vectors will be blockified to blocks, and " +
+        "then cached during training. Be careful of double caching!")
     }
 
-    val initStartTime = System.nanoTime
+    val initStartTime = System.currentTimeMillis
     val centers = initialize(dataset)
-    val initTimeInSeconds = (System.nanoTime - initStartTime) / 1e9
-    instr.logInfo(f"Initialization with ${$(initMode)} took $initTimeInSeconds%.3f seconds.")
+    val initTimeMs = System.currentTimeMillis - initStartTime
+    instr.logInfo(log"Initialization with ${MDC(INIT_MODE, $(initMode))} took " +
+      log"${MDC(TOTAL_TIME, initTimeMs)} ms.")
 
     val numFeatures = centers.head.size
     instr.logNumFeatures(numFeatures)
@@ -492,7 +494,7 @@ class KMeans @Since("1.5.0") (
 
     val distanceFunction = getDistanceFunction
     val sc = dataset.sparkSession.sparkContext
-    val iterationStartTime = System.nanoTime
+    val iterationStartTime = System.currentTimeMillis
     var converged = false
     var cost = 0.0
     var iteration = 0
@@ -549,15 +551,16 @@ class KMeans @Since("1.5.0") (
     }
     blocks.unpersist()
 
-    val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
-    instr.logInfo(f"Iterations took $iterationTimeInSeconds%.3f seconds.")
+    val iterationTimeMs = System.currentTimeMillis - iterationStartTime
+    instr.logInfo(log"Iterations took ${MDC(TOTAL_TIME, iterationTimeMs)} ms.")
 
     if (iteration == $(maxIter)) {
-      instr.logInfo(s"KMeans reached the max number of iterations: ${$(maxIter)}.")
+      instr.logInfo(log"KMeans reached the max number of iterations: " +
+        log"${MDC(NUM_ITERATIONS, $(maxIter))}.")
     } else {
-      instr.logInfo(s"KMeans converged in $iteration iterations.")
+      instr.logInfo(log"KMeans converged in ${MDC(NUM_ITERATIONS, iteration)} iterations.")
     }
-    instr.logInfo(s"The cost is $cost.")
+    instr.logInfo(log"The cost is ${MDC(COST, cost)}.")
     new MLlibKMeansModel(centers.map(OldVectors.fromML), $(distanceMeasure), cost, iteration)
   }
 

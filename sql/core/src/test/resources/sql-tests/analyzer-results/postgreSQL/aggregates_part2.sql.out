@@ -14,7 +14,7 @@ CreateViewCommand `int4_tbl`, select * from values
   (-123456),
   (2147483647),
   (-2147483647)
-  as int4_tbl(f1), false, false, LocalTempView, true
+  as int4_tbl(f1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [f1#x]
       +- SubqueryAlias int4_tbl
          +- LocalRelation [f1#x]
@@ -29,7 +29,7 @@ CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES
 CreateViewCommand `bitwise_test`, SELECT * FROM VALUES
   (1, 1, 1, 1L),
   (3, 3, 3, null),
-  (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4), false, true, LocalTempView, true
+  (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [b1#x, b2#x, b3#x, b4#xL]
       +- SubqueryAlias bitwise_test
          +- LocalRelation [b1#x, b2#x, b3#x, b4#xL]
@@ -41,7 +41,7 @@ SELECT BIT_AND(b1) AS n1, BIT_OR(b2)  AS n2 FROM bitwise_test where 1 = 0
 Aggregate [bit_and(b1#x) AS n1#x, bit_or(b2#x) AS n2#x]
 +- Filter (1 = 0)
    +- SubqueryAlias bitwise_test
-      +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+      +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
          +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
             +- Project [b1#x, b2#x, b3#x, b4#xL]
                +- SubqueryAlias bitwise_test
@@ -54,7 +54,7 @@ SELECT BIT_AND(b4) AS n1, BIT_OR(b4)  AS n2 FROM bitwise_test where b4 is null
 Aggregate [bit_and(b4#xL) AS n1#xL, bit_or(b4#xL) AS n2#xL]
 +- Filter isnull(b4#xL)
    +- SubqueryAlias bitwise_test
-      +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+      +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
          +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
             +- Project [b1#x, b2#x, b3#x, b4#xL]
                +- SubqueryAlias bitwise_test
@@ -75,7 +75,7 @@ FROM bitwise_test
 -- !query analysis
 Aggregate [bit_and(cast(b1#x as tinyint)) AS a1#x, bit_and(cast(b2#x as smallint)) AS b1#x, bit_and(b3#x) AS c1#x, bit_and(b4#xL) AS d1#xL, bit_or(cast(b1#x as tinyint)) AS e7#x, bit_or(cast(b2#x as smallint)) AS f7#x, bit_or(b3#x) AS g7#x, bit_or(b4#xL) AS h3#xL]
 +- SubqueryAlias bitwise_test
-   +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+   +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
       +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
          +- Project [b1#x, b2#x, b3#x, b4#xL]
             +- SubqueryAlias bitwise_test
@@ -87,7 +87,7 @@ SELECT b1 , bit_and(b2), bit_or(b4) FROM bitwise_test GROUP BY b1
 -- !query analysis
 Aggregate [b1#x], [b1#x, bit_and(b2#x) AS bit_and(b2)#x, bit_or(b4#xL) AS bit_or(b4)#xL]
 +- SubqueryAlias bitwise_test
-   +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+   +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
       +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
          +- Project [b1#x, b2#x, b3#x, b4#xL]
             +- SubqueryAlias bitwise_test
@@ -100,7 +100,7 @@ SELECT b1, bit_and(b2) FROM bitwise_test GROUP BY b1 HAVING bit_and(b2) < 7
 Filter (bit_and(b2)#x < 7)
 +- Aggregate [b1#x], [b1#x, bit_and(b2#x) AS bit_and(b2)#x]
    +- SubqueryAlias bitwise_test
-      +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+      +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
          +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
             +- Project [b1#x, b2#x, b3#x, b4#xL]
                +- SubqueryAlias bitwise_test
@@ -115,7 +115,7 @@ Project [b1#x, b2#x, bit_and(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIR
    +- Window [bit_and(b2#x) windowspecdefinition(b1#x, b2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bit_and(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [b1#x], [b2#x ASC NULLS FIRST]
       +- Project [b1#x, b2#x]
          +- SubqueryAlias bitwise_test
-            +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+            +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
                +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
                   +- Project [b1#x, b2#x, b3#x, b4#xL]
                      +- SubqueryAlias bitwise_test
@@ -130,7 +130,7 @@ Project [b1#x, b2#x, bit_or(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRS
    +- Window [bit_or(b2#x) windowspecdefinition(b1#x, b2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bit_or(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [b1#x], [b2#x ASC NULLS FIRST]
       +- Project [b1#x, b2#x]
          +- SubqueryAlias bitwise_test
-            +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+            +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
                +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
                   +- Project [b1#x, b2#x, b3#x, b4#xL]
                      +- SubqueryAlias bitwise_test
@@ -178,7 +178,7 @@ CREATE OR REPLACE TEMPORARY VIEW bool_test AS SELECT * FROM VALUES
 CreateViewCommand `bool_test`, SELECT * FROM VALUES
   (TRUE, null, FALSE, null),
   (FALSE, TRUE, null, null),
-  (null, TRUE, FALSE, null) AS bool_test(b1, b2, b3, b4), false, true, LocalTempView, true
+  (null, TRUE, FALSE, null) AS bool_test(b1, b2, b3, b4), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [b1#x, b2#x, b3#x, b4#x]
       +- SubqueryAlias bool_test
          +- LocalRelation [b1#x, b2#x, b3#x, b4#x]
@@ -190,7 +190,7 @@ SELECT BOOL_AND(b1) AS n1, BOOL_OR(b3) AS n2 FROM bool_test WHERE 1 = 0
 Aggregate [bool_and(b1#x) AS n1#x, bool_or(b3#x) AS n2#x]
 +- Filter (1 = 0)
    +- SubqueryAlias bool_test
-      +- View (`bool_test`, [b1#x,b2#x,b3#x,b4#x])
+      +- View (`bool_test`, [b1#x, b2#x, b3#x, b4#x])
          +- Project [cast(b1#x as boolean) AS b1#x, cast(b2#x as boolean) AS b2#x, cast(b3#x as boolean) AS b3#x, cast(b4#x as void) AS b4#x]
             +- Project [b1#x, b2#x, b3#x, b4#x]
                +- SubqueryAlias bool_test
@@ -209,7 +209,7 @@ FROM bool_test
 -- !query analysis
 Aggregate [bool_and(b1#x) AS f1#x, bool_and(b2#x) AS t2#x, bool_and(b3#x) AS f3#x, bool_and(cast(b4#x as boolean)) AS n4#x, bool_and(NOT b2#x) AS f5#x, bool_and(NOT b3#x) AS t6#x]
 +- SubqueryAlias bool_test
-   +- View (`bool_test`, [b1#x,b2#x,b3#x,b4#x])
+   +- View (`bool_test`, [b1#x, b2#x, b3#x, b4#x])
       +- Project [cast(b1#x as boolean) AS b1#x, cast(b2#x as boolean) AS b2#x, cast(b3#x as boolean) AS b3#x, cast(b4#x as void) AS b4#x]
          +- Project [b1#x, b2#x, b3#x, b4#x]
             +- SubqueryAlias bool_test
@@ -228,7 +228,7 @@ FROM bool_test
 -- !query analysis
 Aggregate [every(b1#x) AS f1#x, every(b2#x) AS t2#x, every(b3#x) AS f3#x, every(cast(b4#x as boolean)) AS n4#x, every(NOT b2#x) AS f5#x, every(NOT b3#x) AS t6#x]
 +- SubqueryAlias bool_test
-   +- View (`bool_test`, [b1#x,b2#x,b3#x,b4#x])
+   +- View (`bool_test`, [b1#x, b2#x, b3#x, b4#x])
       +- Project [cast(b1#x as boolean) AS b1#x, cast(b2#x as boolean) AS b2#x, cast(b3#x as boolean) AS b3#x, cast(b4#x as void) AS b4#x]
          +- Project [b1#x, b2#x, b3#x, b4#x]
             +- SubqueryAlias bool_test
@@ -247,7 +247,7 @@ FROM bool_test
 -- !query analysis
 Aggregate [bool_or(b1#x) AS t1#x, bool_or(b2#x) AS t2#x, bool_or(b3#x) AS f3#x, bool_or(cast(b4#x as boolean)) AS n4#x, bool_or(NOT b2#x) AS f5#x, bool_or(NOT b3#x) AS t6#x]
 +- SubqueryAlias bool_test
-   +- View (`bool_test`, [b1#x,b2#x,b3#x,b4#x])
+   +- View (`bool_test`, [b1#x, b2#x, b3#x, b4#x])
       +- Project [cast(b1#x as boolean) AS b1#x, cast(b2#x as boolean) AS b2#x, cast(b3#x as boolean) AS b3#x, cast(b4#x as void) AS b4#x]
          +- Project [b1#x, b2#x, b3#x, b4#x]
             +- SubqueryAlias bool_test

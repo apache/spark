@@ -30,7 +30,7 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     val nonexistentKey = "nonexistent"
 
     // "set" itself returns all config variables currently specified in SQLConf.
-    assert(sql("SET").collect().size === TestSQLContext.overrideConfs.size)
+    assert(sql("SET").collect().length === TestSQLContext.overrideConfs.size)
     sql("SET").collect().foreach { row =>
       val key = row.getString(0)
       val value = row.getString(1)
@@ -81,18 +81,6 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
         Row("test.key3", "1"))).sortBy(_.getString(0))
     )
     spark.sessionState.conf.clear()
-  }
-
-  test("SPARK-19218 `SET -v` should not fail with null value configuration") {
-    import SQLConf._
-    val confEntry = buildConf("spark.test").doc("doc").stringConf.createWithDefault(null)
-
-    try {
-      val result = sql("SET -v").collect()
-      assert(result === result.sortBy(_.getString(0)))
-    } finally {
-      SQLConf.unregister(confEntry)
-    }
   }
 
   test("SET commands with illegal or inappropriate argument") {
@@ -151,7 +139,7 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
     withSQLConf(key1 -> value1) {
       checkError(
         intercept[ParseException](sql("SET ${test.password}")),
-        errorClass = "INVALID_SET_SYNTAX"
+        condition = "INVALID_SET_SYNTAX"
       )
     }
   }

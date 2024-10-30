@@ -22,6 +22,7 @@ import java.io.Writer
 import com.univocity.parsers.csv.CsvWriter
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, ToStringBase}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, IntervalStringStyles, IntervalUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
@@ -36,9 +37,9 @@ class UnivocityGenerator(
   writerSettings.setHeaders(schema.fieldNames: _*)
   private val gen = new CsvWriter(writer, writerSettings)
 
-  // A `ValueConverter` is responsible for converting a value of an `InternalRow` to `String`.
-  // When the value is null, this converter should not be called.
-  private type ValueConverter = (InternalRow, Int) => String
+  // A `ValueConverter` is responsible for converting a value of an `SpecializedGetters`
+  // to `String`. When the value is null, this converter should not be called.
+  private type ValueConverter = (SpecializedGetters, Int) => String
 
   // `ValueConverter`s for all values in the fields of the schema
   private val valueConverters: Array[ValueConverter] =
@@ -64,33 +65,128 @@ class UnivocityGenerator(
   private val nullAsQuotedEmptyString =
     SQLConf.get.getConf(SQLConf.LEGACY_NULL_VALUE_WRITTEN_AS_QUOTED_EMPTY_STRING_CSV)
 
-  @scala.annotation.tailrec
+  private val binaryFormatter = ToStringBase.getBinaryFormatter
+
   private def makeConverter(dataType: DataType): ValueConverter = dataType match {
+    case BinaryType =>
+      (getter, ordinal) => binaryFormatter(getter.getBinary(ordinal)).toString
+
     case DateType =>
-      (row: InternalRow, ordinal: Int) => dateFormatter.format(row.getInt(ordinal))
+      (getter, ordinal) => dateFormatter.format(getter.getInt(ordinal))
 
     case TimestampType =>
-      (row: InternalRow, ordinal: Int) => timestampFormatter.format(row.getLong(ordinal))
+      (getter, ordinal) => timestampFormatter.format(getter.getLong(ordinal))
 
     case TimestampNTZType =>
-      (row: InternalRow, ordinal: Int) =>
-        timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(row.getLong(ordinal)))
+      (getter, ordinal) =>
+        timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(getter.getLong(ordinal)))
 
     case YearMonthIntervalType(start, end) =>
-      (row: InternalRow, ordinal: Int) =>
+      (getter, ordinal) =>
         IntervalUtils.toYearMonthIntervalString(
-          row.getInt(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
+          getter.getInt(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
 
     case DayTimeIntervalType(start, end) =>
-      (row: InternalRow, ordinal: Int) =>
-      IntervalUtils.toDayTimeIntervalString(
-        row.getLong(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
+      (getter, ordinal) =>
+        IntervalUtils.toDayTimeIntervalString(
+          getter.getLong(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
 
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 
+    case ArrayType(et, _) =>
+      val elementConverter = makeConverter(et)
+      (getter, ordinal) =>
+        val array = getter.getArray(ordinal)
+        val builder = new StringBuilder
+        builder.append("[")
+        if (array.numElements() > 0) {
+          if (array.isNullAt(0)) {
+            appendNull(builder)
+          } else {
+            builder.append(elementConverter(array, 0))
+          }
+          var i = 1
+          while (i < array.numElements()) {
+            builder.append(",")
+            if (array.isNullAt(i)) {
+              appendNull(builder)
+            } else {
+              builder.append(" " + elementConverter(array, i))
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.toString()
+
+    case MapType(kt, vt, _) =>
+      val keyConverter = makeConverter(kt)
+      val valueConverter = makeConverter(vt)
+      (getter, ordinal) =>
+        val map = getter.getMap(ordinal)
+        val builder = new StringBuilder
+        builder.append("{")
+        if (map.numElements() > 0) {
+          val keyArray = map.keyArray()
+          val valueArray = map.valueArray()
+          builder.append(keyConverter(keyArray, 0))
+          builder.append(" ->")
+          if (valueArray.isNullAt(0)) {
+            appendNull(builder)
+          } else {
+            builder.append(" " + valueConverter(valueArray, 0))
+          }
+          var i = 1
+          while (i < map.numElements()) {
+            builder.append(", ")
+            builder.append(keyConverter(keyArray, i))
+            builder.append(" ->")
+            if (valueArray.isNullAt(i)) {
+              appendNull(builder)
+            } else {
+              builder.append(" " + valueConverter(valueArray, i))
+            }
+            i += 1
+          }
+        }
+        builder.append("}")
+        builder.toString()
+
+    case StructType(fields) =>
+      val converters = fields.map(_.dataType).map(makeConverter)
+      (getter, ordinal) =>
+        val row = getter.getStruct(ordinal, fields.length)
+        val builder = new StringBuilder
+        builder.append("{")
+        if (row.numFields > 0) {
+          if (row.isNullAt(0)) {
+            appendNull(builder)
+          } else {
+            builder.append(converters(0)(row, 0))
+          }
+          var i = 1
+          while (i < row.numFields) {
+            builder.append(",")
+            if (row.isNullAt(i)) {
+              appendNull(builder)
+            } else {
+              builder.append(" " + converters(i)(row, i))
+            }
+            i += 1
+          }
+        }
+        builder.append("}")
+        builder.toString()
+
     case dt: DataType =>
-      (row: InternalRow, ordinal: Int) =>
-        row.get(ordinal, dt).toString
+      (getter, ordinal) => getter.get(ordinal, dt).toString
+  }
+
+  private def appendNull(builder: StringBuilder): Unit = {
+    options.parameters.get(CSVOptions.NULL_VALUE) match {
+      case Some(_) => builder.append(" " + options.nullValue)
+      case None =>
+    }
   }
 
   private def convertRow(row: InternalRow): Seq[String] = {

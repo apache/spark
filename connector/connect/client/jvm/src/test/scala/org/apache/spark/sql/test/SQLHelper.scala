@@ -45,7 +45,9 @@ trait SQLHelper {
       if (spark.conf.isModifiable(k)) {
         spark.conf.set(k, v)
       } else {
-        throw new AnalysisException(s"Cannot modify the value of a static config: $k")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3050",
+          messageParameters = Map("k" -> k))
       }
 
     }

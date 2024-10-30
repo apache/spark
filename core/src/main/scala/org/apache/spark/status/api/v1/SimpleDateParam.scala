@@ -18,9 +18,10 @@ package org.apache.spark.status.api.v1
 
 import java.text.{ParseException, SimpleDateFormat}
 import java.util.{Locale, TimeZone}
-import javax.ws.rs.WebApplicationException
-import javax.ws.rs.core.Response
-import javax.ws.rs.core.Response.Status
+
+import jakarta.ws.rs.WebApplicationException
+import jakarta.ws.rs.core.Response
+import jakarta.ws.rs.core.Response.Status
 
 private[v1] class SimpleDateParam(val originalValue: String) {
 

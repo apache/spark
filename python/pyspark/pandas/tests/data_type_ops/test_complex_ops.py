@@ -21,6 +21,7 @@ import datetime
 import pandas as pd
 
 from pyspark import pandas as ps
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
@@ -104,14 +105,18 @@ class ComplexOpsTestsMixin:
     def test_add(self):
         pdf, psdf = self.array_pdf, self.array_psdf
         for col in self.array_df_cols:
-            self.assert_eq(pdf[col] + pdf[col], psdf[col] + psdf[col])
+            self.assert_eq(pdf[col] + pdf[col], psdf[col] + psdf[col], check_exact=False)
 
         # Numeric array + Numeric array
         for col in self.numeric_array_df_cols:
             pser1, psser1 = pdf[col], psdf[col]
             for other_col in self.numeric_array_df_cols:
                 pser2, psser2 = pdf[other_col], psdf[other_col]
-                self.assert_eq((pser1 + pser2).sort_values(), (psser1 + psser2).sort_values())
+                self.assert_eq(
+                    (pser1 + pser2).sort_values(),
+                    (psser1 + psser2).sort_values(),
+                    check_exact=False,
+                )
 
         # Non-numeric array + Non-numeric array
         self.assertRaises(
@@ -129,7 +134,7 @@ class ComplexOpsTestsMixin:
 
         for col in self.non_numeric_array_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser + pser, psser + psser)
+            self.assert_eq(pser + pser, psser + psser, check_exact=False)
 
         # Numeric array + Non-numeric array
         for numeric_col in self.numeric_array_df_cols:
@@ -239,7 +244,7 @@ class ComplexOpsTestsMixin:
         pdf, psdf = self.array_pdf, self.array_psdf
         for col in self.array_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(pser, psser._to_pandas())
+            self.assert_eq(pser, psser._to_pandas(), check_exact=False)
             self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
@@ -351,7 +356,11 @@ class ComplexOpsTestsMixin:
         )
 
 
-class ComplexOpsTests(ComplexOpsTestsMixin, OpsTestBase):
+class ComplexOpsTests(
+    ComplexOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

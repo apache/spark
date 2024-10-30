@@ -10,7 +10,7 @@ CreateViewCommand `nt1`, select * from values
   ("one", 1),
   ("two", 2),
   ("three", 3)
-  as nt1(k, v1), false, false, LocalTempView, true
+  as nt1(k, v1), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
          +- LocalRelation [k#x, v1#x]
@@ -27,7 +27,7 @@ CreateViewCommand `nt2`, select * from values
   ("one", 1),
   ("two", 22),
   ("one", 5)
-  as nt2(k, v2), false, false, LocalTempView, true
+  as nt2(k, v2), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v2#x]
       +- SubqueryAlias nt2
          +- LocalRelation [k#x, v2#x]
@@ -39,13 +39,13 @@ SELECT * FROM nt1 cross join nt2
 Project [k#x, v1#x, k#x, v2#x]
 +- Join Cross
    :- SubqueryAlias nt1
-   :  +- View (`nt1`, [k#x,v1#x])
+   :  +- View (`nt1`, [k#x, v1#x])
    :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :        +- Project [k#x, v1#x]
    :           +- SubqueryAlias nt1
    :              +- LocalRelation [k#x, v1#x]
    +- SubqueryAlias nt2
-      +- View (`nt2`, [k#x,v2#x])
+      +- View (`nt2`, [k#x, v2#x])
          +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
             +- Project [k#x, v2#x]
                +- SubqueryAlias nt2
@@ -59,13 +59,13 @@ Project [k#x, v1#x, k#x, v2#x]
 +- Filter (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(k#x as string)) as string))
    +- Join Cross
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -78,13 +78,13 @@ SELECT * FROM nt1 cross join nt2 on (udf(nt1.k) = udf(nt2.k))
 Project [k#x, v1#x, k#x, v2#x]
 +- Join Cross, (cast(udf(cast(k#x as string)) as string) = cast(udf(cast(k#x as string)) as string))
    :- SubqueryAlias nt1
-   :  +- View (`nt1`, [k#x,v1#x])
+   :  +- View (`nt1`, [k#x, v1#x])
    :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :        +- Project [k#x, v1#x]
    :           +- SubqueryAlias nt1
    :              +- LocalRelation [k#x, v1#x]
    +- SubqueryAlias nt2
-      +- View (`nt2`, [k#x,v2#x])
+      +- View (`nt2`, [k#x, v2#x])
          +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
             +- Project [k#x, v2#x]
                +- SubqueryAlias nt2
@@ -98,13 +98,13 @@ Project [k#x, v1#x, k#x, v2#x]
 +- Filter ((cast(udf(cast(v1#x as string)) as int) = cast(1 as int)) AND (cast(udf(cast(v2#x as string)) as int) = cast(22 as int)))
    +- Join Cross
       :- SubqueryAlias nt1
-      :  +- View (`nt1`, [k#x,v1#x])
+      :  +- View (`nt1`, [k#x, v1#x])
       :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
       :        +- Project [k#x, v1#x]
       :           +- SubqueryAlias nt1
       :              +- LocalRelation [k#x, v1#x]
       +- SubqueryAlias nt2
-         +- View (`nt2`, [k#x,v2#x])
+         +- View (`nt2`, [k#x, v2#x])
             +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
@@ -123,7 +123,7 @@ Project [cast(udf(cast(key#x as string)) as string) AS udf(key)#x, cast(udf(cast
    :  +- Project [cast(udf(cast(k#x as string)) as string) AS key#x]
    :     +- Filter (v1#x < 2)
    :        +- SubqueryAlias nt1
-   :           +- View (`nt1`, [k#x,v1#x])
+   :           +- View (`nt1`, [k#x, v1#x])
    :              +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :                 +- Project [k#x, v1#x]
    :                    +- SubqueryAlias nt1
@@ -132,7 +132,7 @@ Project [cast(udf(cast(key#x as string)) as string) AS udf(key)#x, cast(udf(cast
       +- Project [cast(udf(cast(k#x as string)) as string) AS key#x]
          +- Filter (v2#x = 22)
             +- SubqueryAlias nt2
-               +- View (`nt2`, [k#x,v2#x])
+               +- View (`nt2`, [k#x, v2#x])
                   +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
                      +- Project [k#x, v2#x]
                         +- SubqueryAlias nt2
@@ -142,10 +142,10 @@ Project [cast(udf(cast(key#x as string)) as string) AS udf(key)#x, cast(udf(cast
 -- !query
 create temporary view A(a, va) as select * from nt1
 -- !query analysis
-CreateViewCommand `A`, [(a,None), (va,None)], select * from nt1, false, false, LocalTempView, true
+CreateViewCommand `A`, [(a,None), (va,None)], select * from nt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
-         +- View (`nt1`, [k#x,v1#x])
+         +- View (`nt1`, [k#x, v1#x])
             +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                +- Project [k#x, v1#x]
                   +- SubqueryAlias nt1
@@ -155,10 +155,10 @@ CreateViewCommand `A`, [(a,None), (va,None)], select * from nt1, false, false, L
 -- !query
 create temporary view B(b, vb) as select * from nt1
 -- !query analysis
-CreateViewCommand `B`, [(b,None), (vb,None)], select * from nt1, false, false, LocalTempView, true
+CreateViewCommand `B`, [(b,None), (vb,None)], select * from nt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
-         +- View (`nt1`, [k#x,v1#x])
+         +- View (`nt1`, [k#x, v1#x])
             +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                +- Project [k#x, v1#x]
                   +- SubqueryAlias nt1
@@ -168,10 +168,10 @@ CreateViewCommand `B`, [(b,None), (vb,None)], select * from nt1, false, false, L
 -- !query
 create temporary view C(c, vc) as select * from nt1
 -- !query analysis
-CreateViewCommand `C`, [(c,None), (vc,None)], select * from nt1, false, false, LocalTempView, true
+CreateViewCommand `C`, [(c,None), (vc,None)], select * from nt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
-         +- View (`nt1`, [k#x,v1#x])
+         +- View (`nt1`, [k#x, v1#x])
             +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                +- Project [k#x, v1#x]
                   +- SubqueryAlias nt1
@@ -181,10 +181,10 @@ CreateViewCommand `C`, [(c,None), (vc,None)], select * from nt1, false, false, L
 -- !query
 create temporary view D(d, vd) as select * from nt1
 -- !query analysis
-CreateViewCommand `D`, [(d,None), (vd,None)], select * from nt1, false, false, LocalTempView, true
+CreateViewCommand `D`, [(d,None), (vd,None)], select * from nt1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v1#x]
       +- SubqueryAlias nt1
-         +- View (`nt1`, [k#x,v1#x])
+         +- View (`nt1`, [k#x, v1#x])
             +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                +- Project [k#x, v1#x]
                   +- SubqueryAlias nt1
@@ -199,41 +199,41 @@ Project [a#x, va#x, b#x, vb#x, c#x, vc#x, d#x, vd#x]
    :- Join Cross
    :  :- Join Inner, (cast(udf(cast(a#x as string)) as string) = cast(udf(cast(b#x as string)) as string))
    :  :  :- SubqueryAlias a
-   :  :  :  +- View (`A`, [a#x,va#x])
+   :  :  :  +- View (`A`, [a#x, va#x])
    :  :  :     +- Project [cast(k#x as string) AS a#x, cast(v1#x as int) AS va#x]
    :  :  :        +- Project [k#x, v1#x]
    :  :  :           +- SubqueryAlias nt1
-   :  :  :              +- View (`nt1`, [k#x,v1#x])
+   :  :  :              +- View (`nt1`, [k#x, v1#x])
    :  :  :                 +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :  :  :                    +- Project [k#x, v1#x]
    :  :  :                       +- SubqueryAlias nt1
    :  :  :                          +- LocalRelation [k#x, v1#x]
    :  :  +- SubqueryAlias b
-   :  :     +- View (`B`, [b#x,vb#x])
+   :  :     +- View (`B`, [b#x, vb#x])
    :  :        +- Project [cast(k#x as string) AS b#x, cast(v1#x as int) AS vb#x]
    :  :           +- Project [k#x, v1#x]
    :  :              +- SubqueryAlias nt1
-   :  :                 +- View (`nt1`, [k#x,v1#x])
+   :  :                 +- View (`nt1`, [k#x, v1#x])
    :  :                    +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :  :                       +- Project [k#x, v1#x]
    :  :                          +- SubqueryAlias nt1
    :  :                             +- LocalRelation [k#x, v1#x]
    :  +- SubqueryAlias c
-   :     +- View (`C`, [c#x,vc#x])
+   :     +- View (`C`, [c#x, vc#x])
    :        +- Project [cast(k#x as string) AS c#x, cast(v1#x as int) AS vc#x]
    :           +- Project [k#x, v1#x]
    :              +- SubqueryAlias nt1
-   :                 +- View (`nt1`, [k#x,v1#x])
+   :                 +- View (`nt1`, [k#x, v1#x])
    :                    +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :                       +- Project [k#x, v1#x]
    :                          +- SubqueryAlias nt1
    :                             +- LocalRelation [k#x, v1#x]
    +- SubqueryAlias d
-      +- View (`D`, [d#x,vd#x])
+      +- View (`D`, [d#x, vd#x])
          +- Project [cast(k#x as string) AS d#x, cast(v1#x as int) AS vd#x]
             +- Project [k#x, v1#x]
                +- SubqueryAlias nt1
-                  +- View (`nt1`, [k#x,v1#x])
+                  +- View (`nt1`, [k#x, v1#x])
                      +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
                         +- Project [k#x, v1#x]
                            +- SubqueryAlias nt1
@@ -246,13 +246,13 @@ SELECT * FROM nt1 CROSS JOIN nt2 ON (udf(nt1.k) > udf(nt2.k))
 Project [k#x, v1#x, k#x, v2#x]
 +- Join Cross, (cast(udf(cast(k#x as string)) as string) > cast(udf(cast(k#x as string)) as string))
    :- SubqueryAlias nt1
-   :  +- View (`nt1`, [k#x,v1#x])
+   :  +- View (`nt1`, [k#x, v1#x])
    :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
    :        +- Project [k#x, v1#x]
    :           +- SubqueryAlias nt1
    :              +- LocalRelation [k#x, v1#x]
    +- SubqueryAlias nt2
-      +- View (`nt2`, [k#x,v2#x])
+      +- View (`nt2`, [k#x, v2#x])
          +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
             +- Project [k#x, v2#x]
                +- SubqueryAlias nt2

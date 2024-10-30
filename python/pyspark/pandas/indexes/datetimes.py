@@ -640,7 +640,7 @@ class DatetimeIndex(Index):
 
         Examples
         --------
-        >>> idx = ps.date_range(start='2018-01', freq='M', periods=3)  # doctest: +SKIP
+        >>> idx = ps.date_range(start='2018-01', freq='ME', periods=3)  # doctest: +SKIP
         >>> idx.month_name()  # doctest: +SKIP
         Index(['January', 'February', 'March'], dtype='object')
         """

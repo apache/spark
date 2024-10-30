@@ -25,7 +25,7 @@ import scala.language.implicitConversions
 import org.apache.hive.service.rpc.thrift._
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.HiveResult.{toHiveString, TimeFormatters}
+import org.apache.spark.sql.execution.HiveResult._
 import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType}
 
 object RowSetUtils {
@@ -38,12 +38,11 @@ object RowSetUtils {
       startRowOffSet: Long,
       rows: Seq[Row],
       schema: Array[DataType],
-      protocolVersion: TProtocolVersion,
-      timeFormatters: TimeFormatters): TRowSet = {
+      protocolVersion: TProtocolVersion): TRowSet = {
     if (protocolVersion.getValue < TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V6.getValue) {
-      toRowBasedSet(startRowOffSet, rows, schema, timeFormatters)
+      toRowBasedSet(startRowOffSet, rows, schema, getTimeFormatters, getBinaryFormatter)
     } else {
-      toColumnBasedSet(startRowOffSet, rows, schema, timeFormatters)
+      toColumnBasedSet(startRowOffSet, rows, schema, getTimeFormatters, getBinaryFormatter)
     }
   }
 
@@ -51,23 +50,19 @@ object RowSetUtils {
       startRowOffSet: Long,
       rows: Seq[Row],
       schema: Array[DataType],
-      timeFormatters: TimeFormatters): TRowSet = {
-    var i = 0
-    val rowSize = rows.length
-    val tRows = new java.util.ArrayList[TRow](rowSize)
-    while (i < rowSize) {
-      val row = rows(i)
+      timeFormatters: TimeFormatters,
+      binaryFormatter: BinaryFormatter): TRowSet = {
+    val tRows = rows.map { row =>
       val tRow = new TRow()
       var j = 0
       val columnSize = row.length
       while (j < columnSize) {
-        val columnValue = toTColumnValue(j, row, schema(j), timeFormatters)
+        val columnValue = toTColumnValue(j, row, schema(j), timeFormatters, binaryFormatter)
         tRow.addToColVals(columnValue)
         j += 1
       }
-      i += 1
-      tRows.add(tRow)
-    }
+      tRow
+    }.asJava
     new TRowSet(startRowOffSet, tRows)
   }
 
@@ -75,21 +70,27 @@ object RowSetUtils {
       startRowOffSet: Long,
       rows: Seq[Row],
       schema: Array[DataType],
-      timeFormatters: TimeFormatters): TRowSet = {
+      timeFormatters: TimeFormatters,
+      binaryFormatter: BinaryFormatter): TRowSet = {
     val rowSize = rows.length
     val tRowSet = new TRowSet(startRowOffSet, new java.util.ArrayList[TRow](rowSize))
     var i = 0
     val columnSize = schema.length
+    val columns = new java.util.ArrayList[TColumn](columnSize)
     while (i < columnSize) {
-      val tColumn = toTColumn(rows, i, schema(i), timeFormatters)
-      tRowSet.addToColumns(tColumn)
+      columns.add(i, toTColumn(rows, i, schema(i), timeFormatters, binaryFormatter))
       i += 1
     }
+    tRowSet.setColumns(columns)
     tRowSet
   }
 
   private def toTColumn(
-      rows: Seq[Row], ordinal: Int, typ: DataType, timeFormatters: TimeFormatters): TColumn = {
+      rows: Seq[Row],
+      ordinal: Int,
+      typ: DataType,
+      timeFormatters: TimeFormatters,
+      binaryFormatter: BinaryFormatter): TColumn = {
     val nulls = new java.util.BitSet()
     typ match {
       case BooleanType =>
@@ -136,13 +137,12 @@ object RowSetUtils {
         var i = 0
         val rowSize = rows.length
         val values = new java.util.ArrayList[String](rowSize)
-        while (i < rowSize) {
-          val row = rows(i)
+        rows.foreach { row =>
           nulls.set(i, row.isNullAt(ordinal))
           val value = if (row.isNullAt(ordinal)) {
             ""
           } else {
-            toHiveString((row.get(ordinal), typ), nested = true, timeFormatters)
+            toHiveString((row.get(ordinal), typ), nested = true, timeFormatters, binaryFormatter)
           }
           values.add(value)
           i += 1
@@ -159,8 +159,7 @@ object RowSetUtils {
     val size = rows.length
     val ret = new java.util.ArrayList[T](size)
     var idx = 0
-    while (idx < size) {
-      val row = rows(idx)
+    rows.foreach { row =>
       if (row.isNullAt(ordinal)) {
         nulls.set(idx, true)
         ret.add(idx, defaultVal)
@@ -176,7 +175,8 @@ object RowSetUtils {
       ordinal: Int,
       row: Row,
       dataType: DataType,
-      timeFormatters: TimeFormatters): TColumnValue = {
+      timeFormatters: TimeFormatters,
+      binaryFormatter: BinaryFormatter): TColumnValue = {
     dataType match {
       case BooleanType =>
         val boolValue = new TBoolValue
@@ -232,7 +232,8 @@ object RowSetUtils {
       case _ =>
         val tStrValue = new TStringValue
         if (!row.isNullAt(ordinal)) {
-          val value = toHiveString((row.get(ordinal), dataType), nested = false, timeFormatters)
+          val value = toHiveString(
+            (row.get(ordinal), dataType), nested = false, timeFormatters, binaryFormatter)
           tStrValue.setValue(value)
         }
         TColumnValue.stringVal(tStrValue)

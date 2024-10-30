@@ -142,6 +142,7 @@ private[spark] class LocalSchedulerBackend(
         Map.empty)))
     launcherBackend.setAppId(appId)
     launcherBackend.setState(SparkAppHandle.State.RUNNING)
+    reviveOffers()
   }
 
   override def stop(): Unit = {
@@ -153,7 +154,7 @@ private[spark] class LocalSchedulerBackend(
   }
 
   override def defaultParallelism(): Int =
-    scheduler.conf.getInt("spark.default.parallelism", totalCores)
+    scheduler.conf.getInt(config.DEFAULT_PARALLELISM.key, totalCores)
 
   override def killTask(
       taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {

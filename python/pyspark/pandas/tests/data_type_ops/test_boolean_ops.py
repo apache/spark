@@ -24,6 +24,7 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
@@ -53,7 +54,7 @@ class BooleanOpsTestsMixin:
 
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
-            self.assert_eq(b_pser + pser, b_psser + psser)
+            self.assert_eq(b_pser + pser, b_psser + psser, check_exact=False)
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             if col == "bool":
@@ -72,7 +73,7 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser - True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col])
+            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser - psdf[col])
@@ -89,7 +90,7 @@ class BooleanOpsTestsMixin:
         self.assert_eq(b_pser * False, b_psser * False)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col])
+            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
@@ -144,7 +145,7 @@ class BooleanOpsTestsMixin:
         self.assertRaises(TypeError, lambda: b_psser % True)
 
         for col in self.numeric_df_cols:
-            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col])
+            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col], check_exact=False)
 
         for col in self.non_numeric_df_cols:
             self.assertRaises(TypeError, lambda: b_psser % psdf[col])
@@ -806,7 +807,11 @@ class BooleanExtensionOpsTest(OpsTestBase):
         self.check_extension(pser >= pser, psser >= psser)
 
 
-class BooleanOpsTests(BooleanOpsTestsMixin, OpsTestBase):
+class BooleanOpsTests(
+    BooleanOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

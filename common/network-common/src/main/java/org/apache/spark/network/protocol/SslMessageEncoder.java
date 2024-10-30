@@ -26,8 +26,10 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
 import io.netty.handler.stream.ChunkedStream;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * Encoder used by the server side to encode secure (SSL) server-to-client responses.
@@ -36,7 +38,7 @@ import org.slf4j.LoggerFactory;
 @ChannelHandler.Sharable
 public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
 
-  private static final Logger logger = LoggerFactory.getLogger(SslMessageEncoder.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SslMessageEncoder.class);
 
   private SslMessageEncoder() {}
 
@@ -65,12 +67,12 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
         isBodyInFrame = in.isBodyInFrame();
       } catch (Exception e) {
         in.body().release();
-        if (in instanceof AbstractResponseMessage) {
-          AbstractResponseMessage resp = (AbstractResponseMessage) in;
+        if (in instanceof AbstractResponseMessage resp) {
           // Re-encode this message as a failure response.
           String error = e.getMessage() != null ? e.getMessage() : "null";
-          logger.error(String.format("Error processing %s for client %s",
-                  in, ctx.channel().remoteAddress()), e);
+          logger.error("Error processing {} for client {}", e,
+            MDC.of(LogKeys.MESSAGE$.MODULE$, in),
+            MDC.of(LogKeys.HOST_PORT$.MODULE$, ctx.channel().remoteAddress()));
           encode(ctx, resp.createFailureResponse(error), out);
         } else {
           throw e;
@@ -92,8 +94,8 @@ public final class SslMessageEncoder extends MessageToMessageEncoder<Message> {
     assert header.writableBytes() == 0;
 
     if (body != null && bodyLength > 0) {
-      if (body instanceof ByteBuf) {
-        out.add(Unpooled.wrappedBuffer(header, (ByteBuf) body));
+      if (body instanceof ByteBuf byteBuf) {
+        out.add(Unpooled.wrappedBuffer(header, byteBuf));
       } else if (body instanceof InputStream || body instanceof ChunkedStream) {
         // For now, assume the InputStream is doing proper chunking.
         out.add(new EncryptedMessageWithHeader(in.body(), header, body, bodyLength));

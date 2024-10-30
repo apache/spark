@@ -14,7 +14,7 @@ CreateViewCommand `courseSales`, select * from values
   ("dotNET", 2012, 5000),
   ("dotNET", 2013, 48000),
   ("Java", 2013, 30000)
-  as courseSales(course, year, earnings), false, false, LocalTempView, true
+  as courseSales(course, year, earnings), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [course#x, year#x, earnings#x]
       +- SubqueryAlias courseSales
          +- LocalRelation [course#x, year#x, earnings#x]
@@ -29,7 +29,7 @@ create temporary view years as select * from values
 CreateViewCommand `years`, select * from values
   (2012, 1),
   (2013, 2)
-  as years(y, s), false, false, LocalTempView, true
+  as years(y, s), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [y#x, s#x]
       +- SubqueryAlias years
          +- LocalRelation [y#x, s#x]
@@ -44,7 +44,7 @@ create temporary view yearsWithComplexTypes as select * from values
 CreateViewCommand `yearsWithComplexTypes`, select * from values
   (2012, array(1, 1), map('1', 1), struct(1, 'a')),
   (2013, array(2, 2), map('2', 2), struct(2, 'b'))
-  as yearsWithComplexTypes(y, a, m, s), false, false, LocalTempView, true
+  as yearsWithComplexTypes(y, a, m, s), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [y#x, a#x, m#x, s#x]
       +- SubqueryAlias yearsWithComplexTypes
          +- LocalRelation [y#x, a#x, m#x, s#x]
@@ -66,7 +66,7 @@ Project [year#x, dotNET#xL, Java#xL]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [year#x, course#x, earnings#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
@@ -85,7 +85,7 @@ Project [course#x, 2012#xL, 2013#xL]
    +- Aggregate [course#x], [course#x, pivotfirst(year#x, sum(coursesales.earnings)#xL, 2012, 2013, 0, 0) AS __pivot_sum(coursesales.earnings) AS `sum(coursesales.earnings)`#x]
       +- Aggregate [course#x, year#x], [course#x, year#x, sum(earnings#x) AS sum(coursesales.earnings)#xL]
          +- SubqueryAlias coursesales
-            +- View (`courseSales`, [course#x,year#x,earnings#x])
+            +- View (`courseSales`, [course#x, year#x, earnings#x])
                +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   +- Project [course#x, year#x, earnings#x]
                      +- SubqueryAlias courseSales
@@ -108,7 +108,7 @@ Project [year#x, dotNET_sum(earnings)#xL, dotNET_avg(earnings)#x, Java_sum(earni
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [year#x, course#x, earnings#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
@@ -131,7 +131,7 @@ Project [dotNET#xL, Java#xL]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [course#x, earnings#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
@@ -154,7 +154,7 @@ Project [dotNET_sum(earnings)#xL, dotNET_min(year)#x, Java_sum(earnings)#xL, Jav
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [year#x, course#x, earnings#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
@@ -180,13 +180,13 @@ Project [course#x, year#x, 1#xL, 2#xL]
             +- Project [course#x, year#x, earnings#x, s#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias years
-                     +- View (`years`, [y#x,s#x])
+                     +- View (`years`, [y#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(s#x as int) AS s#x]
                            +- Project [y#x, s#x]
                               +- SubqueryAlias years
@@ -212,13 +212,13 @@ Project [year#x, dotNET_sum(earnings)#xL, dotNET_min(s)#x, Java_sum(earnings)#xL
             +- Project [course#x, year#x, earnings#x, s#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias years
-                     +- View (`years`, [y#x,s#x])
+                     +- View (`years`, [y#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(s#x as int) AS s#x]
                            +- Project [y#x, s#x]
                               +- SubqueryAlias years
@@ -244,13 +244,13 @@ Project [year#x, dotNET#xL, Java#xL]
             +- Project [course#x, year#x, earnings#x, s#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias years
-                     +- View (`years`, [y#x,s#x])
+                     +- View (`years`, [y#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(s#x as int) AS s#x]
                            +- Project [y#x, s#x]
                               +- SubqueryAlias years
@@ -273,7 +273,7 @@ Project [2012_s#xL, 2013_s#xL, 2012_a#x, 2013_a#x, c#x]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [year#x AS y#x, course#x AS c#x, earnings#x AS e#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
@@ -296,7 +296,7 @@ Project [firstYear_s#xL, secondYear_s#xL, firstYear_a#x, secondYear_a#x, c#x]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [year#x AS y#x, course#x AS c#x, earnings#x AS e#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
@@ -380,7 +380,7 @@ Project [year#x, dotNET_CEIL(sum(earnings))#xL, dotNET_a1#x, Java_CEIL(sum(earni
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [year#x, course#x, earnings#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales
@@ -429,13 +429,13 @@ Project [s#x, {dotNET, 2012}#xL, {Java, 2013}#xL]
             +- Project [course#x, year#x, earnings#x, s#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias years
-                     +- View (`years`, [y#x,s#x])
+                     +- View (`years`, [y#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(s#x as int) AS s#x]
                            +- Project [y#x, s#x]
                               +- SubqueryAlias years
@@ -461,13 +461,13 @@ Project [year#x, c1#xL, c2#xL]
             +- Project [course#x, year#x, earnings#x, s#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias years
-                     +- View (`years`, [y#x,s#x])
+                     +- View (`years`, [y#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(s#x as int) AS s#x]
                            +- Project [y#x, s#x]
                               +- SubqueryAlias years
@@ -556,13 +556,13 @@ Project [year#x, dotNET#x, Java#x]
       +- Project [course#x, year#x, a#x]
          +- Join Inner, (year#x = y#x)
             :- SubqueryAlias coursesales
-            :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+            :  +- View (`courseSales`, [course#x, year#x, earnings#x])
             :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
             :        +- Project [course#x, year#x, earnings#x]
             :           +- SubqueryAlias courseSales
             :              +- LocalRelation [course#x, year#x, earnings#x]
             +- SubqueryAlias yearswithcomplextypes
-               +- View (`yearsWithComplexTypes`, [y#x,a#x,m#x,s#x])
+               +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
                   +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
                      +- Project [y#x, a#x, m#x, s#x]
                         +- SubqueryAlias yearsWithComplexTypes
@@ -586,13 +586,13 @@ Project [year#x, {2012, dotNET}#x, {2013, Java}#x]
       +- Project [course#x, year#x, y#x, a#x]
          +- Join Inner, (year#x = y#x)
             :- SubqueryAlias coursesales
-            :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+            :  +- View (`courseSales`, [course#x, year#x, earnings#x])
             :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
             :        +- Project [course#x, year#x, earnings#x]
             :           +- SubqueryAlias courseSales
             :              +- LocalRelation [course#x, year#x, earnings#x]
             +- SubqueryAlias yearswithcomplextypes
-               +- View (`yearsWithComplexTypes`, [y#x,a#x,m#x,s#x])
+               +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
                   +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
                      +- Project [y#x, a#x, m#x, s#x]
                         +- SubqueryAlias yearsWithComplexTypes
@@ -618,13 +618,13 @@ Project [year#x, [1, 1]#xL, [2, 2]#xL]
             +- Project [earnings#x, year#x, a#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias yearswithcomplextypes
-                     +- View (`yearsWithComplexTypes`, [y#x,a#x,m#x,s#x])
+                     +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
                            +- Project [y#x, a#x, m#x, s#x]
                               +- SubqueryAlias yearsWithComplexTypes
@@ -650,13 +650,13 @@ Project [year#x, {dotNET, [1, 1]}#xL, {Java, [2, 2]}#xL]
             +- Project [course#x, earnings#x, year#x, a#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias yearswithcomplextypes
-                     +- View (`yearsWithComplexTypes`, [y#x,a#x,m#x,s#x])
+                     +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
                            +- Project [y#x, a#x, m#x, s#x]
                               +- SubqueryAlias yearsWithComplexTypes
@@ -682,13 +682,13 @@ Project [year#x, {1, a}#xL, {2, b}#xL]
             +- Project [earnings#x, year#x, s#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias yearswithcomplextypes
-                     +- View (`yearsWithComplexTypes`, [y#x,a#x,m#x,s#x])
+                     +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
                            +- Project [y#x, a#x, m#x, s#x]
                               +- SubqueryAlias yearsWithComplexTypes
@@ -714,13 +714,13 @@ Project [year#x, {dotNET, {1, a}}#xL, {Java, {2, b}}#xL]
             +- Project [course#x, earnings#x, year#x, s#x]
                +- Join Inner, (year#x = y#x)
                   :- SubqueryAlias coursesales
-                  :  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  :  +- View (`courseSales`, [course#x, year#x, earnings#x])
                   :     +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                   :        +- Project [course#x, year#x, earnings#x]
                   :           +- SubqueryAlias courseSales
                   :              +- LocalRelation [course#x, year#x, earnings#x]
                   +- SubqueryAlias yearswithcomplextypes
-                     +- View (`yearsWithComplexTypes`, [y#x,a#x,m#x,s#x])
+                     +- View (`yearsWithComplexTypes`, [y#x, a#x, m#x, s#x])
                         +- Project [cast(y#x as int) AS y#x, cast(a#x as array<int>) AS a#x, cast(m#x as map<string,int>) AS m#x, cast(s#x as struct<col1:int,col2:string>) AS s#x]
                            +- Project [y#x, a#x, m#x, s#x]
                               +- SubqueryAlias yearsWithComplexTypes
@@ -786,7 +786,7 @@ Project [a#x, z#x, b#x, y#x, c#x, x#x, d#x, w#x, dotNET#xL, Java#xL]
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [course#x, earnings#x, a AS a#x, z AS z#x, b AS b#x, y AS y#x, c AS c#x, x AS x#x, d AS d#x, w AS w#x]
                +- SubqueryAlias coursesales
-                  +- View (`courseSales`, [course#x,year#x,earnings#x])
+                  +- View (`courseSales`, [course#x, year#x, earnings#x])
                      +- Project [cast(course#x as string) AS course#x, cast(year#x as int) AS year#x, cast(earnings#x as int) AS earnings#x]
                         +- Project [course#x, year#x, earnings#x]
                            +- SubqueryAlias courseSales

@@ -17,9 +17,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.connect.client.ToStub
-import org.apache.spark.sql.test.RemoteSparkSession
+import org.apache.spark.sql.test.{ConnectFunSuite, RemoteSparkSession}
 
-class StubbingTestSuite extends RemoteSparkSession {
+class StubbingTestSuite extends ConnectFunSuite with RemoteSparkSession {
   private def eval[T](f: => T): T = f
 
   test("capture of to-be stubbed class") {

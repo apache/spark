@@ -66,10 +66,10 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean put(Object item) {
-    if (item instanceof String) {
-      return putString((String) item);
-    } else if (item instanceof byte[]) {
-      return putBinary((byte[]) item);
+    if (item instanceof String str) {
+      return putString(str);
+    } else if (item instanceof byte[] bytes) {
+      return putBinary(bytes);
     } else {
       return putLong(Utils.integralToLong(item));
     }
@@ -166,10 +166,10 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public boolean mightContain(Object item) {
-    if (item instanceof String) {
-      return mightContainString((String) item);
-    } else if (item instanceof byte[]) {
-      return mightContainBinary((byte[]) item);
+    if (item instanceof String str) {
+      return mightContainString(str);
+    } else if (item instanceof byte[] bytes) {
+      return mightContainBinary(bytes);
     } else {
       return mightContainLong(Utils.integralToLong(item));
     }

@@ -28,7 +28,8 @@ import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.TrueFileFilter
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{RMSE, TEST_SIZE, TRAINING_SIZE}
 import org.apache.spark.ml.linalg.{BLAS, Vectors}
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -353,8 +354,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
         }
       }
     }
-    logInfo(s"Generated an explicit feedback dataset with ${training.size} ratings for training " +
-      s"and ${test.size} for test.")
+    logInfo(log"Generated an explicit feedback dataset with ${MDC(TRAINING_SIZE, training.size)} " +
+      log"ratings for training and ${MDC(TEST_SIZE, test.size)} for test.")
     (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 
@@ -485,7 +486,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
               val mse = errorSquares.sum / errorSquares.length
               math.sqrt(mse)
             }
-          logInfo(s"Test RMSE is $rmse.")
+          logInfo(log"Test RMSE is ${MDC(RMSE, rmse)}.")
           assert(rmse < targetRMSE)
     }
 
@@ -856,7 +857,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
-      val expectedUpToN = expected.view.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topItems = model.recommendForAllUsers(k)
       assert(topItems.count() == numUsers)
       assert(topItems.columns.contains("user"))
@@ -877,7 +878,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
-      val expectedUpToN = expected.view.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topUsers = getALSModel.recommendForAllItems(k)
       assert(topUsers.count() == numItems)
       assert(topUsers.columns.contains("item"))
@@ -899,7 +900,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
-      val expectedUpToN = expected.view.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topItems = model.recommendForUserSubset(userSubset, k)
       assert(topItems.count() == numUsersSubset)
       assert(topItems.columns.contains("user"))
@@ -921,7 +922,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
-      val expectedUpToN = expected.view.mapValues(_.slice(0, n))
+      val expectedUpToN = expected.transform((_, v) => v.slice(0, n))
       val topUsers = model.recommendForItemSubset(itemSubset, k)
       assert(topUsers.count() == numItemsSubset)
       assert(topUsers.columns.contains("item"))
@@ -1246,8 +1247,8 @@ object ALSSuite extends Logging {
         }
       }
     }
-    logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
-      s"and ${test.size} for test.")
+    logInfo(log"Generated an implicit feedback dataset with ${MDC(TRAINING_SIZE, training.size)}" +
+      log" ratings for training and ${MDC(TEST_SIZE, test.size)} for test.")
     (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 }

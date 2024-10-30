@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.language.implicitConversions
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
-import org.json4s.DefaultFormats
+import org.json4s.{DefaultFormats, Formats}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
@@ -432,7 +432,7 @@ object Vectors {
    */
   @Since("1.6.0")
   def fromJson(json: String): Vector = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val jValue = parseJson(json)
     (jValue \ "type").extract[Int] match {
       case 0 => // sparse
@@ -759,7 +759,7 @@ class DenseVector @Since("1.0.0") (
 
   @Since("1.6.0")
   override def toJson: String = {
-    val jValue = ("type" -> 1) ~ ("values" -> values.toSeq)
+    val jValue = ("type" -> 1) ~ ("values" -> values.toImmutableArraySeq)
     compact(render(jValue))
   }
 
@@ -972,8 +972,8 @@ class SparseVector @Since("1.0.0") (
   override def toJson: String = {
     val jValue = ("type" -> 0) ~
       ("size" -> size) ~
-      ("indices" -> indices.toSeq) ~
-      ("values" -> values.toSeq)
+      ("indices" -> indices.toImmutableArraySeq) ~
+      ("values" -> values.toImmutableArraySeq)
     compact(render(jValue))
   }
 

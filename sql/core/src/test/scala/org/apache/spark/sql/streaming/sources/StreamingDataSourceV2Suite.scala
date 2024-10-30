@@ -324,7 +324,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       readFormat: String,
       writeFormat: String,
       trigger: Trigger,
-      errorClass: String,
+      condition: String,
       parameters: Map[String, String]) = {
     val query = spark.readStream
       .format(readFormat)
@@ -339,7 +339,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       assert(query.exception.get.cause != null)
       checkErrorMatchPVals(
         exception = query.exception.get.cause.asInstanceOf[SparkUnsupportedOperationException],
-        errorClass = errorClass,
+        condition = condition,
         parameters = parameters
       )
     }
@@ -422,10 +422,10 @@ class StreamingDataSourceV2Suite extends StreamTest {
 
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
-      val sourceTable = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
+      val sourceTable = DataSource.lookupDataSource(read, spark.sessionState.conf).getConstructor()
         .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
 
-      val sinkTable = DataSource.lookupDataSource(write, spark.sqlContext.conf).getConstructor()
+      val sinkTable = DataSource.lookupDataSource(write, spark.sessionState.conf).getConstructor()
         .newInstance().asInstanceOf[SimpleTableProvider].getTable(CaseInsensitiveStringMap.empty())
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
@@ -436,7 +436,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
             exception = intercept[SparkUnsupportedOperationException] {
               testCase(read, write, trigger)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_2049",
+            condition = "_LEGACY_ERROR_TEMP_2049",
             parameters = Map(
               "className" -> "fake-read-neither-mode",
               "operator" -> "reading"
@@ -449,7 +449,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
             exception = intercept[SparkUnsupportedOperationException] {
               testCase(read, write, trigger)
             },
-            errorClass = "_LEGACY_ERROR_TEMP_2049",
+            condition = "_LEGACY_ERROR_TEMP_2049",
             parameters = Map(
               "className" -> "fake-write-neither-mode",
               "operator" -> "writing"
@@ -466,7 +466,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
               exception = intercept[SparkUnsupportedOperationException] {
                 testCase(read, write, trigger)
               },
-              errorClass = "_LEGACY_ERROR_TEMP_2253",
+              condition = "_LEGACY_ERROR_TEMP_2253",
               parameters = Map("sourceName" -> "fake-read-microbatch-only")
             )
           }
@@ -478,7 +478,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
           } else {
             // Invalid - trigger is microbatch but reader is not
             testPostCreationNegativeCase(read, write, trigger,
-              errorClass = "_LEGACY_ERROR_TEMP_2209",
+              condition = "_LEGACY_ERROR_TEMP_2209",
               parameters = Map(
                 "srcName" -> read,
                 "disabledSources" -> "",

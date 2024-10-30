@@ -17,17 +17,16 @@
 package org.apache.spark.sql.internal
 
 import java.util.TimeZone
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.util.Try
 
-import org.apache.spark.sql.types.{AtomicType, TimestampType}
+import org.apache.spark.sql.types.{AtomicType, StringType, TimestampType}
 import org.apache.spark.util.SparkClassUtils
 
 /**
  * Configuration for all objects that are placed in the `sql/api` project. The normal way of
- * accessing this class is through `SqlApiConf.get`. If this code is being used with sql/core
- * then its values are bound to the currently set SQLConf. With Spark Connect, it will default to
+ * accessing this class is through `SqlApiConf.get`. If this code is being used with sql/core then
+ * its values are bound to the currently set SQLConf. With Spark Connect, it will default to
  * hardcoded values.
  */
 private[sql] trait SqlApiConf {
@@ -44,29 +43,23 @@ private[sql] trait SqlApiConf {
   def datetimeJava8ApiEnabled: Boolean
   def sessionLocalTimeZone: String
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
+  def defaultStringType: StringType
+  def stackTracesInDataFrameContext: Int
+  def legacyAllowUntypedScalaUDFs: Boolean
 }
 
 private[sql] object SqlApiConf {
   // Shared keys.
-  val ANSI_ENABLED_KEY: String = "spark.sql.ansi.enabled"
-  val LEGACY_TIME_PARSER_POLICY_KEY: String = "spark.sql.legacy.timeParserPolicy"
-  val CASE_SENSITIVE_KEY: String = "spark.sql.caseSensitive"
-  val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
-  val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
-
-  /**
-   * Defines a getter that returns the [[SqlApiConf]] within scope.
-   */
-  private val confGetter = new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)
-
-  /**
-   * Sets the active config getter.
-   */
-  private[sql] def setConfGetter(getter: () => SqlApiConf): Unit = {
-    confGetter.set(getter)
+  val ANSI_ENABLED_KEY: String = SqlApiConfHelper.ANSI_ENABLED_KEY
+  val LEGACY_TIME_PARSER_POLICY_KEY: String = SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY
+  val CASE_SENSITIVE_KEY: String = SqlApiConfHelper.CASE_SENSITIVE_KEY
+  val SESSION_LOCAL_TIMEZONE_KEY: String = SqlApiConfHelper.SESSION_LOCAL_TIMEZONE_KEY
+  val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = {
+    SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
   }
+  val DEFAULT_COLLATION: String = SqlApiConfHelper.DEFAULT_COLLATION
 
-  def get: SqlApiConf = confGetter.get()()
+  def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
   // Force load SQLConf. This will trigger the installation of a confGetter that points to SQLConf.
   Try(SparkClassUtils.classForName("org.apache.spark.sql.internal.SQLConf$"))
@@ -88,5 +81,8 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def charVarcharAsString: Boolean = false
   override def datetimeJava8ApiEnabled: Boolean = false
   override def sessionLocalTimeZone: String = TimeZone.getDefault.getID
-  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.EXCEPTION
+  override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
+  override def defaultStringType: StringType = StringType
+  override def stackTracesInDataFrameContext: Int = 1
+  override def legacyAllowUntypedScalaUDFs: Boolean = false
 }

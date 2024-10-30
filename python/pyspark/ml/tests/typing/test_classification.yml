@@ -23,8 +23,8 @@
 
     # Should support
     OneVsRest(classifier=LogisticRegression())
-    OneVsRest(classifier=LogisticRegressionModel.load("/foo"))  # E: Argument "classifier" to "OneVsRest" has incompatible type "LogisticRegressionModel"; expected "Optional[Classifier[<nothing>]]"  [arg-type]
-    OneVsRest(classifier="foo")  # E: Argument "classifier" to "OneVsRest" has incompatible type "str"; expected "Optional[Classifier[<nothing>]]"  [arg-type]
+    OneVsRest(classifier=LogisticRegressionModel.load("/foo"))  # E: Argument "classifier" to "OneVsRest" has incompatible type "LogisticRegressionModel"; expected "Optional[Classifier[Never]]"  [arg-type]
+    OneVsRest(classifier="foo")  # E: Argument "classifier" to "OneVsRest" has incompatible type "str"; expected "Optional[Classifier[Never]]"  [arg-type]
 
 
 - case: fitFMClassifier

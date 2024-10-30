@@ -169,7 +169,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
 
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
-      case p: FileSourceScanExec => p.selectedPartitions.length
+      case p: FileSourceScanExec => p.selectedPartitions.partitionCount
       case BatchScanExec(_, scan: FileScan, _, _, _, _) =>
         scan.fileIndex.listFiles(scan.partitionFilters, scan.dataFilters).length
     }.get

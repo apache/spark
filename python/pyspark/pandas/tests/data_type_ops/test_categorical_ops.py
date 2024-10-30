@@ -21,6 +21,7 @@ from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
@@ -539,7 +540,11 @@ class CategoricalOpsTestsMixin:
         )
 
 
-class CategoricalOpsTests(CategoricalOpsTestsMixin, OpsTestBase):
+class CategoricalOpsTests(
+    CategoricalOpsTestsMixin,
+    OpsTestBase,
+    PandasOnSparkTestCase,
+):
     pass
 
 

@@ -17,15 +17,27 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{ELAPSED_TIME, TRIGGER_INTERVAL}
 import org.apache.spark.util.{Clock, SystemClock}
 
 trait TriggerExecutor {
 
+  private var execCtx: MicroBatchExecutionContext = _
+
   /**
    * Execute batches using `batchRunner`. If `batchRunner` runs `false`, terminate the execution.
    */
-  def execute(batchRunner: () => Boolean): Unit
+  def execute(batchRunner: (MicroBatchExecutionContext) => Boolean): Unit
+
+  def setNextBatch(execContext: MicroBatchExecutionContext): Unit = {
+    execCtx = execContext
+  }
+
+  protected def runOneBatch(batchRunner: (MicroBatchExecutionContext)
+    => Boolean): Boolean = {
+    batchRunner(execCtx)
+  }
 }
 
 /**
@@ -36,7 +48,9 @@ case class SingleBatchExecutor() extends TriggerExecutor {
   /**
    * Execute a single batch using `batchRunner`.
    */
-  override def execute(batchRunner: () => Boolean): Unit = batchRunner()
+  override def execute(batchRunner: (MicroBatchExecutionContext) => Boolean): Unit = {
+    runOneBatch(batchRunner)
+  }
 }
 
 /**
@@ -46,7 +60,8 @@ case class MultiBatchExecutor() extends TriggerExecutor {
   /**
    * Execute multiple batches using `batchRunner`
    */
-  override def execute(batchRunner: () => Boolean): Unit = while (batchRunner()) {}
+  override def execute(batchRunner: (MicroBatchExecutionContext) => Boolean): Unit
+    = while (runOneBatch(batchRunner)) {}
 }
 
 /**
@@ -60,11 +75,11 @@ case class ProcessingTimeExecutor(
   private val intervalMs = processingTimeTrigger.intervalMs
   require(intervalMs >= 0)
 
-  override def execute(triggerHandler: () => Boolean): Unit = {
+  override def execute(triggerHandler: (MicroBatchExecutionContext) => Boolean): Unit = {
     while (true) {
       val triggerTimeMs = clock.getTimeMillis()
       val nextTriggerTimeMs = nextBatchTime(triggerTimeMs)
-      val terminated = !triggerHandler()
+      val terminated = !runOneBatch(triggerHandler)
       if (intervalMs > 0) {
         val batchElapsedTimeMs = clock.getTimeMillis() - triggerTimeMs
         if (batchElapsedTimeMs > intervalMs) {
@@ -84,8 +99,9 @@ case class ProcessingTimeExecutor(
 
   /** Called when a batch falls behind */
   def notifyBatchFallingBehind(realElapsedTimeMs: Long): Unit = {
-    logWarning("Current batch is falling behind. The trigger interval is " +
-      s"${intervalMs} milliseconds, but spent ${realElapsedTimeMs} milliseconds")
+    logWarning(log"Current batch is falling behind. The trigger interval is " +
+      log"${MDC(TRIGGER_INTERVAL, intervalMs)}} milliseconds, but spent " +
+      log"${MDC(ELAPSED_TIME, realElapsedTimeMs)} milliseconds")
   }
 
   /**

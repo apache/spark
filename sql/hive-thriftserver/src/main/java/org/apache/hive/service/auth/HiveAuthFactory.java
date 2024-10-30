@@ -17,7 +17,6 @@
 package org.apache.hive.service.auth;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,9 +27,7 @@ import javax.security.sasl.Sasl;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.metastore.HiveMetaStore;
-import org.apache.hadoop.hive.metastore.HiveMetaStore.HMSHandler;
-import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.shims.HadoopShims.KerberosNameShim;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.thrift.DBTokenStore;
@@ -45,16 +42,19 @@ import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TTransportFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 
 /**
  * This class helps in some aspects of authentication. It creates the proper Thrift classes for the
  * given configuration as well as helps with authenticating requests.
  */
 public class HiveAuthFactory {
-  private static final Logger LOG = LoggerFactory.getLogger(HiveAuthFactory.class);
 
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(HiveAuthFactory.class);
 
   public enum AuthTypes {
     NOSASL("NOSASL"),
@@ -85,18 +85,9 @@ public class HiveAuthFactory {
   public static final String HS2_PROXY_USER = "hive.server2.proxy.user";
   public static final String HS2_CLIENT_TOKEN = "hiveserver2ClientToken";
 
-  private static Field keytabFile = null;
   private static Method getKeytab = null;
   static {
     Class<?> clz = UserGroupInformation.class;
-    try {
-      keytabFile = clz.getDeclaredField("keytabFile");
-      keytabFile.setAccessible(true);
-    } catch (NoSuchFieldException nfe) {
-      LOG.debug("Cannot find private field \"keytabFile\" in class: " +
-        UserGroupInformation.class.getCanonicalName(), nfe);
-      keytabFile = null;
-    }
 
     try {
       getKeytab = clz.getDeclaredMethod("getKeytab");
@@ -142,16 +133,15 @@ public class HiveAuthFactory {
               HiveConf.ConfVars.METASTORE_CLUSTER_DELEGATION_TOKEN_STORE_CLS);
 
           if (tokenStoreClass.equals(DBTokenStore.class.getName())) {
-            HMSHandler baseHandler = new HiveMetaStore.HMSHandler(
-                "new db based metaserver", conf, true);
-            rawStore = baseHandler.getMS();
+            // Follows https://issues.apache.org/jira/browse/HIVE-12270
+            rawStore = Hive.class;
           }
 
           delegationTokenManager.startDelegationTokenSecretManager(
               conf, rawStore, ServerMode.HIVESERVER2);
           saslServer.setSecretManager(delegationTokenManager.getSecretManager());
         }
-        catch (MetaException|IOException e) {
+        catch (IOException e) {
           throw new TTransportException("Failed to start token manager", e);
         }
       }
@@ -298,9 +288,9 @@ public class HiveAuthFactory {
     try {
       return delegationTokenManager.verifyDelegationToken(delegationToken);
     } catch (IOException e) {
-      String msg =  "Error verifying delegation token " + delegationToken;
-      LOG.error(msg, e);
-      throw new HiveSQLException(msg, "08S01", e);
+      String msg = "Error verifying delegation token";
+      LOG.error(msg + " {}", e, MDC.of(LogKeys.TOKEN$.MODULE$, delegationToken));
+      throw new HiveSQLException(msg + delegationToken, "08S01", e);
     }
   }
 
@@ -347,9 +337,7 @@ public class HiveAuthFactory {
   private static String getKeytabFromUgi() {
     synchronized (UserGroupInformation.class) {
       try {
-        if (keytabFile != null) {
-          return (String) keytabFile.get(null);
-        } else if (getKeytab != null) {
+        if (getKeytab != null) {
           return (String) getKeytab.invoke(UserGroupInformation.getCurrentUser());
         } else {
           return null;

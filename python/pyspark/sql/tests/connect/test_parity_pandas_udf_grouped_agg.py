@@ -20,22 +20,11 @@ from pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg import GroupedAggPanda
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PandasUDFGroupedAggParityTests(GroupedAggPandasUDFTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-43727): Parity returnType check in Spark Connect
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_unsupported_types(self):
-        self.check_unsupported_types()
-
-    def test_invalid_args(self):
-        self.check_invalid_args()
-
-    @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
-    def test_grouped_with_empty_partition(self):
-        super().test_grouped_with_empty_partition()
-
-    @unittest.skip("Spark Connect does not support convert UNPARSED to catalyst types.")
-    def test_manual(self):
-        super().test_manual()
+class PandasUDFGroupedAggParityTests(
+    GroupedAggPandasUDFTestsMixin,
+    ReusedConnectTestCase,
+):
+    pass
 
 
 if __name__ == "__main__":

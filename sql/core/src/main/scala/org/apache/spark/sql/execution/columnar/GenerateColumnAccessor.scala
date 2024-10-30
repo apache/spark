@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -51,16 +52,16 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
 
   // the writer will be used directly to avoid creating wrapper objects
   override def setDecimal(i: Int, v: Decimal, precision: Int): Unit =
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
 
   override def setInterval(i: Int, value: CalendarInterval): Unit =
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
 
-  override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
+  override def update(i: Int, v: Any): Unit = throw SparkUnsupportedOperationException()
 
   // all other methods inherited from GenericMutableRow are not need
-  override protected def genericGet(ordinal: Int): Any = throw new UnsupportedOperationException
-  override def numFields: Int = throw new UnsupportedOperationException
+  override protected def genericGet(ordinal: Int): Any = throw SparkUnsupportedOperationException()
+  override def numFields: Int = throw SparkUnsupportedOperationException()
 }
 
 /**
@@ -85,9 +86,10 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           classOf[LongColumnAccessor].getName
         case FloatType => classOf[FloatColumnAccessor].getName
         case DoubleType => classOf[DoubleColumnAccessor].getName
-        case StringType => classOf[StringColumnAccessor].getName
+        case _: StringType => classOf[StringColumnAccessor].getName
         case BinaryType => classOf[BinaryColumnAccessor].getName
         case CalendarIntervalType => classOf[IntervalColumnAccessor].getName
+        case VariantType => classOf[VariantColumnAccessor].getName
         case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
           classOf[CompactDecimalColumnAccessor].getName
         case dt: DecimalType => classOf[DecimalColumnAccessor].getName
@@ -100,7 +102,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       val createCode = dt match {
         case t if CodeGenerator.isPrimitiveType(dt) =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
-        case NullType | StringType | BinaryType | CalendarIntervalType =>
+        case NullType | BinaryType | CalendarIntervalType | VariantType =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case other =>
           s"""$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder),

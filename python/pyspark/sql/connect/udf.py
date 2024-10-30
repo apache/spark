@@ -27,7 +27,7 @@ import warnings
 from inspect import getfullargspec
 from typing import cast, Callable, Any, List, TYPE_CHECKING, Optional, Union
 
-from pyspark.rdd import PythonEvalType
+from pyspark.util import PythonEvalType
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     CommonInlineUserDefinedFunction,
@@ -36,9 +36,11 @@ from pyspark.sql.connect.expressions import (
     PythonUDF,
 )
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.types import UnparsedDataType
-from pyspark.sql.types import DataType, StringType
-from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
+from pyspark.sql.types import DataType, StringType, _parse_datatype_string
+from pyspark.sql.udf import (
+    UDFRegistration as PySparkUDFRegistration,
+    UserDefinedFunction as PySparkUserDefinedFunction,
+)
 from pyspark.errors import PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -85,7 +87,8 @@ def _create_py_udf(
             eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
         else:
             warnings.warn(
-                "Arrow optimization for Python UDFs cannot be enabled.",
+                "Arrow optimization for Python UDFs cannot be enabled for functions"
+                " without arguments.",
                 UserWarning,
             )
 
@@ -127,14 +130,14 @@ class UserDefinedFunction:
     ):
         if not callable(func):
             raise PySparkTypeError(
-                error_class="NOT_CALLABLE",
-                message_parameters={"arg_name": "func", "arg_type": type(func).__name__},
+                errorClass="NOT_CALLABLE",
+                messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
             )
 
         if not isinstance(returnType, (DataType, str)):
             raise PySparkTypeError(
-                error_class="NOT_DATATYPE_OR_STR",
-                message_parameters={
+                errorClass="NOT_DATATYPE_OR_STR",
+                messageParameters={
                     "arg_name": "returnType",
                     "arg_type": type(returnType).__name__,
                 },
@@ -142,25 +145,41 @@ class UserDefinedFunction:
 
         if not isinstance(evalType, int):
             raise PySparkTypeError(
-                error_class="NOT_INT",
-                message_parameters={"arg_name": "evalType", "arg_type": type(evalType).__name__},
+                errorClass="NOT_INT",
+                messageParameters={"arg_name": "evalType", "arg_type": type(evalType).__name__},
             )
 
         self.func = func
-        self.returnType: DataType = (
-            UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
-        )
+        self._returnType = returnType
+        self._returnType_placeholder: Optional[DataType] = None
         self._name = name or (
             func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
         )
         self.evalType = evalType
         self.deterministic = deterministic
 
+    @property
+    def returnType(self) -> DataType:
+        # Make sure this is called after Connect Session is initialized.
+        # ``_parse_datatype_string`` accesses to Connect Server for parsing a DDL formatted string.
+        # TODO: PythonEvalType.SQL_BATCHED_UDF
+        if self._returnType_placeholder is None:
+            if isinstance(self._returnType, DataType):
+                self._returnType_placeholder = self._returnType
+            else:
+                self._returnType_placeholder = _parse_datatype_string(self._returnType)
+
+        PySparkUserDefinedFunction._check_return_type(self._returnType_placeholder, self.evalType)
+        return self._returnType_placeholder
+
     def _build_common_inline_user_defined_function(
         self, *args: "ColumnOrName", **kwargs: "ColumnOrName"
     ) -> CommonInlineUserDefinedFunction:
         def to_expr(col: "ColumnOrName") -> Expression:
-            return col._expr if isinstance(col, Column) else ColumnReference(col)
+            if isinstance(col, Column):
+                return col._expr
+            else:
+                return ColumnReference(col)  # type: ignore[arg-type]
 
         arg_exprs: List[Expression] = [to_expr(arg) for arg in args] + [
             NamedArgumentExpression(key, to_expr(value)) for key, value in kwargs.items()
@@ -249,8 +268,8 @@ class UDFRegistration:
         if hasattr(f, "asNondeterministic"):
             if returnType is not None:
                 raise PySparkTypeError(
-                    error_class="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
-                    message_parameters={"arg_name": "f", "return_type": str(returnType)},
+                    errorClass="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
+                    messageParameters={"arg_name": "f", "return_type": str(returnType)},
                 )
             f = cast("UserDefinedFunctionLike", f)
             if f.evalType not in [
@@ -261,8 +280,8 @@ class UDFRegistration:
                 PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             ]:
                 raise PySparkTypeError(
-                    error_class="INVALID_UDF_EVAL_TYPE",
-                    message_parameters={
+                    errorClass="INVALID_UDF_EVAL_TYPE",
+                    messageParameters={
                         "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
                         "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or "
                         "SQL_GROUPED_AGG_PANDAS_UDF"

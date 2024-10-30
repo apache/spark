@@ -30,6 +30,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -101,7 +102,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
 
   @Override
   public Object[] array() {
-    throw new UnsupportedOperationException("Not supported on UnsafeArrayData.");
+    throw SparkUnsupportedOperationException.apply();
   }
 
   /**
@@ -272,7 +273,9 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
   }
 
   @Override
-  public void update(int ordinal, Object value) { throw new UnsupportedOperationException(); }
+  public void update(int ordinal, Object value) {
+    throw SparkUnsupportedOperationException.apply();
+  }
 
   @Override
   public void setNullAt(int ordinal) {
@@ -429,8 +432,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3129");
     }
 
     final long[] data = new long[(int)totalSizeInLongs];
@@ -451,8 +453,7 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     final long valueRegionInBytes = (long)elementSize * length;
     final long totalSizeInLongs = (headerInBytes + valueRegionInBytes + 7) / 8;
     if (totalSizeInLongs > Integer.MAX_VALUE / 8) {
-      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
-        "it's too big.");
+      throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3129");
     }
 
     final long[] data = new long[(int)totalSizeInLongs];

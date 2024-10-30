@@ -60,3 +60,9 @@ select * from values (timestamp('1991-12-06 00:00:00.0'), array(timestamp('1991-
 select * from values (try_add(5, 0));
 select * from values (try_divide(5, 0));
 select * from values (10 + try_divide(5, 0));
+
+-- now() should be kept as tempResolved inline expression.
+select count(distinct ct) from values now(), now(), now() as data(ct);
+
+-- current_timestamp() should be kept as tempResolved inline expression.
+select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct);

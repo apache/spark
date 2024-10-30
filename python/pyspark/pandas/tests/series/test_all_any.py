@@ -20,19 +20,11 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesAllAnyMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_all(self):
         for pser in [
             pd.Series([True, True], name="x"),
@@ -89,7 +81,11 @@ class SeriesAllAnyMixin:
             psser.any(axis=1)
 
 
-class SeriesAllAnyTests(SeriesAllAnyMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesAllAnyTests(
+    SeriesAllAnyMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

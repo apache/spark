@@ -117,7 +117,7 @@ private[mllib] object Loader {
    * @return (class name, version, metadata)
    */
   def loadMetadata(sc: SparkContext, path: String): (String, String, JValue) = {
-    implicit val formats = DefaultFormats
+    implicit val formats: Formats = DefaultFormats
     val metadata = parse(sc.textFile(metadataPath(path)).first())
     val clazz = (metadata \ "class").extract[String]
     val version = (metadata \ "version").extract[String]

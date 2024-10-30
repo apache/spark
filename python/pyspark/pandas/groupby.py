@@ -76,6 +76,13 @@ from pyspark.pandas.missing.groupby import (
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.config import get_option
+from pyspark.pandas.correlation import (
+    compute,
+    CORRELATION_VALUE_1_COLUMN,
+    CORRELATION_VALUE_2_COLUMN,
+    CORRELATION_CORR_OUTPUT_COLUMN,
+    CORRELATION_COUNT_OUTPUT_COLUMN,
+)
 from pyspark.pandas.utils import (
     align_diff_frames,
     is_name_like_tuple,
@@ -301,6 +308,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             )
 
         if not self._as_index:
+            index_cols = psdf._internal.column_labels
             should_drop_index = set(
                 i for i, gkey in enumerate(self._groupkeys) if gkey._psdf is not self._psdf
             )
@@ -315,8 +323,12 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psdf = psdf.reset_index(level=should_drop_index, drop=drop)
             if len(should_drop_index) < len(self._groupkeys):
                 psdf = psdf.reset_index()
+            index_cols = [c for c in psdf._internal.column_labels if c not in index_cols]
+            if relabeling:
+                psdf = psdf[pd.Index(index_cols + list(order))]
+                psdf.columns = pd.Index([c[0] for c in index_cols] + list(columns))
 
-        if relabeling:
+        if relabeling and self._as_index:
             psdf = psdf[order]
             psdf.columns = columns  # type: ignore[assignment]
         return psdf
@@ -3927,6 +3939,215 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
 
         # Cast columns to ``"float64"`` to match `pandas.DataFrame.groupby`.
         return DataFrame(internal).astype("float64")
+
+    def corr(
+        self,
+        method: str = "pearson",
+        min_periods: int = 1,
+        numeric_only: bool = False,
+    ) -> "DataFrame":
+        """
+        Compute pairwise correlation of columns, excluding NA/null values.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        method : {'pearson', 'spearman', 'kendall'}
+            * pearson : standard correlation coefficient
+            * spearman : Spearman rank correlation
+            * kendall : Kendall Tau correlation coefficient
+
+        min_periods : int, default 1
+            Minimum number of observations in window required to have a value
+            (otherwise result is NA).
+
+        numeric_only : bool, default False
+            Include only `float`, `int` or `boolean` data.
+
+        Returns
+        -------
+        DataFrame
+
+        See Also
+        --------
+        DataFrame.corrwith
+        Series.corr
+
+        Notes
+        -----
+        1. Pearson, Kendall and Spearman correlation are currently computed using pairwise
+           complete observations.
+
+        2. The complexity of Kendall correlation is O(#row * #row), if the dataset is too
+           large, sampling ahead of correlation computation is recommended.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame(
+        ...     {"A": [0, 0, 0, 1, 1, 2], "B": [-1, 2, 3, 5, 6, 0], "C": [4, 6, 5, 1, 3, 0]},
+        ...     columns=["A", "B", "C"])
+        >>> df.groupby("A").corr()
+                    B         C
+        A
+        0 B  1.000000  0.720577
+          C  0.720577  1.000000
+        1 B  1.000000  1.000000
+          C  1.000000  1.000000
+        2 B       NaN       NaN
+          C       NaN       NaN
+
+        >>> df.groupby("A").corr(min_periods=2)
+                    B         C
+        A
+        0 B  1.000000  0.720577
+          C  0.720577  1.000000
+        1 B  1.000000  1.000000
+          C  1.000000  1.000000
+        2 B       NaN       NaN
+          C       NaN       NaN
+
+        >>> df.groupby("A").corr("spearman")
+               B    C
+        A
+        0 B  1.0  0.5
+          C  0.5  1.0
+        1 B  1.0  1.0
+          C  1.0  1.0
+        2 B  NaN  NaN
+          C  NaN  NaN
+
+        >>> df.groupby("A").corr('kendall')
+                    B         C
+        A
+        0 B  1.000000  0.333333
+          C  0.333333  1.000000
+        1 B  1.000000  1.000000
+          C  1.000000  1.000000
+        2 B  1.000000       NaN
+          C       NaN  1.000000
+        """
+        if method not in ["pearson", "spearman", "kendall"]:
+            raise ValueError(f"Invalid method {method}")
+
+        groupkey_names: List[str] = [str(key.name) for key in self._groupkeys]
+        internal, agg_columns, sdf = self._prepare_reduce(
+            groupkey_names=groupkey_names,
+            accepted_spark_types=(NumericType, BooleanType) if numeric_only else None,
+            bool_to_numeric=False,
+        )
+
+        numeric_labels = [
+            label
+            for label in internal.column_labels
+            if isinstance(internal.spark_type_for(label), (NumericType, BooleanType))
+        ]
+        numeric_scols: List[Column] = [
+            internal.spark_column_for(label).cast("double") for label in numeric_labels
+        ]
+        numeric_col_names: List[str] = [name_like_string(label) for label in numeric_labels]
+        num_scols = len(numeric_scols)
+
+        sdf = internal.spark_frame
+        index_1_col_name = verify_temp_column_name(sdf, "__groupby_corr_index_1_temp_column__")
+        index_2_col_name = verify_temp_column_name(sdf, "__groupby_corr_index_2_temp_column__")
+
+        pair_scols: List[Column] = []
+        for i in range(0, num_scols):
+            for j in range(i, num_scols):
+                pair_scols.append(
+                    F.struct(
+                        F.lit(i).alias(index_1_col_name),
+                        F.lit(j).alias(index_2_col_name),
+                        numeric_scols[i].alias(CORRELATION_VALUE_1_COLUMN),
+                        numeric_scols[j].alias(CORRELATION_VALUE_2_COLUMN),
+                    )
+                )
+
+        sdf = sdf.select(*[F.col(key) for key in groupkey_names], *[F.inline(F.array(*pair_scols))])
+
+        sdf = compute(
+            sdf=sdf, groupKeys=groupkey_names + [index_1_col_name, index_2_col_name], method=method
+        )
+        if method == "kendall":
+            sdf = sdf.withColumn(
+                CORRELATION_CORR_OUTPUT_COLUMN,
+                F.when(F.col(index_1_col_name) == F.col(index_2_col_name), F.lit(1.0)).otherwise(
+                    F.col(CORRELATION_CORR_OUTPUT_COLUMN)
+                ),
+            )
+
+        sdf = sdf.withColumn(
+            CORRELATION_CORR_OUTPUT_COLUMN,
+            F.when(F.col(CORRELATION_COUNT_OUTPUT_COLUMN) < min_periods, F.lit(None)).otherwise(
+                F.col(CORRELATION_CORR_OUTPUT_COLUMN)
+            ),
+        )
+
+        auxiliary_col_name = verify_temp_column_name(sdf, "__groupby_corr_auxiliary_temp_column__")
+        sdf = sdf.withColumn(
+            auxiliary_col_name,
+            F.explode(
+                F.when(
+                    F.col(index_1_col_name) == F.col(index_2_col_name),
+                    F.lit([0]),
+                ).otherwise(F.lit([0, 1]))
+            ),
+        ).select(
+            *[F.col(key) for key in groupkey_names],
+            *[
+                F.when(F.col(auxiliary_col_name) == 0, F.col(index_1_col_name))
+                .otherwise(F.col(index_2_col_name))
+                .alias(index_1_col_name),
+                F.when(F.col(auxiliary_col_name) == 0, F.col(index_2_col_name))
+                .otherwise(F.col(index_1_col_name))
+                .alias(index_2_col_name),
+                F.col(CORRELATION_CORR_OUTPUT_COLUMN),
+            ],
+        )
+
+        array_col_name = verify_temp_column_name(sdf, "__groupby_corr_array_temp_column__")
+        sdf = sdf.groupby(groupkey_names + [index_1_col_name]).agg(
+            F.array_sort(
+                F.collect_list(
+                    F.struct(
+                        F.col(index_2_col_name),
+                        F.col(CORRELATION_CORR_OUTPUT_COLUMN),
+                    )
+                )
+            ).alias(array_col_name)
+        )
+
+        for i in range(0, num_scols):
+            sdf = sdf.withColumn(auxiliary_col_name, F.get(F.col(array_col_name), i)).withColumn(
+                numeric_col_names[i],
+                F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
+            )
+
+        sdf = sdf.orderBy(groupkey_names + [index_1_col_name])  # type: ignore[arg-type]
+
+        sdf = sdf.select(
+            *[F.col(col) for col in groupkey_names + numeric_col_names],
+            *[
+                F.get(F.lit(numeric_col_names), F.col(index_1_col_name)).alias(auxiliary_col_name),
+                F.monotonically_increasing_id().alias(NATURAL_ORDER_COLUMN_NAME),
+            ],
+        )
+
+        return DataFrame(
+            InternalFrame(
+                spark_frame=sdf,
+                index_spark_columns=[
+                    scol_for(sdf, key) for key in groupkey_names + [auxiliary_col_name]
+                ],
+                index_names=(
+                    [psser._column_label for psser in self._groupkeys]
+                    + self._psdf._internal.index_names
+                ),
+                column_labels=numeric_labels,
+                column_label_names=internal.column_label_names,
+            )
+        )
 
 
 class SeriesGroupBy(GroupBy[Series]):

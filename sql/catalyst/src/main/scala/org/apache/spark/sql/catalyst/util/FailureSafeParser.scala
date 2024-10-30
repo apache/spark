@@ -78,10 +78,17 @@ class FailureSafeParser[IN](
             case StringAsDataTypeException(fieldName, fieldValue, dataType) =>
               throw QueryExecutionErrors.cannotParseStringAsDataTypeError(e.record().toString,
                 fieldName, fieldValue, dataType)
-            case _ => throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
-              toResultRow(e.partialResults().headOption, e.record).toString, e)
+            case causeWrapper: LazyBadRecordCauseWrapper =>
+              throwMalformedRecordsDetectedInRecordParsingError(e, causeWrapper.cause())
+            case cause => throwMalformedRecordsDetectedInRecordParsingError(e, cause)
           }
       }
     }
+  }
+
+  private def throwMalformedRecordsDetectedInRecordParsingError(
+      e: BadRecordException, cause: Throwable): Nothing = {
+    throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
+      toResultRow(e.partialResults().headOption, e.record).toString, cause)
   }
 }

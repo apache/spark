@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SpecificInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.util.SchemaUtils
 
 object BucketingUtils {
   // The file name of bucketed data should have 3 parts:
@@ -51,6 +53,8 @@ object BucketingUtils {
       bucketColumn :: Nil)
     bucketIdGenerator(mutableInternalRow).getInt(0)
   }
+
+  def canBucketOn(dataType: DataType): Boolean = !SchemaUtils.hasNonUTF8BinaryCollation(dataType)
 
   def bucketIdToString(id: Int): String = f"_$id%05d"
 }

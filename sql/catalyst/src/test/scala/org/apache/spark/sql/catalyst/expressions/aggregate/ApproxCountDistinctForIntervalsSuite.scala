@@ -42,7 +42,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         DataTypeMismatch(
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
-            "paramIndex" -> "1",
+            "paramIndex" -> ordinalNumber(0),
             "requiredType" -> ("(\"NUMERIC\" or \"TIMESTAMP\" or \"DATE\" or \"TIMESTAMP_NTZ\"" +
               " or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\")"),
             "inputSql" -> "\"a\"",
@@ -59,7 +59,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "\"ARRAY\"",
           "inputSql" -> "\"0.5\"",
           "inputType" -> "\"DOUBLE\""
@@ -91,7 +91,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "2",
+          "paramIndex" -> ordinalNumber(1),
           "requiredType" -> "ARRAY OF (\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"ANSI INTERVAL\")",
           "inputSql" -> "\"array(foobar)\"",
           "inputType" -> "\"ARRAY<STRING>\"")))

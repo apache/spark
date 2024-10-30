@@ -31,8 +31,8 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -71,16 +71,19 @@ import org.apache.spark.util.ArrayImplicits._
  * to ensure re-executed RDD operations re-apply updates on the correct past version of the
  * store.
  */
-private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with Logging {
+private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with Logging
+  with SupportsFineGrainedReplay {
+
+  private val providerName = "HDFSBackedStateStoreProvider"
 
   class HDFSBackedReadStateStore(val version: Long, map: HDFSBackedStateStoreMap)
     extends ReadStateStore {
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
-    override def get(key: UnsafeRow): UnsafeRow = map.get(key)
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = map.get(key)
 
-    override def iterator(): Iterator[UnsafeRowPair] = {
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
       map.iterator()
     }
 
@@ -90,8 +93,13 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       s"HDFSReadStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
       map.prefixScan(prefixKey)
+    }
+
+    override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", "HDFSStateStore")
     }
   }
 
@@ -113,11 +121,32 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
-    override def get(key: UnsafeRow): UnsafeRow = {
+    override def createColFamilyIfAbsent(
+        colFamilyName: String,
+        keySchema: StructType,
+        valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+    }
+
+    // Multiple col families are not supported with HDFSBackedStateStoreProvider. Throw an exception
+    // if the user tries to use a non-default col family.
+    private def assertUseOfDefaultColFamily(colFamilyName: String): Unit = {
+      if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
+
+        throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+      }
+    }
+
+    override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
+      assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.get(key)
     }
 
-    override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
+    override def put(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
+      assertUseOfDefaultColFamily(colFamilyName)
       require(value != null, "Cannot put a null value")
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       val keyCopy = key.copy()
@@ -126,7 +155,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
     }
 
-    override def remove(key: UnsafeRow): Unit = {
+    override def remove(key: UnsafeRow, colFamilyName: String): Unit = {
+      assertUseOfDefaultColFamily(colFamilyName)
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
@@ -140,7 +170,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         verify(state == UPDATING, "Cannot commit after already committed or aborted")
         commitUpdates(newVersion, mapToUpdate, compressedStream)
         state = COMMITTED
-        logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
+        logInfo(log"Committed version ${MDC(LogKeys.COMMITTED_VERSION, newVersion)} " +
+          log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} to file " +
+          log"${MDC(LogKeys.FILE_NAME, finalDeltaFile)}")
         newVersion
       } catch {
         case e: Throwable =>
@@ -158,16 +190,22 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       } else {
         state = ABORTED
       }
-      logInfo(s"Aborted version $newVersion for $this")
+      logInfo(log"Aborted version ${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} " +
+        log"for ${MDC(LogKeys.STATE_STORE_PROVIDER, this)}")
     }
 
     /**
      * Get an iterator of all the store data.
      * This can be called only after committing all the updates made in the current thread.
      */
-    override def iterator(): Iterator[UnsafeRowPair] = mapToUpdate.iterator()
+    override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
+      assertUseOfDefaultColFamily(colFamilyName)
+      mapToUpdate.iterator()
+    }
 
-    override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
+    override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String):
+      Iterator[UnsafeRowPair] = {
+      assertUseOfDefaultColFamily(colFamilyName)
       mapToUpdate.prefixScan(prefixKey)
     }
 
@@ -184,6 +222,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       StateStoreMetrics(mapToUpdate.size(), metricsFromProvider("memoryUsedBytes"), customMetrics)
     }
 
+    override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+      StateStoreCheckpointInfo(id.partitionId, newVersion, None, None)
+    }
+
     /**
      * Whether all updates have been committed
      */
@@ -194,6 +236,20 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     override def toString(): String = {
       s"HDFSStateStore[id=(op=${id.operatorId},part=${id.partitionId}),dir=$baseDir]"
     }
+
+    override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
+      throw StateStoreErrors.removingColumnFamiliesNotSupported(providerName)
+    }
+
+    override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
+    }
+
+    override def merge(key: UnsafeRow,
+        value: UnsafeRow,
+        colFamilyName: String): Unit = {
+      throw StateStoreErrors.unsupportedOperationException("merge", providerName)
+    }
   }
 
   def getMetricsForProvider(): Map[String, Long] = synchronized {
@@ -203,16 +259,23 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   }
 
   /** Get the state store for making updates to create a new `version` of the store. */
-  override def getStore(version: Long): StateStore = {
+  override def getStore(version: Long, uniqueId: Option[String] = None): StateStore = {
+    if (uniqueId.isDefined) {
+      throw QueryExecutionErrors.cannotLoadStore(new SparkException(
+        "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
+        "but a state store checkpointID is passed in"))
+    }
     val newMap = getLoadedMapForStore(version)
-    logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for update")
+    logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +
+      log"of ${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
     new HDFSBackedStateStore(version, newMap)
   }
 
   /** Get the state store for reading to specific `version` of the store. */
-  override def getReadStore(version: Long): ReadStateStore = {
+  override def getReadStore(version: Long, stateStoreCkptId: Option[String]): ReadStateStore = {
     val newMap = getLoadedMapForStore(version)
-    logInfo(s"Retrieved version $version of ${HDFSBackedStateStoreProvider.this} for readonly")
+    logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} of " +
+      log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for readonly")
     new HDFSBackedReadStateStore(version, newMap)
   }
 
@@ -228,7 +291,42 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       newMap
     }
     catch {
+      case e: SparkException if e.getCondition.contains("CANNOT_LOAD_STATE_STORE") =>
+        throw e
+      case e: OutOfMemoryError =>
+        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
+          stateStoreId.toString,
+          "HDFS_STORE_PROVIDER",
+          e)
       case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+
+  // Run bunch of validations specific to HDFSBackedStateStoreProvider
+  private def runValidation(
+      useColumnFamilies: Boolean,
+      useMultipleValuesPerKey: Boolean,
+      keyStateEncoderSpec: KeyStateEncoderSpec): Unit = {
+    // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
+    if (useColumnFamilies) {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+    }
+
+    if (useMultipleValuesPerKey) {
+      throw StateStoreErrors.unsupportedOperationException("multipleValuesPerKey", providerName)
+    }
+
+    if (keyStateEncoderSpec.isInstanceOf[RangeKeyScanStateEncoderSpec]) {
+      throw StateStoreErrors.unsupportedOperationException("Range scan", providerName)
+    }
+  }
+
+  private def getNumColsPrefixKey(keyStateEncoderSpec: KeyStateEncoderSpec): Int = {
+    keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(_) => 0
+      case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) => numColsPrefixKey
+      case _ => throw StateStoreErrors.unsupportedOperationException("Invalid key state encoder",
+        providerName)
     }
   }
 
@@ -236,9 +334,16 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      numColsPrefixKey: Int,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      useMultipleValuesPerKey: Boolean = false): Unit = {
+    assert(
+      !storeConf.enableStateStoreCheckpointIds,
+      "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +
+        s"checkpointFormatVersion ${storeConf.sqlConf.stateStoreCheckpointFormatVersion}")
+
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -246,10 +351,10 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     this.hadoopConf = hadoopConf
     this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
 
-    require((keySchema.length == 0 && numColsPrefixKey == 0) ||
-      (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
-      "greater than the number of columns for prefix key!")
-    this.numColsPrefixKey = numColsPrefixKey
+    // run a bunch of validation checks for this state store provider
+    runValidation(useColumnFamilies, useMultipleValuesPerKey, keyStateEncoderSpec)
+
+    this.numColsPrefixKey = getNumColsPrefixKey(keyStateEncoderSpec)
 
     fm.mkdirs(baseDir)
   }
@@ -259,16 +364,19 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   /** Do maintenance backing data files, including creating snapshots and cleaning up old files */
   override def doMaintenance(): Unit = {
     try {
-      doSnapshot()
+      doSnapshot("maintenance")
       cleanup()
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error performing snapshot and cleaning up $this")
+        logWarning(log"Error performing snapshot and cleaning up " + toMessageWithContext)
     }
   }
 
   override def close(): Unit = {
-    loadedMaps.values.asScala.foreach(_.clear())
+    // Clearing the map resets the TreeMap.root to null, and therefore entries inside the
+    // `loadedMaps` will be de-referenced and GCed automatically when their reference
+    // counts become 0.
+    synchronized { loadedMaps.clear() }
   }
 
   override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
@@ -276,9 +384,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       Nil
   }
 
+  private def toMessageWithContext: MessageWithContext = {
+    log"HDFSStateStoreProvider[id = (op=${MDC(LogKeys.OP_ID, stateStoreId.operatorId)}," +
+      log"part=${MDC(LogKeys.PARTITION_ID, stateStoreId.partitionId)})," +
+      log"dir = ${MDC(LogKeys.PATH, baseDir)}]"
+  }
+
   override def toString(): String = {
-    s"HDFSStateStoreProvider[" +
-      s"id = (op=${stateStoreId.operatorId},part=${stateStoreId.partitionId}),dir = $baseDir]"
+    toMessageWithContext.message
   }
 
   /* Internal fields and methods */
@@ -350,6 +463,27 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private def putStateIntoStateCacheMap(
       newVersion: Long,
       map: HDFSBackedStateStoreMap): Unit = synchronized {
+    val loadedEntries = loadedMaps.size()
+    val earliestLoadedVersion: Option[Long] = if (loadedEntries > 0) {
+      Some(loadedMaps.lastKey())
+    } else {
+      None
+    }
+
+    if (earliestLoadedVersion.isDefined) {
+      logInfo(log"Trying to add version=${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} to state " +
+        log"cache map with current_size=${MDC(LogKeys.NUM_LOADED_ENTRIES, loadedEntries)} and " +
+        log"earliest_loaded_version=" +
+        log"${MDC(LogKeys.EARLIEST_LOADED_VERSION, earliestLoadedVersion.get)}} " +
+        log"and max_versions_to_retain_in_memory=" +
+        log"${MDC(LogKeys.NUM_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
+    } else {
+      logInfo(log"Trying to add version=${MDC(LogKeys.STATE_STORE_VERSION, newVersion)} to state " +
+        log"cache map with current_size=${MDC(LogKeys.NUM_LOADED_ENTRIES, loadedEntries)} and " +
+        log"max_versions_to_retain_in_memory=" +
+        log"${MDC(LogKeys.NUM_VERSIONS_RETAIN, numberOfVersionsToRetainInMemory)}")
+    }
+
     if (numberOfVersionsToRetainInMemory <= 0) {
       if (loadedMaps.size() > 0) loadedMaps.clear()
       return
@@ -385,9 +519,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       return loadedCurrentVersionMap.get
     }
 
-    logWarning(s"The state for version $version doesn't exist in loadedMaps. " +
-      "Reading snapshot file and delta files if needed..." +
-      "Note that this is normal for the first batch of starting query.")
+    logWarning(log"The state for version ${MDC(LogKeys.FILE_VERSION, version)} doesn't exist in " +
+      log"loadedMaps. Reading snapshot file and delta files if needed..." +
+      log"Note that this is normal for the first batch of starting query.")
 
     loadedMapCacheMissCount.increment()
 
@@ -507,10 +641,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     } finally {
       if (input != null) input.close()
     }
-    logInfo(s"Read delta file for version $version of $this from $fileToRead")
+    logInfo(log"Read delta file for version ${MDC(LogKeys.FILE_VERSION, version)} " +
+      log"of ${MDC(LogKeys.STATE_STORE_PROVIDER, this)} from ${MDC(LogKeys.FILE_NAME, fileToRead)}")
   }
 
-  private def writeSnapshotFile(version: Long, map: HDFSBackedStateStoreMap): Unit = {
+  private def writeSnapshotFile(
+      version: Long,
+      map: HDFSBackedStateStoreMap,
+      opType: String): Unit = {
     val targetFile = snapshotFile(version)
     var rawOutput: CancellableFSDataOutputStream = null
     var output: DataOutputStream = null
@@ -534,7 +672,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         cancelDeltaFile(compressedStream = output, rawStream = rawOutput)
         throw e
     }
-    logInfo(s"Written snapshot file for version $version of $this at $targetFile")
+    logInfo(log"Written snapshot file for version ${MDC(LogKeys.FILE_VERSION, version)} of " +
+      log"${MDC(LogKeys.STATE_STORE_PROVIDER, this)} at ${MDC(LogKeys.FILE_NAME, targetFile)} " +
+      log"for ${MDC(LogKeys.OP_TYPE, opType)}")
   }
 
   /**
@@ -559,11 +699,17 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       // SPARK-42668 - Catch and log any other exception thrown while trying to cancel
       // raw stream or close compressed stream.
       case NonFatal(ex) =>
-        logInfo(s"Failed to cancel delta file for provider=$stateStoreId " +
-          s"with exception=$ex")
+        logInfo(log"Failed to cancel delta file for " +
+          log"provider=${MDC(LogKeys.STATE_STORE_ID, stateStoreId)} " +
+          log"with exception=${MDC(LogKeys.ERROR, ex)}")
     }
   }
 
+  /**
+   * Try to read the snapshot file. If the snapshot file is not available, return [[None]].
+   *
+   * @param version the version of the snapshot file
+  */
   private def readSnapshotFile(version: Long): Option[HDFSBackedStateStoreMap] = {
     val fileToRead = snapshotFile(version)
     val map = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
@@ -609,7 +755,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
           }
         }
       }
-      logInfo(s"Read snapshot file for version $version of $this from $fileToRead")
+      logInfo(log"Read snapshot file for version ${MDC(LogKeys.SNAPSHOT_VERSION, version)} of " +
+        log"${MDC(LogKeys.STATE_STORE_PROVIDER, this)} from ${MDC(LogKeys.FILE_NAME, fileToRead)}")
       Some(map)
     } catch {
       case _: FileNotFoundException =>
@@ -621,7 +768,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
 
   /** Perform a snapshot of the store to allow delta files to be consolidated */
-  private def doSnapshot(): Unit = {
+  private def doSnapshot(opType: String): Unit = {
     try {
       val (files, e1) = Utils.timeTakenMs(fetchFiles())
       logDebug(s"fetchFiles() took $e1 ms.")
@@ -633,7 +780,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         synchronized { Option(loadedMaps.get(lastVersion)) } match {
           case Some(map) =>
             if (deltaFilesForLastVersion.size > storeConf.minDeltasForSnapshot) {
-              val (_, e2) = Utils.timeTakenMs(writeSnapshotFile(lastVersion, map))
+              val (_, e2) = Utils.timeTakenMs(writeSnapshotFile(lastVersion, map, opType))
               logDebug(s"writeSnapshotFile() took $e2 ms.")
             }
           case None =>
@@ -642,7 +789,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error doing snapshots for $this", e)
+        logWarning(log"Error doing snapshots for " + toMessageWithContext, e)
     }
   }
 
@@ -667,13 +814,15 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             }
           }
           logDebug(s"deleting files took $e2 ms.")
-          logInfo(s"Deleted files older than ${earliestFileToRetain.version} for $this: " +
-            filesToDelete.mkString(", "))
+          logInfo(log"Deleted files older than " +
+            log"${MDC(LogKeys.FILE_VERSION, earliestFileToRetain.version)} for " +
+            log"${MDC(LogKeys.STATE_STORE_PROVIDER, this)}: " +
+            log"${MDC(LogKeys.FILE_NAME, filesToDelete.mkString(", "))}")
         }
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error cleaning up files for $this", e)
+        logWarning(log"Error cleaning up files for " + toMessageWithContext, e)
     }
   }
 
@@ -726,8 +875,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
             }
           case "snapshot" =>
             versionToFiles.put(version, StoreFile(version, path, isSnapshot = true))
-          case _ =>
-            logWarning(s"Could not identify file $path for $this")
+          case _ => logWarning(
+            log"Could not identify file ${MDC(LogKeys.PATH, path)} for " + toMessageWithContext)
         }
       }
     }
@@ -759,6 +908,151 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   private def verify(condition: => Boolean, msg: String): Unit = {
     if (!condition) {
       throw new IllegalStateException(msg)
+    }
+  }
+
+  /**
+   * Get the state store of endVersion by applying delta files on the snapshot of snapshotVersion.
+   * If snapshot for snapshotVersion does not exist, an error will be thrown.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   * @return [[HDFSBackedStateStore]]
+   */
+  override def replayStateFromSnapshot(snapshotVersion: Long, endVersion: Long): StateStore = {
+    val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
+    logInfo(log"Retrieved snapshot at version " +
+      log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
+      log"${MDC(LogKeys.STATE_STORE_VERSION, endVersion)} of " +
+      log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for update")
+    new HDFSBackedStateStore(endVersion, newMap)
+  }
+
+  /**
+   * Get the state store of endVersion for reading by applying delta files on the snapshot of
+   * snapshotVersion. If snapshot for snapshotVersion does not exist, an error will be thrown.
+   *
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   * @return [[HDFSBackedReadStateStore]]
+   */
+  override def replayReadStateFromSnapshot(snapshotVersion: Long, endVersion: Long):
+    ReadStateStore = {
+    val newMap = replayLoadedMapFromSnapshot(snapshotVersion, endVersion)
+    logInfo(log"Retrieved snapshot at version " +
+      log"${MDC(LogKeys.STATE_STORE_VERSION, snapshotVersion)} and apply delta files to version " +
+      log"${MDC(LogKeys.STATE_STORE_VERSION, endVersion)} of " +
+      log"${MDC(LogKeys.STATE_STORE_PROVIDER, HDFSBackedStateStoreProvider.this)} for read-only")
+    new HDFSBackedReadStateStore(endVersion, newMap)
+  }
+
+  /**
+   * Construct the state map at endVersion from snapshot of version snapshotVersion.
+   * Returns a new [[HDFSBackedStateStoreMap]]
+   * @param snapshotVersion checkpoint version of the snapshot to start with
+   * @param endVersion   checkpoint version to end with
+   */
+  private def replayLoadedMapFromSnapshot(snapshotVersion: Long, endVersion: Long):
+  HDFSBackedStateStoreMap = synchronized {
+    try {
+      if (snapshotVersion < 1) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(snapshotVersion)
+      }
+      if (endVersion < snapshotVersion) {
+        throw QueryExecutionErrors.unexpectedStateStoreVersion(endVersion)
+      }
+
+      val newMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
+      newMap.putAll(constructMapFromSnapshot(snapshotVersion, endVersion))
+
+      newMap
+    }
+    catch {
+      case e: OutOfMemoryError =>
+        throw QueryExecutionErrors.notEnoughMemoryToLoadStore(
+          stateStoreId.toString,
+          "HDFS_STORE_PROVIDER",
+          e)
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+    }
+  }
+
+  private def constructMapFromSnapshot(snapshotVersion: Long, endVersion: Long):
+  HDFSBackedStateStoreMap = {
+    val (result, elapsedMs) = Utils.timeTakenMs {
+      val startVersionMap = synchronized { Option(loadedMaps.get(snapshotVersion)) } match {
+        case Some(value) => Option(value)
+        case None => readSnapshotFile(snapshotVersion)
+      }
+      if (startVersionMap.isEmpty) {
+        throw StateStoreErrors.stateStoreSnapshotFileNotFound(
+          snapshotFile(snapshotVersion).toString, toString())
+      }
+
+      // Load all the deltas from the version after the start version up to the end version.
+      val resultMap = HDFSBackedStateStoreMap.create(keySchema, numColsPrefixKey)
+      resultMap.putAll(startVersionMap.get)
+      for (deltaVersion <- snapshotVersion + 1 to endVersion) {
+        updateFromDeltaFile(deltaVersion, resultMap)
+      }
+
+      resultMap
+    }
+
+    logDebug(s"Loading snapshot at version $snapshotVersion and apply delta files to version " +
+      s"$endVersion takes $elapsedMs ms.")
+
+    result
+  }
+
+  override def getStateStoreChangeDataReader(
+      startVersion: Long,
+      endVersion: Long,
+      colFamilyNameOpt: Option[String] = None):
+    StateStoreChangeDataReader = {
+    // Multiple column families are not supported with HDFSBackedStateStoreProvider
+    if (colFamilyNameOpt.isDefined) {
+      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+    }
+
+    new HDFSBackedStateStoreChangeDataReader(fm, baseDir, startVersion, endVersion,
+      CompressionCodec.createCodec(sparkConf, storeConf.compressionCodec),
+      keySchema, valueSchema)
+  }
+}
+
+/** [[StateStoreChangeDataReader]] implementation for [[HDFSBackedStateStoreProvider]] */
+class HDFSBackedStateStoreChangeDataReader(
+    fm: CheckpointFileManager,
+    stateLocation: Path,
+    startVersion: Long,
+    endVersion: Long,
+    compressionCodec: CompressionCodec,
+    keySchema: StructType,
+    valueSchema: StructType)
+  extends StateStoreChangeDataReader(
+    fm, stateLocation, startVersion, endVersion, compressionCodec) {
+
+  override protected var changelogSuffix: String = "delta"
+
+  override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+    val reader = currentChangelogReader()
+    if (reader == null) {
+      return null
+    }
+    val (recordType, keyArray, valueArray) = reader.next()
+    val keyRow = new UnsafeRow(keySchema.fields.length)
+    keyRow.pointTo(keyArray, keyArray.length)
+    if (valueArray == null) {
+      (recordType, keyRow, null, currentChangelogVersion - 1)
+    } else {
+      val valueRow = new UnsafeRow(valueSchema.fields.length)
+      // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+      // This is a workaround for the following:
+      // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+      // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+      valueRow.pointTo(valueArray, (valueArray.length / 8) * 8)
+      (recordType, keyRow, valueRow, currentChangelogVersion - 1)
     }
   }
 }

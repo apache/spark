@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ResolvedFieldName}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{TableCatalog, TableChange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -243,4 +244,20 @@ case class AlterColumn(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
+}
+
+/**
+ * The logical plan of the following commands:
+ *  - ALTER TABLE ... CLUSTER BY (col1, col2, ...)
+ *  - ALTER TABLE ... CLUSTER BY NONE
+ */
+case class AlterTableClusterBy(
+    table: LogicalPlan, clusterBySpec: Option[ClusterBySpec]) extends AlterTableCommand {
+  override def changes: Seq[TableChange] = {
+    Seq(TableChange.clusterBy(clusterBySpec
+      .map(_.columnNames.toArray) // CLUSTER BY (col1, col2, ...)
+      .getOrElse(Array.empty)))
+  }
+
+  protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)
 }

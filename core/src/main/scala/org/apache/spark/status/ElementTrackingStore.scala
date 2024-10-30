@@ -22,6 +22,7 @@ import java.util.concurrent.{ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkConf
@@ -177,10 +178,7 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
     }
 
     stopped = true
-    executor.shutdown()
-    if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-      executor.shutdownNow()
-    }
+    ThreadUtils.shutdown(executor, FiniteDuration(5, TimeUnit.SECONDS))
 
     flushTriggers.foreach { trigger =>
       Utils.tryLog(trigger())

@@ -243,7 +243,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select("name", METADATA_FILE_NAME).collect()
       },
-      errorClass = "FIELD_NOT_FOUND",
+      condition = "FIELD_NOT_FOUND",
       parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
       context =
         ExpectedContext(fragment = "select", callSitePattern = getCurrentClassCallSitePattern))
@@ -309,7 +309,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.metadataColumn("foo")
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`foo`", "proposal" -> "`_metadata`"))
 
     // Name exists, but does not reference a metadata column
@@ -317,7 +317,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.metadataColumn("name")
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`name`", "proposal" -> "`_metadata`"))
   }
 
@@ -419,14 +419,15 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     val filteredDF = df.select("name", "age", METADATA_FILE_NAME)
       .where(Column(METADATA_FILE_NAME) === f0(METADATA_FILE_NAME))
 
-    // check the filtered file
+    // Check the filtered file.
     val partitions = filteredDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.selectedPartitions
+      case p: FileSourceScanExec => p.selectedPartitions.filePartitionIterator.toSeq
     }.get
 
     assert(partitions.length == 1) // 1 partition
-    assert(partitions.head.files.length == 1) // 1 file in that partition
-    assert(partitions.head.files.head.getPath.toString == f0(METADATA_FILE_PATH)) // the file is f0
+    assert(partitions.head.numFiles == 1) // 1 file in that partition
+    // The file is f0.
+    assert(partitions.head.files.toSeq.head.getPath.toString == f0(METADATA_FILE_PATH))
 
     // check result
     checkAnswer(
@@ -464,14 +465,15 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       // only user column
       .where("age == 31")
 
-    // check the filtered file
+    // Check the filtered file.
     val partitions = filteredDF.queryExecution.sparkPlan.collectFirst {
-      case p: FileSourceScanExec => p.selectedPartitions
+      case p: FileSourceScanExec => p.selectedPartitions.filePartitionIterator.toSeq
     }.get
 
     assert(partitions.length == 1) // 1 partition
-    assert(partitions.head.files.length == 1) // 1 file in that partition
-    assert(partitions.head.files.head.getPath.toString == f1(METADATA_FILE_PATH)) // the file is f1
+    assert(partitions.head.numFiles == 1) // 1 file in that partition
+    // The file is f0.
+    assert(partitions.head.files.toSeq.head.getPath.toString == f1(METADATA_FILE_PATH))
 
     // check result
     checkAnswer(
@@ -523,7 +525,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               df.select("name", "_metadata.file_name").collect()
             },
-            errorClass = "FIELD_NOT_FOUND",
+            condition = "FIELD_NOT_FOUND",
             parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"),
             context = ExpectedContext(
               fragment = "select",
@@ -533,7 +535,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               df.select("name", "_METADATA.file_NAME").collect()
             },
-            errorClass = "FIELD_NOT_FOUND",
+            condition = "FIELD_NOT_FOUND",
             parameters = Map("fieldName" -> "`file_NAME`", "fields" -> "`id`, `university`"),
             context = ExpectedContext(
               fragment = "select",
@@ -967,10 +969,12 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
           .where("_metadata.File_bLoCk_start > 0 and _metadata.file_block_length > 0 " +
             "and _metadata.file_SizE > 0")
           .select("id", METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH)
-        val fileSourceScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec])
-        assert(fileSourceScan2.isDefined)
-        val files2 = fileSourceScan2.get.asInstanceOf[FileSourceScanExec].selectedPartitions
-        assert(files2.length == 1 && files2.head.files.length == 1)
+        val fileSourceScan2 = df2.queryExecution.sparkPlan.collectFirst {
+          case p: FileSourceScanExec => p
+        }.get
+        // Assert that there's 1 selected partition with 1 file.
+        assert(fileSourceScan2.selectedPartitions.partitionCount == 1)
+        assert(fileSourceScan2.selectedPartitions.totalNumberOfFiles == 1)
         val res2 = df2.collect()
         assert(res2.length == 1)
         assert(res2.head.getLong(0) == 1L) // id
@@ -981,10 +985,12 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
         val df3 = spark.read.json(path.getCanonicalPath)
           .where("_metadata.File_bLoCk_start > 0 and _metadata.file_SizE > 1000000")
           .select("id", METADATA_FILE_BLOCK_START, METADATA_FILE_BLOCK_LENGTH)
-        val fileSourceScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec])
-        assert(fileSourceScan3.isDefined)
-        val files3 = fileSourceScan3.get.asInstanceOf[FileSourceScanExec].selectedPartitions
-        assert(files3.length == 1 && files3.head.files.isEmpty)
+        val fileSourceScan3 = df3.queryExecution.sparkPlan.collectFirst {
+          case p: FileSourceScanExec => p
+        }.get
+        // Assert that there's 1 selected partition with no files.
+        assert(fileSourceScan3.selectedPartitions.partitionCount == 1)
+        assert(fileSourceScan3.selectedPartitions.totalNumberOfFiles == 0)
         assert(df3.collect().isEmpty)
       }
     }

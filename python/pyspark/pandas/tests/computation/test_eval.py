@@ -17,22 +17,14 @@
 
 import unittest
 
-import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameEvalMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=np.random.rand(9),
-        )
-
     def test_eval(self):
         pdf = pd.DataFrame({"A": range(1, 6), "B": range(10, 0, -2)})
         psdf = ps.from_pandas(pdf)
@@ -68,7 +60,11 @@ class FrameEvalMixin:
         self.assertRaises(TypeError, lambda: psdf.eval("x.a + y.b"))
 
 
-class FrameEvalTests(FrameEvalMixin, ComparisonTestBase, SQLTestUtils):
+class FrameEvalTests(
+    FrameEvalMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

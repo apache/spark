@@ -1,4 +1,4 @@
-TakeOrderedAndProject [cnt,ca_state,state]
+TakeOrderedAndProject [cnt,state]
   WholeStageCodegen (14)
     Filter [cnt]
       HashAggregate [ca_state,count] [count(1),state,cnt,count]

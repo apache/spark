@@ -21,7 +21,7 @@ import numpy as np
 from numpy import ndarray
 
 from pyspark.mllib.common import callMLlibFunc
-from pyspark.rdd import RDD
+from pyspark.core.rdd import RDD
 
 
 class KernelDensity:

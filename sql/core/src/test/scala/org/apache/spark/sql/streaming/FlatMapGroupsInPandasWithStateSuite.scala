@@ -19,7 +19,6 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.IntegratedUDFTestUtils._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.{NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Complete, Update}
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
@@ -87,7 +86,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Update",
@@ -161,7 +160,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         inputDataDS
           .groupBy("key")
           .applyInPandasWithState(
-            pythonFunc(inputDataDS("key"), inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+            pythonFunc(inputDataDS("key"), inputDataDS("value")),
             outputStructType,
             stateStructType,
             "Update",
@@ -234,7 +233,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Append",
@@ -318,7 +317,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Update",
@@ -366,91 +365,101 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("applyInPandasWithState - streaming w/ event time timeout + watermark") {
-    assume(shouldTestPandasUDFs)
+  Seq(true, false).map { ifUseDateTimeType =>
+    test("applyInPandasWithState - streaming w/ event time timeout + watermark " +
+      s"ifUseDateTimeType=$ifUseDateTimeType") {
+      assume(shouldTestPandasUDFs)
 
-    // timestamp_seconds assumes the base timezone is UTC. However, the provided function
-    // localizes it. Therefore, this test assumes the timezone is in UTC
-    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      val pythonScript =
-        """
-          |import calendar
-          |import os
-          |import datetime
-          |import pandas as pd
-          |from pyspark.sql.types import StructType, StringType, StructField, IntegerType
-          |
-          |tpe = StructType([
-          |    StructField("key", StringType()),
-          |    StructField("maxEventTimeSec", IntegerType())])
-          |
-          |def func(key, pdf_iter, state):
-          |    assert state.getCurrentProcessingTimeMs() >= 0
-          |    assert state.getCurrentWatermarkMs() >= -1
-          |
-          |    timeout_delay_sec = 5
-          |    if state.hasTimedOut:
-          |        state.remove()
-          |        yield pd.DataFrame({'key': [key[0]], 'maxEventTimeSec': [-1]})
-          |    else:
-          |        m = state.getOption
-          |        if m is None:
-          |            max_event_time_sec = 0
-          |        else:
-          |            max_event_time_sec = m[0]
-          |
-          |        for pdf in pdf_iter:
-          |            pser = pdf.eventTime.apply(
-          |                lambda dt: (int(calendar.timegm(dt.utctimetuple()) + dt.microsecond)))
-          |            max_event_time_sec = int(max(pser.max(), max_event_time_sec))
-          |
-          |        state.update((max_event_time_sec,))
-          |        timeout_timestamp_sec = max_event_time_sec + timeout_delay_sec
-          |        state.setTimeoutTimestamp(timeout_timestamp_sec * 1000)
-          |        yield pd.DataFrame({'key': [key[0]],
-          |                            'maxEventTimeSec': [max_event_time_sec]})
-          |""".stripMargin
-      val pythonFunc = TestGroupedMapPandasUDFWithState(
-        name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
+      // timestamp_seconds assumes the base timezone is UTC. However, the provided function
+      // localizes it. Therefore, this test assumes the timezone is in UTC
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val timeoutMs = if (ifUseDateTimeType) {
+          "datetime.datetime.fromtimestamp(timeout_timestamp_sec)"
+        } else {
+          "timeout_timestamp_sec * 1000"
+        }
 
-      val inputData = MemoryStream[(String, Int)]
-      val inputDataDF =
-        inputData.toDF().select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
-      val outputStructType = StructType(
-        Seq(
-          StructField("key", StringType),
-          StructField("maxEventTimeSec", IntegerType)))
-      val stateStructType = StructType(Seq(StructField("maxEventTimeSec", LongType)))
-      val result =
-        inputDataDF
-          .withWatermark("eventTime", "10 seconds")
-          .groupBy("key")
-          .applyInPandasWithState(
-            pythonFunc(inputDataDF("key"), inputDataDF("eventTime")).expr.asInstanceOf[PythonUDF],
-            outputStructType,
-            stateStructType,
-            "Update",
-            "EventTimeTimeout")
+        val pythonScript =
+          s"""
+            |import calendar
+            |import os
+            |import datetime
+            |import pandas as pd
+            |from pyspark.sql.types import StructType, StringType, StructField, IntegerType
+            |
+            |tpe = StructType([
+            |    StructField("key", StringType()),
+            |    StructField("maxEventTimeSec", IntegerType())])
+            |
+            |def func(key, pdf_iter, state):
+            |    assert state.getCurrentProcessingTimeMs() >= 0
+            |    assert state.getCurrentWatermarkMs() >= -1
+            |
+            |    timeout_delay_sec = 5
+            |    if state.hasTimedOut:
+            |        state.remove()
+            |        yield pd.DataFrame({'key': [key[0]], 'maxEventTimeSec': [-1]})
+            |    else:
+            |        m = state.getOption
+            |        if m is None:
+            |            max_event_time_sec = 0
+            |        else:
+            |            max_event_time_sec = m[0]
+            |
+            |        for pdf in pdf_iter:
+            |            pser = pdf.eventTime.apply(
+            |                lambda dt: (int(calendar.timegm(dt.utctimetuple()) + dt.microsecond)))
+            |            max_event_time_sec = int(max(pser.max(), max_event_time_sec))
+            |
+            |        state.update((max_event_time_sec,))
+            |        timeout_timestamp_sec = max_event_time_sec + timeout_delay_sec
+            |        state.setTimeoutTimestamp($timeoutMs)
+            |        yield pd.DataFrame({'key': [key[0]],
+            |                            'maxEventTimeSec': [max_event_time_sec]})
+            |""".stripMargin.format("")
+        val pythonFunc = TestGroupedMapPandasUDFWithState(
+          name = "pandas_grouped_map_with_state", pythonScript = pythonScript)
 
-      testStream(result, Update)(
-        StartStream(),
+        val inputData = MemoryStream[(String, Int)]
+        val inputDataDF =
+          inputData.toDF().select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+        val outputStructType = StructType(
+          Seq(
+            StructField("key", StringType),
+            StructField("maxEventTimeSec", IntegerType)))
+        val stateStructType = StructType(Seq(StructField("maxEventTimeSec", LongType)))
+        val result =
+          inputDataDF
+            .withWatermark("eventTime", "10 seconds")
+            .groupBy("key")
+            .applyInPandasWithState(
+              pythonFunc(inputDataDF("key"), inputDataDF("eventTime")),
+              outputStructType,
+              stateStructType,
+              "Update",
+              "EventTimeTimeout")
 
-        AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
-        // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
-        CheckNewAnswer(("a", 15)), // Output = max event time of a
+        testStream(result, Update)(
+          StartStream(),
 
-        AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
-        CheckNewAnswer(), // No output as data should get filtered by watermark
+          AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+          // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+          CheckNewAnswer(("a", 15)), // Output = max event time of a
 
-        AddData(inputData, ("a", 10)), // Add data newer than watermark for "a"
-        CheckNewAnswer(("a", 15)), // Max event time is still the same
-        // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
-        // Watermark is still 5 as max event time for all data is still 15.
+          AddData(inputData, ("a", 4)), // Add data older than watermark for "a"
+          CheckNewAnswer(), // No output as data should get filtered by watermark
 
-        AddData(inputData, ("b", 31)), // Add data newer than watermark for "b", not "a"
-        // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
-        CheckNewAnswer(("a", -1), ("b", 31)) // State for "a" should timeout and emit -1
-      )
+          AddData(inputData, ("a", 10)), // Add data newer than watermark for "a"
+          CheckNewAnswer(("a", 15)), // Max event time is still the same
+          // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
+          // Watermark is still 5 as max event time for all data is still 15.
+
+          AddData(inputData, ("b", 31)), // Add data newer than watermark for "b", not "a"
+          // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is
+          // 20.
+          CheckNewAnswer(("a", -1), ("b", 31)) // State for "a" should timeout and emit -1
+        )
+      }
     }
   }
 
@@ -509,7 +518,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             .withWatermark("timestamp", "10 second")
             .groupBy("key")
             .applyInPandasWithState(
-              pythonFunc(inputDataDF("key"), inputDataDF("timestamp")).expr.asInstanceOf[PythonUDF],
+              pythonFunc(inputDataDF("key"), inputDataDF("timestamp")),
               outputStructType,
               stateStructType,
               "Update",
@@ -579,7 +588,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Update",
@@ -646,7 +655,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
           inputDataDS
             .groupBy("key")
             .applyInPandasWithState(
-              pythonFunc(inputDataDS("key")).expr.asInstanceOf[PythonUDF],
+              pythonFunc(inputDataDS("key")),
               outputStructType,
               stateStructType,
               "Update",
@@ -703,7 +712,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
           inputDataDS
             .groupBy("key")
             .applyInPandasWithState(
-              pythonFunc(inputDataDS("key")).expr.asInstanceOf[PythonUDF],
+              pythonFunc(inputDataDS("key")),
               outputStructType,
               stateStructType,
               "Update",
@@ -779,8 +788,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         .groupBy("key1", "key2")
         .applyInPandasWithState(
           pythonFunc(
-            inputDataDS("key1"), inputDataDS("key2"), inputDataDS("val1"), inputDataDS("val2")
-          ).expr.asInstanceOf[PythonUDF],
+            inputDataDS("key1"), inputDataDS("key2"), inputDataDS("val1"), inputDataDS("val2")),
           outputStructType,
           stateStructType,
           "Update",
@@ -867,8 +875,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         .applyInPandasWithState(
           pythonFunc(
             inputDataDS("val1"), inputDataDS("key2"), inputDataDS("val2"), inputDataDS("key1"),
-            inputDataDS("val3")
-          ).expr.asInstanceOf[PythonUDF],
+            inputDataDS("val3")),
           outputStructType,
           stateStructType,
           "Update",
@@ -939,7 +946,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Update",

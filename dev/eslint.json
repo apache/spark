@@ -1,7 +1,8 @@
 {
   "env": {
     "browser": true,
-    "es6": true
+    "es6": true,
+    "jest": true
   },
   "extends": "eslint:recommended",
   "rules": {
@@ -20,5 +21,8 @@
     "sorttable.js",
     "jquery.mustache.js",
     "dataTables.rowsGroup.js"
-  ]
+  ],
+  "parserOptions": {
+    "sourceType": "module"
+  }
 }

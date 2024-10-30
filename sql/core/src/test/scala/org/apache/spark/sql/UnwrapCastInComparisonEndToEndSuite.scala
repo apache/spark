@@ -264,5 +264,30 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("SPARK-46069: Support unwrap timestamp type to date type") {
+    val d1 = java.sql.Date.valueOf("2023-01-01")
+    val d2 = java.sql.Date.valueOf("2023-01-02")
+    val d3 = java.sql.Date.valueOf("2023-01-03")
+
+    withTable(t) {
+      Seq(d1, d2, d3).toDF("dt").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      val ts1 = "timestamp'2023-01-02 10:00:00'"
+      checkAnswer(df.where(s"cast(dt as timestamp) > $ts1"), Seq(d3).map(Row(_)))
+      checkAnswer(df.where(s"cast(dt as timestamp) >= $ts1"), Seq(d3).map(Row(_)))
+      checkAnswer(df.where(s"cast(dt as timestamp) = $ts1"), Seq().map(Row(_)))
+      checkAnswer(df.where(s"cast(dt as timestamp) < $ts1"), Seq(d1, d2).map(Row(_)))
+      checkAnswer(df.where(s"cast(dt as timestamp) <= $ts1"), Seq(d1, d2).map(Row(_)))
+
+      val ts2 = "timestamp'2023-01-02 00:00:00'"
+      checkAnswer(df.where(s"cast(dt as timestamp) > $ts2"), Seq(d3).map(Row(_)))
+      checkAnswer(df.where(s"cast(dt as timestamp) >= $ts2"), Seq(d2, d3).map(Row(_)))
+      checkAnswer(df.where(s"cast(dt as timestamp) = $ts2"), Seq(d2).map(Row(_)))
+      checkAnswer(df.where(s"cast(dt as timestamp) < $ts2"), Seq(d1).map(Row(_)))
+      checkAnswer(df.where(s"cast(dt as timestamp) <= $ts2"), Seq(d1, d2).map(Row(_)))
+    }
+  }
+
   private def decimal(v: BigDecimal): Decimal = Decimal(v, 5, 2)
 }

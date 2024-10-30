@@ -24,7 +24,7 @@ PySpark Overview
 **Date**: |today| **Version**: |release|
 
 **Useful links**:
-|binder|_ | `GitHub <https://github.com/apache/spark>`_ | `Issues <https://issues.apache.org/jira/projects/SPARK/issues>`_ | |examples|_ | `Community <https://spark.apache.org/community.html>`_
+|binder|_ | `GitHub <https://github.com/apache/spark>`_ | `Issues <https://issues.apache.org/jira/projects/SPARK/issues>`_ | |examples|_ | `Community <https://spark.apache.org/community.html>`_ | `Stack Overflow <https://stackoverflow.com/questions/tagged/pyspark>`_ | `Dev Mailing List <https://lists.apache.org/list.html?dev@spark.apache.org>`_ | `User Mailing List <https://lists.apache.org/list.html?user@spark.apache.org>`_
 
 PySpark is the Python API for Apache Spark. It enables you to perform real-time,
 large-scale data processing in a distributed environment using Python. It also provides a PySpark

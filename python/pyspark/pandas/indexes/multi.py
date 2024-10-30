@@ -23,7 +23,6 @@ from pandas.api.types import is_hashable, is_list_like  # type: ignore[attr-defi
 
 from pyspark.sql import functions as F, Column as PySparkColumn, Window
 from pyspark.sql.types import DataType
-from pyspark.sql.utils import get_column_class
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label, Name, Scalar
 from pyspark.pandas.exceptions import PandasNotImplementedError
@@ -514,7 +513,6 @@ class MultiIndex(Index):
 
         cond = F.lit(True)
         has_not_null = F.lit(True)
-        Column = get_column_class()
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -522,7 +520,9 @@ class MultiIndex(Index):
             # Since pandas 1.1.4, null value is not allowed at any levels of MultiIndex.
             # Therefore, we should check `has_not_null` over all levels.
             has_not_null = has_not_null & scol.isNotNull()
-            cond = F.when(scol.eqNullSafe(prev), cond).otherwise(compare(scol, prev, Column.__gt__))
+            cond = F.when(scol.eqNullSafe(prev), cond).otherwise(
+                compare(scol, prev, PySparkColumn.__gt__)
+            )
 
         cond = has_not_null & (prev.isNull() | cond)
 
@@ -560,7 +560,6 @@ class MultiIndex(Index):
 
         cond = F.lit(True)
         has_not_null = F.lit(True)
-        Column = get_column_class()
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -568,7 +567,9 @@ class MultiIndex(Index):
             # Since pandas 1.1.4, null value is not allowed at any levels of MultiIndex.
             # Therefore, we should check `has_not_null` over all levels.
             has_not_null = has_not_null & scol.isNotNull()
-            cond = F.when(scol.eqNullSafe(prev), cond).otherwise(compare(scol, prev, Column.__lt__))
+            cond = F.when(scol.eqNullSafe(prev), cond).otherwise(
+                compare(scol, prev, PySparkColumn.__lt__)
+            )
 
         cond = has_not_null & (prev.isNull() | cond)
 

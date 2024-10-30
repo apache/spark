@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -46,7 +47,7 @@ class Catalog:
         self._sparkSession = sparkSession
 
     def _execute_and_fetch(self, catalog: plan.LogicalPlan) -> pa.Table:
-        table, _ = DataFrame.withPlan(catalog, session=self._sparkSession)._to_table()
+        table, _ = DataFrame(catalog, session=self._sparkSession)._to_table()
         assert table is not None
         return table
 
@@ -165,6 +166,12 @@ class Catalog:
     listFunctions.__doc__ = PySparkCatalog.listFunctions.__doc__
 
     def functionExists(self, functionName: str, dbName: Optional[str] = None) -> bool:
+        if dbName is not None:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use functionExists(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
         table = self._execute_and_fetch(
             plan.FunctionExists(function_name=functionName, db_name=dbName)
         )
@@ -186,6 +193,12 @@ class Catalog:
     getFunction.__doc__ = PySparkCatalog.getFunction.__doc__
 
     def listColumns(self, tableName: str, dbName: Optional[str] = None) -> List[Column]:
+        if dbName is not None:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use listColumns(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
         table = self._execute_and_fetch(plan.ListColumns(table_name=tableName, db_name=dbName))
         return [
             Column(
@@ -195,6 +208,7 @@ class Catalog:
                 nullable=table[3][i].as_py(),
                 isPartition=table[4][i].as_py(),
                 isBucket=table[5][i].as_py(),
+                isCluster=table[6][i].as_py(),
             )
             for i in range(table.num_rows)
         ]
@@ -202,6 +216,12 @@ class Catalog:
     listColumns.__doc__ = PySparkCatalog.listColumns.__doc__
 
     def tableExists(self, tableName: str, dbName: Optional[str] = None) -> bool:
+        if dbName is not None:
+            warnings.warn(
+                "`dbName` has been deprecated since Spark 3.4 and might be removed in "
+                "a future version. Use tableExists(`dbName.tableName`) instead.",
+                FutureWarning,
+            )
         table = self._execute_and_fetch(plan.TableExists(table_name=tableName, db_name=dbName))
         return table[0][0].as_py()
 
@@ -214,17 +234,12 @@ class Catalog:
         source: Optional[str] = None,
         schema: Optional[StructType] = None,
         **options: str,
-    ) -> DataFrame:
-        catalog = plan.CreateExternalTable(
-            table_name=tableName,
-            path=path,  # type: ignore[arg-type]
-            source=source,
-            schema=schema,
-            options=options,
+    ) -> "DataFrame":
+        warnings.warn(
+            "createExternalTable is deprecated since Spark 4.0, please use createTable instead.",
+            FutureWarning,
         )
-        df = DataFrame.withPlan(catalog, session=self._sparkSession)
-        df._to_table()  # Eager execution.
-        return df
+        return self.createTable(tableName, path, source, schema, **options)
 
     createExternalTable.__doc__ = PySparkCatalog.createExternalTable.__doc__
 
@@ -236,7 +251,15 @@ class Catalog:
         schema: Optional[StructType] = None,
         description: Optional[str] = None,
         **options: str,
-    ) -> DataFrame:
+    ) -> "DataFrame":
+        if schema is not None and not isinstance(schema, StructType):
+            raise PySparkTypeError(
+                errorClass="NOT_STRUCT",
+                messageParameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
         catalog = plan.CreateTable(
             table_name=tableName,
             path=path,  # type: ignore[arg-type]
@@ -245,7 +268,7 @@ class Catalog:
             description=description,
             options=options,
         )
-        df = DataFrame.withPlan(catalog, session=self._sparkSession)
+        df = DataFrame(catalog, session=self._sparkSession)
         df._to_table()  # Eager execution.
         return df
 
@@ -312,6 +335,7 @@ Catalog.__doc__ = PySparkCatalog.__doc__
 
 
 def _test() -> None:
+    import os
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
@@ -319,7 +343,9 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.catalog.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
+        PySparkSession.builder.appName("sql.connect.catalog tests")
+        .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[4]"))
+        .getOrCreate()
     )
 
     (failure_count, test_count) = doctest.testmod(

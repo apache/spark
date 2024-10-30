@@ -12,7 +12,7 @@ CreateViewCommand `hav`, select * from values
   ("two", 2),
   ("three", 3),
   ("one", 5)
-  as hav(k, v), false, false, LocalTempView, true
+  as hav(k, v), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias hav
          +- LocalRelation [k#x, v#x]
@@ -24,7 +24,7 @@ SELECT udf(k) AS k, udf(sum(v)) FROM hav GROUP BY k HAVING udf(sum(v)) > 2
 Filter (udf(sum(v))#xL > cast(2 as bigint))
 +- Aggregate [k#x], [cast(udf(cast(k#x as string)) as string) AS k#x, cast(udf(cast(sum(v#x) as string)) as bigint) AS udf(sum(v))#xL]
    +- SubqueryAlias hav
-      +- View (`hav`, [k#x,v#x])
+      +- View (`hav`, [k#x, v#x])
          +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias hav
@@ -38,7 +38,7 @@ Project [udf(count(udf(k)))#xL]
 +- Filter ((v#x + 1)#x = cast(udf(cast(2 as string)) as int))
    +- Aggregate [(v#x + 1)], [cast(udf(cast(count(cast(udf(cast(k#x as string)) as string)) as string)) as bigint) AS udf(count(udf(k)))#xL, (v#x + 1) AS (v#x + 1)#x]
       +- SubqueryAlias hav
-         +- View (`hav`, [k#x,v#x])
+         +- View (`hav`, [k#x, v#x])
             +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias hav
@@ -55,7 +55,7 @@ Project [udf(min(v))#x]
          +- Project [k#x, v#x]
             +- Filter (v#x > 0)
                +- SubqueryAlias hav
-                  +- View (`hav`, [k#x,v#x])
+                  +- View (`hav`, [k#x, v#x])
                      +- Project [cast(k#x as string) AS k#x, cast(v#x as int) AS v#x]
                         +- Project [k#x, v#x]
                            +- SubqueryAlias hav

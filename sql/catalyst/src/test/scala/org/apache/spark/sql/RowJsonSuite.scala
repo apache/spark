@@ -21,9 +21,10 @@ import java.time.LocalDate
 
 import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JLong, JNull, JObject, JString, JValue}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
 import org.apache.spark.sql.types._
 
 /**
@@ -128,12 +129,19 @@ class RowJsonSuite extends SparkFunSuite {
   }
 
   test("unsupported type") {
-    val e = intercept[IllegalArgumentException] {
-      val row = new GenericRowWithSchema(
-        Array((1, 2)),
-        new StructType().add("a", ObjectType(classOf[(Int, Int)])))
-      row.jsonValue
-    }
-    assert(e.getMessage.contains("Failed to convert value"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        val row = new GenericRowWithSchema(
+          Array((1, 2)),
+          new StructType().add("a", ObjectType(classOf[(Int, Int)])))
+        row.jsonValue
+      },
+      condition = "FAILED_ROW_TO_JSON",
+      parameters = Map(
+        "value" -> toSQLValue("(1,2)"),
+        "class" -> "class scala.Tuple2$mcII$sp",
+        "sqlType" -> toSQLType("ObjectType(class scala.Tuple2)")
+      )
+    )
   }
 }

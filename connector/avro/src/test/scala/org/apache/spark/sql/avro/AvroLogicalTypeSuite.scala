@@ -433,11 +433,13 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
       dataFileWriter.flush()
       dataFileWriter.close()
 
+      val ex = intercept[SparkException] {
+        spark.read.format("avro").load(s"$dir.avro").collect()
+      }
+      assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
       checkError(
-        exception = intercept[SparkException] {
-          spark.read.format("avro").load(s"$dir.avro").collect()
-        }.getCause.getCause.asInstanceOf[SparkArithmeticException],
-        errorClass = "NUMERIC_VALUE_OUT_OF_RANGE",
+        exception = ex.getCause.asInstanceOf[SparkArithmeticException],
+        condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
         parameters = Map(
           "value" -> "0",
           "precision" -> "4",

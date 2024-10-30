@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileFormat, V1WriteCommand, V1WritesUtils}
-import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
 
@@ -109,7 +109,7 @@ case class InsertIntoHiveTable(
     }
 
     // un-cache this table.
-    CommandUtils.uncacheTableOrView(sparkSession, table.identifier.quotedString)
+    CommandUtils.uncacheTableOrView(sparkSession, table.identifier)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
 
     CommandUtils.updateTableStats(sparkSession, table)
@@ -207,34 +207,7 @@ case class InsertIntoHiveTable(
             table.database,
             table.identifier.table,
             partitionSpec)
-
-        var doHiveOverwrite = overwrite
-
         if (oldPart.isEmpty || !ifPartitionNotExists) {
-          // SPARK-29295: When insert overwrite to a Hive external table partition, if the
-          // partition does not exist, Hive will not check if the external partition directory
-          // exists or not before copying files. So if users drop the partition, and then do
-          // insert overwrite to the same partition, the partition will have both old and new
-          // data. We construct partition path. If the path exists, we delete it manually.
-          val partitionPath = if (oldPart.isEmpty && overwrite
-              && table.tableType == CatalogTableType.EXTERNAL) {
-            val partitionColumnNames = table.partitionColumnNames
-            val tablePath = new Path(table.location)
-            Some(ExternalCatalogUtils.generatePartitionPath(partitionSpec,
-              partitionColumnNames, tablePath))
-          } else {
-            oldPart.flatMap(_.storage.locationUri.map(uri => new Path(uri)))
-          }
-
-          // SPARK-18107: Insert overwrite runs much slower than hive-client.
-          // Newer Hive largely improves insert overwrite performance. As Spark uses older Hive
-          // version and we may not want to catch up new Hive version every time. We delete the
-          // Hive partition first and then load data file into the Hive partition.
-          val hiveVersion = externalCatalog.asInstanceOf[ExternalCatalogWithListener]
-            .unwrapped.asInstanceOf[HiveExternalCatalog]
-            .client
-            .version
-
           // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
           // which is currently considered as a Hive native command.
           val inheritTableSpecs = true
@@ -243,7 +216,7 @@ case class InsertIntoHiveTable(
             table.identifier.table,
             tmpLocation.toString,
             partitionSpec,
-            isOverwrite = doHiveOverwrite,
+            isOverwrite = overwrite,
             inheritTableSpecs = inheritTableSpecs,
             isSrcLocal = false)
         }
@@ -263,6 +236,12 @@ case class InsertIntoHiveTable(
 }
 
 object InsertIntoHiveTable extends V1WritesHiveUtils {
+
+  /**
+   * A tag to identify if this command is created by a CTAS.
+   */
+  val BY_CTAS = TreeNodeTag[Unit]("by_ctas")
+
   def apply(
       table: CatalogTable,
       partition: Map[String, Option[String]],

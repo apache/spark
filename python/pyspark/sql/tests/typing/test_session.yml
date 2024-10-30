@@ -51,25 +51,6 @@
     spark.createDataFrame(["foo", "bar"], "string")
 
 
-- case: createDataFrameScalarsInvalid
-  main: |
-    from pyspark.sql import SparkSession
-    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
-
-    spark = SparkSession.builder.getOrCreate()
-
-    schema = StructType([
-        StructField("name", StringType(), True),
-        StructField("age", IntegerType(), True)
-    ])
-
-    # Invalid - scalars require schema
-    spark.createDataFrame(["foo", "bar"]) # E: Value of type variable "RowLike" of "createDataFrame" of "SparkSession" cannot be "str"  [type-var]
-
-    # Invalid - data has to match schema (either product -> struct or scalar -> atomic)
-    spark.createDataFrame([1, 2, 3], schema) # E: Value of type variable "RowLike" of "createDataFrame" of "SparkSession" cannot be "int"  [type-var]
-
-
 - case: createDataFrameStructsInvalid
   main: |
     from pyspark.sql import SparkSession
@@ -92,18 +73,19 @@
     spark.createDataFrame(data, schema, samplingRatio=0.1)
 
   out: |
-    main:14: error: Value of type variable "AtomicValue" of "createDataFrame" of "SparkSession" cannot be "Tuple[str, int]"  [type-var]
-    main:18: error: No overload variant of "createDataFrame" of "SparkSession" matches argument types "List[Tuple[str, int]]", "StructType", "float"  [call-overload]
+    main:14: error: Value of type variable "AtomicValue" of "createDataFrame" of "SparkSession" cannot be "tuple[str, int]"  [type-var]
+    main:18: error: No overload variant of "createDataFrame" of "SparkSession" matches argument types "list[tuple[str, int]]", "StructType", "float"  [call-overload]
     main:18: note: Possible overload variants:
-    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: Iterable[RowLike], schema: Union[List[str], Tuple[str, ...]] = ..., samplingRatio: Optional[float] = ...) -> DataFrame
-    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: RDD[RowLike], schema: Union[List[str], Tuple[str, ...]] = ..., samplingRatio: Optional[float] = ...) -> DataFrame
-    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: Iterable[RowLike], schema: Union[StructType, str], *, verifySchema: bool = ...) -> DataFrame
-    main:18: note:     def [RowLike in (List[Any], Tuple[Any, ...], Row)] createDataFrame(self, data: RDD[RowLike], schema: Union[StructType, str], *, verifySchema: bool = ...) -> DataFrame
+    main:18: note:     def [RowLike in (list[Any], tuple[Any, ...], Row)] createDataFrame(self, data: Iterable[RowLike], schema: Union[list[str], tuple[str, ...]] = ..., samplingRatio: Optional[float] = ...) -> DataFrame
+    main:18: note:     def [RowLike in (list[Any], tuple[Any, ...], Row)] createDataFrame(self, data: RDD[RowLike], schema: Union[list[str], tuple[str, ...]] = ..., samplingRatio: Optional[float] = ...) -> DataFrame
+    main:18: note:     def [RowLike in (list[Any], tuple[Any, ...], Row)] createDataFrame(self, data: Iterable[RowLike], schema: Union[StructType, str], *, verifySchema: bool = ...) -> DataFrame
+    main:18: note:     def [RowLike in (list[Any], tuple[Any, ...], Row)] createDataFrame(self, data: RDD[RowLike], schema: Union[StructType, str], *, verifySchema: bool = ...) -> DataFrame
     main:18: note:     def [AtomicValue in (datetime, date, Decimal, bool, str, int, float)] createDataFrame(self, data: RDD[AtomicValue], schema: Union[AtomicType, str], verifySchema: bool = ...) -> DataFrame
     main:18: note:     def [AtomicValue in (datetime, date, Decimal, bool, str, int, float)] createDataFrame(self, data: Iterable[AtomicValue], schema: Union[AtomicType, str], verifySchema: bool = ...) -> DataFrame
     main:18: note:     def createDataFrame(self, data: DataFrame, samplingRatio: Optional[float] = ...) -> DataFrame
+    main:18: note:     def createDataFrame(self, data: Any, samplingRatio: Optional[float] = ...) -> DataFrame
     main:18: note:     def createDataFrame(self, data: DataFrame, schema: Union[StructType, str], verifySchema: bool = ...) -> DataFrame
-
+    main:18: note:     def createDataFrame(self, data: Any, schema: Union[StructType, str], verifySchema: bool = ...) -> DataFrame
 
 - case: createDataFrameFromEmptyRdd
   main: |

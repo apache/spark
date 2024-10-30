@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import scala.xml.Node
 
+import jakarta.servlet.http.HttpServletRequest
 import org.json4s.JNull
 import org.json4s.JsonAST.{JBool, JString}
 import org.json4s.jackson.JsonMethods.parse
@@ -85,9 +84,9 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
       summary ++
         planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription) ++
-        modifiedConfigs(configs.view.filterKeys(!_.startsWith(pandasOnSparkConfPrefix)).toMap) ++
+        modifiedConfigs(configs.filter { case (k, _) => !k.startsWith(pandasOnSparkConfPrefix) }) ++
         modifiedPandasOnSparkConfigs(
-          configs.view.filterKeys(_.startsWith(pandasOnSparkConfPrefix)).toMap)
+          configs.filter { case (k, _) => k.startsWith(pandasOnSparkConfPrefix) })
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
     }

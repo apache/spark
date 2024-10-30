@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, S
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -43,28 +44,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._
-
-  test("reuse window partitionBy") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    val w = Window.partitionBy("key").orderBy("value")
-
-    checkAnswer(
-      df.select(
-        lead("key", 1).over(w),
-        lead("value", 1).over(w)),
-      Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
-  }
-
-  test("reuse window orderBy") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    val w = Window.orderBy("value").partitionBy("key")
-
-    checkAnswer(
-      df.select(
-        lead("key", 1).over(w),
-        lead("value", 1).over(w)),
-      Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
-  }
 
   test("rank functions in unspecific window") {
     withTempView("window_table") {
@@ -409,7 +388,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       df.select($"key", count("invalid").over()))
     checkError(
       exception = e,
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map(
         "objectName" -> "`invalid`",
         "proposal" -> "`value`, `key`"),
@@ -883,7 +862,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           lead($"value", 2, null, true).over(window),
           lead($"value", 3, null, true).over(window),
           lead(concat($"value", $"key"), 1, null, true).over(window),
-          Column(Lag($"value".expr, NonFoldableLiteral(1), Literal(null), true)).over(window),
+          column(Lag($"value".expr, NonFoldableLiteral(1), Literal(null), true)).over(window),
           lag($"value", 2).over(window),
           lag($"value", 0, null, true).over(window),
           lag($"value", 1, null, true).over(window),
@@ -891,7 +870,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           lag($"value", 3, null, true).over(window),
           lag(concat($"value", $"key"), 1, null, true).over(window)).orderBy($"order").collect()
       },
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"lag(value, nonfoldableliteral(), NULL)\"",
         "inputName" -> "`offset`",
@@ -1154,32 +1133,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       Seq(
         Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
         Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
-  }
-
-  test("SPARK-34227: WindowFunctionFrame should clear its states during preparation") {
-    // This creates a single partition dataframe with 3 records:
-    //   "a", 0, null
-    //   "a", 1, "x"
-    //   "b", 0, null
-    val df = spark.range(0, 3, 1, 1).select(
-      when($"id" < 2, lit("a")).otherwise(lit("b")).as("key"),
-      ($"id" % 2).cast("int").as("order"),
-      when($"id" % 2 === 0, lit(null)).otherwise(lit("x")).as("value"))
-
-    val window1 = Window.partitionBy($"key").orderBy($"order")
-      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
-    val window2 = Window.partitionBy($"key").orderBy($"order")
-      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-    checkAnswer(
-      df.select(
-        $"key",
-        $"order",
-        nth_value($"value", 1, ignoreNulls = true).over(window1),
-        nth_value($"value", 1, ignoreNulls = true).over(window2)),
-      Seq(
-        Row("a", 0, "x", null),
-        Row("a", 1, "x", "x"),
-        Row("b", 0, null, null)))
   }
 
   test("SPARK-38237: require all cluster keys for child required distribution for window query") {
@@ -1636,6 +1589,33 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           Row(7, "Mark", 3, 2023, 2, Array(6, 3, 3)),
           Row(5, "Dave", 3, 2024, 2, Array(7, 7, 3, 3)),
           Row(8, "Mark", 3, 2024, 2, Array(7, 7, 3, 3))
+        ))
+      }
+    }
+  }
+
+  test("SPARK-46941: Can't insert window group limit node for top-k computation if contains " +
+    "SizeBasedWindowFunction") {
+    val df = Seq(
+      (1, "Dave", 1, 2020),
+      (2, "Mark", 2, 2020),
+      (3, "Amy", 3, 2020),
+      (4, "Dave", 1, 2021),
+      (5, "Mark", 2, 2021),
+      (6, "Amy", 3, 2021),
+      (7, "John", 4, 2021)).toDF("id", "name", "score", "year")
+
+    val window = Window.partitionBy($"year").orderBy($"score".desc)
+
+    Seq(-1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.WINDOW_GROUP_LIMIT_THRESHOLD.key -> threshold.toString) {
+        val df2 = df
+          .withColumn("rank", rank().over(window))
+          .withColumn("percent_rank", percent_rank().over(window))
+          .sort($"year")
+        checkAnswer(df2.filter("rank=2"), Seq(
+          Row(2, "Mark", 2, 2020, 2, 0.5),
+          Row(6, "Amy", 3, 2021, 2, 0.3333333333333333)
         ))
       }
     }

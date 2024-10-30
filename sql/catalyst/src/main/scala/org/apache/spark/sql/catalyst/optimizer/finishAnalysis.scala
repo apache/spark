@@ -19,7 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.time.{Instant, LocalDateTime, ZoneId}
 
-import org.apache.spark.sql.catalyst.CurrentUserContext
+import scala.util.control.NonFatal
+
+import org.apache.spark.sql.catalyst.{CurrentUserContext, InternalRow}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, ResolvedInlineTable}
+import org.apache.spark.sql.catalyst.analysis.ResolveInlineTables.prepareForEval
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -27,7 +31,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, instantToMicros, localDateTimeToMicros}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -68,6 +74,36 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
           exprId = exists.exprId,
           hint = exists.hint))
   }
+}
+
+/**
+ * Computes expressions in inline tables. This rule is supposed to be called at the very end
+ * of the analysis phase, given that all the expressions need to be fully resolved/replaced
+ * at this point.
+ */
+object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
+      case table: ResolvedInlineTable => eval(table)
+    }
+  }
+
+    def eval(table: ResolvedInlineTable): LocalRelation = {
+      val newRows: Seq[InternalRow] =
+        table.rows.map { row => InternalRow.fromSeq(row.map { e =>
+          try {
+            prepareForEval(e).eval()
+          } catch {
+            case NonFatal(ex) =>
+              table.failAnalysis(
+                errorClass = "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+                messageParameters = Map("sqlExpr" -> toSQLExpr(e)),
+                cause = ex)
+          }})
+        }
+
+      LocalRelation(table.output, newRows)
+    }
 }
 
 /**
@@ -119,11 +155,11 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case CurrentDatabase() =>
-        Literal.create(currentNamespace, StringType)
+        Literal.create(currentNamespace, SQLConf.get.defaultStringType)
       case CurrentCatalog() =>
-        Literal.create(currentCatalog, StringType)
+        Literal.create(currentCatalog, SQLConf.get.defaultStringType)
       case CurrentUser() =>
-        Literal.create(currentUser, StringType)
+        Literal.create(currentUser, SQLConf.get.defaultStringType)
     }
   }
 }
@@ -146,5 +182,12 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
           .map(Literal(_, dt))
           .getOrElse(cast)
     }
+  }
+}
+
+object ReplaceTranspose extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case t @ Transpose(output, data) =>
+      LocalRelation(output, data)
   }
 }

@@ -22,7 +22,9 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class GroupbyParityApplyFuncTests(
-    GroupbyApplyFuncMixin, PandasOnSparkTestUtils, ReusedConnectTestCase
+    GroupbyApplyFuncMixin,
+    PandasOnSparkTestUtils,
+    ReusedConnectTestCase,
 ):
     @unittest.skip("Test depends on SparkContext which is not supported from Spark Connect.")
     def test_apply_with_side_effect(self):

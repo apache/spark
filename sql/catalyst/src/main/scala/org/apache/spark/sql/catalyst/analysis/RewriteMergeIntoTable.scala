@@ -45,7 +45,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions) if m.resolved && m.rewritable && m.aligned &&
+        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
         matchedActions.isEmpty && notMatchedActions.size == 1 &&
         notMatchedBySourceActions.isEmpty =>
 
@@ -79,7 +79,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions) if m.resolved && m.rewritable && m.aligned &&
+        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned &&
         matchedActions.isEmpty && notMatchedBySourceActions.isEmpty =>
 
       EliminateSubqueryAliases(aliasedTable) match {
@@ -95,7 +95,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
             case InsertAction(cond, assignments) =>
               Keep(cond.getOrElse(TrueLiteral), assignments.map(_.value))
             case other =>
-              throw new AnalysisException(s"Unexpected WHEN NOT MATCHED action: $other")
+              throw new AnalysisException(
+                errorClass = "_LEGACY_ERROR_TEMP_3053",
+                messageParameters = Map("other" -> other.toString))
           }
 
           val outputs = notMatchedInstructions.flatMap(_.outputs)
@@ -118,7 +120,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       }
 
     case m @ MergeIntoTable(aliasedTable, source, cond, matchedActions, notMatchedActions,
-        notMatchedBySourceActions) if m.resolved && m.rewritable && m.aligned =>
+        notMatchedBySourceActions, _) if m.resolved && m.rewritable && m.aligned =>
 
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ DataSourceV2Relation(tbl: SupportsRowLevelOperations, _, _, _, _) =>
@@ -440,7 +442,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         Keep(cond.getOrElse(TrueLiteral), output)
 
       case other =>
-        throw new AnalysisException(s"Unexpected action: $other")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3052",
+          messageParameters = Map("other" -> other.toString))
     }
   }
 
@@ -472,7 +476,9 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
         Keep(cond.getOrElse(TrueLiteral), output)
 
       case other =>
-        throw new AnalysisException(s"Unexpected action: $other")
+        throw new AnalysisException(
+          errorClass = "_LEGACY_ERROR_TEMP_3052",
+          messageParameters = Map("other" -> other.toString))
     }
   }
 

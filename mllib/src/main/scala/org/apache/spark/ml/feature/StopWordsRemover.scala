@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import java.util.Locale
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
@@ -129,9 +130,9 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     if (Locale.getAvailableLocales.contains(Locale.getDefault)) {
       Locale.getDefault
     } else {
-      logWarning(s"Default locale set was [${Locale.getDefault.toString}]; however, it was " +
-        "not found in available locales in JVM, falling back to en_US locale. Set param `locale` " +
-        "in order to respect another locale.")
+      logWarning(log"Default locale set was [${MDC(LogKeys.LOCALE, Locale.getDefault)}]; " +
+        log"however, it was not found in available locales in JVM, falling back to en_US locale. " +
+        log"Set param `locale` in order to respect another locale.")
       Locale.US
     }
   }
@@ -192,13 +193,16 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     }
 
     val (inputColNames, outputColNames) = getInOutCols()
+
     val newCols = inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
        require(!schema.fieldNames.contains(outputColName),
         s"Output Column $outputColName already exists.")
-      val inputType = schema(inputColName).dataType
+      val inputType = SchemaUtils.getSchemaFieldType(schema, inputColName)
       require(DataTypeUtils.sameType(inputType, ArrayType(StringType)), "Input type must be " +
         s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
-      StructField(outputColName, inputType, schema(inputColName).nullable)
+      StructField(
+        outputColName, inputType, SchemaUtils.getSchemaField(schema, inputColName).nullable
+      )
     }
     StructType(schema.fields ++ newCols)
   }

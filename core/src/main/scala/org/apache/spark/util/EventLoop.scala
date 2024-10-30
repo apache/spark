@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.EVENT_LOOP
 
 /**
  * An event loop to receive events from the caller and process all events in the event thread. It
@@ -52,13 +53,13 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
               try {
                 onError(e)
               } catch {
-                case NonFatal(e) => logError("Unexpected error in " + name, e)
+                case NonFatal(e) => logError(log"Unexpected error in ${MDC(EVENT_LOOP, name)}", e)
               }
           }
         }
       } catch {
         case ie: InterruptedException => // exit even if eventQueue is not empty
-        case NonFatal(e) => logError("Unexpected error in " + name, e)
+        case NonFatal(e) => logError(log"Unexpected error in ${MDC(EVENT_LOOP, name)}", e)
       }
     }
 

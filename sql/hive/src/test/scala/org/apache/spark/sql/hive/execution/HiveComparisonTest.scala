@@ -100,8 +100,9 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
       .map(name => new File(targetDir, s"$suiteName.$name"))
 
   /** The local directory with cached golden answer will be stored. */
-  protected val answerCache = new File("src" + File.separator + "test" +
-    File.separator + "resources" + File.separator + "golden")
+  protected val answerCache = getWorkspaceFilePath(
+    "sql", "hive", "src", "test", "resources", "golden").toFile
+
   if (!answerCache.exists) {
     answerCache.mkdir()
   }

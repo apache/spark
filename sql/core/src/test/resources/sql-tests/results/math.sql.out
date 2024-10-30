@@ -493,3 +493,91 @@ SELECT conv('-9223372036854775807', 36, 10)
 struct<conv(-9223372036854775807, 36, 10):string>
 -- !query output
 18446744073709551615
+
+
+-- !query
+SELECT BIN(0)
+-- !query schema
+struct<bin(0):string>
+-- !query output
+0
+
+
+-- !query
+SELECT BIN(25)
+-- !query schema
+struct<bin(25):string>
+-- !query output
+11001
+
+
+-- !query
+SELECT BIN(25L)
+-- !query schema
+struct<bin(25):string>
+-- !query output
+11001
+
+
+-- !query
+SELECT BIN(25.5)
+-- !query schema
+struct<bin(25.5):string>
+-- !query output
+11001
+
+
+-- !query
+SELECT POSITIVE(0Y)
+-- !query schema
+struct<(+ 0):tinyint>
+-- !query output
+0
+
+
+-- !query
+SELECT POSITIVE(25)
+-- !query schema
+struct<(+ 25):int>
+-- !query output
+25
+
+
+-- !query
+SELECT POSITIVE(-25L)
+-- !query schema
+struct<(+ -25):bigint>
+-- !query output
+-25
+
+
+-- !query
+SELECT POSITIVE(25.5)
+-- !query schema
+struct<(+ 25.5):decimal(3,1)>
+-- !query output
+25.5
+
+
+-- !query
+SELECT POSITIVE("25.5")
+-- !query schema
+struct<(+ 25.5):double>
+-- !query output
+25.5
+
+
+-- !query
+SELECT POSITIVE("invalid")
+-- !query schema
+struct<(+ invalid):double>
+-- !query output
+NULL
+
+
+-- !query
+SELECT POSITIVE(null)
+-- !query schema
+struct<(+ NULL):double>
+-- !query output
+NULL

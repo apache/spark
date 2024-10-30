@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT, YearMonthIntervalType => YM}
@@ -37,17 +38,16 @@ trait SparkIntervalUtils {
   private final val minDurationSeconds = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
 
   /**
-   * Converts this duration to the total length in microseconds.
-   * <p>
-   * If this duration is too large to fit in a [[Long]] microseconds, then an
-   * exception is thrown.
-   * <p>
-   * If this duration has greater than microsecond precision, then the conversion
-   * will drop any excess precision information as though the amount in nanoseconds
-   * was subject to integer division by one thousand.
+   * Converts this duration to the total length in microseconds. <p> If this duration is too large
+   * to fit in a [[Long]] microseconds, then an exception is thrown. <p> If this duration has
+   * greater than microsecond precision, then the conversion will drop any excess precision
+   * information as though the amount in nanoseconds was subject to integer division by one
+   * thousand.
    *
-   * @return The total length of the duration in microseconds
-   * @throws ArithmeticException If numeric overflow occurs
+   * @return
+   *   The total length of the duration in microseconds
+   * @throws ArithmeticException
+   *   If numeric overflow occurs
    */
   def durationToMicros(duration: Duration): Long = {
     durationToMicros(duration, DT.SECOND)
@@ -58,7 +58,8 @@ trait SparkIntervalUtils {
     val micros = if (seconds == minDurationSeconds) {
       val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
       val nanoAdjustment = duration.getNano
-      assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
+      assert(
+        0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
         "Duration.getNano() must return the adjustment to the seconds field " +
           "in the range from 0 to 999999999 nanoseconds, inclusive.")
       Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
@@ -76,14 +77,13 @@ trait SparkIntervalUtils {
   }
 
   /**
-   * Gets the total number of months in this period.
-   * <p>
-   * This returns the total number of months in the period by multiplying the
-   * number of years by 12 and adding the number of months.
-   * <p>
+   * Gets the total number of months in this period. <p> This returns the total number of months
+   * in the period by multiplying the number of years by 12 and adding the number of months. <p>
    *
-   * @return The total number of months in the period, may be negative
-   * @throws ArithmeticException If numeric overflow occurs
+   * @return
+   *   The total number of months in the period, may be negative
+   * @throws ArithmeticException
+   *   If numeric overflow occurs
    */
   def periodToMonths(period: Period): Int = {
     periodToMonths(period, YM.MONTH)
@@ -102,47 +102,50 @@ trait SparkIntervalUtils {
   /**
    * Obtains a [[Duration]] representing a number of microseconds.
    *
-   * @param micros The number of microseconds, positive or negative
-   * @return A [[Duration]], not null
+   * @param micros
+   *   The number of microseconds, positive or negative
+   * @return
+   *   A [[Duration]], not null
    */
   def microsToDuration(micros: Long): Duration = Duration.of(micros, ChronoUnit.MICROS)
 
   /**
-   * Obtains a [[Period]] representing a number of months. The days unit will be zero, and the years
-   * and months units will be normalized.
+   * Obtains a [[Period]] representing a number of months. The days unit will be zero, and the
+   * years and months units will be normalized.
    *
-   * <p>
-   * The months unit is adjusted to have an absolute value < 12, with the years unit being adjusted
-   * to compensate. For example, the method returns "2 years and 3 months" for the 27 input months.
-   * <p>
-   * The sign of the years and months units will be the same after normalization.
-   * For example, -13 months will be converted to "-1 year and -1 month".
+   * <p> The months unit is adjusted to have an absolute value < 12, with the years unit being
+   * adjusted to compensate. For example, the method returns "2 years and 3 months" for the 27
+   * input months. <p> The sign of the years and months units will be the same after
+   * normalization. For example, -13 months will be converted to "-1 year and -1 month".
    *
-   * @param months The number of months, positive or negative
-   * @return The period of months, not null
+   * @param months
+   *   The number of months, positive or negative
+   * @return
+   *   The period of months, not null
    */
   def monthsToPeriod(months: Int): Period = Period.ofMonths(months).normalized()
 
   /**
    * Converts a string to [[CalendarInterval]] case-insensitively.
    *
-   * @throws IllegalArgumentException if the input string is not in valid interval format.
+   * @throws IllegalArgumentException
+   *   if the input string is not in valid interval format.
    */
   def stringToInterval(input: UTF8String): CalendarInterval = {
     import ParseState._
-    def throwIAE(msg: String, e: Exception = null) = {
-      throw new IllegalArgumentException(s"Error parsing '$input' to interval, $msg", e)
-    }
-
     if (input == null) {
-      throwIAE("interval string cannot be null")
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_NULL",
+        messageParameters = Map("input" -> "null"))
     }
     // scalastyle:off caselocale .toLowerCase
     val s = input.trimAll().toLowerCase
     // scalastyle:on
     val bytes = s.getBytes
     if (bytes.isEmpty) {
-      throwIAE("interval string cannot be empty")
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
+        messageParameters = Map("input" -> input.toString))
     }
     var state = PREFIX
     var i = 0
@@ -177,9 +180,13 @@ trait SparkIntervalUtils {
         case PREFIX =>
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
-              throwIAE("interval string cannot be empty")
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.INPUT_IS_EMPTY",
+                messageParameters = Map("input" -> input.toString))
             } else if (!Character.isWhitespace(bytes(i + intervalStr.numBytes()))) {
-              throwIAE(s"invalid interval prefix $currentWord")
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PREFIX",
+                messageParameters = Map("input" -> input.toString, "prefix" -> currentWord))
             } else {
               i += intervalStr.numBytes() + 1
             }
@@ -214,7 +221,10 @@ trait SparkIntervalUtils {
               pointPrefixed = true
               i += 1
               state = VALUE_FRACTIONAL_PART
-            case _ => throwIAE( s"unrecognized number '$currentWord'")
+            case _ =>
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.UNRECOGNIZED_NUMBER",
+                messageParameters = Map("input" -> input.toString, "number" -> currentWord))
           }
         case TRIM_BEFORE_VALUE => trimToNextState(b, VALUE)
         case VALUE =>
@@ -223,13 +233,19 @@ trait SparkIntervalUtils {
               try {
                 currentValue = Math.addExact(Math.multiplyExact(10, currentValue), (b - '0'))
               } catch {
-                case e: ArithmeticException => throwIAE(e.getMessage, e)
+                case e: ArithmeticException =>
+                  throw new SparkIllegalArgumentException(
+                    errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
+                    messageParameters = Map("input" -> input.toString))
               }
             case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = initialFractionScale
               state = VALUE_FRACTIONAL_PART
-            case _ => throwIAE(s"invalid value '$currentWord'")
+            case _ =>
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
+                messageParameters = Map("input" -> input.toString, "value" -> currentWord))
           }
           i += 1
         case VALUE_FRACTIONAL_PART =>
@@ -241,17 +257,22 @@ trait SparkIntervalUtils {
             fraction /= NANOS_PER_MICROS.toInt
             state = TRIM_BEFORE_UNIT
           } else if ('0' <= b && b <= '9') {
-            throwIAE(s"interval can only support nanosecond precision, '$currentWord' is out" +
-              s" of range")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_PRECISION",
+              messageParameters = Map("input" -> input.toString, "value" -> currentWord))
           } else {
-            throwIAE(s"invalid value '$currentWord'")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_VALUE",
+              messageParameters = Map("input" -> input.toString, "value" -> currentWord))
           }
           i += 1
         case TRIM_BEFORE_UNIT => trimToNextState(b, UNIT_BEGIN)
         case UNIT_BEGIN =>
           // Checks that only seconds can have the fractional part
           if (b != 's' && fractionScale >= 0) {
-            throwIAE(s"'$currentWord' cannot have fractional part")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_FRACTION",
+              messageParameters = Map("input" -> input.toString, "unit" -> currentWord))
           }
           if (isNegative) {
             currentValue = -currentValue
@@ -293,26 +314,41 @@ trait SparkIntervalUtils {
                 } else if (s.matchAt(microsStr, i)) {
                   microseconds = Math.addExact(microseconds, currentValue)
                   i += microsStr.numBytes()
-                } else throwIAE(s"invalid unit '$currentWord'")
-              case _ => throwIAE(s"invalid unit '$currentWord'")
+                } else {
+                  throw new SparkIllegalArgumentException(
+                    errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+                    messageParameters = Map("input" -> input.toString, "unit" -> currentWord))
+                }
+              case _ =>
+                throw new SparkIllegalArgumentException(
+                  errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+                  messageParameters = Map("input" -> input.toString, "unit" -> currentWord))
             }
           } catch {
-            case e: ArithmeticException => throwIAE(e.getMessage, e)
+            case e: ArithmeticException =>
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.ARITHMETIC_EXCEPTION",
+                messageParameters = Map("input" -> input.toString))
           }
           state = UNIT_SUFFIX
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
             case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_SIGN
-            case _ => throwIAE(s"invalid unit '$currentWord'")
+            case _ =>
+              throw new SparkIllegalArgumentException(
+                errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+                messageParameters = Map("input" -> input.toString, "unit" -> currentWord))
           }
           i += 1
         case UNIT_END =>
-          if (Character.isWhitespace(b) ) {
+          if (Character.isWhitespace(b)) {
             i += 1
             state = TRIM_BEFORE_SIGN
           } else {
-            throwIAE(s"invalid unit '$currentWord'")
+            throw new SparkIllegalArgumentException(
+              errorClass = "INVALID_INTERVAL_FORMAT.INVALID_UNIT",
+              messageParameters = Map("input" -> input.toString, "unit" -> currentWord))
           }
       }
     }
@@ -320,24 +356,37 @@ trait SparkIntervalUtils {
     val result = state match {
       case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
         new CalendarInterval(months, days, microseconds)
-      case TRIM_BEFORE_VALUE => throwIAE(s"expect a number after '$currentWord' but hit EOL")
+      case TRIM_BEFORE_VALUE =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_INTERVAL_FORMAT.MISSING_NUMBER",
+          messageParameters = Map("input" -> input.toString, "word" -> currentWord))
       case VALUE | VALUE_FRACTIONAL_PART =>
-        throwIAE(s"expect a unit name after '$currentWord' but hit EOL")
-      case _ => throwIAE(s"unknown error when parsing '$currentWord'")
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_INTERVAL_FORMAT.MISSING_UNIT",
+          messageParameters = Map("input" -> input.toString, "word" -> currentWord))
+      case _ =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "INVALID_INTERVAL_FORMAT.UNKNOWN_PARSING_ERROR",
+          messageParameters = Map("input" -> input.toString, "word" -> currentWord))
     }
 
     result
   }
 
   /**
-   * Converts an year-month interval as a number of months to its textual representation
-   * which conforms to the ANSI SQL standard.
+   * Converts an year-month interval as a number of months to its textual representation which
+   * conforms to the ANSI SQL standard.
    *
-   * @param months The number of months, positive or negative
-   * @param style The style of textual representation of the interval
-   * @param startField The start field (YEAR or MONTH) which the interval comprises of.
-   * @param endField The end field (YEAR or MONTH) which the interval comprises of.
-   * @return Year-month interval string
+   * @param months
+   *   The number of months, positive or negative
+   * @param style
+   *   The style of textual representation of the interval
+   * @param startField
+   *   The start field (YEAR or MONTH) which the interval comprises of.
+   * @param endField
+   *   The end field (YEAR or MONTH) which the interval comprises of.
+   * @return
+   *   Year-month interval string
    */
   def toYearMonthIntervalString(
       months: Int,
@@ -369,14 +418,19 @@ trait SparkIntervalUtils {
   }
 
   /**
-   * Converts a day-time interval as a number of microseconds to its textual representation
-   * which conforms to the ANSI SQL standard.
+   * Converts a day-time interval as a number of microseconds to its textual representation which
+   * conforms to the ANSI SQL standard.
    *
-   * @param micros The number of microseconds, positive or negative
-   * @param style The style of textual representation of the interval
-   * @param startField The start field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
-   * @param endField The end field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
-   * @return Day-time interval string
+   * @param micros
+   *   The number of microseconds, positive or negative
+   * @param style
+   *   The style of textual representation of the interval
+   * @param startField
+   *   The start field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
+   * @param endField
+   *   The end field (DAY, HOUR, MINUTE, SECOND) which the interval comprises of.
+   * @return
+   *   Day-time interval string
    */
   def toDayTimeIntervalString(
       micros: Long,
@@ -449,8 +503,9 @@ trait SparkIntervalUtils {
             rest %= MICROS_PER_MINUTE
           case DT.SECOND =>
             val leadZero = if (rest < 10 * MICROS_PER_SECOND) "0" else ""
-            formatBuilder.append(s"$leadZero" +
-              s"${java.math.BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString}")
+            formatBuilder.append(
+              s"$leadZero" +
+                s"${java.math.BigDecimal.valueOf(rest, 6).stripTrailingZeros.toPlainString}")
         }
 
         if (startField < DT.HOUR && DT.HOUR <= endField) {
@@ -500,20 +555,11 @@ trait SparkIntervalUtils {
   protected val microsStr: UTF8String = unitToUtf8("microsecond")
   protected val nanosStr: UTF8String = unitToUtf8("nanosecond")
 
-
   private object ParseState extends Enumeration {
     type ParseState = Value
 
-    val PREFIX,
-    TRIM_BEFORE_SIGN,
-    SIGN,
-    TRIM_BEFORE_VALUE,
-    VALUE,
-    VALUE_FRACTIONAL_PART,
-    TRIM_BEFORE_UNIT,
-    UNIT_BEGIN,
-    UNIT_SUFFIX,
-    UNIT_END = Value
+    val PREFIX, TRIM_BEFORE_SIGN, SIGN, TRIM_BEFORE_VALUE, VALUE, VALUE_FRACTIONAL_PART,
+        TRIM_BEFORE_UNIT, UNIT_BEGIN, UNIT_SUFFIX, UNIT_END = Value
   }
 }
 

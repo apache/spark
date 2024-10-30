@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, SparkDataStream}
 
 /**
@@ -47,9 +48,9 @@ object AcceptsLatestSeenOffsetHandler {
       .filter(_.isInstanceOf[Source])
 
     if (unsupportedSources.nonEmpty) {
-      throw new UnsupportedOperationException(
-        "AcceptsLatestSeenOffset is not supported with DSv1 streaming source: " +
-          unsupportedSources)
+      throw new SparkUnsupportedOperationException(
+        errorClass = "_LEGACY_ERROR_TEMP_3169",
+        messageParameters = Map("unsupportedSources" -> unsupportedSources.toString()))
     }
   }
 }

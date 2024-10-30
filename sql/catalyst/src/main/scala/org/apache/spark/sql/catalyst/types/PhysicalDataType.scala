@@ -21,8 +21,9 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
-import org.apache.spark.sql.catalyst.util.{ArrayData, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
@@ -40,9 +41,9 @@ object PhysicalDataType {
     case ShortType => PhysicalShortType
     case IntegerType => PhysicalIntegerType
     case LongType => PhysicalLongType
-    case VarcharType(_) => PhysicalStringType
-    case CharType(_) => PhysicalStringType
-    case StringType => PhysicalStringType
+    case VarcharType(_) => PhysicalStringType(SqlApiConf.get.defaultStringType.collationId)
+    case CharType(_) => PhysicalStringType(SqlApiConf.get.defaultStringType.collationId)
+    case s: StringType => PhysicalStringType(s.collationId)
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType
     case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
@@ -233,16 +234,77 @@ case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType {
-  override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalMapType")
-  override private[sql] type InternalType = Any
+  // maps are not orderable, we use `ordering` just to support group by queries
+  override private[sql] def ordering = interpretedOrdering
+  override private[sql] type InternalType = MapData
   @transient private[sql] lazy val tag = typeTag[InternalType]
+
+  @transient
+  private[sql] lazy val interpretedOrdering: Ordering[MapData] = new Ordering[MapData] {
+    private[this] val keyOrdering =
+      PhysicalDataType(keyType).ordering.asInstanceOf[Ordering[Any]]
+    private[this] val valuesOrdering =
+      PhysicalDataType(valueType).ordering.asInstanceOf[Ordering[Any]]
+
+    override def compare(left: MapData, right: MapData): Int = {
+      val lengthLeft = left.numElements()
+      val lengthRight = right.numElements()
+      val keyArrayLeft = left.keyArray()
+      val valueArrayLeft = left.valueArray()
+      val keyArrayRight = right.keyArray()
+      val valueArrayRight = right.valueArray()
+      val minLength = math.min(lengthLeft, lengthRight)
+      var i = 0
+      while (i < minLength) {
+        var comp = compareElements(keyArrayLeft, keyArrayRight, keyType, i, keyOrdering)
+        if (comp != 0) {
+          return comp
+        }
+        comp = compareElements(valueArrayLeft, valueArrayRight, valueType, i, valuesOrdering)
+        if (comp != 0) {
+          return comp
+        }
+
+        i += 1
+      }
+
+      if (lengthLeft < lengthRight) {
+        -1
+      } else if (lengthLeft > lengthRight) {
+        1
+      } else {
+        0
+      }
+    }
+
+    private def compareElements(
+        arrayLeft: ArrayData,
+        arrayRight: ArrayData,
+        dataType: DataType,
+        position: Int,
+        ordering: Ordering[Any]): Int = {
+      val isNullLeft = arrayLeft.isNullAt(position)
+      val isNullRight = arrayRight.isNullAt(position)
+
+      if (isNullLeft && isNullRight) {
+        0
+      } else if (isNullLeft) {
+        -1
+      } else if (isNullRight) {
+        1
+      } else {
+        ordering.compare(
+          arrayLeft.get(position, dataType),
+          arrayRight.get(position, dataType)
+        )
+      }
+    }
+  }
 }
 
 class PhysicalNullType() extends PhysicalDataType with PhysicalPrimitiveType {
   override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
-      "PhysicalNullType")
+    implicitly[Ordering[Unit]].asInstanceOf[Ordering[Any]]
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
@@ -258,15 +320,17 @@ class PhysicalShortType() extends PhysicalIntegralType with PhysicalPrimitiveTyp
 }
 case object PhysicalShortType extends PhysicalShortType
 
-class PhysicalStringType() extends PhysicalDataType {
+case class PhysicalStringType(collationId: Int) extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = UTF8String
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
+  private[sql] val ordering = CollationFactory.fetchCollation(collationId).comparator.compare(_, _)
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalStringType extends PhysicalStringType
+object PhysicalStringType {
+  def apply(collationId: Int): PhysicalStringType = new PhysicalStringType(collationId)
+}
 
 case class PhysicalArrayType(
     elementType: DataType, containsNull: Boolean) extends PhysicalDataType {

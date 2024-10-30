@@ -22,7 +22,8 @@ import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{SHARD_ID, WORKER_URL}
 import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, SystemClock}
@@ -72,8 +73,9 @@ private[kinesis] class KinesisCheckpointer(
         KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
       } catch {
         case NonFatal(e) =>
-          logError(s"Exception:  WorkerId $workerId encountered an exception while checkpointing" +
-            s"to finish reading a shard of $shardId.", e)
+          logError(log"Exception: WorkerId ${MDC(WORKER_URL, workerId)} encountered an " +
+            log"exception while checkpointing to finish reading a shard of " +
+            log"${MDC(SHARD_ID, shardId)}.", e)
           // Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor
           throw e
       }
@@ -101,7 +103,7 @@ private[kinesis] class KinesisCheckpointer(
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to checkpoint shardId $shardId to DynamoDB.", e)
+        logWarning(log"Failed to checkpoint shardId ${MDC(SHARD_ID, shardId)} to DynamoDB.", e)
     }
   }
 

@@ -41,8 +41,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorClass(plan,
-      expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`"))
   }
 
@@ -56,8 +56,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorClass(plan,
-      expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`.`z`"))
   }
 
@@ -71,8 +71,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorClass(plan,
-      expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`point`.`z`"))
   }
 
@@ -86,8 +86,8 @@ class CreateTablePartitioningValidationSuite extends AnalysisTest {
       ignoreIfExists = false)
 
     assert(!plan.resolved)
-    assertAnalysisErrorClass(plan,
-      expectedErrorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
+    assertAnalysisErrorCondition(plan,
+      expectedErrorCondition = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
       expectedMessageParameters = Map("cols" -> "`does_not_exist`, `point`.`z`"))
   }
 

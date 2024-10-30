@@ -62,28 +62,12 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   // specialization to work (specialized class extends the non-specialized one and needs access
   // to the "private" variables).
 
-  protected val hasher: Hasher[T] = {
-    // It would've been more natural to write the following using pattern matching. But Scala 2.9.x
-    // compiler has a bug when specialization is used together with this pattern matching, and
-    // throws:
-    // scala.tools.nsc.symtab.Types$TypeError: type mismatch;
-    //  found   : scala.reflect.AnyValManifest[Long]
-    //  required: scala.reflect.ClassTag[Int]
-    //         at scala.tools.nsc.typechecker.Contexts$Context.error(Contexts.scala:298)
-    //         at scala.tools.nsc.typechecker.Infer$Inferencer.error(Infer.scala:207)
-    //         ...
-    val mt = classTag[T]
-    if (mt == ClassTag.Long) {
-      (new LongHasher).asInstanceOf[Hasher[T]]
-    } else if (mt == ClassTag.Int) {
-      (new IntHasher).asInstanceOf[Hasher[T]]
-    } else if (mt == ClassTag.Double) {
-      (new DoubleHasher).asInstanceOf[Hasher[T]]
-    } else if (mt == ClassTag.Float) {
-      (new FloatHasher).asInstanceOf[Hasher[T]]
-    } else {
-      new Hasher[T]
-    }
+  protected val hasher: Hasher[T] = classTag[T] match {
+    case ClassTag.Long => new LongHasher().asInstanceOf[Hasher[T]]
+    case ClassTag.Int => new IntHasher().asInstanceOf[Hasher[T]]
+    case ClassTag.Double => new DoubleHasher().asInstanceOf[Hasher[T]]
+    case ClassTag.Float => new FloatHasher().asInstanceOf[Hasher[T]]
+    case _ => new Hasher[T]
   }
 
   protected var _capacity = nextPowerOf2(initialCapacity)
@@ -127,6 +111,17 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   }
 
   /**
+   * Check if a key exists at the provided position using object equality rather than
+   * cooperative equality. Otherwise, hash sets will mishandle values for which `==`
+   * and `equals` return different results, like 0.0/-0.0 and NaN/NaN.
+   *
+   * See: https://issues.apache.org/jira/browse/SPARK-45599
+   */
+  @annotation.nowarn("cat=other-non-cooperative-equals")
+  private def keyExistsAtPos(k: T, pos: Int) =
+    _data(pos) equals k
+
+  /**
    * Add an element to the set. This one differs from add in that it doesn't trigger rehashing.
    * The caller is responsible for calling rehashIfNeeded.
    *
@@ -146,8 +141,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
         _bitset.set(pos)
         _size += 1
         return pos | NONEXISTENCE_MASK
-      } else if (_data(pos) == k) {
-        // Found an existing key.
+      } else if (keyExistsAtPos(k, pos)) {
         return pos
       } else {
         // quadratic probing with values increase by 1, 2, 3, ...
@@ -181,7 +175,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     while (true) {
       if (!_bitset.get(pos)) {
         return INVALID_POS
-      } else if (k == _data(pos)) {
+      } else if (keyExistsAtPos(k, pos)) {
         return pos
       } else {
         // quadratic probing with values increase by 1, 2, 3, ...
@@ -272,7 +266,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
    */
-  private def hashcode(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
+  private def hashcode(h: Int): Int = Hashing.murmur3_32_fixed().hashInt(h).asInt()
 
   private def nextPowerOf2(n: Int): Int = {
     if (n == 0) {

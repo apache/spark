@@ -135,7 +135,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"bit count\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INTEGRAL\" or \"BOOLEAN\")",
     "sqlExpr" : "\"bit_count(bit count)\""
   },
@@ -159,7 +159,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"a\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "(\"INTEGRAL\" or \"BOOLEAN\")",
     "sqlExpr" : "\"bit_count(a)\""
   },
@@ -182,7 +182,7 @@ CREATE OR REPLACE TEMPORARY VIEW bitwise_test AS SELECT * FROM VALUES
 CreateViewCommand `bitwise_test`, SELECT * FROM VALUES
   (1, 1, 1, 1L),
   (2, 3, 4, null),
-  (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4), false, true, LocalTempView, true
+  (7, 7, 7, 3L) AS bitwise_test(b1, b2, b3, b4), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [b1#x, b2#x, b3#x, b4#xL]
       +- SubqueryAlias bitwise_test
          +- LocalRelation [b1#x, b2#x, b3#x, b4#xL]
@@ -194,7 +194,7 @@ SELECT BIT_XOR(b3) AS n1 FROM bitwise_test where 1 = 0
 Aggregate [bit_xor(b3#x) AS n1#x]
 +- Filter (1 = 0)
    +- SubqueryAlias bitwise_test
-      +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+      +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
          +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
             +- Project [b1#x, b2#x, b3#x, b4#xL]
                +- SubqueryAlias bitwise_test
@@ -207,7 +207,7 @@ SELECT BIT_XOR(b4) AS n1 FROM bitwise_test where b4 is null
 Aggregate [bit_xor(b4#xL) AS n1#xL]
 +- Filter isnull(b4#xL)
    +- SubqueryAlias bitwise_test
-      +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+      +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
          +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
             +- Project [b1#x, b2#x, b3#x, b4#xL]
                +- SubqueryAlias bitwise_test
@@ -225,7 +225,7 @@ FROM bitwise_test
 -- !query analysis
 Aggregate [bit_xor(cast(b1#x as tinyint)) AS a4#x, bit_xor(cast(b2#x as smallint)) AS b5#x, bit_xor(b3#x) AS c2#x, bit_xor(b4#xL) AS d2#xL, bit_xor(distinct b4#xL) AS e2#xL]
 +- SubqueryAlias bitwise_test
-   +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+   +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
       +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
          +- Project [b1#x, b2#x, b3#x, b4#xL]
             +- SubqueryAlias bitwise_test
@@ -237,7 +237,7 @@ SELECT bit_xor(b3) FROM bitwise_test GROUP BY b1 & 1
 -- !query analysis
 Aggregate [(b1#x & 1)], [bit_xor(b3#x) AS bit_xor(b3)#x]
 +- SubqueryAlias bitwise_test
-   +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+   +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
       +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
          +- Project [b1#x, b2#x, b3#x, b4#xL]
             +- SubqueryAlias bitwise_test
@@ -251,7 +251,7 @@ Project [b1#x, bit_xor(b2)#x]
 +- Filter (bit_and(b2#x)#x < 7)
    +- Aggregate [b1#x], [b1#x, bit_xor(b2#x) AS bit_xor(b2)#x, bit_and(b2#x) AS bit_and(b2#x)#x]
       +- SubqueryAlias bitwise_test
-         +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+         +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
             +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
                +- Project [b1#x, b2#x, b3#x, b4#xL]
                   +- SubqueryAlias bitwise_test
@@ -266,7 +266,7 @@ Project [b1#x, b2#x, bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIR
    +- Window [bit_xor(b2#x) windowspecdefinition(b1#x, b2#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [b1#x], [b2#x ASC NULLS FIRST]
       +- Project [b1#x, b2#x]
          +- SubqueryAlias bitwise_test
-            +- View (`bitwise_test`, [b1#x,b2#x,b3#x,b4#xL])
+            +- View (`bitwise_test`, [b1#x, b2#x, b3#x, b4#xL])
                +- Project [cast(b1#x as int) AS b1#x, cast(b2#x as int) AS b2#x, cast(b3#x as int) AS b3#x, cast(b4#xL as bigint) AS b4#xL]
                   +- Project [b1#x, b2#x, b3#x, b4#xL]
                      +- SubqueryAlias bitwise_test
@@ -305,4 +305,137 @@ Project [getbit(11, -1) AS getbit(11, -1)#x]
 select getbit(11L, 64)
 -- !query analysis
 Project [getbit(11, 64) AS getbit(11, 64)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 20181117 >> 2
+-- !query analysis
+Project [(20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 20181117 << 2
+-- !query analysis
+Project [(20181117 << 2) AS (20181117 << 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 20181117 >>> 2
+-- !query analysis
+Project [(20181117 >>> 2) AS (20181117 >>> 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 20181117 > > 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 < < 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'<'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 > >> 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 <<< 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'<'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT 20181117 >>>> 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >> 2
+-- !query analysis
+Project [cast(null as array<array<int>>) AS NULL#x, (20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as array<array<int>>), 20181117 >>> 2
+-- !query analysis
+Project [cast(null as array<array<int>>) AS NULL#x, (20181117 >>> 2) AS (20181117 >>> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as map<int, array<int>>), 20181117 >> 2
+-- !query analysis
+Project [cast(null as map<int,array<int>>) AS NULL#x, (20181117 >> 2) AS (20181117 >> 2)#x]
++- OneRowRelation
+
+
+-- !query
+select 1 << 1 + 2 as plus_over_shift
+-- !query analysis
+Project [(1 << (1 + 2)) AS plus_over_shift#x]
++- OneRowRelation
+
+
+-- !query
+select 2 >> 1 << 1 as left_to_right
+-- !query analysis
+Project [((2 >> 1) << 1) AS left_to_right#x]
++- OneRowRelation
+
+
+-- !query
+select 1 & 2 >> 1 as shift_over_ampersand
+-- !query analysis
+Project [(1 & (2 >> 1)) AS shift_over_ampersand#x]
 +- OneRowRelation

@@ -116,7 +116,7 @@ case class BitmapCount(child: Expression)
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "0",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BinaryType),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType)
@@ -261,7 +261,7 @@ case class BitmapOrAgg(child: Expression,
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "0",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(BinaryType),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType)

@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
@@ -85,7 +87,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Error trying to extract state constraint from condition $joinCondition", e)
+          logWarning(log"Error trying to extract state constraint from condition " +
+            log"${MDC(JOIN_CONDITION, joinCondition)}", e)
           None
       }
     }
@@ -101,10 +104,14 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
         case LessThanOrEqual(l, r) => getStateWatermarkSafely(l, r).map(_ - 1)
         case GreaterThan(l, r) => getStateWatermarkSafely(r, l)
         case GreaterThanOrEqual(l, r) => getStateWatermarkSafely(r, l).map(_ - 1)
+        case Between(input, lower, upper, _) =>
+          getStateWatermarkSafely(lower, input).map(_ - 1)
+            .orElse(getStateWatermarkSafely(input, upper).map(_ - 1))
         case _ => None
       }
       if (stateWatermark.nonEmpty) {
-        logInfo(s"Condition $joinCondition generated watermark constraint = ${stateWatermark.get}")
+        logInfo(log"Condition ${MDC(JOIN_CONDITION, joinCondition)} generated " +
+          log"watermark constraint = ${MDC(WATERMARK_CONSTRAINT, stateWatermark.get)}")
       }
       stateWatermark
     }
@@ -159,8 +166,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     // Verify there is only one correct constraint term and of the correct type
     if (constraintTerms.size > 1) {
-      logWarning("Failed to extract state constraint terms: multiple time terms in condition\n\t" +
-        terms.mkString("\n\t"))
+      logWarning(
+        log"Failed to extract state constraint terms: multiple time terms in condition\n\t" +
+          log"${MDC(EXPR_TERMS, terms.mkString("\n\t"))}")
       return None
     }
     if (constraintTerms.isEmpty) {
@@ -192,7 +200,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     }.reduceLeft(Add(_, _))
 
     // Calculate the constraint value
-    logInfo(s"Final expression to evaluate constraint:\t$exprWithWatermarkSubstituted")
+    logInfo(log"Final expression to evaluate " +
+      log"constraint:\t${MDC(WATERMARK_CONSTRAINT, exprWithWatermarkSubstituted)}")
     val constraintValue = exprWithWatermarkSubstituted.eval().asInstanceOf[java.lang.Double]
     Some((Double2double(constraintValue) / 1000.0).toLong)
   }
@@ -256,9 +265,10 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
               if (calendarInterval.months != 0) {
                 invalid = true
                 logWarning(
-                  s"Failed to extract state value watermark from condition $exprToCollectFrom " +
-                    s"as imprecise intervals like months and years cannot be used for" +
-                    s"watermark calculation. Use interval in terms of day instead.")
+                  log"Failed to extract state value watermark from condition " +
+                    log"${MDC(JOIN_CONDITION, exprToCollectFrom)} " +
+                    log"as imprecise intervals like months and years cannot be used for" +
+                    log"watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
                 Literal(calendarInterval.days * MICROS_PER_DAY.toDouble +
@@ -277,7 +287,9 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
           Seq(negateIfNeeded(castedLit, negate))
         case a @ _ =>
           logWarning(
-            s"Failed to extract state value watermark from condition $exprToCollectFrom due to $a")
+            log"Failed to extract state value watermark from condition " +
+              log"${MDC(JOIN_CONDITION, exprToCollectFrom)} due to " +
+              log"${MDC(JOIN_CONDITION_SUB_EXPR, a)}")
           invalid = true
           Seq.empty
       }

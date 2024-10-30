@@ -41,16 +41,21 @@ import org.apache.spark.network.util.TransportConf;
  * Exchange, using a pre-shared key to derive an AES-GCM key encrypting key.
  */
 class AuthEngine implements Closeable {
+  public static final byte[] DERIVED_KEY_INFO = "derivedKey".getBytes(UTF_8);
   public static final byte[] INPUT_IV_INFO = "inputIv".getBytes(UTF_8);
   public static final byte[] OUTPUT_IV_INFO = "outputIv".getBytes(UTF_8);
   private static final String MAC_ALGORITHM = "HMACSHA256";
+  private static final String LEGACY_CIPHER_ALGORITHM = "AES/CTR/NoPadding";
+  private static final String CIPHER_ALGORITHM = "AES/GCM/NoPadding";
   private static final int AES_GCM_KEY_SIZE_BYTES = 16;
   private static final byte[] EMPTY_TRANSCRIPT = new byte[0];
+  private static final int UNSAFE_SKIP_HKDF_VERSION = 1;
 
   private final String appId;
   private final byte[] preSharedSecret;
   private final TransportConf conf;
   private final Properties cryptoConf;
+  private final boolean unsafeSkipFinalHkdf;
 
   private byte[] clientPrivateKey;
   private TransportCipher sessionCipher;
@@ -62,6 +67,9 @@ class AuthEngine implements Closeable {
     this.preSharedSecret = preSharedSecret.getBytes(UTF_8);
     this.conf = conf;
     this.cryptoConf = conf.cryptoConf();
+    // This is for backward compatibility with version 1.0 of this protocol,
+    // which did not perform a final HKDF round.
+    this.unsafeSkipFinalHkdf = conf.authEngineVersion() == UNSAFE_SKIP_HKDF_VERSION;
   }
 
   @VisibleForTesting
@@ -201,6 +209,13 @@ class AuthEngine implements Closeable {
       byte[] sharedSecret,
       boolean isClient,
       byte[] transcript) throws GeneralSecurityException {
+    byte[] derivedKey = unsafeSkipFinalHkdf ? sharedSecret :  // This is for backwards compatibility
+      Hkdf.computeHkdf(
+        MAC_ALGORITHM,
+        sharedSecret,
+        transcript,
+        DERIVED_KEY_INFO,
+        AES_GCM_KEY_SIZE_BYTES);
     byte[] clientIv = Hkdf.computeHkdf(
         MAC_ALGORITHM,
         sharedSecret,
@@ -213,13 +228,20 @@ class AuthEngine implements Closeable {
         transcript,  // Passing this as the HKDF salt
         OUTPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
         AES_GCM_KEY_SIZE_BYTES);
-    SecretKeySpec sessionKey = new SecretKeySpec(sharedSecret, "AES");
-    return new TransportCipher(
-        cryptoConf,
-        conf.cipherTransformation(),
-        sessionKey,
-        isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
-        isClient ? serverIv : clientIv);
+    SecretKeySpec sessionKey = new SecretKeySpec(derivedKey, "AES");
+    if (LEGACY_CIPHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
+      return new CtrTransportCipher(
+          cryptoConf,
+          sessionKey,
+          isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
+          isClient ? serverIv : clientIv);
+    } else if (CIPHER_ALGORITHM.equalsIgnoreCase(conf.cipherTransformation())) {
+      return new GcmTransportCipher(sessionKey);
+    } else {
+      throw new IllegalArgumentException(
+              String.format("Unsupported cipher mode: %s. %s and %s are supported.",
+                      conf.cipherTransformation(), CIPHER_ALGORITHM, LEGACY_CIPHER_ALGORITHM));
+    }
   }
 
   private byte[] getTranscript(AuthMessage... encryptedPublicKeys) {

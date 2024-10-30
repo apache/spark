@@ -28,7 +28,8 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.SPARK_EXECUTOR_PREFIX
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceInformation
@@ -87,7 +88,7 @@ private[deploy] class ExecutorRunner(
       if (state == ExecutorState.LAUNCHING || state == ExecutorState.RUNNING) {
         state = ExecutorState.FAILED
       }
-      killProcess(Some("Worker shutting down")) }
+      killProcess("Worker shutting down") }
   }
 
   /**
@@ -95,7 +96,7 @@ private[deploy] class ExecutorRunner(
    *
    * @param message the exception message which caused the executor's death
    */
-  private def killProcess(message: Option[String]): Unit = {
+  private def killProcess(message: String): Unit = {
     var exitCode: Option[Int] = None
     if (process != null) {
       logInfo("Killing process!")
@@ -107,14 +108,14 @@ private[deploy] class ExecutorRunner(
       }
       exitCode = Utils.terminateProcess(process, EXECUTOR_TERMINATE_TIMEOUT_MS)
       if (exitCode.isEmpty) {
-        logWarning("Failed to terminate process: " + process +
-          ". This process will likely be orphaned.")
+        logWarning(log"Failed to terminate process: ${MDC(PROCESS, process)}" +
+          log". This process will likely be orphaned.")
       }
     }
     try {
-      worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+      worker.send(ExecutorStateChanged(appId, execId, state, Some(message), exitCode))
     } catch {
-      case e: IllegalStateException => logWarning(e.getMessage(), e)
+      case e: IllegalStateException => logWarning(log"${MDC(ERROR, e.getMessage())}", e)
     }
   }
 
@@ -162,7 +163,7 @@ private[deploy] class ExecutorRunner(
       val command = builder.command()
       val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
-      logInfo(s"Launch command: $redactedCommand")
+      logInfo(log"Launch command: ${MDC(COMMAND, redactedCommand)}")
 
       builder.directory(executorDir)
       builder.environment.put("SPARK_EXECUTOR_DIRS", appLocalDirs.mkString(File.pathSeparator))
@@ -190,7 +191,7 @@ private[deploy] class ExecutorRunner(
       stdoutAppender = FileAppender(process.getInputStream, stdout, conf, true)
 
       val stderr = new File(executorDir, "stderr")
-      Files.write(header, stderr, StandardCharsets.UTF_8)
+      Files.asCharSink(stderr, StandardCharsets.UTF_8).write(header)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf, true)
 
       state = ExecutorState.RUNNING
@@ -203,13 +204,13 @@ private[deploy] class ExecutorRunner(
       worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
     } catch {
       case interrupted: InterruptedException =>
-        logInfo("Runner thread for executor " + fullId + " interrupted")
+        logInfo(log"Runner thread for executor ${MDC(EXECUTOR_ID, fullId)} interrupted")
         state = ExecutorState.KILLED
-        killProcess(None)
+        killProcess(s"Runner thread for executor $fullId interrupted")
       case e: Exception =>
         logError("Error running executor", e)
         state = ExecutorState.FAILED
-        killProcess(Some(e.toString))
+        killProcess(s"Error running executor: $e")
     }
   }
 }

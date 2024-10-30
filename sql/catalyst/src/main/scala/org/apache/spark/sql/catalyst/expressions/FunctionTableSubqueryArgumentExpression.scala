@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Project, Repartition, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION, TreePattern}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -58,6 +59,10 @@ import org.apache.spark.sql.types.DataType
  * @param orderByExpressions if non-empty, the TABLE argument included the ORDER BY clause to
  *                           indicate that the rows within each partition of the table function are
  *                           to arrive in the provided order.
+ * @param selectedInputExpressions If non-empty, this is a sequence of expressions that the UDTF is
+ *                                 specifying for Catalyst to evaluate against the columns in the
+ *                                 input TABLE argument. The UDTF then receives one input attribute
+ *                                 for each name in the list, in the order they are listed.
  */
 case class FunctionTableSubqueryArgumentExpression(
     plan: LogicalPlan,
@@ -65,7 +70,8 @@ case class FunctionTableSubqueryArgumentExpression(
     exprId: ExprId = NamedExpression.newExprId,
     partitionByExpressions: Seq[Expression] = Seq.empty,
     withSinglePartition: Boolean = false,
-    orderByExpressions: Seq[SortOrder] = Seq.empty)
+    orderByExpressions: Seq[SortOrder] = Seq.empty,
+    selectedInputExpressions: Seq[PythonUDTFSelectedExpression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, Seq.empty, None) with Unevaluable {
 
   assert(!(withSinglePartition && partitionByExpressions.nonEmpty),
@@ -75,6 +81,8 @@ case class FunctionTableSubqueryArgumentExpression(
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): FunctionTableSubqueryArgumentExpression =
     copy(plan = plan)
+  override def withNewOuterAttrs(outerAttrs: Seq[Expression])
+  : FunctionTableSubqueryArgumentExpression = copy(outerAttrs = outerAttrs)
   override def hint: Option[HintInfo] = None
   override def withNewHint(hint: Option[HintInfo]): FunctionTableSubqueryArgumentExpression =
     copy()
@@ -134,6 +142,19 @@ case class FunctionTableSubqueryArgumentExpression(
           child = subquery)
       }
     }
+    // If instructed, add a projection to compute the specified input expressions.
+    if (selectedInputExpressions.nonEmpty) {
+      val projectList: Seq[NamedExpression] = selectedInputExpressions.map {
+        case PythonUDTFSelectedExpression(expression: Expression, Some(alias: String)) =>
+          Alias(expression, alias)()
+        case PythonUDTFSelectedExpression(a: Attribute, None) =>
+          a
+        case PythonUDTFSelectedExpression(other: Expression, None) =>
+          throw QueryCompilationErrors
+            .invalidUDTFSelectExpressionFromAnalyzeMethodNeedsAlias(other.sql)
+      } ++ extraProjectedPartitioningExpressions
+      subquery = Project(projectList, subquery)
+    }
     Project(Seq(Alias(CreateStruct(subquery.output), "c")()), subquery)
   }
 
@@ -147,15 +168,16 @@ case class FunctionTableSubqueryArgumentExpression(
     val extraPartitionByExpressionsToIndexes: Map[Expression, Int] =
       extraProjectedPartitioningExpressions.map(_.child).zipWithIndex.toMap
     partitionByExpressions.map { e =>
-      subqueryOutputs.get(e).getOrElse {
-        extraPartitionByExpressionsToIndexes.get(e).get + plan.output.length
-      }
+      subqueryOutputs.getOrElse(e, extraPartitionByExpressionsToIndexes(e) + plan.output.length)
     }
   }
 
-  private lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
+  lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
     partitionByExpressions.filter { e =>
-      !subqueryOutputs.contains(e)
+      !subqueryOutputs.contains(e) ||
+        // Skip deduplicating the 'partitionBy' expression(s) against the attributes of the input
+        // table if the UDTF also specified 'select' expression(s).
+        selectedInputExpressions.nonEmpty
     }.zipWithIndex.map { case (expr, index) =>
       Alias(expr, s"partition_by_$index")()
     }

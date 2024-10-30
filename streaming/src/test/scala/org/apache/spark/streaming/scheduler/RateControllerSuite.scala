@@ -83,5 +83,5 @@ private[streaming] class ConstantEstimator(@volatile private var rate: Long)
       time: Long,
       elements: Long,
       processingDelay: Long,
-      schedulingDelay: Long): Option[Double] = Some(rate)
+      schedulingDelay: Long): Option[Double] = Some(rate.toDouble)
 }

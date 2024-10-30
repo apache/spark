@@ -30,6 +30,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructType}
 
 class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
+  import testImplicits.toRichColumn
 
   private val EnsureRequirements = new EnsureRequirements()
 

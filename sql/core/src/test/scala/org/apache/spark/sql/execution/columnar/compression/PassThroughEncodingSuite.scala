@@ -178,7 +178,7 @@ class PassThroughSuite extends SparkFunSuite {
         case SHORT => Seq(2: Short, 1: Short, 2: Short, nullValue.toShort: Short, 5: Short)
         case INT => Seq(2: Int, 1: Int, 2: Int, nullValue: Int, 5: Int)
         case LONG => Seq(2: Long, 1: Long, 2: Long, nullValue: Long, 5: Long)
-        case FLOAT => Seq(2: Float, 1: Float, 2: Float, nullValue: Float, 5: Float)
+        case FLOAT => Seq(2: Float, 1: Float, 2: Float, nullValue.toFloat: Float, 5: Float)
         case DOUBLE => Seq(2: Double, 1: Double, 2: Double, nullValue: Double, 5: Double)
       }
 

@@ -15,9 +15,16 @@
  * limitations under the License.
  */
 
-/* global $, ConvertDurationString, Mustache, createRESTEndPointForExecutorsPage */
-/* global createTemplateURI, formatBytes, formatDate, formatDuration, formatLogsCells */
-/* global getStandAloneAppId, setDataTableDefaults, getBaseURI, uiRoot errorMessageCell */
+/* global $, Mustache, uiRoot */
+
+import {
+  ConvertDurationString, createRESTEndPointForExecutorsPage, createTemplateURI, errorMessageCell,
+  formatBytes, formatDate, formatDuration, formatLogsCells,
+  getBaseURI, getStandAloneAppId,
+  setDataTableDefaults
+} from './utils.js';
+
+export {setTaskThreadDumpEnabled};
 
 var shouldBlockUI = true;
 var taskThreadDumpEnabled = false;
@@ -647,6 +654,7 @@ $(document).ready(function () {
             }
             executorSummaryTableSelector.column(13).visible(dataToShow.showBytesSpilledData);
             executorSummaryTableSelector.column(14).visible(dataToShow.showBytesSpilledData);
+            reselectCheckboxesBasedOnTaskTableState();
           });
 
         // Prepare data for speculation metrics

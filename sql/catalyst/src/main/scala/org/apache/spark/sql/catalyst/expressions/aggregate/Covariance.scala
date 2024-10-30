@@ -155,9 +155,12 @@ case class PandasCovar(
     ddof: Int)
   extends Covariance(left, right, true) {
 
+  def this(left: Expression, right: Expression, ddof: Expression) =
+    this(left, right, PandasAggregate.expressionToDDOF(ddof, "pandas_covar"))
+
   override val evaluateExpression: Expression = {
     If(n === 0.0, Literal.create(null, DoubleType),
-      If(n === ddof, divideByZeroEvalResult, ck / (n - ddof)))
+      If(n === ddof.toDouble, divideByZeroEvalResult, ck / (n - ddof.toDouble)))
   }
   override def prettyName: String = "pandas_covar"
 

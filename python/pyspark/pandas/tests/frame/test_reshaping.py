@@ -22,7 +22,7 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
@@ -327,7 +327,7 @@ class FrameReshapingMixin:
         )
 
         self.assert_eq(result1, expected_result1, almost=True)
-        self.assert_eq(result2, expected_result2)
+        self.assert_eq(result2, expected_result2, check_exact=False)
         self.assert_eq(result1.index.name, expected_result1.index.name)
         self.assert_eq(result1.columns.name, expected_result1.columns.name)
         self.assert_eq(result3, expected_result3, almost=True)
@@ -349,7 +349,7 @@ class FrameReshapingMixin:
         )
 
         self.assert_eq(result1, expected_result1, almost=True)
-        self.assert_eq(result2, expected_result2)
+        self.assert_eq(result2, expected_result2, check_exact=False)
         self.assert_eq(result1.index.names, expected_result1.index.names)
         self.assert_eq(result1.columns.name, expected_result1.columns.name)
         self.assert_eq(result3, expected_result3, almost=True)
@@ -367,7 +367,7 @@ class FrameReshapingMixin:
         expected_result3, result3 = pdf.A.explode("Z"), psdf.A.explode("Z")
 
         self.assert_eq(result1, expected_result1, almost=True)
-        self.assert_eq(result2, expected_result2)
+        self.assert_eq(result2, expected_result2, check_exact=False)
         self.assert_eq(result1.index.names, expected_result1.index.names)
         self.assert_eq(result1.columns.names, expected_result1.columns.names)
         self.assert_eq(result3, expected_result3, almost=True)
@@ -464,7 +464,11 @@ class FrameReshapingMixin:
             self.assert_eq(pdf.squeeze(axis), psdf.squeeze(axis))
 
 
-class FrameReshapingTests(FrameReshapingMixin, ComparisonTestBase, SQLTestUtils):
+class FrameReshapingTests(
+    FrameReshapingMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

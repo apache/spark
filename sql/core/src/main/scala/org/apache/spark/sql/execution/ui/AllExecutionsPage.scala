@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.ui
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
 import scala.xml.{Node, NodeSeq}
+
+import jakarta.servlet.http.HttpServletRequest
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
@@ -79,7 +80,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
             request,
             "running",
             running.toSeq,
-            executionIdToSubExecutions.view.mapValues(_.toSeq).toMap,
+            executionIdToSubExecutions.toMap.transform((_, v) => v.toSeq),
             currentTime,
             showErrorMessage = false,
             showRunningJobs = true,
@@ -105,7 +106,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           request,
           "completed",
           completed.toSeq,
-          executionIdToSubExecutions.view.mapValues(_.toSeq).toMap,
+          executionIdToSubExecutions.toMap.transform((_, v) => v.toSeq),
           currentTime,
           showErrorMessage = false,
           showRunningJobs = false,
@@ -132,7 +133,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
             request,
             "failed",
             failed.toSeq,
-            executionIdToSubExecutions.view.mapValues(_.toSeq).toMap,
+            executionIdToSubExecutions.toMap.transform((_, v) => v.toSeq),
             currentTime,
             showErrorMessage = true,
             showRunningJobs = false,

@@ -2,21 +2,21 @@
 -- !query
 create temporary view t1(c1, c2) as values (0, 1), (1, 2)
 -- !query analysis
-CreateViewCommand `t1`, [(c1,None), (c2,None)], values (0, 1), (1, 2), false, false, LocalTempView, true
+CreateViewCommand `t1`, [(c1,None), (c2,None)], values (0, 1), (1, 2), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 create temporary view t2(c1, c2) as values (0, 2), (0, 3)
 -- !query analysis
-CreateViewCommand `t2`, [(c1,None), (c2,None)], values (0, 2), (0, 3), false, false, LocalTempView, true
+CreateViewCommand `t2`, [(c1,None), (c2,None)], values (0, 2), (0, 3), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 create temporary view t3(c1, c2) as values (0, 3), (1, 4), (2, 5)
 -- !query analysis
-CreateViewCommand `t3`, [(c1,None), (c2,None)], values (0, 3), (1, 4), (2, 5), false, false, LocalTempView, true
+CreateViewCommand `t3`, [(c1,None), (c2,None)], values (0, 3), (1, 4), (2, 5), false, false, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -29,11 +29,11 @@ Project [c1#x, c2#x]
    :     +- Aggregate [(count(1) + cast(1 as bigint)) AS (count(1) + 1)#xL]
    :        +- Filter (c1#x = outer(c1#x))
    :           +- SubqueryAlias t2
-   :              +- View (`t2`, [c1#x,c2#x])
+   :              +- View (`t2`, [c1#x, c2#x])
    :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                    +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -47,11 +47,11 @@ Project [c1#x, c2#x, cast(c1#x as bigint) IN (list#x [c1#x]) AS (c1 IN (listquer
 :     +- Aggregate [(count(1) + cast(1 as bigint)) AS (count(1) + 1)#xL]
 :        +- Filter (c1#x = outer(c1#x))
 :           +- SubqueryAlias t2
-:              +- View (`t2`, [c1#x,c2#x])
+:              +- View (`t2`, [c1#x, c2#x])
 :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                    +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -65,11 +65,11 @@ Project [c1#x, c2#x, NOT cast(c1#x as bigint) IN (list#x [c1#x]) AS (NOT (c1 IN 
 :     +- Aggregate [(count(1) + cast(1 as bigint)) AS (count(1) + 1)#xL]
 :        +- Filter (c1#x = outer(c1#x))
 :           +- SubqueryAlias t2
-:              +- View (`t2`, [c1#x,c2#x])
+:              +- View (`t2`, [c1#x, c2#x])
 :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                    +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -85,18 +85,18 @@ Project [c1#x, c2#x]
    :  :  +- Aggregate [(count(1) + cast(1 as bigint)) AS (count(1) + 1)#xL]
    :  :     +- Filter (c1#x = outer(c1#x))
    :  :        +- SubqueryAlias t2
-   :  :           +- View (`t2`, [c1#x,c2#x])
+   :  :           +- View (`t2`, [c1#x, c2#x])
    :  :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :  :                 +- LocalRelation [col1#x, col2#x]
    :  +- Project [(count(1) - 1)#xL]
    :     +- Aggregate [(count(1) - cast(1 as bigint)) AS (count(1) - 1)#xL]
    :        +- Filter (c1#x = outer(c1#x))
    :           +- SubqueryAlias t2
-   :              +- View (`t2`, [c1#x,c2#x])
+   :              +- View (`t2`, [c1#x, c2#x])
    :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                    +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -113,25 +113,25 @@ Project [c1#x, c2#x]
    :  :  +- Aggregate [(count(1) + cast(1 as bigint)) AS (count(1) + 1)#xL]
    :  :     +- Filter (c1#x = outer(c1#x))
    :  :        +- SubqueryAlias t2
-   :  :           +- View (`t2`, [c1#x,c2#x])
+   :  :           +- View (`t2`, [c1#x, c2#x])
    :  :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :  :                 +- LocalRelation [col1#x, col2#x]
    :  :- Project [(count(1) - 1)#xL]
    :  :  +- Aggregate [(count(1) - cast(1 as bigint)) AS (count(1) - 1)#xL]
    :  :     +- Filter (c1#x = outer(c1#x))
    :  :        +- SubqueryAlias t2
-   :  :           +- View (`t2`, [c1#x,c2#x])
+   :  :           +- View (`t2`, [c1#x, c2#x])
    :  :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :  :                 +- LocalRelation [col1#x, col2#x]
    :  +- Project [count(1)#xL]
    :     +- Aggregate [count(1) AS count(1)#xL]
    :        +- Filter (c1#x = outer(c2#x))
    :           +- SubqueryAlias t2
-   :              +- View (`t2`, [c1#x,c2#x])
+   :              +- View (`t2`, [c1#x, c2#x])
    :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                    +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -146,11 +146,11 @@ Project [c1#x, c2#x]
    :        +- Aggregate [1 AS 1#x, count(1) AS count(1)#xL]
    :           +- Filter (c1#x = outer(c1#x))
    :              +- SubqueryAlias t2
-   :                 +- View (`t2`, [c1#x,c2#x])
+   :                 +- View (`t2`, [c1#x, c2#x])
    :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                       +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -165,11 +165,11 @@ Project [c1#x, c2#x]
    :        +- Aggregate [1 AS 1#x, count(1) AS count(1)#xL]
    :           +- Filter (c1#x = outer(c1#x))
    :              +- SubqueryAlias t2
-   :                 +- View (`t2`, [c1#x,c2#x])
+   :                 +- View (`t2`, [c1#x, c2#x])
    :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                       +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -186,15 +186,15 @@ Project [c1#x, c2#x]
    :              +- Project [c1#x, c2#x, c2#x, c1#x]
    :                 +- Join Inner, (c1#x = c1#x)
    :                    :- SubqueryAlias t1
-   :                    :  +- View (`t1`, [c1#x,c2#x])
+   :                    :  +- View (`t1`, [c1#x, c2#x])
    :                    :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                    :        +- LocalRelation [col1#x, col2#x]
    :                    +- SubqueryAlias t3
-   :                       +- View (`t3`, [c1#x,c2#x])
+   :                       +- View (`t3`, [c1#x, c2#x])
    :                          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                             +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -211,15 +211,15 @@ Project [c1#x, c2#x]
    :              +- Project [c1#x, c2#x, c2#x, c1#x]
    :                 +- Join Inner, (c1#x = c1#x)
    :                    :- SubqueryAlias t1
-   :                    :  +- View (`t1`, [c1#x,c2#x])
+   :                    :  +- View (`t1`, [c1#x, c2#x])
    :                    :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                    :        +- LocalRelation [col1#x, col2#x]
    :                    +- SubqueryAlias t3
-   :                       +- View (`t3`, [c1#x,c2#x])
+   :                       +- View (`t3`, [c1#x, c2#x])
    :                          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                             +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -239,11 +239,11 @@ Project [c1#x, c2#x]
    :     +- Aggregate [(count(1) + cast(1 as bigint)) AS (count(1) + 1)#xL]
    :        +- Filter (c1#x = outer(c1#x))
    :           +- SubqueryAlias t2
-   :              +- View (`t2`, [c1#x,c2#x])
+   :              +- View (`t2`, [c1#x, c2#x])
    :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                    +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -257,11 +257,11 @@ Project [c1#x, c2#x, cast(c1#x as bigint) IN (list#x [c1#x]) AS (c1 IN (listquer
 :     +- Aggregate [(count(1) + cast(1 as bigint)) AS (count(1) + 1)#xL]
 :        +- Filter (c1#x = outer(c1#x))
 :           +- SubqueryAlias t2
-:              +- View (`t2`, [c1#x,c2#x])
+:              +- View (`t2`, [c1#x, c2#x])
 :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                    +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -275,11 +275,11 @@ Project [c1#x, c2#x, NOT cast(c1#x as bigint) IN (list#x [c1#x]) AS (NOT (c1 IN 
 :     +- Aggregate [(count(1) + cast(1 as bigint)) AS (count(1) + 1)#xL]
 :        +- Filter (c1#x = outer(c1#x))
 :           +- SubqueryAlias t2
-:              +- View (`t2`, [c1#x,c2#x])
+:              +- View (`t2`, [c1#x, c2#x])
 :                 +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                    +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -294,11 +294,11 @@ Project [c1#x, c2#x]
    :        +- Aggregate [1 AS 1#x, count(1) AS count(1)#xL]
    :           +- Filter (c1#x = outer(c1#x))
    :              +- SubqueryAlias t2
-   :                 +- View (`t2`, [c1#x,c2#x])
+   :                 +- View (`t2`, [c1#x, c2#x])
    :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                       +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -313,11 +313,11 @@ Project [c1#x, c2#x]
    :        +- Aggregate [1 AS 1#x, count(1) AS count(1)#xL]
    :           +- Filter (c1#x = outer(c1#x))
    :              +- SubqueryAlias t2
-   :                 +- View (`t2`, [c1#x,c2#x])
+   :                 +- View (`t2`, [c1#x, c2#x])
    :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                       +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -334,15 +334,15 @@ Project [c1#x, c2#x]
    :              +- Project [c1#x, c2#x, c2#x, c1#x]
    :                 +- Join Inner, (c1#x = c1#x)
    :                    :- SubqueryAlias t1
-   :                    :  +- View (`t1`, [c1#x,c2#x])
+   :                    :  +- View (`t1`, [c1#x, c2#x])
    :                    :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                    :        +- LocalRelation [col1#x, col2#x]
    :                    +- SubqueryAlias t3
-   :                       +- View (`t3`, [c1#x,c2#x])
+   :                       +- View (`t3`, [c1#x, c2#x])
    :                          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                             +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 
@@ -359,15 +359,15 @@ Project [c1#x, c2#x]
    :              +- Project [c1#x, c2#x, c2#x, c1#x]
    :                 +- Join Inner, (c1#x = c1#x)
    :                    :- SubqueryAlias t1
-   :                    :  +- View (`t1`, [c1#x,c2#x])
+   :                    :  +- View (`t1`, [c1#x, c2#x])
    :                    :     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                    :        +- LocalRelation [col1#x, col2#x]
    :                    +- SubqueryAlias t3
-   :                       +- View (`t3`, [c1#x,c2#x])
+   :                       +- View (`t3`, [c1#x, c2#x])
    :                          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
    :                             +- LocalRelation [col1#x, col2#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
             +- LocalRelation [col1#x, col2#x]
 

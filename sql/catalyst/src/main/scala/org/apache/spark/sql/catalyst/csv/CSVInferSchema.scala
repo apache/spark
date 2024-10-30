@@ -21,13 +21,13 @@ import java.util.Locale
 
 import scala.util.control.Exception.allCatch
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class CSVInferSchema(val options: CSVOptions) extends Serializable {
@@ -65,6 +65,8 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   // StringType when no timestamp format is specified (the lenient timestamp formatter will be used)
   private val LENIENT_TS_FORMATTER_SUPPORTED_DATE_FORMATS = Set(
     "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
+
+  private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
 
   /**
    * Similar to the JSON schema inference
@@ -136,7 +138,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
-          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
+          throw SparkException.internalError(s"Unexpected data type $other")
       }
       compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
@@ -199,14 +201,12 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
   }
 
   private def tryParseTimestampNTZ(field: String): DataType = {
-    // We can only parse the value as TimestampNTZType if it does not have zone-offset or
-    // time-zone component and can be parsed with the timestamp formatter.
-    // Otherwise, it is likely to be a timestamp with timezone.
-    val timestampType = SQLConf.get.timestampType
-    if ((SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY ||
-        timestampType == TimestampNTZType) &&
-        timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
-      timestampType
+    // For text-based format, it's ambiguous to infer a timestamp string without timezone, as it can
+    // be both TIMESTAMP LTZ and NTZ. To avoid behavior changes with the new support of NTZ, here
+    // we only try to infer NTZ if the config is set to use NTZ by default.
+    if (isDefaultNTZ &&
+      timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
+      TimestampNTZType
     } else {
       tryParseTimestamp(field)
     }

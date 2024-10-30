@@ -98,7 +98,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
           }
           (symbol, literals) :: Nil
         } else {
-          val literal = literalDef.replaceAll("'", "").trim
+          val literal = literalDef.split("\\{")(0).replaceAll("'", "").trim
           // The case where a symbol string and its literal string are different,
           // e.g., `SETMINUS: 'MINUS';`.
           if (symbol != literal) {

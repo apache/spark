@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.config.METRICS_CONF
 import org.apache.spark.util.Utils
 
@@ -140,7 +141,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     } catch {
       case e: Exception =>
         val file = path.getOrElse(DEFAULT_METRICS_CONF_FILENAME)
-        logError(s"Error loading configuration file $file", e)
+        logError(log"Error loading configuration file ${MDC(PATH, file)}", e)
     } finally {
       if (is != null) {
         is.close()

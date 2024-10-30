@@ -117,7 +117,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         exception = intercept[AnalysisException] {
           sql("select interval 1 days").write.mode("overwrite").orc(orcDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`INTERVAL '1' DAY`",
           "columnType" -> "\"INTERVAL DAY\"",
@@ -128,7 +128,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         exception = intercept[AnalysisException] {
           sql("select null").write.mode("overwrite").orc(orcDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`NULL`",
           "columnType" -> "\"VOID\"",
@@ -140,10 +140,10 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
           spark.udf.register("testType", () => new IntervalData())
           sql("select testType()").write.mode("overwrite").orc(orcDir)
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`testType()`",
-          "columnType" -> "\"INTERVAL\"",
+          "columnType" -> "UDT(\"INTERVAL\")",
           "format" -> "ORC")
       )
 
@@ -154,7 +154,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
           spark.range(1).write.mode("overwrite").orc(orcDir)
           spark.read.schema(schema).orc(orcDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
           "columnType" -> "\"INTERVAL\"",
@@ -167,10 +167,10 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
           spark.range(1).write.mode("overwrite").orc(orcDir)
           spark.read.schema(schema).orc(orcDir).collect()
         },
-        errorClass = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
         parameters = Map(
           "columnName" -> "`a`",
-          "columnType" -> "\"INTERVAL\"",
+          "columnType" -> "UDT(\"INTERVAL\")",
           "format" -> "ORC")
       )
     }
@@ -350,5 +350,29 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)
+  }
+
+  Seq("NONE", "SNAPPY", "ZLIB", "LZ4", "LZO", "ZSTD").foreach { compression =>
+    test(s"SPARK-46742: Read and write with $compression compressions") {
+      Seq(true, false).foreach { convertMetastore =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+          withTempDir { dir =>
+            withTable("orc_tbl1") {
+              val orcTblStatement1 =
+                s"""
+                   |CREATE TABLE orc_tbl1(
+                   |  c1 int,
+                   |  c2 string)
+                   |STORED AS orc
+                   |TBLPROPERTIES ("orc.compress"="$compression")
+                   |LOCATION '${s"${dir.getCanonicalPath}"}'""".stripMargin
+              sql(orcTblStatement1)
+              sql("INSERT INTO TABLE orc_tbl1 VALUES (1, 'orc1'), (2, 'orc2')")
+              checkAnswer(sql("SELECT * FROM orc_tbl1"), (1 to 2).map(i => Row(i, s"orc$i")))
+            }
+          }
+        }
+      }
+    }
   }
 }

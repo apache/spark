@@ -48,6 +48,20 @@ try:
 except Exception as e:
     test_not_compiled_message = str(e)
 
+plotly_requirement_message = None
+try:
+    import plotly
+except ImportError as e:
+    plotly_requirement_message = str(e)
+have_plotly = plotly_requirement_message is None
+
+numpy_requirement_message = None
+try:
+    import numpy
+except ImportError as e:
+    numpy_requirement_message = str(e)
+have_numpy = numpy_requirement_message is None
+
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
@@ -56,6 +70,7 @@ from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
 have_pandas = pandas_requirement_message is None
 have_pyarrow = pyarrow_requirement_message is None
 test_compiled = test_not_compiled_message is None
+have_numpy = numpy_requirement_message is None
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
@@ -247,6 +262,29 @@ class SQLTestUtils:
             for f in functions:
                 self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
 
+    @contextmanager
+    def temp_env(self, pairs):
+        assert isinstance(pairs, dict), "pairs should be a dictionary."
+
+        keys = pairs.keys()
+        new_values = pairs.values()
+        old_values = [os.environ.get(key, None) for key in keys]
+        for key, new_value in zip(keys, new_values):
+            if new_value is None:
+                if key in os.environ:
+                    del os.environ[key]
+            else:
+                os.environ[key] = new_value
+        try:
+            yield
+        finally:
+            for key, old_value in zip(keys, old_values):
+                if old_value is None:
+                    if key in os.environ:
+                        del os.environ[key]
+                else:
+                    os.environ[key] = old_value
+
     @staticmethod
     def assert_close(a, b):
         c = [j[0] for j in b]
@@ -258,6 +296,7 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
     @classmethod
     def setUpClass(cls):
         super(ReusedSQLTestCase, cls).setUpClass()
+        cls._legacy_sc = cls.sc
         cls.spark = SparkSession(cls.sc)
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)

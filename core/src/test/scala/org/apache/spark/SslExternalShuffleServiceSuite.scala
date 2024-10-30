@@ -22,6 +22,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExternalBlockHandler
+import org.apache.spark.util.SslTestUtils
 
 /**
  * This suite creates an external shuffle server and routes all shuffle fetches through it.

@@ -18,6 +18,8 @@
 package org.apache.spark.sql.execution.streaming.continuous
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write.DataWriter
@@ -68,8 +70,8 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
           }
           CustomMetrics.updateMetrics(
             dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)
-          logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
+          logInfo(log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} " +
+            log"in epoch ${MDC(EPOCH, EpochTracker.getCurrentEpoch.get)} is committing.")
           val msg = dataWriter.commit()
           epochCoordinator.send(
             CommitPartitionEpoch(
@@ -77,8 +79,8 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
               EpochTracker.getCurrentEpoch.get,
               msg)
           )
-          logInfo(s"Writer for partition ${context.partitionId()} " +
-            s"in epoch ${EpochTracker.getCurrentEpoch.get} committed.")
+          logInfo(log"Writer for partition ${MDC(PARTITION_ID, context.partitionId())} " +
+            log"in epoch ${MDC(EPOCH, EpochTracker.getCurrentEpoch.get)} committed.")
           EpochTracker.incrementCurrentEpoch()
         } catch {
           case _: InterruptedException =>
@@ -87,9 +89,11 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
       })(catchBlock = {
         // If there is an error, abort this writer. We enter this callback in the middle of
         // rethrowing an exception, so compute() will stop executing at this point.
-        logError(s"Writer for partition ${context.partitionId()} is aborting.")
+        logError(log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
+          log"is aborting.")
         if (dataWriter != null) dataWriter.abort()
-        logError(s"Writer for partition ${context.partitionId()} aborted.")
+        logError(log"Writer for partition ${MDC(LogKeys.PARTITION_ID, context.partitionId())} " +
+          log"aborted.")
       }, finallyBlock = {
         if (dataWriter != null) dataWriter.close()
       })

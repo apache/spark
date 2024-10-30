@@ -43,6 +43,18 @@ struct<>
 
 
 -- !query
+CREATE OR REPLACE TEMPORARY VIEW FilterExpressionTestData AS SELECT * FROM VALUES
+  (1, 2, "asd"),
+  (3, 4, "fgh"),
+  (5, 6, "jkl")
+AS FilterExpressionTestData(num1, num2, str)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData
 -- !query schema
 struct<>
@@ -880,3 +892,93 @@ SELECT t1.b FROM (SELECT COUNT(b) FILTER (WHERE a >= 2) AS b FROM testData) t1
 struct<b:bigint>
 -- !query output
 4
+
+
+-- !query
+SELECT count(num1) FILTER (WHERE rand(int(num2)) > 1) FROM FilterExpressionTestData
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_AGGREGATE_FILTER.NON_DETERMINISTIC",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "filterExpr" : "\"(rand(num2) > 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "count(num1) FILTER (WHERE rand(int(num2)) > 1)"
+  } ]
+}
+
+
+-- !query
+SELECT sum(num1) FILTER (WHERE str) FROM FilterExpressionTestData
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_AGGREGATE_FILTER.NOT_BOOLEAN",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "filterExpr" : "\"str\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "sum(num1) FILTER (WHERE str)"
+  } ]
+}
+
+
+-- !query
+SELECT sum(num1) FILTER (WHERE max(num2) > 1) FROM FilterExpressionTestData
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_AGGREGATE_FILTER.CONTAINS_AGGREGATE",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "aggExpr" : "\"max(num2)\"",
+    "filterExpr" : "\"(max(num2) > 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "sum(num1) FILTER (WHERE max(num2) > 1)"
+  } ]
+}
+
+
+-- !query
+SELECT sum(num1) FILTER (WHERE nth_value(num2, 2) OVER(ORDER BY num2) > 1) FROM FilterExpressionTestData
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_AGGREGATE_FILTER.CONTAINS_WINDOW_FUNCTION",
+  "sqlState" : "42903",
+  "messageParameters" : {
+    "filterExpr" : "\"(nth_value(num2, 2) OVER (ORDER BY num2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) > 1)\"",
+    "windowExpr" : "\"nth_value(num2, 2) OVER (ORDER BY num2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "sum(num1) FILTER (WHERE nth_value(num2, 2) OVER(ORDER BY num2) > 1)"
+  } ]
+}

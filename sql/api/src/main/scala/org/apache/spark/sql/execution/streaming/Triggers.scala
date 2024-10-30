@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.concurrent.duration.Duration
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.microsToMillis
 import org.apache.spark.sql.catalyst.util.SparkIntervalUtils
@@ -35,7 +36,9 @@ private object Triggers {
   def convert(interval: String): Long = {
     val cal = SparkIntervalUtils.stringToInterval(UTF8String.fromString(interval))
     if (cal.months != 0) {
-      throw new IllegalArgumentException(s"Doesn't support month or year interval: $interval")
+      throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3262",
+        messageParameters = Map("interval" -> interval))
     }
     val microsInDays = Math.multiplyExact(cal.days, MICROS_PER_DAY)
     microsToMillis(Math.addExact(cal.microseconds, microsInDays))
@@ -85,8 +88,8 @@ object ProcessingTimeTrigger {
 }
 
 /**
- * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at
- * the specified interval.
+ * A [[Trigger]] that continuously processes streaming data, asynchronously checkpointing at the
+ * specified interval.
  */
 case class ContinuousTrigger(intervalMs: Long) extends Trigger {
   Triggers.validate(intervalMs)

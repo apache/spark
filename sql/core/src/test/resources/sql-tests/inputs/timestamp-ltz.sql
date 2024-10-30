@@ -1,6 +1,6 @@
 -- timestamp_ltz literals and constructors
 --CONFIG_DIM1 spark.sql.timestampType=TIMESTAMP_LTZ
---CONFIG_DIM1 spark.sql.timestampType=TIMESTAMP_NTZ
+--CONFIG_DIM2 spark.sql.timestampType=TIMESTAMP_NTZ
 
 select timestamp_ltz'2016-12-31 00:12:00', timestamp_ltz'2016-12-31';
 

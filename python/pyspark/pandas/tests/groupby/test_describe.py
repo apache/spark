@@ -20,26 +20,11 @@ from itertools import product
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyDescribeMixin:
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "A": [1, 2, 1, 2],
-                "B": [3.1, 4.1, 4.1, 3.1],
-                "C": ["a", "b", "b", "a"],
-                "D": [True, False, False, True],
-            }
-        )
-
-    @property
-    def psdf(self):
-        return ps.from_pandas(self.pdf)
-
     def test_describe(self):
         # support for numeric type, not support for string type yet
         datas = []
@@ -128,7 +113,11 @@ class GroupbyDescribeMixin:
         )
 
 
-class GroupbyDescribeTests(GroupbyDescribeMixin, ComparisonTestBase, SQLTestUtils):
+class GroupbyDescribeTests(
+    GroupbyDescribeMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

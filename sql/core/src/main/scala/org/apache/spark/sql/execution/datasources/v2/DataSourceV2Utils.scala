@@ -31,6 +31,8 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -106,7 +108,7 @@ private[sql] object DataSourceV2Utils extends Logging {
 
     val optionsWithPath = getOptionsWithPaths(extraOptions, paths: _*)
 
-    val finalOptions = sessionOptions.view.filterKeys(!optionsWithPath.contains(_)).toMap ++
+    val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
       optionsWithPath.originalMap
     val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
     val (table, catalog, ident) = provider match {
@@ -147,6 +149,20 @@ private[sql] object DataSourceV2Utils extends Logging {
         Option(Dataset.ofRows(
           sparkSession,
           DataSourceV2Relation.create(table, catalog, ident, dsOptions)))
+      case _ => None
+    }
+  }
+
+  /**
+   * Returns the table provider for the given format, or None if it cannot be found.
+   */
+  def getTableProvider(provider: String, conf: SQLConf): Option[TableProvider] = {
+    // Return earlier since `lookupDataSourceV2` may fail to resolve provider "hive" to
+    // `HiveFileFormat`, when running tests in sql/core.
+    if (DDLUtils.isHiveTable(Some(provider))) return None
+    DataSource.lookupDataSourceV2(provider, conf) match {
+      // TODO(SPARK-28396): Currently file source v2 can't work with tables.
+      case Some(p) if !p.isInstanceOf[FileDataSourceV2] => Some(p)
       case _ => None
     }
   }

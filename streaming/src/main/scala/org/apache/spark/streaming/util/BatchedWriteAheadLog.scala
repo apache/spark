@@ -29,7 +29,8 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.LogKeys.RECORDS
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -121,7 +122,8 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
    * Stop the batched writer thread, fulfill promises with failures and close the wrapped WAL.
    */
   override def close(): Unit = {
-    logInfo(s"BatchedWriteAheadLog shutting down at time: ${System.currentTimeMillis()}.")
+    logInfo(log"BatchedWriteAheadLog shutting down at time: " +
+      log"${MDC(LogKeys.TIME, System.currentTimeMillis())}.")
     if (!active.getAndSet(false)) return
     batchedWriterThread.interrupt()
     batchedWriterThread.join()
@@ -178,7 +180,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
         logWarning("BatchedWriteAheadLog Writer queue interrupted.", e)
         buffer.foreach(_.promise.failure(e))
       case NonFatal(e) =>
-        logWarning(s"BatchedWriteAheadLog Writer failed to write $buffer", e)
+        logWarning(log"BatchedWriteAheadLog Writer failed to write ${MDC(RECORDS, buffer)}", e)
         buffer.foreach(_.promise.failure(e))
     } finally {
       buffer.clear()

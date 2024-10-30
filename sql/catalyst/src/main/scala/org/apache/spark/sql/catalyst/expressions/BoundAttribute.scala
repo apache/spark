@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
@@ -76,7 +77,7 @@ object BindReferences extends Logging {
         if (allowFailures) {
           a
         } else {
-          throw new IllegalStateException(
+          throw SparkException.internalError(
             s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
         }
       } else {

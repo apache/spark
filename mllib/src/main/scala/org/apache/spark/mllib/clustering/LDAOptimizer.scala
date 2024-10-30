@@ -525,7 +525,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     updateLambda(batchResult, batchSize)
 
     logphatOption.foreach(_ /= nonEmptyDocsN.toDouble)
-    logphatOption.foreach(updateAlpha(_, nonEmptyDocsN))
+    logphatOption.foreach(updateAlpha(_, nonEmptyDocsN.toDouble))
 
     this
   }

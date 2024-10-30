@@ -33,9 +33,11 @@ import scala.Tuple2;
 import scala.collection.Iterator;
 
 import com.google.common.io.Closeables;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
@@ -81,7 +83,8 @@ final class BypassMergeSortShuffleWriter<K, V>
   extends ShuffleWriter<K, V>
   implements ShuffleChecksumSupport {
 
-  private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 
   private final int fileBufferSize;
   private final boolean transferToEnabled;
@@ -223,7 +226,8 @@ final class BypassMergeSortShuffleWriter<K, V>
               writePartitionedDataWithStream(file, writer);
             }
             if (!file.delete()) {
-              logger.error("Unable to delete file for partition {}", i);
+              logger.error("Unable to delete file for partition {}",
+                MDC.of(LogKeys.PARTITION_ID$.MODULE$, i));
             }
           }
         }

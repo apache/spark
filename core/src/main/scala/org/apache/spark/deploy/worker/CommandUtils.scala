@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SecurityManager, SSLOptions}
 import org.apache.spark.deploy.Command
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
 
@@ -120,7 +120,8 @@ object CommandUtils extends Logging {
           Utils.copyStream(in, out, true)
         } catch {
           case e: IOException =>
-            logInfo("Redirection to " + file + " closed: " + e.getMessage)
+            logInfo(log"Redirection to ${MDC(LogKeys.FILE_NAME, file)} closed: " +
+              log"${MDC(LogKeys.ERROR, e.getMessage)}")
         }
       }
     }.start()

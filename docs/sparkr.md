@@ -22,6 +22,8 @@ license: |
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
+SparkR is deprecated from Apache Spark 4.0.0 and will be removed in a future version.
+
 # Overview
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R.
 In Spark {{site.SPARK_VERSION}}, SparkR provides a distributed data frame implementation that
@@ -77,7 +79,7 @@ sparkR.session(master = "local[*]", sparkConfig = list(spark.driver.memory = "2g
 
 The following Spark driver properties can be set in `sparkConfig` with `sparkR.session` from RStudio:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th>Property Name</th><th>Property group</th><th><code>spark-submit</code> equivalent</th></tr></thead>
   <tr>
     <td><code>spark.master</code></td>
@@ -571,7 +573,7 @@ SparkR supports the following machine learning algorithms currently:
 #### Frequent Pattern Mining
 
 * [`spark.fpGrowth`](api/R/reference/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
-* [`spark.prefixSpan`](api/R/reference/spark.prefixSpan.html) : [`PrefixSpan`](ml-frequent-pattern-mining.html#prefixSpan)
+* [`spark.prefixSpan`](api/R/reference/spark.prefixSpan.html) : [`PrefixSpan`](ml-frequent-pattern-mining.html#prefixspan)
 
 #### Statistics
 
@@ -588,7 +590,7 @@ The following example shows how to save/load a MLlib model by SparkR.
 {% include_example read_write r/ml/ml.R %}
 
 # Data type mapping between R and Spark
-<table class="table table-striped">
+<table>
 <thead><tr><th>R</th><th>Spark</th></tr></thead>
 <tr>
   <td>byte</td>
@@ -658,7 +660,7 @@ The following example shows how to save/load a MLlib model by SparkR.
 
 # Structured Streaming
 
-SparkR supports the Structured Streaming API. Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](structured-streaming-programming-guide.html)
+SparkR supports the Structured Streaming API. Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](./streaming/index.html).
 
 # Apache Arrow in SparkR
 
@@ -728,7 +730,7 @@ function is masking another function.
 
 The following functions are masked by the SparkR package:
 
-<table class="table table-striped">
+<table>
   <thead><tr><th>Masked function</th><th>How to Access</th></tr></thead>
   <tr>
     <td><code>cov</code> in <code>package:stats</code></td>

@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.history
 
-import java.net.URL
-import javax.servlet.http.HttpServletResponse
+import java.net.URI
 
+import jakarta.servlet.http.HttpServletResponse
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods.parse
@@ -43,12 +43,13 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
   private val localhost: String = Utils.localHostNameForURI()
   private var port: Int = -1
 
-  private def startHistoryServer(logDir: String): Unit = {
+  private def startHistoryServer(logDir: String, title: Option[String] = None): Unit = {
     assert(server.isEmpty)
     val conf = new SparkConf()
       .set(HISTORY_LOG_DIR, logDir)
       .set(UPDATE_INTERVAL_S.key, "0")
       .set(IS_TESTING, true)
+    title.foreach(conf.set(HISTORY_SERVER_UI_TITLE.key, _))
     val provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
@@ -71,7 +72,7 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
       ApplicationStatus.COMPLETED.toString.toLowerCase()
     }
     val (code, jsonOpt, errOpt) = HistoryServerSuite.getContentAndCode(
-      new URL(s"http://$localhost:$port/api/v1/applications?status=$param")
+      new URI(s"http://$localhost:$port/api/v1/applications?status=$param").toURL
     )
     assert(code == HttpServletResponse.SC_OK)
     assert(jsonOpt.isDefined)
@@ -97,6 +98,21 @@ class HistoryServerPageSuite extends SparkFunSuite with BeforeAndAfter {
           assert(apiResponse.isEmpty)
         }
       }
+      stopHistoryServer()
+    }
+  }
+
+  test("SPARK-49128: Support custom History Server UI title") {
+    Seq(None, Some("Custom History Server Title")).foreach { title =>
+      startHistoryServer(logDirs.head, title)
+      val page = new HistoryPage(server.get)
+      val (code, htmlOpt, errOpt) = HistoryServerSuite.getContentAndCode(
+        new URI(s"http://$localhost:$port/").toURL
+      )
+      assert(code == HttpServletResponse.SC_OK)
+      val expected = title.getOrElse("History Server")
+      assert(htmlOpt.isDefined && htmlOpt.get.contains(s"<title>$expected</title>"))
+      assert(errOpt.isEmpty)
       stopHistoryServer()
     }
   }

@@ -22,7 +22,7 @@ import java.util
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.TableIdentifierHelper
 import org.apache.spark.sql.connector.catalog.V1Table.addV2TableProperties
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
@@ -38,7 +38,7 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   lazy val options: Map[String, String] = {
     v1Table.storage.locationUri match {
       case Some(uri) =>
-        v1Table.storage.properties + ("path" -> uri.toString)
+        v1Table.storage.properties + ("path" -> CatalogUtils.URIToString(uri))
       case _ =>
         v1Table.storage.properties
     }
@@ -57,6 +57,10 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
     }
 
     v1Table.bucketSpec.foreach { spec =>
+      partitions += spec.asTransform
+    }
+
+    v1Table.clusterBySpec.foreach { spec =>
       partitions += spec.asTransform
     }
 
@@ -81,7 +85,9 @@ private[sql] object V1Table {
         TableCatalog.OPTION_PREFIX + key -> value } ++
       v1Table.provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       v1Table.comment.map(TableCatalog.PROP_COMMENT -> _) ++
-      v1Table.storage.locationUri.map(TableCatalog.PROP_LOCATION -> _.toString) ++
+      v1Table.storage.locationUri.map { loc =>
+        TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(loc)
+      } ++
       (if (managed) Some(TableCatalog.PROP_IS_MANAGED_LOCATION -> "true") else None) ++
       (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
       Some(TableCatalog.PROP_OWNER -> v1Table.owner)

@@ -40,7 +40,7 @@ EXPLAIN EXTENDED
   SELECT sum(distinct val)
   FROM explain_temp1
 -- !query analysis
-ExplainCommand 'Project [unresolvedalias('sum(distinct 'val), None)], ExtendedMode
+ExplainCommand 'Project [unresolvedalias('sum(distinct 'val))], ExtendedMode
 
 
 -- !query
@@ -129,7 +129,7 @@ EXPLAIN FORMATTED
   SELECT (SELECT Avg(key) FROM explain_temp1) + (SELECT Avg(key) FROM explain_temp1)
   FROM explain_temp1
 -- !query analysis
-ExplainCommand 'Project [unresolvedalias((scalar-subquery#x [] + scalar-subquery#x []), None)], FormattedMode
+ExplainCommand 'Project [unresolvedalias((scalar-subquery#x [] + scalar-subquery#x []))], FormattedMode
 
 
 -- !query
@@ -162,7 +162,7 @@ EXPLAIN FORMATTED
   CREATE VIEW explain_view AS
     SELECT key, val FROM explain_temp1
 -- !query analysis
-ExplainCommand 'CreateView SELECT key, val FROM explain_temp1, false, false, FormattedMode
+ExplainCommand 'CreateView SELECT key, val FROM explain_temp1, false, false, COMPENSATION, FormattedMode
 
 
 -- !query
@@ -172,7 +172,7 @@ EXPLAIN FORMATTED
     COUNT(key) FILTER (WHERE val > 1)
   FROM explain_temp1
 -- !query analysis
-ExplainCommand 'Project [('COUNT('val) + 'SUM('key)) AS TOTAL#x, unresolvedalias('COUNT('key, ('val > 1)), None)], FormattedMode
+ExplainCommand 'Project [('COUNT('val) + 'SUM('key)) AS TOTAL#x, unresolvedalias('COUNT('key, ('val > 1)))], FormattedMode
 
 
 -- !query
@@ -181,7 +181,7 @@ EXPLAIN FORMATTED
   FROM explain_temp4
   GROUP BY key
 -- !query analysis
-ExplainCommand 'Aggregate ['key], ['key, unresolvedalias('sort_array('collect_set('val))[0], None)], FormattedMode
+ExplainCommand 'Aggregate ['key], ['key, unresolvedalias('sort_array('collect_set('val))[0])], FormattedMode
 
 
 -- !query
@@ -190,13 +190,13 @@ EXPLAIN FORMATTED
   FROM explain_temp4
   GROUP BY key
 -- !query analysis
-ExplainCommand 'Aggregate ['key], ['key, unresolvedalias('MIN('val), None)], FormattedMode
+ExplainCommand 'Aggregate ['key], ['key, unresolvedalias('MIN('val))], FormattedMode
 
 
 -- !query
 EXPLAIN EXTENDED INSERT INTO TABLE explain_temp5 SELECT * FROM explain_temp4
 -- !query analysis
-ExplainCommand 'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [], false, false, false, false, ExtendedMode
+ExplainCommand 'InsertIntoStatement 'UnresolvedRelation [explain_temp5], [__required_write_privileges__=INSERT], false, false, false, false, ExtendedMode
 
 
 -- !query

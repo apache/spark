@@ -6,7 +6,7 @@ AS testData(a, b)
 -- !query analysis
 CreateViewCommand `testData`, SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
-AS testData(a, b), false, true, LocalTempView, true
+AS testData(a, b), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [a#x, b#x]
       +- SubqueryAlias testData
          +- LocalRelation [a#x, b#x]
@@ -34,7 +34,7 @@ SELECT COUNT(udf(a)), udf(COUNT(b)) FROM testData
 -- !query analysis
 Aggregate [count(cast(udf(cast(a#x as string)) as int)) AS count(udf(a))#xL, cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -46,7 +46,7 @@ SELECT udf(a), COUNT(udf(b)) FROM testData GROUP BY a
 -- !query analysis
 Aggregate [a#x], [cast(udf(cast(a#x as string)) as int) AS udf(a)#x, count(cast(udf(cast(b#x as string)) as int)) AS count(udf(b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -72,7 +72,7 @@ SELECT COUNT(udf(a)), COUNT(udf(b)) FROM testData GROUP BY udf(a)
 -- !query analysis
 Aggregate [cast(udf(cast(a#x as string)) as int)], [count(cast(udf(cast(a#x as string)) as int)) AS count(udf(a))#xL, count(cast(udf(cast(b#x as string)) as int)) AS count(udf(b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -84,7 +84,7 @@ SELECT 'foo', COUNT(udf(a)) FROM testData GROUP BY 1
 -- !query analysis
 Aggregate [foo], [foo AS foo#x, count(cast(udf(cast(a#x as string)) as int)) AS count(udf(a))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -97,7 +97,7 @@ SELECT 'foo' FROM testData WHERE a = 0 GROUP BY udf(1)
 Aggregate [cast(udf(cast(1 as string)) as int)], [foo AS foo#x]
 +- Filter (a#x = 0)
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -110,7 +110,7 @@ SELECT 'foo', udf(APPROX_COUNT_DISTINCT(udf(a))) FROM testData WHERE a = 0 GROUP
 Aggregate [cast(udf(cast(1 as string)) as int)], [foo AS foo#x, cast(udf(cast(approx_count_distinct(cast(udf(cast(a#x as string)) as int), 0.05, 0, 0) as string)) as bigint) AS udf(approx_count_distinct(udf(a)))#xL]
 +- Filter (a#x = 0)
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -123,7 +123,7 @@ SELECT 'foo', MAX(STRUCT(udf(a))) FROM testData WHERE a = 0 GROUP BY udf(1)
 Aggregate [cast(udf(cast(1 as string)) as int)], [foo AS foo#x, max(struct(col1, cast(udf(cast(a#x as string)) as int))) AS max(struct(udf(a)))#x]
 +- Filter (a#x = 0)
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -135,7 +135,7 @@ SELECT udf(a + b), udf(COUNT(b)) FROM testData GROUP BY a + b
 -- !query analysis
 Aggregate [(a#x + b#x)], [cast(udf(cast((a#x + b#x) as string)) as int) AS udf((a + b))#x, cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -161,7 +161,7 @@ SELECT udf(a + 1) + 1, udf(COUNT(b)) FROM testData GROUP BY udf(a + 1)
 -- !query analysis
 Aggregate [cast(udf(cast((a#x + 1) as string)) as int)], [(cast(udf(cast((a#x + 1) as string)) as int) + 1) AS (udf((a + 1)) + 1)#x, cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -174,7 +174,7 @@ FROM testData
 -- !query analysis
 Aggregate [skewness(cast(cast(udf(cast(a#x as string)) as int) as double)) AS skewness(udf(a))#x, cast(udf(cast(kurtosis(cast(a#x as double)) as string)) as double) AS udf(kurtosis(a))#x, cast(udf(cast(min(a#x) as string)) as int) AS udf(min(a))#x, max(cast(udf(cast(a#x as string)) as int)) AS max(udf(a))#x, cast(udf(cast(avg(cast(udf(cast(a#x as string)) as int)) as string)) as double) AS udf(avg(udf(a)))#x, cast(udf(cast(variance(cast(a#x as double)) as string)) as double) AS udf(variance(a))#x, stddev(cast(cast(udf(cast(a#x as string)) as int) as double)) AS stddev(udf(a))#x, cast(udf(cast(sum(a#x) as string)) as bigint) AS udf(sum(a))#xL, cast(udf(cast(count(a#x) as string)) as bigint) AS udf(count(a))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -195,7 +195,7 @@ SELECT udf(a) AS k, COUNT(udf(b)) FROM testData GROUP BY k
 -- !query analysis
 Aggregate [cast(udf(cast(a#x as string)) as int)], [cast(udf(cast(a#x as string)) as int) AS k#x, count(cast(udf(cast(b#x as string)) as int)) AS count(udf(b))#xL]
 +- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
+   +- View (`testData`, [a#x, b#x])
       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
          +- Project [a#x, b#x]
             +- SubqueryAlias testData
@@ -208,7 +208,7 @@ SELECT a AS k, udf(COUNT(b)) FROM testData GROUP BY k HAVING k > 1
 Filter (k#x > 1)
 +- Aggregate [a#x], [a#x AS k#x, cast(udf(cast(count(b#x) as string)) as bigint) AS udf(count(b))#xL]
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -240,7 +240,7 @@ CREATE OR REPLACE TEMPORARY VIEW testDataHasSameNameWithAlias AS SELECT * FROM V
 (1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v)
 -- !query analysis
 CreateViewCommand `testDataHasSameNameWithAlias`, SELECT * FROM VALUES
-(1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v), false, true, LocalTempView, true
+(1, 1, 3), (1, 2, 1) AS testDataHasSameNameWithAlias(k, a, v), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, a#x, v#x]
       +- SubqueryAlias testDataHasSameNameWithAlias
          +- LocalRelation [k#x, a#x, v#x]
@@ -293,7 +293,7 @@ SELECT udf(a), COUNT(udf(1)) FROM testData WHERE false GROUP BY udf(a)
 Aggregate [cast(udf(cast(a#x as string)) as int)], [cast(udf(cast(a#x as string)) as int) AS udf(a)#x, count(cast(udf(cast(1 as string)) as int)) AS count(udf(1))#xL]
 +- Filter false
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -306,7 +306,7 @@ SELECT udf(COUNT(1)) FROM testData WHERE false
 Aggregate [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL]
 +- Filter false
    +- SubqueryAlias testdata
-      +- View (`testData`, [a#x,b#x])
+      +- View (`testData`, [a#x, b#x])
          +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
             +- Project [a#x, b#x]
                +- SubqueryAlias testData
@@ -321,7 +321,7 @@ Project [1 AS 1#x]
    +- Aggregate [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL]
       +- Filter false
          +- SubqueryAlias testdata
-            +- View (`testData`, [a#x,b#x])
+            +- View (`testData`, [a#x, b#x])
                +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
                   +- Project [a#x, b#x]
                      +- SubqueryAlias testData
@@ -362,7 +362,7 @@ SELECT udf(1) FROM range(10) HAVING true
 -- !query analysis
 Filter cast(true as boolean)
 +- Aggregate [cast(udf(cast(1 as string)) as int) AS udf(1)#x]
-   +- Range (0, 10, step=1, splits=None)
+   +- Range (0, 10, step=1)
 
 
 -- !query
@@ -371,7 +371,7 @@ SELECT udf(udf(1)) FROM range(10) HAVING MAX(id) > 0
 Project [udf(udf(1))#x]
 +- Filter (max(id#xL)#xL > cast(0 as bigint))
    +- Aggregate [cast(udf(cast(cast(udf(cast(1 as string)) as int) as string)) as int) AS udf(udf(1))#x, max(id#xL) AS max(id#xL)#xL]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1)
 
 
 -- !query
@@ -404,7 +404,7 @@ CreateViewCommand `test_agg`, SELECT * FROM VALUES
   (2, true),
   (3, false), (3, null),
   (4, null), (4, null),
-  (5, null), (5, true), (5, false) AS test_agg(k, v), false, true, LocalTempView, true
+  (5, null), (5, true), (5, false) AS test_agg(k, v), false, true, LocalTempView, UNSUPPORTED, true
    +- Project [k#x, v#x]
       +- SubqueryAlias test_agg
          +- LocalRelation [k#x, v#x]
@@ -416,7 +416,7 @@ SELECT udf(every(v)), udf(some(v)), any(v) FROM test_agg WHERE 1 = 0
 Aggregate [cast(udf(cast(every(v#x) as string)) as boolean) AS udf(every(v))#x, cast(udf(cast(some(v#x) as string)) as boolean) AS udf(some(v))#x, any(v#x) AS any(v)#x]
 +- Filter (1 = 0)
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -429,7 +429,7 @@ SELECT udf(every(udf(v))), some(v), any(v) FROM test_agg WHERE k = 4
 Aggregate [cast(udf(cast(every(cast(udf(cast(v#x as string)) as boolean)) as string)) as boolean) AS udf(every(udf(v)))#x, some(v#x) AS some(v)#x, any(v#x) AS any(v)#x]
 +- Filter (k#x = 4)
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -442,7 +442,7 @@ SELECT every(v), udf(some(v)), any(v) FROM test_agg WHERE k = 5
 Aggregate [every(v#x) AS every(v)#x, cast(udf(cast(some(v#x) as string)) as boolean) AS udf(some(v))#x, any(v#x) AS any(v)#x]
 +- Filter (k#x = 5)
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -454,7 +454,7 @@ SELECT udf(k), every(v), udf(some(v)), any(v) FROM test_agg GROUP BY udf(k)
 -- !query analysis
 Aggregate [cast(udf(cast(k#x as string)) as int)], [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, every(v#x) AS every(v)#x, cast(udf(cast(some(v#x) as string)) as boolean) AS udf(some(v))#x, any(v#x) AS any(v)#x]
 +- SubqueryAlias test_agg
-   +- View (`test_agg`, [k#x,v#x])
+   +- View (`test_agg`, [k#x, v#x])
       +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
          +- Project [k#x, v#x]
             +- SubqueryAlias test_agg
@@ -467,7 +467,7 @@ SELECT udf(k), every(v) FROM test_agg GROUP BY k HAVING every(v) = false
 Filter (every(v)#x = false)
 +- Aggregate [k#x], [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, every(v#x) AS every(v)#x]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -481,7 +481,7 @@ Project [udf(k)#x, udf(every(v))#x]
 +- Filter isnull(every(v#x)#x)
    +- Aggregate [cast(udf(cast(k#x as string)) as int)], [cast(udf(cast(k#x as string)) as int) AS udf(k)#x, cast(udf(cast(every(v#x) as string)) as boolean) AS udf(every(v))#x, every(v#x) AS every(v#x)#x]
       +- SubqueryAlias test_agg
-         +- View (`test_agg`, [k#x,v#x])
+         +- View (`test_agg`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias test_agg
@@ -503,13 +503,13 @@ Aggregate [cast(udf(cast(k#x as string)) as int)], [cast(udf(cast(k#x as string)
    :  +- Aggregate [any(v#x) AS any(v)#x]
    :     +- Filter (k#x = 1)
    :        +- SubqueryAlias test_agg
-   :           +- View (`test_agg`, [k#x,v#x])
+   :           +- View (`test_agg`, [k#x, v#x])
    :              +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
    :                 +- Project [k#x, v#x]
    :                    +- SubqueryAlias test_agg
    :                       +- LocalRelation [k#x, v#x]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -531,13 +531,13 @@ Aggregate [cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as in
    :  +- Aggregate [every(v#x) AS every(v)#x]
    :     +- Filter (k#x = 1)
    :        +- SubqueryAlias test_agg
-   :           +- View (`test_agg`, [k#x,v#x])
+   :           +- View (`test_agg`, [k#x, v#x])
    :              +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
    :                 +- Project [k#x, v#x]
    :                    +- SubqueryAlias test_agg
    :                       +- LocalRelation [k#x, v#x]
    +- SubqueryAlias test_agg
-      +- View (`test_agg`, [k#x,v#x])
+      +- View (`test_agg`, [k#x, v#x])
          +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
             +- Project [k#x, v#x]
                +- SubqueryAlias test_agg
@@ -554,7 +554,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(udf(1))\""
   },
@@ -578,7 +578,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"SMALLINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"some(udf(1))\""
   },
@@ -602,7 +602,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"udf(1)\"",
     "inputType" : "\"BIGINT\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"any(udf(1))\""
   },
@@ -626,7 +626,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"true\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "1",
+    "paramIndex" : "first",
     "requiredType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"every(true)\""
   },
@@ -648,7 +648,7 @@ Project [k#x, v#x, every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANG
    +- Window [every(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS every(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, v#x]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -663,7 +663,7 @@ Project [k#x, udf(udf(v))#x, some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS F
    +- Window [some(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS some(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [k#x, cast(udf(cast(cast(udf(cast(v#x as string)) as boolean) as string)) as boolean) AS udf(udf(v))#x, v#x]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -678,7 +678,7 @@ Project [udf(udf(k))#x, v#x, any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FI
    +- Window [any(v#x) windowspecdefinition(k#x, v#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any(v) OVER (PARTITION BY k ORDER BY v ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [k#x], [v#x ASC NULLS FIRST]
       +- Project [cast(udf(cast(cast(udf(cast(k#x as string)) as int) as string)) as int) AS udf(udf(k))#x, v#x, k#x]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg
@@ -692,7 +692,7 @@ Project [udf(count(1))#xL]
 +- Filter (count(1)#xL > 1)
    +- Aggregate [cast(udf(cast(count(1) as string)) as bigint) AS udf(count(1))#xL, count(1) AS count(1)#xL]
       +- SubqueryAlias test_agg
-         +- View (`test_agg`, [k#x,v#x])
+         +- View (`test_agg`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias test_agg
@@ -706,7 +706,7 @@ Project [k#x, udf(max(v))#x]
 +- Filter (max(v#x)#x = true)
    +- Aggregate [k#x], [k#x, cast(udf(cast(max(v#x) as string)) as boolean) AS udf(max(v))#x, max(v#x) AS max(v#x)#x]
       +- SubqueryAlias test_agg
-         +- View (`test_agg`, [k#x,v#x])
+         +- View (`test_agg`, [k#x, v#x])
             +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                +- Project [k#x, v#x]
                   +- SubqueryAlias test_agg
@@ -721,7 +721,7 @@ Project [cnt#xL]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Aggregate [cast(udf(cast(count(1) as string)) as bigint) AS cnt#xL]
          +- SubqueryAlias test_agg
-            +- View (`test_agg`, [k#x,v#x])
+            +- View (`test_agg`, [k#x, v#x])
                +- Project [cast(k#x as int) AS k#x, cast(v#x as boolean) AS v#x]
                   +- Project [k#x, v#x]
                      +- SubqueryAlias test_agg

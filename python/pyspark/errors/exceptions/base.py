@@ -14,10 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING
+from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Dict, Optional, cast, Iterable, TYPE_CHECKING, List
 
 from pyspark.errors.utils import ErrorClassesReader
+from pyspark.logger import PySparkLogger
 from pickle import PicklingError
 
 if TYPE_CHECKING:
@@ -32,25 +34,24 @@ class PySparkException(Exception):
     def __init__(
         self,
         message: Optional[str] = None,
-        error_class: Optional[str] = None,
-        message_parameters: Optional[Dict[str, str]] = None,
+        errorClass: Optional[str] = None,
+        messageParameters: Optional[Dict[str, str]] = None,
+        contexts: Optional[List["QueryContext"]] = None,
     ):
-        # `message` vs `error_class` & `message_parameters` are mutually exclusive.
-        assert (message is not None and (error_class is None and message_parameters is None)) or (
-            message is None and (error_class is not None and message_parameters is not None)
-        )
-
+        if contexts is None:
+            contexts = []
         self._error_reader = ErrorClassesReader()
 
         if message is None:
             self._message = self._error_reader.get_error_message(
-                cast(str, error_class), cast(Dict[str, str], message_parameters)
+                cast(str, errorClass), cast(Dict[str, str], messageParameters)
             )
         else:
             self._message = message
 
-        self._error_class = error_class
-        self._message_parameters = message_parameters
+        self._errorClass = errorClass
+        self._messageParameters = messageParameters
+        self._contexts = contexts
 
     def getErrorClass(self) -> Optional[str]:
         """
@@ -60,10 +61,12 @@ class PySparkException(Exception):
 
         See Also
         --------
+        :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
-        return self._error_class
+        return self._errorClass
 
     def getMessageParameters(self) -> Optional[Dict[str, str]]:
         """
@@ -74,9 +77,11 @@ class PySparkException(Exception):
         See Also
         --------
         :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessage`
+        :meth:`PySparkException.getQueryContext`
         :meth:`PySparkException.getSqlState`
         """
-        return self._message_parameters
+        return self._messageParameters
 
     def getSqlState(self) -> Optional[str]:
         """
@@ -89,13 +94,67 @@ class PySparkException(Exception):
         See Also
         --------
         :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessage`
         :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
         """
         return None
 
+    def getMessage(self) -> str:
+        """
+        Returns full error message.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getQueryContext`
+        :meth:`PySparkException.getSqlState`
+        """
+        return f"[{self.getErrorClass()}] {self._message}"
+
+    def getQueryContext(self) -> List["QueryContext"]:
+        """
+        Returns :class:`QueryContext`.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        :meth:`PySparkException.getErrorClass`
+        :meth:`PySparkException.getMessageParameters`
+        :meth:`PySparkException.getMessage`
+        :meth:`PySparkException.getSqlState`
+        """
+        return self._contexts
+
+    def _log_exception(self) -> None:
+        contexts = self.getQueryContext()
+        context = contexts[0] if len(contexts) != 0 else None
+        if context:
+            if context.contextType().name == "DataFrame":
+                logger = PySparkLogger.getLogger("DataFrameQueryContextLogger")
+                call_site = context.callSite().split(":")
+                line = call_site[1] if len(call_site) == 2 else ""
+                logger.exception(
+                    self.getMessage(),
+                    file=call_site[0],
+                    line=line,
+                    fragment=context.fragment(),
+                    errorClass=self.getErrorClass(),
+                )
+            else:
+                logger = PySparkLogger.getLogger("SQLQueryContextLogger")
+                logger.exception(
+                    self.getMessage(),
+                    errorClass=self.getErrorClass(),
+                )
+
     def __str__(self) -> str:
         if self.getErrorClass() is not None:
-            return f"[{self.getErrorClass()}] {self._message}"
+            return self.getMessage()
         else:
             return self._message
 
@@ -214,6 +273,12 @@ class PySparkTypeError(PySparkException, TypeError):
     """
 
 
+class PySparkIndexError(PySparkException, IndexError):
+    """
+    Wrapper class for IndexError to support error classes.
+    """
+
+
 class PySparkAttributeError(PySparkException, AttributeError):
     """
     Wrapper class for AttributeError to support error classes.
@@ -234,11 +299,11 @@ class PySparkAssertionError(PySparkException, AssertionError):
     def __init__(
         self,
         message: Optional[str] = None,
-        error_class: Optional[str] = None,
-        message_parameters: Optional[Dict[str, str]] = None,
+        errorClass: Optional[str] = None,
+        messageParameters: Optional[Dict[str, str]] = None,
         data: Optional[Iterable["Row"]] = None,
     ):
-        super().__init__(message, error_class, message_parameters)
+        super().__init__(message, errorClass, messageParameters)
         self.data = data
 
 
@@ -252,3 +317,102 @@ class PySparkPicklingError(PySparkException, PicklingError):
     """
     Wrapper class for pickle.PicklingError to support error classes.
     """
+
+
+class RetriesExceeded(PySparkException):
+    """
+    Represents an exception which is considered retriable, but retry limits
+    were exceeded
+    """
+
+
+class PySparkKeyError(PySparkException, KeyError):
+    """
+    Wrapper class for KeyError to support error classes.
+    """
+
+
+class PySparkImportError(PySparkException, ImportError):
+    """
+    Wrapper class for ImportError to support error classes.
+    """
+
+
+class QueryContextType(Enum):
+    """
+    The type of :class:`QueryContext`.
+
+    .. versionadded:: 4.0.0
+    """
+
+    SQL = 0
+    DataFrame = 1
+
+
+class QueryContext(ABC):
+    """
+    Query context of a :class:`PySparkException`. It helps users understand
+    where error occur while executing queries.
+
+    .. versionadded:: 4.0.0
+    """
+
+    @abstractmethod
+    def contextType(self) -> QueryContextType:
+        """
+        The type of this query context.
+        """
+        ...
+
+    @abstractmethod
+    def objectType(self) -> str:
+        """
+        The object type of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the exact object type in upper case. For example, a "VIEW".
+        """
+        ...
+
+    @abstractmethod
+    def objectName(self) -> str:
+        """
+        The object name of the query which throws the exception.
+        If the exception is directly from the main query, it should be an empty string.
+        Otherwise, it should be the object name. For example, a view name "V1".
+        """
+        ...
+
+    @abstractmethod
+    def startIndex(self) -> int:
+        """
+        The starting index in the query text which throws the exception. The index starts from 0.
+        """
+        ...
+
+    @abstractmethod
+    def stopIndex(self) -> int:
+        """
+        The stopping index in the query which throws the exception. The index starts from 0.
+        """
+        ...
+
+    @abstractmethod
+    def fragment(self) -> str:
+        """
+        The corresponding fragment of the query which throws the exception.
+        """
+        ...
+
+    @abstractmethod
+    def callSite(self) -> str:
+        """
+        The user code (call site of the API) that caused throwing the exception.
+        """
+        ...
+
+    @abstractmethod
+    def summary(self) -> str:
+        """
+        Summary of the exception cause.
+        """
+        ...

@@ -52,11 +52,13 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
       deleteOneFileInDirectory(location)
 
       // Read it again and now we should see a FileNotFoundException
-      val e = intercept[SparkException] {
-        df.count()
-      }
-      assert(e.getMessage.contains("FileNotFoundException"))
-      assert(e.getMessage.contains("recreating the Dataset/DataFrame involved"))
+      checkErrorMatchPVals(
+        exception = intercept[SparkException] {
+          df.count()
+        },
+        condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+        parameters = Map("path" -> ".*")
+      )
     }
   }
 }
@@ -81,11 +83,13 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
       deleteOneFileInDirectory(location)
 
       // Read it again and now we should see a FileNotFoundException
-      val e = intercept[SparkException] {
-        sql("select count(*) from view_refresh").first()
-      }
-      assert(e.getMessage.contains("FileNotFoundException"))
-      assert(e.getMessage.contains("REFRESH"))
+      checkErrorMatchPVals(
+        exception = intercept[SparkException] {
+          sql("select count(*) from view_refresh").first()
+        },
+        condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+        parameters = Map("path" -> ".*")
+      )
 
       // Refresh and we should be able to read it again.
       spark.catalog.refreshTable("view_refresh")
@@ -107,7 +111,13 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
 
           // Delete a file
           deleteOneFileInDirectory(location)
-          intercept[SparkException](sql("select count(*) from view_refresh").first())
+          checkErrorMatchPVals(
+            exception = intercept[SparkException] {
+              sql("select count(*) from view_refresh").first()
+            },
+            condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+            parameters = Map("path" -> ".*")
+          )
 
           // Refresh and we should be able to read it again.
           spark.catalog.refreshTable("vIeW_reFrEsH")

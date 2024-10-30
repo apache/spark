@@ -28,7 +28,7 @@ CreateViewCommand `t1`, select * from values
   ('val1d', 10S, null, 12L, float(17.0), 25D, 26E2, timestamp '2015-05-04 01:01:00.000', date '2015-05-04'),
   ('val1a', 6S, 8, 10L, float(15.0), 20D, 20E2, timestamp '2014-04-04 01:02:00.001', date '2014-04-04'),
   ('val1e', 10S, null, 19L, float(17.0), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', date '2014-05-04')
-  as t1(t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i), false, false, LocalTempView, true
+  as t1(t1a, t1b, t1c, t1d, t1e, t1f, t1g, t1h, t1i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
       +- SubqueryAlias t1
          +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
@@ -65,7 +65,7 @@ CreateViewCommand `t2`, select * from values
   ('val1e', 8S, null, 19L, float(17), 25D, 26E2, timestamp '2014-09-04 01:01:00.000', date '2014-09-04'),
   ('val1f', 19S, null, 19L, float(17), 25D, 26E2, timestamp '2014-10-04 01:01:00.000', date '2014-10-04'),
   ('val1b', null, 16, 19L, float(17), 25D, 26E2, timestamp '2014-05-04 01:01:00.000', null)
-  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, true
+  as t2(t2a, t2b, t2c, t2d, t2e, t2f, t2g, t2h, t2i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
       +- SubqueryAlias t2
          +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
@@ -100,7 +100,7 @@ CreateViewCommand `t3`, select * from values
   ('val1b', null, 16, 19L, float(17), 25D, 26E2, timestamp '2014-11-04 01:02:00.000', null),
   ('val3b', 8S, null, 719L, float(17), 25D, 26E2, timestamp '2014-05-04 01:02:00.000', date '2014-05-04'),
   ('val3b', 8S, null, 19L, float(17), 25D, 26E2, timestamp '2015-05-04 01:02:00.000', date '2015-05-04')
-  as t3(t3a, t3b, t3c, t3d, t3e, t3f, t3g, t3h, t3i), false, false, LocalTempView, true
+  as t3(t3a, t3b, t3c, t3d, t3e, t3f, t3g, t3h, t3i), false, false, LocalTempView, UNSUPPORTED, true
    +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
       +- SubqueryAlias t3
          +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
@@ -115,21 +115,21 @@ WHERE  t1a = 'val1c'
 Project [scalar-subquery#x [] AS min_t3d#xL, scalar-subquery#x [] AS max_t2h#x]
 :  :- Aggregate [min(t3d#xL) AS min(t3d)#xL]
 :  :  +- SubqueryAlias t3
-:  :     +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+:  :     +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
 :  :        +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
 :  :           +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
 :  :              +- SubqueryAlias t3
 :  :                 +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
 :  +- Aggregate [max(t2h#x) AS max(t2h)#x]
 :     +- SubqueryAlias t2
-:        +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :                 +- SubqueryAlias t2
 :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 +- Filter (t1a#x = val1c)
    +- SubqueryAlias t1
-      +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+      +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
          +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
             +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
                +- SubqueryAlias t1
@@ -152,19 +152,19 @@ Aggregate [t1a#x], [t1a#x, count(1) AS count(1)#xL]
    :        +- Aggregate [t2g#x], [scalar-subquery#x [] AS scalarsubquery()#x, count(1) AS count(1)#xL]
    :           :  +- Aggregate [min(t3c#x) AS min(t3c)#x]
    :           :     +- SubqueryAlias t3
-   :           :        +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+   :           :        +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
    :           :           +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
    :           :              +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    :           :                 +- SubqueryAlias t3
    :           :                    +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    :           +- SubqueryAlias t2
-   :              +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+   :              +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
    :                 +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
    :                    +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    :                       +- SubqueryAlias t2
    :                          +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+      +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
          +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
             +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
                +- SubqueryAlias t1
@@ -188,14 +188,14 @@ Distinct
    :  +- Project [scalar-subquery#x [] AS min_t3d#xL, null AS NULL#x]
    :     :  +- Aggregate [min(t3d#xL) AS min(t3d)#xL]
    :     :     +- SubqueryAlias t3
-   :     :        +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+   :     :        +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
    :     :           +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
    :     :              +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    :     :                 +- SubqueryAlias t3
    :     :                    +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    :     +- Filter (t1a#x = val1c)
    :        +- SubqueryAlias t1
-   :           +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   :           +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
    :              +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
    :                 +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
    :                    +- SubqueryAlias t1
@@ -204,14 +204,14 @@ Distinct
       +- Project [null AS NULL#x, scalar-subquery#x [] AS max_t2h#x]
          :  +- Aggregate [max(t2h#x) AS max(t2h)#x]
          :     +- SubqueryAlias t2
-         :        +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+         :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
          :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
          :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
          :                 +- SubqueryAlias t2
          :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
          +- Filter (t1a#x = val1c)
             +- SubqueryAlias t1
-               +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+               +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
                   +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
                      +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
                         +- SubqueryAlias t1
@@ -231,14 +231,14 @@ Intersect false
 :- Project [scalar-subquery#x [] AS min_t3d#x]
 :  :  +- Aggregate [min(t3c#x) AS min(t3c)#x]
 :  :     +- SubqueryAlias t3
-:  :        +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+:  :        +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
 :  :           +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
 :  :              +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
 :  :                 +- SubqueryAlias t3
 :  :                    +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
 :  +- Filter (t1a#x = val1a)
 :     +- SubqueryAlias t1
-:        +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+:        +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
 :           +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
 :              +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
 :                 +- SubqueryAlias t1
@@ -246,14 +246,14 @@ Intersect false
 +- Project [scalar-subquery#x [] AS min_t2d#x]
    :  +- Aggregate [min(t2c#x) AS min(t2c)#x]
    :     +- SubqueryAlias t2
-   :        +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+   :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
    :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
    :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    :                 +- SubqueryAlias t2
    :                    +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    +- Filter (t1a#x = val1d)
       +- SubqueryAlias t1
-         +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+         +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
             +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
                +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
                   +- SubqueryAlias t1
@@ -278,14 +278,14 @@ Project [t1a#x, t2a#x, min_t3d#xL, avg_t3d#x]
    :  +- Project [t1a#x, scalar-subquery#x [] AS min_t3d#xL]
    :     :  +- Aggregate [min(t3d#xL) AS min(t3d)#xL]
    :     :     +- SubqueryAlias t3
-   :     :        +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+   :     :        +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
    :     :           +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
    :     :              +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    :     :                 +- SubqueryAlias t3
    :     :                    +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    :     +- Filter t1a#x IN (val1e,val1c)
    :        +- SubqueryAlias t1
-   :           +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   :           +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
    :              +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
    :                 +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
    :                    +- SubqueryAlias t1
@@ -294,14 +294,14 @@ Project [t1a#x, t2a#x, min_t3d#xL, avg_t3d#x]
       +- Project [t2a#x, scalar-subquery#x [] AS avg_t3d#x]
          :  +- Aggregate [avg(t3d#xL) AS avg(t3d)#x]
          :     +- SubqueryAlias t3
-         :        +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+         :        +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
          :           +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
          :              +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
          :                 +- SubqueryAlias t3
          :                    +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
          +- Filter t2a#x IN (val1c,val2a)
             +- SubqueryAlias t2
-               +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+               +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
                   +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
                      +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
                         +- SubqueryAlias t2
@@ -318,7 +318,7 @@ Project [scalar-subquery#x [t1a#x] AS min_t3d#xL, scalar-subquery#x [t1a#x] AS m
 :  :- Aggregate [min(t3d#xL) AS min(t3d)#xL]
 :  :  +- Filter (t3a#x = outer(t1a#x))
 :  :     +- SubqueryAlias t3
-:  :        +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+:  :        +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
 :  :           +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
 :  :              +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
 :  :                 +- SubqueryAlias t3
@@ -326,14 +326,14 @@ Project [scalar-subquery#x [t1a#x] AS min_t3d#xL, scalar-subquery#x [t1a#x] AS m
 :  +- Aggregate [max(t2h#x) AS max(t2h)#x]
 :     +- Filter (t2a#x = outer(t1a#x))
 :        +- SubqueryAlias t2
-:           +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:           +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :              +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :                 +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :                    +- SubqueryAlias t2
 :                       +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 +- Filter (t1a#x = val1b)
    +- SubqueryAlias t1
-      +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+      +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
          +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
             +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
                +- SubqueryAlias t1
@@ -354,14 +354,14 @@ Except false
 :  :  +- Aggregate [min(t3d#xL) AS min(t3d)#xL]
 :  :     +- Filter (t3a#x = outer(t1a#x))
 :  :        +- SubqueryAlias t3
-:  :           +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+:  :           +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
 :  :              +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
 :  :                 +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
 :  :                    +- SubqueryAlias t3
 :  :                       +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
 :  +- Filter (t1a#x = val1b)
 :     +- SubqueryAlias t1
-:        +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+:        +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
 :           +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
 :              +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
 :                 +- SubqueryAlias t1
@@ -369,14 +369,14 @@ Except false
 +- Project [scalar-subquery#x [] AS abs_min_t3d#xL]
    :  +- Aggregate [min(t3d#xL) AS min(t3d)#xL]
    :     +- SubqueryAlias t3
-   :        +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+   :        +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
    :           +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
    :              +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    :                 +- SubqueryAlias t3
    :                    +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    +- Filter (t1a#x = val1b)
       +- SubqueryAlias t1
-         +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+         +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
             +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
                +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
                   +- SubqueryAlias t1
@@ -404,13 +404,13 @@ Project [t1a#x, t1b#x]
    :     :     +- Filter (t2c#x = outer(t3c#x))
    :     :        +- Join LeftOuter, (t2a#x = t1a#x)
    :     :           :- SubqueryAlias t2
-   :     :           :  +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+   :     :           :  +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
    :     :           :     +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
    :     :           :        +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    :     :           :           +- SubqueryAlias t2
    :     :           :              +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    :     :           +- SubqueryAlias t1
-   :     :              +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   :     :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
    :     :                 +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
    :     :                    +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
    :     :                       +- SubqueryAlias t1
@@ -420,25 +420,25 @@ Project [t1a#x, t1b#x]
    :        :     +- Filter (t2c#x = outer(t3c#x))
    :        :        +- Join LeftOuter, (t2a#x = t1a#x)
    :        :           :- SubqueryAlias t2
-   :        :           :  +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+   :        :           :  +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
    :        :           :     +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
    :        :           :        +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    :        :           :           +- SubqueryAlias t2
    :        :           :              +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
    :        :           +- SubqueryAlias t1
-   :        :              +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   :        :              +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
    :        :                 +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
    :        :                    +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
    :        :                       +- SubqueryAlias t1
    :        :                          +- LocalRelation [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
    :        +- SubqueryAlias t3
-   :           +- View (`t3`, [t3a#x,t3b#x,t3c#x,t3d#xL,t3e#x,t3f#x,t3g#x,t3h#x,t3i#x])
+   :           +- View (`t3`, [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x])
    :              +- Project [cast(t3a#x as string) AS t3a#x, cast(t3b#x as smallint) AS t3b#x, cast(t3c#x as int) AS t3c#x, cast(t3d#xL as bigint) AS t3d#xL, cast(t3e#x as float) AS t3e#x, cast(t3f#x as double) AS t3f#x, cast(t3g#x as double) AS t3g#x, cast(t3h#x as timestamp) AS t3h#x, cast(t3i#x as date) AS t3i#x]
    :                 +- Project [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    :                    +- SubqueryAlias t3
    :                       +- LocalRelation [t3a#x, t3b#x, t3c#x, t3d#xL, t3e#x, t3f#x, t3g#x, t3h#x, t3i#x]
    +- SubqueryAlias t1
-      +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+      +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
          +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
             +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
                +- SubqueryAlias t1
@@ -459,7 +459,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 :  :- Aggregate [count(t2d#xL) AS count(t2d)#xL]
 :  :  +- Filter (t2a#x = outer(t1a#x))
 :  :     +- SubqueryAlias t2
-:  :        +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :  :                 +- SubqueryAlias t2
@@ -467,7 +467,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 :  :- Aggregate [count_if((t2d#xL > cast(0 as bigint))) AS count_if((t2d > 0))#xL]
 :  :  +- Filter (t2a#x = outer(t1a#x))
 :  :     +- SubqueryAlias t2
-:  :        +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :  :                 +- SubqueryAlias t2
@@ -475,7 +475,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 :  :- Aggregate [approx_count_distinct(t2d#xL, 0.05, 0, 0) AS approx_count_distinct(t2d)#xL]
 :  :  +- Filter (t2a#x = outer(t1a#x))
 :  :     +- SubqueryAlias t2
-:  :        +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :  :                 +- SubqueryAlias t2
@@ -483,7 +483,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 :  :- Aggregate [collect_list(t2d#xL, 0, 0) AS collect_list(t2d)#x]
 :  :  +- Filter (t2a#x = outer(t1a#x))
 :  :     +- SubqueryAlias t2
-:  :        +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :  :                 +- SubqueryAlias t2
@@ -491,7 +491,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 :  :- Aggregate [sort_array(collect_set(t2d#xL, 0, 0), true) AS sort_array(collect_set(t2d), true)#x]
 :  :  +- Filter (t2a#x = outer(t1a#x))
 :  :     +- SubqueryAlias t2
-:  :        +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:  :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :  :           +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :  :              +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :  :                 +- SubqueryAlias t2
@@ -499,13 +499,13 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS count_t2#xL, scalar-subquery#x [t1a
 :  +- Aggregate [hex(count_min_sketch(t2d#xL, 0.5, 0.5, 1, 0, 0)) AS hex(count_min_sketch(t2d, 0.5, 0.5, 1))#x]
 :     +- Filter (t2a#x = outer(t1a#x))
 :        +- SubqueryAlias t2
-:           +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:           +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :              +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :                 +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :                    +- SubqueryAlias t2
 :                       +- LocalRelation [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
       +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
          +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
             +- SubqueryAlias t1
@@ -519,7 +519,7 @@ Project [t1c#x, scalar-subquery#x [t1c#x] AS scalarsubquery(t1c)#x]
 :  +- Project [outer(t1c#x)]
 :     +- OneRowRelation
 +- SubqueryAlias t1
-   +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
       +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
          +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
             +- SubqueryAlias t1
@@ -534,7 +534,7 @@ Project [t1c#x, scalar-subquery#x [t1c#x && t1c#x] AS scalarsubquery(t1c, t1c)#x
 :     +- Filter (outer(t1c#x) = 8)
 :        +- OneRowRelation
 +- SubqueryAlias t1
-   +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
       +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
          +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
             +- SubqueryAlias t1
@@ -550,7 +550,7 @@ Project [t1c#x, t1d#xL, scalar-subquery#x [t1c#x && t1d#xL] AS scalarsubquery(t1
 :        +- Project [outer(t1c#x) AS c#x, outer(t1d#xL) AS d#xL]
 :           +- OneRowRelation
 +- SubqueryAlias t1
-   +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
       +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
          +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
             +- SubqueryAlias t1
@@ -566,7 +566,7 @@ Project [t1c#x, scalar-subquery#x [t1c#x] AS scalarsubquery(t1c)#xL]
 :        +- Project [outer(t1c#x) AS c#x]
 :           +- OneRowRelation
 +- SubqueryAlias t1
-   +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
       +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
          +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
             +- SubqueryAlias t1
@@ -580,7 +580,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS scalarsubquery(t1a)#xL]
 :  +- Aggregate [sum(t2b#x) AS sum(t2b)#xL]
 :     +- Join Inner, (t2a#x = a#x)
 :        :- SubqueryAlias t2
-:        :  +- View (`t2`, [t2a#x,t2b#x,t2c#x,t2d#xL,t2e#x,t2f#x,t2g#x,t2h#x,t2i#x])
+:        :  +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])
 :        :     +- Project [cast(t2a#x as string) AS t2a#x, cast(t2b#x as smallint) AS t2b#x, cast(t2c#x as int) AS t2c#x, cast(t2d#xL as bigint) AS t2d#xL, cast(t2e#x as float) AS t2e#x, cast(t2f#x as double) AS t2f#x, cast(t2g#x as double) AS t2g#x, cast(t2h#x as timestamp) AS t2h#x, cast(t2i#x as date) AS t2i#x]
 :        :        +- Project [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x]
 :        :           +- SubqueryAlias t2
@@ -589,7 +589,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS scalarsubquery(t1a)#xL]
 :           +- Project [outer(t1a#x) AS a#x]
 :              +- OneRowRelation
 +- SubqueryAlias t1
-   +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
+   +- View (`t1`, [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x])
       +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
          +- Project [t1a#x, t1b#x, t1c#x, t1d#xL, t1e#x, t1f#x, t1g#x, t1h#x, t1i#x]
             +- SubqueryAlias t1
@@ -599,7 +599,7 @@ Project [t1a#x, scalar-subquery#x [t1a#x] AS scalarsubquery(t1a)#xL]
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (0, 1), (1, 2) t1(c1, c2)
 -- !query analysis
-CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t1(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t1(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t1
       +- LocalRelation [c1#x, c2#x]
 
@@ -607,7 +607,7 @@ CreateViewCommand `t1`, VALUES (0, 1), (1, 2) t1(c1, c2), false, true, LocalTemp
 -- !query
 CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (0, 2), (0, 3) t2(c1, c2)
 -- !query analysis
-CreateViewCommand `t2`, VALUES (0, 2), (0, 3) t2(c1, c2), false, true, LocalTempView, true
+CreateViewCommand `t2`, VALUES (0, 2), (0, 3) t2(c1, c2), false, true, LocalTempView, UNSUPPORTED, true
    +- SubqueryAlias t2
       +- LocalRelation [c1#x, c2#x]
 
@@ -625,7 +625,7 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#x]
 :        +- SubqueryAlias t
 :           +- CTERelationRef xxxx, true, [a#x], false
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
          +- SubqueryAlias t1
             +- LocalRelation [c1#x, c2#x]
@@ -641,7 +641,7 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :     :     +- Project [c1#x, c2#x]
 :     :        +- Filter (c1#x = outer(c1#x))
 :     :           +- SubqueryAlias t2
-:     :              +- View (`t2`, [c1#x,c2#x])
+:     :              +- View (`t2`, [c1#x, c2#x])
 :     :                 +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
 :     :                    +- SubqueryAlias t2
 :     :                       +- LocalRelation [c1#x, c2#x]
@@ -649,7 +649,7 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :        +- SubqueryAlias t
 :           +- CTERelationRef xxxx, true, [c1#x, c2#x], false
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
          +- SubqueryAlias t1
             +- LocalRelation [c1#x, c2#x]
@@ -668,7 +668,7 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :     :  +- SubqueryAlias t3
 :     :     +- Project [(c1#x + 1) AS c1#x, (c2#x + 1) AS c2#x]
 :     :        +- SubqueryAlias t2
-:     :           +- View (`t2`, [c1#x,c2#x])
+:     :           +- View (`t2`, [c1#x, c2#x])
 :     :              +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
 :     :                 +- SubqueryAlias t2
 :     :                    +- LocalRelation [c1#x, c2#x]
@@ -682,7 +682,7 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :        +- SubqueryAlias t4
 :           +- CTERelationRef xxxx, true, [c1#x, c2#x], false
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
          +- SubqueryAlias t1
             +- LocalRelation [c1#x, c2#x]
@@ -701,7 +701,7 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :     :  +- SubqueryAlias t
 :     :     +- Project [c1#x, c2#x]
 :     :        +- SubqueryAlias t2
-:     :           +- View (`t2`, [c1#x,c2#x])
+:     :           +- View (`t2`, [c1#x, c2#x])
 :     :              +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
 :     :                 +- SubqueryAlias t2
 :     :                    +- LocalRelation [c1#x, c2#x]
@@ -718,7 +718,7 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :                          +- SubqueryAlias t
 :                             +- CTERelationRef xxxx, true, [c1#x, c2#x], false
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
          +- SubqueryAlias t1
             +- LocalRelation [c1#x, c2#x]
@@ -736,7 +736,7 @@ WithCTE
 :  +- SubqueryAlias v
 :     +- Project [c1#x, c2#x]
 :        +- SubqueryAlias t2
-:           +- View (`t2`, [c1#x,c2#x])
+:           +- View (`t2`, [c1#x, c2#x])
 :              +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
 :                 +- SubqueryAlias t2
 :                    +- LocalRelation [c1#x, c2#x]
@@ -747,7 +747,7 @@ WithCTE
       :     :  +- SubqueryAlias t
       :     :     +- Project [c1#x, c2#x]
       :     :        +- SubqueryAlias t2
-      :     :           +- View (`t2`, [c1#x,c2#x])
+      :     :           +- View (`t2`, [c1#x, c2#x])
       :     :              +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
       :     :                 +- SubqueryAlias t2
       :     :                    +- LocalRelation [c1#x, c2#x]
@@ -760,7 +760,7 @@ WithCTE
       :           +- SubqueryAlias v
       :              +- CTERelationRef xxxx, true, [c1#x, c2#x], false
       +- SubqueryAlias t1
-         +- View (`t1`, [c1#x,c2#x])
+         +- View (`t1`, [c1#x, c2#x])
             +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
                +- SubqueryAlias t1
                   +- LocalRelation [c1#x, c2#x]
@@ -781,7 +781,7 @@ WithCTE
    :        +- SubqueryAlias t
    :           +- CTERelationRef xxxx, true, [a#x], false
    +- SubqueryAlias t1
-      +- View (`t1`, [c1#x,c2#x])
+      +- View (`t1`, [c1#x, c2#x])
          +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
             +- SubqueryAlias t1
                +- LocalRelation [c1#x, c2#x]
@@ -820,14 +820,14 @@ Project [scalar-subquery#x [] AS b#x]
 -- !query
 CREATE OR REPLACE TEMP VIEW t1(c1, c2) AS (VALUES (0, 1), (1, 2))
 -- !query analysis
-CreateViewCommand `t1`, [(c1,None), (c2,None)], (VALUES (0, 1), (1, 2)), false, true, LocalTempView, true
+CreateViewCommand `t1`, [(c1,None), (c2,None)], (VALUES (0, 1), (1, 2)), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 
 -- !query
 CREATE OR REPLACE TEMP VIEW t2(c1, c2) AS (VALUES (0, 2), (0, 3))
 -- !query analysis
-CreateViewCommand `t2`, [(c1,None), (c2,None)], (VALUES (0, 2), (0, 3)), false, true, LocalTempView, true
+CreateViewCommand `t2`, [(c1,None), (c2,None)], (VALUES (0, 2), (0, 3)), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x]
 
 
@@ -840,7 +840,7 @@ CREATE OR REPLACE TEMP VIEW students(id, name, major, year) AS (VALUES
 CreateViewCommand `students`, [(id,None), (name,None), (major,None), (year,None)], (VALUES
     (0, 'A', 'CS', 2022),
     (1, 'B', 'CS', 2022),
-    (2, 'C', 'Math', 2022)), false, true, LocalTempView, true
+    (2, 'C', 'Math', 2022)), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x]
 
 
@@ -855,7 +855,7 @@ CreateViewCommand `exams`, [(sid,None), (course,None), (curriculum,None), (grade
     (0, 'C1', 'CS', 4, 2020),
     (0, 'C2', 'CS', 3, 2021),
     (1, 'C1', 'CS', 2, 2020),
-    (1, 'C2', 'CS', 1, 2021)), false, true, LocalTempView, true
+    (1, 'C2', 'CS', 1, 2021)), false, true, LocalTempView, UNSUPPORTED, true
    +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
 
@@ -875,16 +875,16 @@ Project [name#x, course#x]
    :  +- Aggregate [(avg(grade#x) + cast(1 as double)) AS (avg(grade) + 1)#x]
    :     +- Filter ((outer(id#x) = sid#x) OR ((curriculum#x = outer(major#x)) AND (outer(year#x) > date#x)))
    :        +- SubqueryAlias exams
-   :           +- View (`exams`, [sid#x,course#x,curriculum#x,grade#x,date#x])
+   :           +- View (`exams`, [sid#x, course#x, curriculum#x, grade#x, date#x])
    :              +- Project [cast(col1#x as int) AS sid#x, cast(col2#x as string) AS course#x, cast(col3#x as string) AS curriculum#x, cast(col4#x as int) AS grade#x, cast(col5#x as int) AS date#x]
    :                 +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
    +- Join Inner
       :- SubqueryAlias students
-      :  +- View (`students`, [id#x,name#x,major#x,year#x])
+      :  +- View (`students`, [id#x, name#x, major#x, year#x])
       :     +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS name#x, cast(col3#x as string) AS major#x, cast(col4#x as int) AS year#x]
       :        +- LocalRelation [col1#x, col2#x, col3#x, col4#x]
       +- SubqueryAlias exams
-         +- View (`exams`, [sid#x,course#x,curriculum#x,grade#x,date#x])
+         +- View (`exams`, [sid#x, course#x, curriculum#x, grade#x, date#x])
             +- Project [cast(col1#x as int) AS sid#x, cast(col2#x as string) AS course#x, cast(col3#x as string) AS curriculum#x, cast(col4#x as int) AS grade#x, cast(col5#x as int) AS date#x]
                +- LocalRelation [col1#x, col2#x, col3#x, col4#x, col5#x]
 
@@ -896,11 +896,11 @@ Project [scalar-subquery#x [c1#x] AS scalarsubquery(c1)#x]
 :  +- Aggregate [min(c2#x) AS min(c2)#x]
 :     +- Filter (outer(c1#x) > c1#x)
 :        +- SubqueryAlias t2
-:           +- View (`t2`, [c1#x,c2#x])
+:           +- View (`t2`, [c1#x, c2#x])
 :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                 +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -912,11 +912,11 @@ Project [scalar-subquery#x [c1#x && c2#x] AS scalarsubquery(c1, c2)#x]
 :  +- Aggregate [min(c2#x) AS min(c2)#x]
 :     +- Filter ((outer(c1#x) >= c1#x) AND (outer(c2#x) < c2#x))
 :        +- SubqueryAlias t2
-:           +- View (`t2`, [c1#x,c2#x])
+:           +- View (`t2`, [c1#x, c2#x])
 :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                 +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -928,11 +928,11 @@ Project [scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :  +- Aggregate [count(1) AS count(1)#xL]
 :     +- Filter (outer(c1#x) > c1#x)
 :        +- SubqueryAlias t2
-:           +- View (`t2`, [c1#x,c2#x])
+:           +- View (`t2`, [c1#x, c2#x])
 :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                 +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -980,11 +980,11 @@ Project [c1#x, c2#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#x]
 :  +- Aggregate [isnull(count(1)) AS (count(1) IS NULL)#x]
 :     +- Filter (outer(c1#x) = c1#x)
 :        +- SubqueryAlias t2
-:           +- View (`t2`, [c1#x,c2#x])
+:           +- View (`t2`, [c1#x, c2#x])
 :              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                 +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -998,11 +998,11 @@ Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :        +- Aggregate [false AS f#x, max(c2#x) AS max(c2)#x]
 :           +- Filter (c1#x = c1#x)
 :              +- SubqueryAlias t1
-:                 +- View (`t1`, [c1#x,c2#x])
+:                 +- View (`t1`, [c1#x, c2#x])
 :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                       +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t2
-   +- View (`t2`, [c1#x,c2#x])
+   +- View (`t2`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
 
@@ -1054,9 +1054,9 @@ Project [c1#xL, c2#xL]
          :  +- Project [id#xL AS c#xL]
          :     +- Filter (outer(id#xL) = id#xL)
          :        +- SubqueryAlias t2
-         :           +- Range (1, 2, step=1, splits=None)
+         :           +- Range (1, 2, step=1)
          +- SubqueryAlias t1
-            +- Range (1, 3, step=1, splits=None)
+            +- Range (1, 3, step=1)
 
 
 -- !query
@@ -1068,10 +1068,10 @@ Project [c1#x, c2#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :        +- Filter (outer(c1#x) = c1#x)
 :           +- SubqueryAlias t2
 :              +- SubqueryAlias t1
-:                 +- View (`t1`, [c1#x,c2#x])
+:                 +- View (`t1`, [c1#x, c2#x])
 :                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
 :                       +- LocalRelation [col1#x, col2#x]
 +- SubqueryAlias t1
-   +- View (`t1`, [c1#x,c2#x])
+   +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]

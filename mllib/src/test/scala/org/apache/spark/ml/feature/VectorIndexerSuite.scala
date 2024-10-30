@@ -18,7 +18,8 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.{CATEGORICAL_FEATURES, MAX_CATEGORIES}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
@@ -175,8 +176,10 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
         maxCategories: Int,
         categoricalFeatures: Set[Int]): Unit = {
       val collectedData = data.collect().map(_.getAs[Vector](0))
-      val errMsg = s"checkCategoryMaps failed for input with maxCategories=$maxCategories," +
-        s" categoricalFeatures=${categoricalFeatures.mkString(", ")}"
+
+      val errMsg = log"checkCategoryMaps failed for input with " +
+        log"maxCategories=${MDC(MAX_CATEGORIES, maxCategories)} " +
+        log"categoricalFeatures=${MDC(CATEGORICAL_FEATURES, categoricalFeatures.mkString(", "))}"
       try {
         val vectorIndexer = getIndexer.setMaxCategories(maxCategories)
         val model = vectorIndexer.fit(data)
@@ -210,8 +213,8 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
                 assert(attr.values.get === origValueSet.toArray.sorted.map(_.toString))
                 assert(attr.isOrdinal.get === false)
               case _ =>
-                throw new RuntimeException(errMsg + s". Categorical feature $feature failed" +
-                  s" metadata check. Found feature attribute: $featureAttr.")
+                throw new RuntimeException(errMsg.message + s". Categorical feature $feature " +
+                  s"failed metadata check. Found feature attribute: $featureAttr.")
             }
           }
           // Check numerical feature metadata.
@@ -222,8 +225,8 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
               case attr: NumericAttribute =>
                 assert(featureAttr.index.get === feature)
               case _ =>
-                throw new RuntimeException(errMsg + s". Numerical feature $feature failed" +
-                  s" metadata check. Found feature attribute: $featureAttr.")
+                throw new RuntimeException(errMsg.message + s". Numerical feature $feature " +
+                  s"failed metadata check. Found feature attribute: $featureAttr.")
             }
           }
         }

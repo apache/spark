@@ -387,7 +387,7 @@ SetCatalogAndNamespace
 -- !query
 CREATE VIEW v1 AS SELECT * FROM t1
 -- !query analysis
-CreateViewCommand `spark_catalog`.`mydb1`.`v1`, SELECT * FROM t1, false, false, PersistedView, true
+CreateViewCommand `spark_catalog`.`mydb1`.`v1`, SELECT * FROM t1, false, false, PersistedView, COMPENSATION, true
    +- Project [i1#x]
       +- SubqueryAlias spark_catalog.mydb1.t1
          +- Relation spark_catalog.mydb1.t1[i1#x] parquet
@@ -435,7 +435,7 @@ SetCatalogAndNamespace
 -- !query
 CREATE TEMP VIEW v2 AS SELECT * FROM t1
 -- !query analysis
-CreateViewCommand `v2`, SELECT * FROM t1, false, false, LocalTempView, true
+CreateViewCommand `v2`, SELECT * FROM t1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [i1#x]
       +- SubqueryAlias spark_catalog.mydb2.t1
          +- Relation spark_catalog.mydb2.t1[i1#x] parquet

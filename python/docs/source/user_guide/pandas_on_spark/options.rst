@@ -304,6 +304,8 @@ compute.isin_limit              80                      'compute.isin_limit' set
                                                         'Column.isin(list)'. If the length of the ‘list’ is
                                                         above the limit, broadcast join is used instead for
                                                         better performance.
+compute.pandas_fallback         False                   'compute.pandas_fallback' sets whether or not to
+                                                        fallback automatically to Pandas' implementation.
 plotting.max_rows               1000                    'plotting.max_rows' sets the visual limit on top-n-
                                                         based plots such as `plot.bar` and `plot.pie`. If it
                                                         is set to 1000, the first 1000 data points will be

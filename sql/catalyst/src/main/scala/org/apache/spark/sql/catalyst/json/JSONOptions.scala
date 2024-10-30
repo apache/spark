@@ -122,12 +122,8 @@ class JSONOptions(
     } else {
       parameters.get(TIMESTAMP_FORMAT)
     }
-  val timestampFormatInWrite: String = parameters.getOrElse(TIMESTAMP_FORMAT,
-    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
-    } else {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
-    })
+  val timestampFormatInWrite: String =
+    parameters.getOrElse(TIMESTAMP_FORMAT, commonTimestampFormat)
 
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
   val timestampNTZFormatInWrite: String =
@@ -154,7 +150,8 @@ class JSONOptions(
     sep
   }
 
-  protected def checkedEncoding(enc: String): String = enc
+  protected def checkedEncoding(enc: String): String =
+    CharsetProvider.forName(enc, caller = "JSONOptions").name()
 
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
@@ -187,6 +184,14 @@ class JSONOptions(
    */
   val writeNonAsciiCharacterAsCodePoint: Boolean =
     parameters.get(WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT).map(_.toBoolean).getOrElse(false)
+
+  // This option takes in a column name and specifies that the entire JSON record should be stored
+  // as a single VARIANT type column in the table with the given column name.
+  // E.g. spark.read.format("json").option("singleVariantColumn", "colName")
+  val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+
+  val useUnsafeRow: Boolean = parameters.get(USE_UNSAFE_ROW).map(_.toBoolean).getOrElse(
+    SQLConf.get.getConf(SQLConf.JSON_USE_UNSAFE_ROW))
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
@@ -229,16 +234,16 @@ class JSONOptionsInRead(
   }
 
   protected override def checkedEncoding(enc: String): String = {
-    val isDenied = JSONOptionsInRead.denyList.contains(Charset.forName(enc))
+    val charset = CharsetProvider.forName(enc, caller = "JSONOptionsInRead")
+    val isDenied = JSONOptionsInRead.denyList.contains(charset)
     require(multiLine || !isDenied,
       s"""The $enc encoding must not be included in the denyList when multiLine is disabled:
          |denylist: ${JSONOptionsInRead.denyList.mkString(", ")}""".stripMargin)
 
-    val isLineSepRequired =
-        multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
+    val isLineSepRequired = multiLine || charset == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
     require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
 
-    enc
+    charset.name()
   }
 }
 
@@ -282,6 +287,8 @@ object JSONOptions extends DataSourceOptions {
   val COLUMN_NAME_OF_CORRUPTED_RECORD = newOption("columnNameOfCorruptRecord")
   val TIME_ZONE = newOption("timeZone")
   val WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT = newOption("writeNonAsciiCharacterAsCodePoint")
+  val SINGLE_VARIANT_COLUMN = newOption("singleVariantColumn")
+  val USE_UNSAFE_ROW = newOption("useUnsafeRow")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"

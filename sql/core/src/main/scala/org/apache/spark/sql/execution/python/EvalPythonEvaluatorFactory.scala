@@ -36,7 +36,7 @@ abstract class EvalPythonEvaluatorFactory(
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
   protected def evaluate(
-      funcs: Seq[ChainedPythonFunctions],
+      funcs: Seq[(ChainedPythonFunctions, Long)],
       argMetas: Array[Array[ArgumentMetadata]],
       iter: Iterator[InternalRow],
       schema: StructType,
@@ -47,15 +47,16 @@ abstract class EvalPythonEvaluatorFactory(
 
   private class EvalPythonPartitionEvaluator
       extends PartitionEvaluator[InternalRow, InternalRow] {
-    private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
+    private def collectFunctions(
+        udf: PythonUDF): ((ChainedPythonFunctions, Long), Seq[Expression]) = {
       udf.children match {
         case Seq(u: PythonUDF) =>
-          val (chained, children) = collectFunctions(u)
-          (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
+          val ((chained, _), children) = collectFunctions(u)
+          ((ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), udf.resultId.id), children)
         case children =>
           // There should not be any other UDFs, or the children can't be evaluated directly.
           assert(children.forall(!_.exists(_.isInstanceOf[PythonUDF])))
-          (ChainedPythonFunctions(Seq(udf.func)), udf.children)
+          ((ChainedPythonFunctions(Seq(udf.func)), udf.resultId.id), udf.children)
       }
     }
     override def eval(

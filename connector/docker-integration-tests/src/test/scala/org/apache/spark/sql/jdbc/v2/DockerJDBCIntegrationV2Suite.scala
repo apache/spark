@@ -38,6 +38,25 @@ abstract class DockerJDBCIntegrationV2Suite extends DockerJDBCIntegrationSuite {
       .executeUpdate()
     connection.prepareStatement("INSERT INTO employee VALUES (6, 'jen', 12000, 1200)")
       .executeUpdate()
+
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_quote''_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_quote_not_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_percent%_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_percent_not_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_underscore_present')")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO pattern_testing_table "
+        + "VALUES ('special_character_underscorenot_present')")
+      .executeUpdate()
   }
 
   def tablePreparation(connection: Connection): Unit

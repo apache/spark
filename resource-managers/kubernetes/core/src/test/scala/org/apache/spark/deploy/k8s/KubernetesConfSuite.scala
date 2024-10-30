@@ -40,7 +40,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     "execNodeSelectorKey2" -> "execNodeSelectorValue2")
   private val CUSTOM_LABELS = Map(
     "customLabel1Key" -> "customLabel1Value",
-    "customLabel2Key" -> "customLabel2Value")
+    "customLabel2Key" -> "customLabel2Value",
+    "customLabel3Key" -> "{{APP_ID}}",
+    "customLabel4Key" -> "{{EXECUTOR_ID}}")
   private val CUSTOM_ANNOTATIONS = Map(
     "customAnnotation1Key" -> "customAnnotation1Value",
     "customAnnotation2Key" -> "customAnnotation2Value",
@@ -95,7 +97,9 @@ class KubernetesConfSuite extends SparkFunSuite {
       SPARK_APP_ID_LABEL -> KubernetesTestConf.APP_ID,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(conf.appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE) ++
-      CUSTOM_LABELS)
+      CUSTOM_LABELS.map {
+        case (k, v) => (k, Utils.substituteAppNExecIds(v, conf.appId, ""))
+      })
     assert(conf.annotations === CUSTOM_ANNOTATIONS.map {
       case (k, v) => (k, Utils.substituteAppNExecIds(v, conf.appId, ""))
     })
@@ -165,7 +169,10 @@ class KubernetesConfSuite extends SparkFunSuite {
       SPARK_APP_ID_LABEL -> KubernetesTestConf.APP_ID,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(conf.appName),
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
-      SPARK_RESOURCE_PROFILE_ID_LABEL -> DEFAULT_RESOURCE_PROFILE_ID.toString) ++ CUSTOM_LABELS)
+      SPARK_RESOURCE_PROFILE_ID_LABEL -> DEFAULT_RESOURCE_PROFILE_ID.toString) ++
+      CUSTOM_LABELS.map {
+        case (k, v) => (k, Utils.substituteAppNExecIds(v, conf.appId, EXECUTOR_ID))
+      })
     assert(conf.annotations === CUSTOM_ANNOTATIONS.map {
       case (k, v) => (k, Utils.substituteAppNExecIds(v, conf.appId, EXECUTOR_ID))
     })

@@ -59,10 +59,10 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("stack(1.1, 1, 2, 3)")
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"stack(1.1, 1, 2, 3)\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"1.1\"",
         "inputType" -> "\"DECIMAL(2,1)\"",
         "requiredType" -> "\"INT\""),
@@ -77,7 +77,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("stack(-1, 1, 2, 3)")
       },
-      errorClass = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
       parameters = Map(
         "sqlExpr" -> "\"stack(-1, 1, 2, 3)\"",
         "exprName" -> "`n`",
@@ -95,7 +95,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("stack(2, 1, '2.2')")
       },
-      errorClass = "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"stack(2, 1, 2.2)\"",
         "columnIndex" -> "0",
@@ -118,7 +118,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df2.selectExpr("stack(n, a, b, c)")
       },
-      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"stack(n, a, b, c)\"",
         "inputName" -> "`n`",
@@ -136,7 +136,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("stack(2, a, b)")
       },
-      errorClass = "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.STACK_COLUMN_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"stack(2, a, b)\"",
         "columnIndex" -> "0",
@@ -287,10 +287,10 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         spark.range(2).select(inline(array()))
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"inline(array())\"",
-        "paramIndex" -> "1",
+        "paramIndex" -> "first",
         "inputSql" -> "\"array()\"",
         "inputType" -> "\"ARRAY<VOID>\"",
         "requiredType" -> "\"ARRAY<STRUCT>\""),
@@ -330,11 +330,11 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(inline(array(struct(Symbol("a")), struct(Symbol("b")))))
       },
-      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"array(struct(a), struct(b))\"",
         "functionName" -> "`array`",
-        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<b: INT>\")"),
+        "dataType" -> "(\"STRUCT<a: INT NOT NULL>\" or \"STRUCT<b: INT NOT NULL>\")"),
       context = ExpectedContext(
         fragment = "array",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -348,11 +348,11 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(inline(array(struct(Symbol("a")), struct(lit(2)))))
       },
-      errorClass = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+      condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
       parameters = Map(
         "sqlExpr" -> "\"array(struct(a), struct(2))\"",
         "functionName" -> "`array`",
-        "dataType" -> "(\"STRUCT<a: INT>\" or \"STRUCT<col1: INT>\")"),
+        "dataType" -> "(\"STRUCT<a: INT NOT NULL>\" or \"STRUCT<col1: INT NOT NULL>\")"),
       context = ExpectedContext(
         fragment = "array",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -427,7 +427,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
         },
-        errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+        condition = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
         parameters = Map(
           "expression" -> "\"(1 + explode(array(min(c2), max(c2))))\""))
 
@@ -440,9 +440,8 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
               |  posexplode(array(min(c2), max(c2)))
               |from t1 group by c1""".stripMargin)
         },
-        errorClass = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
+        condition = "UNSUPPORTED_GENERATOR.MULTI_GENERATOR",
         parameters = Map(
-          "clause" -> "aggregate",
           "num" -> "2",
           "generators" -> ("\"explode(array(min(c2), max(c2)))\", " +
             "\"posexplode(array(min(c2), max(c2)))\"")))
@@ -454,7 +453,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect()
       },
-      errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+      condition = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
       parameters = Map("expression" -> "\"explode(explode(v))\""))
   }
 
@@ -552,6 +551,32 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       val df = sql("select explode(array(rand(0)))")
       checkAnswer(df, Row(0.7604953758285915d))
     }
+  }
+
+  test("SPARK-47241: two generator functions in SELECT") {
+    def testTwoGenerators(needImplicitCast: Boolean): Unit = {
+      val df = sql(
+        s"""
+          |SELECT
+          |explode(array('a', 'b')) as c1,
+          |explode(array(0L, ${if (needImplicitCast) "0L + 1" else "1L"})) as c2
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row("a", 0L), Row("a", 1L), Row("b", 0L), Row("b", 1L)))
+    }
+    testTwoGenerators(needImplicitCast = true)
+    testTwoGenerators(needImplicitCast = false)
+  }
+
+  test("SPARK-47241: generator function after wildcard in SELECT") {
+    val df = sql(
+      s"""
+         |SELECT *, explode(array('a', 'b')) as c1
+         |FROM
+         |(
+         |  SELECT id FROM range(1) GROUP BY 1
+         |)
+         |""".stripMargin)
+    checkAnswer(df, Seq(Row(0, "a"), Row(0, "b")))
   }
 }
 

@@ -23,8 +23,11 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageEncoder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.MDC;
 
 /**
  * Encoder used by the server side to encode server-to-client responses.
@@ -33,7 +36,7 @@ import org.slf4j.LoggerFactory;
 @ChannelHandler.Sharable
 public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
-  private static final Logger logger = LoggerFactory.getLogger(MessageEncoder.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(MessageEncoder.class);
 
   public static final MessageEncoder INSTANCE = new MessageEncoder();
 
@@ -62,8 +65,9 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
         if (in instanceof AbstractResponseMessage resp) {
           // Re-encode this message as a failure response.
           String error = e.getMessage() != null ? e.getMessage() : "null";
-          logger.error(String.format("Error processing %s for client %s",
-            in, ctx.channel().remoteAddress()), e);
+          logger.error("Error processing {} for client {}", e,
+            MDC.of(LogKeys.MESSAGE$.MODULE$, in),
+            MDC.of(LogKeys.HOST_PORT$.MODULE$, ctx.channel().remoteAddress()));
           encode(ctx, resp.createFailureResponse(error), out);
         } else {
           throw e;

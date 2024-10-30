@@ -26,10 +26,11 @@ import scala.reflect.ClassTag
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs._
-import org.json4s.NoTypeHints
+import org.json4s.{Formats, NoTypeHints}
 import org.json4s.jackson.Serialization
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -50,9 +51,10 @@ import org.apache.spark.util.ArrayImplicits._
 class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: String)
   extends MetadataLog[T] with Logging {
 
-  private implicit val formats = Serialization.formats(NoTypeHints)
+  private implicit val formats: Formats = Serialization.formats(NoTypeHints)
 
   /** Needed to serialize type T into JSON when using Jackson */
+  @scala.annotation.nowarn
   private implicit val manifest = Manifest.classType[T](implicitly[ClassTag[T]].runtimeClass)
 
   // Avoid serializing generic sequences, see SPARK-17372
@@ -264,7 +266,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
 
   override def getLatest(): Option[(Long, T)] = {
     listBatches.sorted.lastOption.map { batchId =>
-      logInfo(s"Getting latest batch $batchId")
+      logInfo(log"Getting latest batch ${MDC(BATCH_ID, batchId)}")
       (batchId, getExistingBatch(batchId))
     }
   }
@@ -326,13 +328,15 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   /** List the available batches on file system. */
   protected def listBatches: Array[Long] = {
     val batchIds = fileManager.list(metadataPath, batchFilesFilter)
+      // Batches must be files
+      .filter(f => f.isFile)
       .map(f => pathToBatchId(f.getPath)) ++
       // Iterate over keySet is not thread safe. We call `toArray` to make a copy in the lock to
       // elimiate the race condition.
       batchCache.synchronized {
         batchCache.keySet.asScala.toArray
       }
-    logInfo("BatchIds found from listing: " + batchIds.sorted.mkString(", "))
+    logInfo(log"BatchIds found from listing: ${MDC(BATCH_ID, batchIds.sorted.mkString(", "))}")
 
     if (batchIds.isEmpty) {
       Array.empty

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* global $, getBaseURI */
+/* global $ */
 
 var baseParams;
 
@@ -58,7 +58,7 @@ function getRESTEndPoint() {
   // If the worker is served from the master through a proxy (see doc on spark.ui.reverseProxy), 
   // we need to retain the leading ../proxy/<workerid>/ part of the URL when making REST requests.
   // Similar logic is contained in executorspage.js function createRESTEndPoint.
-  var words = getBaseURI().split('/');
+  var words = (document.baseURI || document.URL).split('/');
   var ind = words.indexOf("proxy");
   if (ind > 0) {
     return words.slice(0, ind + 2).join('/') + "/log";

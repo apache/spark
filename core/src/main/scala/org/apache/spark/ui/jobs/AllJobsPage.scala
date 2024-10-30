@@ -20,11 +20,11 @@ package org.apache.spark.ui.jobs
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Date, Locale}
-import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.ListBuffer
 import scala.xml._
 
+import jakarta.servlet.http.HttpServletRequest
 import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus

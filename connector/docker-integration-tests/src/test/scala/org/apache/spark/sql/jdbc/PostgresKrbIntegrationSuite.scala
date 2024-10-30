@@ -19,16 +19,17 @@ package org.apache.spark.sql.jdbc
 
 import javax.security.auth.login.Configuration
 
-import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
+import com.github.dockerjava.api.model.{AccessMode, Bind, ContainerConfig, HostConfig, Volume}
 
 import org.apache.spark.sql.execution.datasources.jdbc.connection.SecureConnectionProvider
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:15.1):
+ * To run this test suite for a specific version (e.g., postgres:17.0-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:15.1
- *     ./build/sbt -Pdocker-integration-tests "testOnly *PostgresKrbIntegrationSuite"
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.0-alpine
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "docker-integration-tests/testOnly *PostgresKrbIntegrationSuite"
  * }}}
  */
 @DockerTest
@@ -37,7 +38,7 @@ class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override protected val keytabFileName = "postgres.keytab"
 
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:15.1")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.0-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -48,14 +49,14 @@ class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
       s"jdbc:postgresql://$ip:$port/postgres?user=$principal&gsslib=gssapi"
 
     override def beforeContainerStart(
-        hostConfigBuilder: HostConfig.Builder,
-        containerConfigBuilder: ContainerConfig.Builder): Unit = {
+        hostConfigBuilder: HostConfig,
+        containerConfigBuilder: ContainerConfig): Unit = {
       copyExecutableResource("postgres_krb_setup.sh", initDbDir, replaceIp)
-
-      hostConfigBuilder.appendBinds(
-        HostConfig.Bind.from(initDbDir.getAbsolutePath)
-          .to("/docker-entrypoint-initdb.d").readOnly(true).build()
-      )
+      val newBind = new Bind(
+        initDbDir.getAbsolutePath,
+        new Volume("/docker-entrypoint-initdb.d"),
+        AccessMode.ro)
+      hostConfigBuilder.withBinds(hostConfigBuilder.getBinds :+ newBind: _*)
     }
   }
 

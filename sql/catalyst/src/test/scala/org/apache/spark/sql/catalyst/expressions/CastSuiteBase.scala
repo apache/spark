@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, LocalDate, LocalDateTime, Period, Year => JYear}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.TestUDT._
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
@@ -1105,9 +1106,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
       .foreach { interval =>
-        checkExceptionInExpression[IllegalArgumentException](
+        checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), YearMonthIntervalType()),
-          "Error parsing interval year-month string: integer overflow")
+          "INVALID_INTERVAL_FORMAT.INTERVAL_PARSING",
+          Map(
+            "interval" -> "year-month",
+            "input" -> interval))
       }
 
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
@@ -1173,13 +1177,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
       val dataType = YearMonthIntervalType()
-      val expectedMsg = s"Interval string does not match year-month format of " +
-        s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-          .map(format => s"`$format`").mkString(", ")} " +
-        s"when cast to ${dataType.typeName}: $interval"
-      checkExceptionInExpression[IllegalArgumentException](
+      checkErrorInExpression[SparkIllegalArgumentException](
         cast(Literal.create(interval), dataType),
-        expectedMsg
+        "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
+        Map(
+          "typeName" -> "interval year to month",
+          "intervalStr" -> "year-month",
+          "supportedFormat" -> "`[+|-]y-m`, `INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH`",
+          "input" -> interval)
       )
     }
     Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
@@ -1193,13 +1198,16 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR)),
       ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
       .foreach { case (interval, dataType) =>
-        val expectedMsg = s"Interval string does not match year-month format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-            .map(format => s"`$format`").mkString(", ")} " +
-          s"when cast to ${dataType.typeName}: $interval"
-        checkExceptionInExpression[IllegalArgumentException](
+        checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          expectedMsg)
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING",
+          Map(
+            "typeName" -> dataType.typeName,
+            "intervalStr" -> "year-month",
+            "supportedFormat" ->
+              IntervalUtils.supportedFormat(("year-month", dataType.startField, dataType.endField))
+                .map(format => s"`$format`").mkString(", "),
+            "input" -> interval))
       }
   }
 
@@ -1313,15 +1321,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("1.23", DayTimeIntervalType(MINUTE)),
       ("1.23", DayTimeIntervalType(MINUTE)))
       .foreach { case (interval, dataType) =>
-        val expectedMsg = s"Interval string does not match day-time format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-            .map(format => s"`$format`").mkString(", ")} " +
-          s"when cast to ${dataType.typeName}: $interval, " +
-          s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
-          "to restore the behavior before Spark 3.0."
-        checkExceptionInExpression[IllegalArgumentException](
+        checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          expectedMsg
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+          Map("intervalStr" -> "day-time",
+            "typeName" -> dataType.typeName,
+            "input" -> interval,
+            "supportedFormat" ->
+              IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
+                .map(format => s"`$format`").mkString(", "))
         )
       }
 
@@ -1337,15 +1345,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '1537228672801:54.7757' MINUTE TO SECOND", DayTimeIntervalType(MINUTE, SECOND)),
       ("INTERVAL '92233720368541.775807' SECOND", DayTimeIntervalType(SECOND)))
       .foreach { case (interval, dataType) =>
-        val expectedMsg = "Interval string does not match day-time format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-            .map(format => s"`$format`").mkString(", ")} " +
-          s"when cast to ${dataType.typeName}: $interval, " +
-          s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
-          "to restore the behavior before Spark 3.0."
-        checkExceptionInExpression[IllegalArgumentException](
+        checkErrorInExpression[SparkIllegalArgumentException](
           cast(Literal.create(interval), dataType),
-          expectedMsg)
+          "INVALID_INTERVAL_FORMAT.UNMATCHED_FORMAT_STRING_WITH_NOTICE",
+          Map("intervalStr" -> "day-time",
+            "typeName" -> dataType.typeName,
+            "input" -> interval,
+            "supportedFormat" ->
+              IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
+                .map(format => s"`$format`").mkString(", ")))
       }
   }
 
@@ -1402,4 +1410,43 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(!Cast(timestampLiteral, TimestampNTZType).resolved)
     assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
   }
+
+  test("SPARK-49787: Cast between UDT and other types") {
+    val value = new MyDenseVector(Array(1.0, 2.0, -1.0))
+    val udtType = new MyDenseVectorUDT()
+    val targetType = ArrayType(DoubleType, containsNull = false)
+
+    val serialized = udtType.serialize(value)
+
+    checkEvaluation(Cast(new Literal(serialized, udtType), targetType), serialized)
+    checkEvaluation(Cast(new Literal(serialized, targetType), udtType), serialized)
+
+    val year = JYear.parse("2024")
+    val yearUDTType = new YearUDT()
+
+    val yearSerialized = yearUDTType.serialize(year)
+
+    checkEvaluation(Cast(new Literal(yearSerialized, yearUDTType), IntegerType), 2024)
+    checkEvaluation(Cast(new Literal(2024, IntegerType), yearUDTType), yearSerialized)
+
+    val yearString = UTF8String.fromString("2024")
+    checkEvaluation(Cast(new Literal(yearSerialized, yearUDTType), StringType), yearString)
+    checkEvaluation(Cast(new Literal(yearString, StringType), yearUDTType), yearSerialized)
+  }
+}
+
+private[sql] class YearUDT extends UserDefinedType[JYear] {
+  override def sqlType: DataType = IntegerType
+
+  override def serialize(obj: JYear): Int = {
+    obj.getValue
+  }
+
+  def deserialize(datum: Any): JYear = datum match {
+    case value: Int => JYear.of(value)
+  }
+
+  override def userClass: Class[JYear] = classOf[JYear]
+
+  private[spark] override def asNullable: YearUDT = this
 }

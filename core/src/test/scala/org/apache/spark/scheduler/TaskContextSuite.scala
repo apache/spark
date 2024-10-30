@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
@@ -27,7 +28,9 @@ import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
+import org.apache.spark.api.plugin.{DriverPlugin, ExecutorPlugin, SparkPlugin}
 import org.apache.spark.executor.{Executor, TaskMetrics, TaskMetricsSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.METRICS_CONF
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.JvmSource
@@ -670,14 +673,90 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(invocationOrder === Seq("C", "B", "A", "D"))
   }
 
+  test("SPARK-46480: Add isFailed in TaskContext") {
+    val context = TaskContext.empty()
+    var isFailed = false
+    context.addTaskCompletionListener[Unit] { context =>
+      isFailed = context.isFailed()
+    }
+    context.markTaskFailed(new RuntimeException())
+    context.markTaskCompleted(None)
+    assert(isFailed)
+  }
+
+  test("SPARK-46947: ensure the correct block manager is used to unroll memory for task") {
+    import BlockManagerValidationPlugin._
+    BlockManagerValidationPlugin.resetState()
+
+    // run a task which ignores thread interruption when spark context is shutdown
+    sc = new SparkContext("local", "test")
+
+    val rdd = new RDD[String](sc, List()) {
+      override def getPartitions = Array[Partition](StubPartition(0))
+
+      override def compute(split: Partition, context: TaskContext): Iterator[String] = {
+        context.addTaskCompletionListener(new TaskCompletionListener {
+          override def onTaskCompletion(context: TaskContext): Unit = {
+            try {
+              releaseTaskSem.acquire()
+            } catch {
+              case _: InterruptedException =>
+                // ignore thread interruption
+            }
+          }
+        })
+        taskStartedSem.release()
+        Iterator.empty
+      }
+    }
+    // submit the job, but don't block this thread
+    rdd.collectAsync()
+    // wait for task to start
+    taskStartedSem.acquire()
+
+    sc.stop()
+    assert(sc.isStopped)
+
+    // create a new SparkContext which will be blocked for certain amount of time
+    // during initializing the driver plugin below
+    val conf = new SparkConf()
+    conf.set("spark.plugins", classOf[BlockManagerValidationPlugin].getName)
+    sc = new SparkContext("local", "test", conf)
+  }
 }
 
-private object TaskContextSuite {
+private object TaskContextSuite extends Logging {
   @volatile var completed = false
 
   @volatile var lastError: Throwable = _
 
   class FakeTaskFailureException extends Exception("Fake task failure")
+}
+
+class BlockManagerValidationPlugin extends SparkPlugin {
+  override def driverPlugin(): DriverPlugin = {
+    new DriverPlugin() {
+      // does nothing but block the current thread for certain time for the task thread
+      // to progress and reproduce the issue.
+      BlockManagerValidationPlugin.releaseTaskSem.release()
+      Thread.sleep(2500)
+    }
+  }
+  override def executorPlugin(): ExecutorPlugin = {
+    new ExecutorPlugin() {
+      // do nothing
+    }
+  }
+}
+
+object BlockManagerValidationPlugin {
+  val releaseTaskSem = new Semaphore(0)
+  val taskStartedSem = new Semaphore(0)
+
+  def resetState(): Unit = {
+    releaseTaskSem.drainPermits()
+    taskStartedSem.drainPermits()
+  }
 }
 
 private case class StubPartition(index: Int) extends Partition

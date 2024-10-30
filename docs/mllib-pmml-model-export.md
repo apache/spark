@@ -28,7 +28,7 @@ license: |
 
 The table below outlines the `spark.mllib` models that can be exported to PMML and their equivalent PMML model.
 
-<table class="table table-striped">
+<table>
   <thead>
     <tr><th>spark.mllib model</th><th>PMML model</th></tr>
   </thead>

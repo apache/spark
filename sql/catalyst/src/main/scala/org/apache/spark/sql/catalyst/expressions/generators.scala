@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -28,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData}
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -172,7 +173,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(IntegerType),
           "inputSql" -> toSQLExpr(children.head),
           "inputType" -> toSQLType(children.head.dataType))
@@ -342,7 +343,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType(TypeCollection(ArrayType, MapType)),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType))
@@ -557,7 +558,7 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
-          "paramIndex" -> "1",
+          "paramIndex" -> ordinalNumber(0),
           "requiredType" -> toSQLType("ARRAY<STRUCT>"),
           "inputSql" -> toSQLExpr(child),
           "inputType" -> toSQLType(child.dataType))
@@ -617,4 +618,45 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
   }
 
   override def prettyName: String = "sql_keywords"
+}
+
+@ExpressionDescription(
+  usage = """_FUNC_() - Get all of the Spark SQL string collations""",
+  examples = """
+    Examples:
+      > SELECT * FROM _FUNC_() WHERE NAME = 'UTF8_BINARY';
+       SYSTEM  BUILTIN  UTF8_BINARY NULL  NULL  ACCENT_SENSITIVE  CASE_SENSITIVE  NO_PAD  NULL
+  """,
+  since = "4.0.0",
+  group = "generator_funcs")
+case class Collations() extends LeafExpression with Generator with CodegenFallback {
+  override def elementSchema: StructType = new StructType()
+    .add("CATALOG", StringType, nullable = false)
+    .add("SCHEMA", StringType, nullable = false)
+    .add("NAME", StringType, nullable = false)
+    .add("LANGUAGE", StringType)
+    .add("COUNTRY", StringType)
+    .add("ACCENT_SENSITIVITY", StringType, nullable = false)
+    .add("CASE_SENSITIVITY", StringType, nullable = false)
+    .add("PAD_ATTRIBUTE", StringType, nullable = false)
+    .add("ICU_VERSION", StringType)
+
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
+    CollationFactory.listCollations().asScala.map(CollationFactory.loadCollationMeta).map { m =>
+      InternalRow(
+        UTF8String.fromString(m.catalog),
+        UTF8String.fromString(m.schema),
+        UTF8String.fromString(m.collationName),
+        UTF8String.fromString(m.language),
+        UTF8String.fromString(m.country),
+        UTF8String.fromString(
+          if (m.accentSensitivity) "ACCENT_SENSITIVE" else "ACCENT_INSENSITIVE"),
+        UTF8String.fromString(
+          if (m.caseSensitivity) "CASE_SENSITIVE" else "CASE_INSENSITIVE"),
+        UTF8String.fromString(m.padAttribute),
+        UTF8String.fromString(m.icuVersion))
+    }
+  }
+
+  override def prettyName: String = "collations"
 }

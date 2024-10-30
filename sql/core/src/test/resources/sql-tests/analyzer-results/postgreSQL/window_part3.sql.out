@@ -2,7 +2,7 @@
 -- !query
 CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1
 -- !query analysis
-CreateViewCommand `tenk2`, SELECT * FROM tenk1, false, false, LocalTempView, true
+CreateViewCommand `tenk2`, SELECT * FROM tenk1, false, false, LocalTempView, UNSUPPORTED, true
    +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
       +- SubqueryAlias spark_catalog.default.tenk1
          +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
@@ -93,7 +93,7 @@ WithCTE
 :  +- SubqueryAlias cte
 :     +- Project [id#xL AS x#xL]
 :        +- Project [id#xL]
-:           +- Range (1, 36, step=2, splits=None)
+:           +- Range (1, 36, step=2)
 +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
    +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
@@ -115,7 +115,7 @@ WithCTE
 :  +- SubqueryAlias cte
 :     +- Project [id#xL AS x#xL]
 :        +- Project [id#xL]
-:           +- Range (1, 36, step=2, splits=None)
+:           +- Range (1, 36, step=2)
 +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL]
    +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL]
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as bigint), cast(1 as bigint))) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
@@ -148,7 +148,7 @@ WithCTE
 :           :     +- Project [1 AS 1#x]
 :           :        +- OneRowRelation
 :           +- Project [id#xL]
-:              +- Range (5, 50, step=2, splits=None)
+:              +- Range (5, 50, step=2)
 +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
    +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL]
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, 1)) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
@@ -181,7 +181,7 @@ WithCTE
 :           :     +- Project [1 AS 1#x]
 :           :        +- OneRowRelation
 :           +- Project [id#xL]
-:              +- Range (5, 50, step=2, splits=None)
+:              +- Range (5, 50, step=2)
 +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL]
    +- Project [x#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL, sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL]
       +- Window [sum(x#xL) windowspecdefinition(x#xL ASC NULLS FIRST, specifiedwindowframe(RangeFrame, cast(-1 as bigint), cast(1 as bigint))) AS sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING)#xL], [x#xL ASC NULLS FIRST]
@@ -206,7 +206,7 @@ GlobalLimit 0
                      :     +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
                      +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                         +- SubqueryAlias tenk2
-                           +- View (`tenk2`, [unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x])
+                           +- View (`tenk2`, [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x])
                               +- Project [cast(unique1#x as int) AS unique1#x, cast(unique2#x as int) AS unique2#x, cast(two#x as int) AS two#x, cast(four#x as int) AS four#x, cast(ten#x as int) AS ten#x, cast(twenty#x as int) AS twenty#x, cast(hundred#x as int) AS hundred#x, cast(thousand#x as int) AS thousand#x, cast(twothousand#x as int) AS twothousand#x, cast(fivethous#x as int) AS fivethous#x, cast(tenthous#x as int) AS tenthous#x, cast(odd#x as int) AS odd#x, cast(even#x as int) AS even#x, cast(stringu1#x as string) AS stringu1#x, cast(stringu2#x as string) AS stringu2#x, cast(string4#x as string) AS string4#x]
                                  +- Project [unique1#x, unique2#x, two#x, four#x, ten#x, twenty#x, hundred#x, thousand#x, twothousand#x, fivethous#x, tenthous#x, odd#x, even#x, stringu1#x, stringu2#x, string4#x]
                                     +- SubqueryAlias spark_catalog.default.tenk1

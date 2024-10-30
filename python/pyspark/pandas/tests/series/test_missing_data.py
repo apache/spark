@@ -20,19 +20,11 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import ComparisonTestBase
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesMissingDataMixin:
-    @property
-    def pser(self):
-        return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
-
-    @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
     def test_fillna(self):
         pdf = pd.DataFrame({"x": [np.nan, 2, 3, 4, np.nan, 6], "y": [np.nan, 2, 3, 4, np.nan, 6]})
         psdf = ps.from_pandas(pdf)
@@ -232,7 +224,11 @@ class SeriesMissingDataMixin:
         self.assert_eq(pdf, psdf)
 
 
-class SeriesMissingDataTests(SeriesMissingDataMixin, ComparisonTestBase, SQLTestUtils):
+class SeriesMissingDataTests(
+    SeriesMissingDataMixin,
+    PandasOnSparkTestCase,
+    SQLTestUtils,
+):
     pass
 
 

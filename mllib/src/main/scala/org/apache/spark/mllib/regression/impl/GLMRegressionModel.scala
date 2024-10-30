@@ -53,11 +53,11 @@ private[regression] object GLMRegressionModel {
       val metadata = compact(render(
         ("class" -> modelClass) ~ ("version" -> thisFormatVersion) ~
           ("numFeatures" -> weights.size)))
-      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+      spark.createDataFrame(Seq(Tuple1(metadata))).write.text(Loader.metadataPath(path))
 
       // Create Parquet data.
       val data = Data(weights, intercept)
-      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(Seq(data)).write.parquet(Loader.dataPath(path))
     }
 
     /**

@@ -147,7 +147,7 @@ SELECT f1 AS `Three` FROM DATE_TBL
   WHERE f1 BETWEEN '2000-01-01' AND '2001-01-01'
 -- !query analysis
 Project [f1#x AS Three#x]
-+- Filter ((f1#x >= cast(2000-01-01 as date)) AND (f1#x <= cast(2001-01-01 as date)))
++- Filter between(f1#x, 2000-01-01, 2001-01-01)
    +- SubqueryAlias spark_catalog.default.date_tbl
       +- Relation spark_catalog.default.date_tbl[f1#x] parquet
 

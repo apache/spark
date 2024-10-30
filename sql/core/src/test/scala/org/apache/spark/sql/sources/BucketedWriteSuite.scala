@@ -91,7 +91,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         df.write.sortBy("j").saveAsTable("tt")
       },
-      errorClass = "SORT_BY_WITHOUT_BUCKETING",
+      condition = "SORT_BY_WITHOUT_BUCKETING",
       parameters = Map.empty)
   }
 
@@ -106,7 +106,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         df.write.bucketBy(2, "i").parquet("/tmp/path")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1312",
+      condition = "_LEGACY_ERROR_TEMP_1312",
       parameters = Map("operation" -> "save"))
   }
 
@@ -116,7 +116,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         df.write.bucketBy(2, "i").sortBy("i").parquet("/tmp/path")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1313",
+      condition = "_LEGACY_ERROR_TEMP_1313",
       parameters = Map("operation" -> "save"))
   }
 
@@ -126,7 +126,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         df.write.bucketBy(2, "i").insertInto("tt")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1312",
+      condition = "_LEGACY_ERROR_TEMP_1312",
       parameters = Map("operation" -> "insertInto"))
   }
 
@@ -136,7 +136,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
       exception = intercept[AnalysisException] {
         df.write.bucketBy(2, "i").sortBy("i").insertInto("tt")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1313",
+      condition = "_LEGACY_ERROR_TEMP_1313",
       parameters = Map("operation" -> "insertInto"))
   }
 
@@ -252,7 +252,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
         .bucketBy(8, "j", "k")
         .sortBy("k")
         .saveAsTable("bucketed_table")),
-      errorClass = "_LEGACY_ERROR_TEMP_1166",
+      condition = "_LEGACY_ERROR_TEMP_1166",
       parameters = Map("bucketCol" -> "j", "normalizedPartCols" -> "i, j"))
 
     checkError(
@@ -261,7 +261,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
         .bucketBy(8, "k")
         .sortBy("i")
         .saveAsTable("bucketed_table")),
-      errorClass = "_LEGACY_ERROR_TEMP_1167",
+      condition = "_LEGACY_ERROR_TEMP_1167",
       parameters = Map("sortCol" -> "i", "normalizedPartCols" -> "i, j"))
   }
 

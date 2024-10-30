@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes.{ordinalNumber, toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, TreePattern}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -32,8 +37,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterministic
-  with ExpressionWithRandomSeed {
+trait RDG extends Expression with ExpressionWithRandomSeed {
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize and initialize it.
@@ -41,12 +45,6 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
   @transient protected var rng: XORShiftRandom = _
 
   override def stateful: Boolean = true
-
-  override protected def initializeInternal(partitionIndex: Int): Unit = {
-    rng = new XORShiftRandom(seed + partitionIndex)
-  }
-
-  override def seedExpression: Expression = child
 
   @transient protected lazy val seed: Long = seedExpression match {
     case e if e.dataType == IntegerType => e.eval().asInstanceOf[Int]
@@ -56,6 +54,15 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
   override def nullable: Boolean = false
 
   override def dataType: DataType = DoubleType
+}
+
+abstract class NondeterministicUnaryRDG
+  extends RDG with UnaryLike[Expression] with Nondeterministic with ExpectsInputTypes {
+  override def seedExpression: Expression = child
+
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    rng = new XORShiftRandom(seed + partitionIndex)
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegerType, LongType))
 }
@@ -69,6 +76,15 @@ trait ExpressionWithRandomSeed extends Expression {
 
   def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
+}
+
+private[catalyst] object ExpressionWithRandomSeed {
+  def expressionToSeed(e: Expression, source: String): Option[Long] = e match {
+    case IntegerLiteral(seed) => Some(seed)
+    case LongLiteral(seed) => Some(seed)
+    case Literal(null, _) => None
+    case _ => throw QueryCompilationErrors.invalidRandomSeedParameter(source, e)
+  }
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
@@ -90,7 +106,7 @@ trait ExpressionWithRandomSeed extends Expression {
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
+case class Rand(child: Expression, hideSeed: Boolean = false) extends NondeterministicUnaryRDG {
 
   def this() = this(UnresolvedSeed, true)
 
@@ -141,7 +157,7 @@ object Rand {
   since = "1.5.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
+case class Randn(child: Expression, hideSeed: Boolean = false) extends NondeterministicUnaryRDG {
 
   def this() = this(UnresolvedSeed, true)
 
@@ -171,4 +187,240 @@ case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
 
 object Randn {
   def apply(seed: Long): Randn = Randn(Literal(seed, LongType))
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(min, max[, seed]) - Returns a random value with independent and identically
+      distributed (i.i.d.) values with the specified range of numbers. The random seed is optional.
+      The provided numbers specifying the minimum and maximum values of the range must be constant.
+      If both of these numbers are integers, then the result will also be an integer. Otherwise if
+      one or both of these are floating-point numbers, then the result will also be a floating-point
+      number.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(10, 20, 0) > 0 AS result;
+      true
+  """,
+  since = "4.0.0",
+  group = "math_funcs")
+case class Uniform(min: Expression, max: Expression, seedExpression: Expression, hideSeed: Boolean)
+  extends RuntimeReplaceable with TernaryLike[Expression] with RDG {
+  def this(min: Expression, max: Expression) =
+    this(min, max, UnresolvedSeed, hideSeed = true)
+  def this(min: Expression, max: Expression, seedExpression: Expression) =
+    this(min, max, seedExpression, hideSeed = false)
+
+  final override lazy val deterministic: Boolean = false
+  override val nodePatterns: Seq[TreePattern] =
+    Seq(RUNTIME_REPLACEABLE, EXPRESSION_WITH_RANDOM_SEED)
+
+  override def dataType: DataType = {
+    val first = min.dataType
+    val second = max.dataType
+    (min.dataType, max.dataType) match {
+      case _ if !seedExpression.resolved || seedExpression.dataType == NullType =>
+        NullType
+      case (_, NullType) | (NullType, _) => NullType
+      case (_, LongType) | (LongType, _)
+        if Seq(first, second).forall(integer) => LongType
+      case (_, IntegerType) | (IntegerType, _)
+        if Seq(first, second).forall(integer) => IntegerType
+      case (_, ShortType) | (ShortType, _)
+        if Seq(first, second).forall(integer) => ShortType
+      case (_, DoubleType) | (DoubleType, _) => DoubleType
+      case (_, FloatType) | (FloatType, _) => FloatType
+      case _ =>
+        throw SparkException.internalError(
+          s"Unexpected argument data types: ${min.dataType}, ${max.dataType}")
+    }
+  }
+
+  private def integer(t: DataType): Boolean = t match {
+    case _: ShortType | _: IntegerType | _: LongType => true
+    case _ => false
+  }
+
+  override def sql: String = {
+    s"uniform(${min.sql}, ${max.sql}${if (hideSeed) "" else s", ${seedExpression.sql}"})"
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
+    def requiredType = "integer or floating-point"
+    Seq((min, "min", 0),
+      (max, "max", 1),
+      (seedExpression, "seed", 2)).foreach {
+      case (expr: Expression, name: String, index: Int) =>
+        if (result == TypeCheckResult.TypeCheckSuccess) {
+          if (!expr.foldable) {
+            result = DataTypeMismatch(
+              errorSubClass = "NON_FOLDABLE_INPUT",
+              messageParameters = Map(
+                "inputName" -> toSQLId(name),
+                "inputType" -> requiredType,
+                "inputExpr" -> toSQLExpr(expr)))
+          } else expr.dataType match {
+            case _: ShortType | _: IntegerType | _: LongType | _: FloatType | _: DoubleType |
+                 _: NullType =>
+            case _ =>
+              result = DataTypeMismatch(
+                errorSubClass = "UNEXPECTED_INPUT_TYPE",
+                messageParameters = Map(
+                  "paramIndex" -> ordinalNumber(index),
+                  "requiredType" -> requiredType,
+                  "inputSql" -> toSQLExpr(expr),
+                  "inputType" -> toSQLType(expr.dataType)))
+          }
+        }
+    }
+    result
+  }
+
+  override def first: Expression = min
+  override def second: Expression = max
+  override def third: Expression = seedExpression
+
+  override def withNewSeed(newSeed: Long): Expression =
+    Uniform(min, max, Literal(newSeed, LongType), hideSeed)
+
+  override def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Expression =
+    Uniform(newFirst, newSecond, newThird, hideSeed)
+
+  override def replacement: Expression = {
+    if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {
+      Literal(null)
+    } else {
+      def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
+      cast(Add(
+        cast(min, DoubleType),
+        Multiply(
+          Subtract(
+            cast(max, DoubleType),
+            cast(min, DoubleType)),
+          Rand(seed))),
+        dataType)
+    }
+  }
+}
+
+object Uniform {
+  def apply(min: Expression, max: Expression): Uniform =
+    Uniform(min, max, UnresolvedSeed, hideSeed = true)
+  def apply(min: Expression, max: Expression, seedExpression: Expression): Uniform =
+    Uniform(min, max, seedExpression, hideSeed = false)
+}
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(length[, seed]) - Returns a string of the specified length whose characters are chosen
+      uniformly at random from the following pool of characters: 0-9, a-z, A-Z. The random seed is
+      optional. The string length must be a constant two-byte or four-byte integer (SMALLINT or INT,
+      respectively).
+  """,
+  examples =
+    """
+    Examples:
+      > SELECT _FUNC_(3, 0) AS result;
+       ceV
+  """,
+  since = "4.0.0",
+  group = "string_funcs")
+case class RandStr(
+    length: Expression, override val seedExpression: Expression, hideSeed: Boolean)
+  extends ExpressionWithRandomSeed with BinaryLike[Expression] with Nondeterministic {
+  def this(length: Expression) =
+    this(length, UnresolvedSeed, hideSeed = true)
+  def this(length: Expression, seedExpression: Expression) =
+    this(length, seedExpression, hideSeed = false)
+
+  override def nullable: Boolean = false
+  override def dataType: DataType = StringType
+  override def stateful: Boolean = true
+  override def left: Expression = length
+  override def right: Expression = seedExpression
+
+  /**
+   * Record ID within each partition. By being transient, the Random Number Generator is
+   * reset every time we serialize and deserialize and initialize it.
+   */
+  @transient protected var rng: XORShiftRandom = _
+
+  @transient protected lazy val seed: Long = seedExpression match {
+    case e if e.dataType == IntegerType => e.eval().asInstanceOf[Int]
+    case e if e.dataType == LongType => e.eval().asInstanceOf[Long]
+  }
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
+    rng = new XORShiftRandom(seed + partitionIndex)
+  }
+
+  override def withNewSeed(newSeed: Long): Expression =
+    RandStr(length, Literal(newSeed, LongType), hideSeed)
+  override def withNewChildrenInternal(newFirst: Expression, newSecond: Expression): Expression =
+    RandStr(newFirst, newSecond, hideSeed)
+
+  override def sql: String = {
+    s"randstr(${length.sql}${if (hideSeed) "" else s", ${seedExpression.sql}"})"
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    var result: TypeCheckResult = TypeCheckResult.TypeCheckSuccess
+    def requiredType = "INT or SMALLINT"
+    Seq((length, "length", 0),
+      (seedExpression, "seed", 1)).foreach {
+      case (expr: Expression, name: String, index: Int) =>
+        if (result == TypeCheckResult.TypeCheckSuccess) {
+          if (!expr.foldable) {
+            result = DataTypeMismatch(
+              errorSubClass = "NON_FOLDABLE_INPUT",
+              messageParameters = Map(
+                "inputName" -> toSQLId(name),
+                "inputType" -> requiredType,
+                "inputExpr" -> toSQLExpr(expr)))
+          } else expr.dataType match {
+            case _: ShortType | _: IntegerType =>
+            case _: LongType if index == 1 =>
+            case _ =>
+              result = DataTypeMismatch(
+                errorSubClass = "UNEXPECTED_INPUT_TYPE",
+                messageParameters = Map(
+                  "paramIndex" -> ordinalNumber(index),
+                  "requiredType" -> requiredType,
+                  "inputSql" -> toSQLExpr(expr),
+                  "inputType" -> toSQLType(expr.dataType)))
+          }
+        }
+    }
+    result
+  }
+
+  override def evalInternal(input: InternalRow): Any = {
+    val numChars = length.eval(input).asInstanceOf[Number].intValue()
+    ExpressionImplUtils.randStr(rng, numChars)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val className = classOf[XORShiftRandom].getName
+    val rngTerm = ctx.addMutableState(className, "rng")
+    ctx.addPartitionInitializationStatement(
+      s"$rngTerm = new $className(${seed}L + partitionIndex);")
+    val eval = length.genCode(ctx)
+    ev.copy(code =
+      code"""
+        |${eval.code}
+        |UTF8String ${ev.value} =
+        |  ${classOf[ExpressionImplUtils].getName}.randStr($rngTerm, (int)(${eval.value}));
+        |boolean ${ev.isNull} = false;
+        |""".stripMargin,
+      isNull = FalseLiteral)
+  }
+}
+
+object RandStr {
+  def apply(length: Expression): RandStr =
+    RandStr(length, UnresolvedSeed, hideSeed = true)
+  def apply(length: Expression, seedExpression: Expression): RandStr =
+    RandStr(length, seedExpression, hideSeed = false)
 }

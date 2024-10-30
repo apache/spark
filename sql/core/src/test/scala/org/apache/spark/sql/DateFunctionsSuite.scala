@@ -23,7 +23,7 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
@@ -54,7 +54,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         sql("SELECT CURDATE(1)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`curdate`",
         "expectedNum" -> "0",
@@ -265,6 +265,30 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.selectExpr("weekday(a)", "weekday(b)", "weekday(c)"),
       Row(2, 2, 0))
+  }
+
+  test("monthname") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(monthname($"a"), monthname($"b"), monthname($"c")),
+      Row("Apr", "Apr", "Apr"))
+
+    checkAnswer(
+      df.selectExpr("monthname(a)", "monthname(b)", "monthname(c)"),
+      Row("Apr", "Apr", "Apr"))
+  }
+
+  test("dayname") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+
+    checkAnswer(
+      df.select(dayname($"a"), dayname($"b"), dayname($"c")),
+      Row("Wed", "Wed", "Mon"))
+
+    checkAnswer(
+      df.selectExpr("dayname(a)", "dayname(b)", "dayname(c)"),
+      Row("Wed", "Wed", "Mon"))
   }
 
   test("extract") {
@@ -570,9 +594,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   def checkExceptionMessage(df: DataFrame): Unit = {
-    val message = intercept[SparkException] {
+    val message = intercept[SparkUpgradeException] {
       df.collect()
-    }.getCause.getMessage
+    }.getMessage
     assert(message.contains("Fail to parse"))
   }
 
@@ -1340,6 +1364,84 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
       col("year"), col("month"), col("day"), col("hour"),
       col("min"), col("sec")))
     checkAnswer(result1, result2)
+  }
+
+  test("try_make_timestamp") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
+      toDF("year", "month", "day", "hour", "min", "sec", "timezone")
+
+    val result1 = df.selectExpr("try_make_timestamp(year, month, day, hour, min, sec, timezone)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result2 = df.select(make_timestamp(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec"), col("timezone")))
+      checkAnswer(result1, result2)
+    }
+
+    val result3 = df.selectExpr("try_make_timestamp(year, month, day, hour, min, sec)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result4 = df.select(make_timestamp(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec")))
+      checkAnswer(result3, result4)
+    }
+
+    val result5 = df.selectExpr("try_make_timestamp(year, month, day, hour, min, sec)")
+    val result6 = df.select(try_make_timestamp(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result5, result6)
+  }
+
+  test("try_make_timestamp_ntz") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001)).
+      toDF("year", "month", "day", "hour", "min", "sec")
+
+    val result1 = df.selectExpr(
+      "try_make_timestamp_ntz(year, month, day, hour, min, sec)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result2 = df.select(make_timestamp_ntz(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec")))
+      checkAnswer(result1, result2)
+    }
+
+    val result3 = df.selectExpr(
+    "try_make_timestamp_ntz(year, month, day, hour, min, sec)")
+    val result4 = df.select(try_make_timestamp_ntz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result3, result4)
+  }
+
+  test("try_make_timestamp_ltz") {
+    val df = Seq((100, 11, 1, 12, 30, 01.001001, "UTC")).
+      toDF("year", "month", "day", "hour", "min", "sec", "timezone")
+
+    val result1 = df.selectExpr(
+      "try_make_timestamp_ltz(year, month, day, hour, min, sec, timezone)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result2 = df.select(make_timestamp_ltz(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec"), col("timezone")))
+      checkAnswer(result1, result2)
+    }
+
+    val result3 = df.selectExpr(
+      "try_make_timestamp_ltz(year, month, day, hour, min, sec)")
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      val result4 = df.select(make_timestamp_ltz(
+        col("year"), col("month"), col("day"), col("hour"),
+        col("min"), col("sec")))
+      checkAnswer(result3, result4)
+    }
+
+    val result5 = df.selectExpr(
+    "try_make_timestamp_ltz(year, month, day, hour, min, sec)")
+    val result6 = df.select(try_make_timestamp_ltz(
+      col("year"), col("month"), col("day"), col("hour"),
+      col("min"), col("sec")))
+    checkAnswer(result5, result6)
   }
 
   test("make_ym_interval") {

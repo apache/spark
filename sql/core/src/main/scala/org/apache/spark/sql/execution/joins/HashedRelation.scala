@@ -22,7 +22,7 @@ import java.io._
 import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.config.{BUFFER_PAGESIZE, MEMORY_OFFHEAP_ENABLED}
 import org.apache.spark.memory._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -52,7 +52,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns null if there is no matched rows.
    */
   def get(key: Long): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -64,7 +64,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns the matched single row with key that have only one column of LongType.
    */
   def getValue(key: Long): InternalRow = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -73,7 +73,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns null if there is no matched rows.
    */
   def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -83,21 +83,21 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
    * Returns null if there is no matched rows.
    */
   def getValueWithKeyIndex(key: InternalRow): ValueRowWithKeyIndex = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
    * Returns an iterator for keys index and rows of InternalRow type.
    */
   def valuesWithKeyIndex(): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
    * Returns the maximum number of allowed keys index.
    */
   def maxNumKeysIndex: Int = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   /**
@@ -1043,19 +1043,19 @@ class LongHashedRelation(
   override def keys(): Iterator[InternalRow] = map.keys()
 
   override def getWithKeyIndex(key: InternalRow): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def getValueWithKeyIndex(key: InternalRow): ValueRowWithKeyIndex = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def valuesWithKeyIndex(): Iterator[ValueRowWithKeyIndex] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def maxNumKeysIndex: Int = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 }
 
@@ -1126,11 +1126,11 @@ case object EmptyHashedRelation extends HashedRelation {
  */
 case object HashedRelationWithAllNullKeys extends HashedRelation {
   override def get(key: InternalRow): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def getValue(key: InternalRow): InternalRow = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def asReadOnlyCopy(): HashedRelationWithAllNullKeys.type = this
@@ -1138,7 +1138,7 @@ case object HashedRelationWithAllNullKeys extends HashedRelation {
   override def keyIsUnique: Boolean = true
 
   override def keys(): Iterator[InternalRow] = {
-    throw new UnsupportedOperationException
+    throw SparkUnsupportedOperationException()
   }
 
   override def close(): Unit = {}

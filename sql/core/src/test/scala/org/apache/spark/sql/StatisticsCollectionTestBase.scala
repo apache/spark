@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
@@ -139,11 +140,11 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       Some(Histogram(1, Array(HistogramBin(d1Internal, d1Internal, 1),
         HistogramBin(d1Internal, d2Internal, 1))))))
     colStats.update("ctimestamp", stats("ctimestamp").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(t1Internal, t1Internal, 1),
-        HistogramBin(t1Internal, t2Internal, 1))))))
+      Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
+        HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
     colStats.update("ctimestamp_ntz", stats("ctimestamp_ntz").copy(histogram =
-      Some(Histogram(1, Array(HistogramBin(t1Internal, t1Internal, 1),
-        HistogramBin(t1Internal, t2Internal, 1))))))
+      Some(Histogram(1, Array(HistogramBin(t1Internal.toDouble, t1Internal.toDouble, 1),
+        HistogramBin(t1Internal.toDouble, t2Internal.toDouble, 1))))))
     colStats
   }
 
@@ -269,7 +270,8 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   def getTableFromCatalogCache(tableName: String): LogicalPlan = {
     val catalog = spark.sessionState.catalog
-    val qualifiedTableName = QualifiedTableName(catalog.getCurrentDatabase, tableName)
+    val qualifiedTableName = QualifiedTableName(
+      CatalogManager.SESSION_CATALOG_NAME, catalog.getCurrentDatabase, tableName)
     catalog.getCachedTable(qualifiedTableName)
   }
 
@@ -364,7 +366,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       val stats = spark.table("ds_tbl").queryExecution.optimizedPlan.stats
       assert(stats.sizeInBytes > 0, "non-empty partitioned table should not report zero size.")
 
-      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION.key) == "hive") {
         sql("CREATE TABLE hive_tbl(i int) PARTITIONED BY (j int)")
         sql("INSERT INTO hive_tbl PARTITION(j=1) SELECT 1")
         val stats2 = spark.table("hive_tbl").queryExecution.optimizedPlan.stats
@@ -379,7 +381,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       // Test data source table
       checkStatsConversion(tableName = "ds_tbl", isDatasourceTable = true)
       // Test hive serde table
-      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION) == "hive") {
+      if (spark.conf.get(StaticSQLConf.CATALOG_IMPLEMENTATION.key) == "hive") {
         checkStatsConversion(tableName = "hive_tbl", isDatasourceTable = false)
       }
     }
