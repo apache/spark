@@ -4642,7 +4642,7 @@
   },
   "TUPLE_SIZE_EXCEEDS_LIMIT" : {
     "message" : [
-      "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
+      "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
     ],
     "sqlState" : "54011"
   },
