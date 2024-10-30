@@ -491,7 +491,7 @@ class PandasGroupedOpsMixin:
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
-        ) -> Iterator[Iterator["PandasDataFrameLike"]]:
+        ) -> Iterator["PandasDataFrameLike"]:
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
