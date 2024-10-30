@@ -135,13 +135,13 @@
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.8.0</kafka.version>
+    <kafka.version>3.8.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.14.3</parquet.version>
     <orc.version>2.0.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.23</jetty.version>
+    <jetty.version>11.0.24</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -726,7 +726,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.5.2</version>
+        <version>9.7.3</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
