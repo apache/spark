@@ -17,14 +17,14 @@
 
 # Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
-FROM ubuntu:jammy-20240227
+FROM ubuntu:jammy-20240911.1
 LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image"
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE 20241007
+ENV FULL_REFRESH_DATE 20241028
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -96,7 +96,7 @@ RUN pypy3 -m pip install numpy 'six==1.16.0' 'pandas==2.2.3' scipy coverage matp
 
 ARG BASIC_PIP_PKGS="numpy pyarrow>=15.0.0 six==1.16.0 pandas==2.2.3 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.62.0 grpcio-status==1.62.0 protobuf==4.25.1 googleapis-common-protos==1.65.0 graphviz==0.20.3"
+ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.28.3 googleapis-common-protos==1.65.0 graphviz==0.20.3"
 
 # Install Python 3.10 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10

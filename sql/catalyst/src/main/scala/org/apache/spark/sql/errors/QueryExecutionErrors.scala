@@ -257,11 +257,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def invalidFractionOfSecondError(): DateTimeException = {
+  def invalidFractionOfSecondError(secAndMicros: Decimal): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
       messageParameters = Map(
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)
+        "secAndMicros" -> s"$secAndMicros"
       ),
       context = Array.empty,
       summary = "")
@@ -295,8 +295,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
-  def overflowInSumOfDecimalError(context: QueryContext): ArithmeticException = {
-    arithmeticOverflowError("Overflow in sum of decimals", context = context)
+  def overflowInSumOfDecimalError(
+      context: QueryContext,
+      suggestedFunc: String): ArithmeticException = {
+    arithmeticOverflowError("Overflow in sum of decimals", suggestedFunc = suggestedFunc,
+      context = context)
   }
 
   def overflowInIntegralDivideError(context: QueryContext): ArithmeticException = {
