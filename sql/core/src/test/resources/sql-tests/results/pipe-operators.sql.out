@@ -1953,6 +1953,206 @@ struct<sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNB
 
 -- !query
 table windowTestData
+|> window w as (order by val_timestamp range between unbounded preceding and current row)
+|> select avg(val) over w
+-- !query schema
+struct<avg(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double>
+-- !query output
+1.5
+1.6
+1.6666666666666667
+1.6666666666666667
+1.6666666666666667
+1.6666666666666667
+1.8571428571428572
+1.8571428571428572
+NULL
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate order by val)
+|> select cate
+-- !query schema
+struct<cate:string>
+-- !query output
+NULL
+NULL
+a
+a
+a
+a
+b
+b
+b
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate order by val)
+|> where cate = "a"
+-- !query schema
+struct<val:int,val_long:bigint,val_double:double,val_date:date,val_timestamp:timestamp,cate:string>
+-- !query output
+1	1	1.0	2017-08-01	2017-07-31 17:00:00	a
+1	2	2.5	2017-08-02	2017-08-05 23:13:20	a
+2	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	a
+NULL	1	1.0	2017-08-01	2017-07-31 17:00:00	a
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate order by val)
+|> order by cate
+-- !query schema
+struct<val:int,val_long:bigint,val_double:double,val_date:date,val_timestamp:timestamp,cate:string>
+-- !query output
+NULL	NULL	NULL	NULL	NULL	NULL
+3	1	1.0	2017-08-01	2017-07-31 17:00:00	NULL
+NULL	1	1.0	2017-08-01	2017-07-31 17:00:00	a
+1	1	1.0	2017-08-01	2017-07-31 17:00:00	a
+1	2	2.5	2017-08-02	2017-08-05 23:13:20	a
+2	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	a
+1	NULL	1.0	2017-08-01	2017-07-31 17:00:00	b
+2	3	3.3	2017-08-03	2017-08-17 13:00:00	b
+3	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	b
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate order by val)
+|> select cate, sum(val) over w
+|> where cate = "a"
+-- !query schema
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+a	2
+a	2
+a	4
+a	NULL
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate order by val)
+|> select cate, sum(val) over w as sum_val
+|> order by sum_val
+-- !query schema
+struct<cate:string,sum_val:bigint>
+-- !query output
+NULL	NULL
+a	NULL
+b	1
+a	2
+a	2
+NULL	3
+b	3
+a	4
+b	6
+
+
+-- !query
+table windowTestData
+|> window w as (partition by windowTestData.cate order by windowTestData.val)
+|> select windowTestData.cate, sum(windowTestData.val) over w
+-- !query schema
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+NULL	3
+NULL	NULL
+a	2
+a	2
+a	4
+a	NULL
+b	1
+b	3
+b	6
+
+
+-- !query
+(select col from st)
+|> window w as (partition by col.i1 order by col.i2)
+|> select col.i1, sum(col.i2) over w
+-- !query schema
+struct<i1:int,sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+2	3
+
+
+-- !query
+table st
+|> window w as (partition by st.col.i1 order by st.col.i2)
+|> select st.col.i1, sum(st.col.i2) over w
+-- !query schema
+struct<i1:int,sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+2	3
+
+
+-- !query
+table st
+|> window w as (partition by spark_catalog.default.st.col.i1 order by spark_catalog.default.st.col.i2)
+|> select spark_catalog.default.st.col.i1, sum(spark_catalog.default.st.col.i2) over w
+-- !query schema
+struct<i1:int,sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+2	3
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate)
+-- !query schema
+struct<val:int,val_long:bigint,val_double:double,val_date:date,val_timestamp:timestamp,cate:string>
+-- !query output
+1	1	1.0	2017-08-01	2017-07-31 17:00:00	a
+1	2	2.5	2017-08-02	2017-08-05 23:13:20	a
+1	NULL	1.0	2017-08-01	2017-07-31 17:00:00	b
+2	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	a
+2	3	3.3	2017-08-03	2017-08-17 13:00:00	b
+3	1	1.0	2017-08-01	2017-07-31 17:00:00	NULL
+3	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	b
+NULL	1	1.0	2017-08-01	2017-07-31 17:00:00	a
+NULL	NULL	NULL	NULL	NULL	NULL
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate) order by val
+-- !query schema
+struct<val:int,val_long:bigint,val_double:double,val_date:date,val_timestamp:timestamp,cate:string>
+-- !query output
+NULL	1	1.0	2017-08-01	2017-07-31 17:00:00	a
+NULL	NULL	NULL	NULL	NULL	NULL
+1	2	2.5	2017-08-02	2017-08-05 23:13:20	a
+1	NULL	1.0	2017-08-01	2017-07-31 17:00:00	b
+1	1	1.0	2017-08-01	2017-07-31 17:00:00	a
+2	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	a
+2	3	3.3	2017-08-03	2017-08-17 13:00:00	b
+3	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	b
+3	1	1.0	2017-08-01	2017-07-31 17:00:00	NULL
+
+
+-- !query
+table windowTestData
+|> window val as (partition by cate order by val)
+|> select cate, sum(val) over val
+-- !query schema
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+NULL	3
+NULL	NULL
+a	2
+a	2
+a	4
+a	NULL
+b	1
+b	3
+b	6
+
+
+-- !query
+table windowTestData
 |> window w as (partition by cate order by val) limit 5
 -- !query schema
 struct<>
@@ -1972,6 +2172,121 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "stopIndex" : 76,
     "fragment" : "window w as (partition by cate order by val) limit 5"
   } ]
+}
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate order by val) offset 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "clause1" : "WINDOW",
+    "clause2" : "OFFSET"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 77,
+    "fragment" : "window w as (partition by cate order by val) offset 1"
+  } ]
+}
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate) order by val
+|> select val, sum(val) over w
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'|>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate) order by val
+|> select val
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'|>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate) order by val
+|> where sum(val) over w = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'|>'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table windowTestData
+|> window w as (partition by cate)
+|> select cate, sum(val) over w1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w1"
+  }
+}
+
+
+-- !query
+table windowTestData
+|> window w1 as (partition by cate)
+|> window w2 as (partition by val order by cate)
+|> select sum(val) over w1, first_value(cate) over w2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w1"
+  }
 }
 
 
