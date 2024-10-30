@@ -500,14 +500,20 @@ class PandasGroupedOpsMixin:
                     StatefulProcessorHandleState.INITIALIZED
                 )
 
+            # Key is None when we have processed all the input data from the worker and ready to
+            # proceed with the cleanup steps.
+            if key is None:
+                statefulProcessorApiClient.remove_implicit_key()
+                statefulProcessor.close()
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.CLOSED
+                )
+                return iter([])
+
             statefulProcessorApiClient.set_implicit_key(key)
             result = statefulProcessor.handleInputRows(key, inputRows)
 
-            try:
-                yield result
-            finally:
-                statefulProcessor.close()
-                statefulProcessorApiClient.remove_implicit_key()
+            return result
 
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
