@@ -726,7 +726,7 @@ class RocksDB(
     } finally {
       // reset resources as either 1) we already pushed the changes and it has been committed or
       // 2) commit has failed and the current version is "invalidated".
-      release(LoadStore, None)
+      release(LoadStore)
     }
   }
 
@@ -756,7 +756,7 @@ class RocksDB(
 
       logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
     } finally {
-      release(RollbackStore, None)
+      release(RollbackStore)
     }
   }
 
@@ -813,7 +813,7 @@ class RocksDB(
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
     } finally {
-      release(CloseStore, None)
+      release(CloseStore)
     }
   }
 
@@ -914,7 +914,7 @@ class RocksDB(
       case ex: Exception =>
         logInfo(log"Failed to acquire metrics with exception=${MDC(LogKeys.ERROR, ex)}")
     } finally {
-      release(ReportStoreMetrics, None)
+      release(ReportStoreMetrics)
     }
     rocksDBMetricsOpt
   }
@@ -976,7 +976,7 @@ class RocksDB(
    * @param forThreadOpt - optional thread to check against acquired thread
    */
   private def release(opType: RocksDBOpType,
-    forThreadOpt: Option[AcquiredThreadInfo]): Unit = acquireLock.synchronized {
+    forThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
     if (acquiredThreadInfo != null) {
       if (forThreadOpt.nonEmpty) {
         if (forThreadOpt.get.threadRef.get.isEmpty) {
@@ -987,10 +987,8 @@ class RocksDB(
         }
 
         if (acquiredThreadInfo.threadRef.get.isDefined
-          && forThreadOpt.get.threadRef.get.isDefined
-          && acquiredThreadInfo.threadRef.get.get.getId
-          != forThreadOpt.get.threadRef.get.get.getId) {
-          logInfo(log"Thread reference does not match the acquired thread when attempting to" +
+          && acquiredThreadInfo != forThreadOpt.get) {
+          logInfo(log"Thread info does not match the acquired thread when attempting to" +
             log" release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
             log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
           return
