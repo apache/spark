@@ -891,12 +891,10 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       // inline table.
       def check(query: String, patterns: Seq[TreePattern]): Unit = {
         val plan: LogicalPlan = parser.parsePlan(query)
-        print("Resulted plan")
-        println(plan)
         assert(patterns.exists(plan.containsPattern))
         assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
       }
-      // def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
+      def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
       checkPipeSelect("TABLE t |> SELECT 1 AS X")
       checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
       checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
