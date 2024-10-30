@@ -64,7 +64,7 @@ class StatefulProcessorApiClient:
         self.list_timer_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if state == StatefulProcessorHandleState.CREATED:
             proto_state = stateMessage.CREATED
@@ -91,7 +91,7 @@ class StatefulProcessorApiClient:
             raise PySparkRuntimeError(f"Error setting handle state: " f"{response_message[1]}")
 
     def set_implicit_key(self, key: Tuple) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         key_bytes = self._serialize_to_bytes(self.key_schema, key)
         set_implicit_key = stateMessage.SetImplicitKey(key=key_bytes)
@@ -106,7 +106,7 @@ class StatefulProcessorApiClient:
             raise PySparkRuntimeError(f"Error setting implicit key: " f"{response_message[1]}")
 
     def remove_implicit_key(self) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         remove_implicit_key = stateMessage.RemoveImplicitKey()
         request = stateMessage.ImplicitGroupingKeyRequest(removeImplicitKey=remove_implicit_key)
@@ -122,7 +122,7 @@ class StatefulProcessorApiClient:
     def get_value_state(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
     ) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
@@ -145,7 +145,7 @@ class StatefulProcessorApiClient:
     def get_list_state(
         self, state_name: str, schema: Union[StructType, str], ttl_duration_ms: Optional[int]
     ) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
@@ -166,7 +166,7 @@ class StatefulProcessorApiClient:
             raise PySparkRuntimeError(f"Error initializing list state: " f"{response_message[1]}")
 
     def register_timer(self, expiry_time_stamp_ms: int) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         register_call = stateMessage.RegisterTimer(expiryTimestampMs=expiry_time_stamp_ms)
         state_call_command = stateMessage.TimerStateCallCommand(register=register_call)
@@ -181,7 +181,7 @@ class StatefulProcessorApiClient:
             raise PySparkRuntimeError(f"Error register timer: " f"{response_message[1]}")
 
     def delete_timer(self, expiry_time_stamp_ms: int) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         delete_call = stateMessage.DeleteTimer(expiryTimestampMs=expiry_time_stamp_ms)
         state_call_command = stateMessage.TimerStateCallCommand(delete=delete_call)
@@ -196,7 +196,7 @@ class StatefulProcessorApiClient:
             raise PySparkRuntimeError(f"Error deleting timer: " f"{response_message[1]}")
 
     def get_list_timer_row(self, iterator_id) -> int:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.list_timer_iterator_cursors:
             # if the iterator is already in the dictionary, return the next row
@@ -238,7 +238,7 @@ class StatefulProcessorApiClient:
         return pandas_df.at[index, "timestamp"].item()
 
     def get_expiry_timers_iterator(self, expiry_timestamp: int) -> Iterator[list[Tuple, int]]:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         while True:
             expiry_timer_call = stateMessage.ExpiryTimerRequest(expiryTimestampMs=expiry_timestamp)
@@ -265,7 +265,7 @@ class StatefulProcessorApiClient:
                 raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
 
     def get_batch_timestamp(self) -> int:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         get_processing_time_call = stateMessage.GetProcessingTime()
         timer_value_call = stateMessage.TimerValueRequest(
@@ -287,7 +287,7 @@ class StatefulProcessorApiClient:
             return timestamp
 
     def get_watermark_timestamp(self) -> int:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         get_watermark_call = stateMessage.GetWatermark()
         timer_value_call = stateMessage.TimerValueRequest(getWatermark=get_watermark_call)
@@ -313,7 +313,7 @@ class StatefulProcessorApiClient:
         value_schema: Union[StructType, str],
         ttl_duration_ms: Optional[int],
     ) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(user_key_schema, str):
             user_key_schema = cast(StructType, _parse_datatype_string(user_key_schema))
@@ -345,7 +345,7 @@ class StatefulProcessorApiClient:
         self.sockfile.flush()
 
     def _receive_proto_message(self) -> Tuple[int, str, bytes]:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         length = read_int(self.sockfile)
         bytes = self.sockfile.read(length)
@@ -354,7 +354,7 @@ class StatefulProcessorApiClient:
         return message.statusCode, message.errorMessage, message.value
 
     def _receive_proto_message_with_long_value(self) -> Tuple[int, str, int]:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         length = read_int(self.sockfile)
         bytes = self.sockfile.read(length)
