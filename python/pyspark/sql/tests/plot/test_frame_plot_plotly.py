@@ -24,7 +24,6 @@ from pyspark.testing.sqlutils import (
     have_plotly,
     have_numpy,
     plotly_requirement_message,
-    numpy_requirement_message,
     have_pandas,
     pandas_requirement_message,
 )
