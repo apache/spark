@@ -392,12 +392,12 @@ This file is divided into 3 sections:
 
   <!-- We cannot turn the following two on, because it'd fail a lot of string interpolation use cases. -->
   <!-- Ideally the following two rules should be configurable to rule out string interpolation. -->
-  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceBeforeLeftBracketChecker" enabled="true"></check>
-  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceAfterLeftBracketChecker" enabled="true"></check>
+  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceBeforeLeftBracketChecker" enabled="false"></check>
+  <check level="error" class="org.scalastyle.scalariform.NoWhitespaceAfterLeftBracketChecker" enabled="false"></check>
 
   <!-- This breaks symbolic method names so we don't turn it on. -->
   <!-- Maybe we should update it to allow basic symbolic names, and then we are good to go. -->
-  <check level="error" class="org.scalastyle.scalariform.MethodNamesChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.MethodNamesChecker" enabled="false">
     <parameters>
     <parameter name="regex"><![CDATA[^[a-z][A-Za-z0-9]*$]]></parameter>
     </parameters>
@@ -410,53 +410,53 @@ This file is divided into 3 sections:
   <!--                               rules we don't want                                -->
   <!-- ================================================================================ -->
 
-  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="false">
     <parameters><parameter name="illegalImports"><![CDATA[sun._,java.awt._]]></parameter></parameters>
   </check>
 
   <!-- We want the opposite of this: NewLineAtEofChecker -->
-  <check level="error" class="org.scalastyle.file.NoNewLineAtEofChecker" enabled="true"></check>
+  <check level="error" class="org.scalastyle.file.NoNewLineAtEofChecker" enabled="false"></check>
 
   <!-- This one complains about all kinds of random things. Disable. -->
-  <check level="error" class="org.scalastyle.scalariform.SimplifyBooleanExpressionChecker" enabled="true"></check>
+  <check level="error" class="org.scalastyle.scalariform.SimplifyBooleanExpressionChecker" enabled="false"></check>
 
   <!-- We use return quite a bit for control flows and guards -->
-  <check level="error" class="org.scalastyle.scalariform.ReturnChecker" enabled="true"></check>
+  <check level="error" class="org.scalastyle.scalariform.ReturnChecker" enabled="false"></check>
 
   <!-- We use null a lot in low level code and to interface with 3rd party code -->
-  <check level="error" class="org.scalastyle.scalariform.NullChecker" enabled="true"></check>
+  <check level="error" class="org.scalastyle.scalariform.NullChecker" enabled="false"></check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.scalariform.NoCloneChecker" enabled="true"></check>
+  <check level="error" class="org.scalastyle.scalariform.NoCloneChecker" enabled="false"></check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.file.FileLengthChecker" enabled="true">
+  <check level="error" class="org.scalastyle.file.FileLengthChecker" enabled="false">
     <parameters><parameter name="maxFileLength">800></parameter></parameters>
   </check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.scalariform.NumberOfTypesChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.NumberOfTypesChecker" enabled="false">
     <parameters><parameter name="maxTypes">30</parameter></parameters>
   </check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.scalariform.CyclomaticComplexityChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.CyclomaticComplexityChecker" enabled="false">
     <parameters><parameter name="maximum">10</parameter></parameters>
   </check>
 
   <!-- Doesn't seem super big deal here ... -->
-  <check level="error" class="org.scalastyle.scalariform.MethodLengthChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.MethodLengthChecker" enabled="false">
     <parameters><parameter name="maxLength">50</parameter></parameters>
   </check>
 
   <!-- Not exactly feasible to enforce this right now. -->
   <!-- It is also infrequent that somebody introduces a new class with a lot of methods. -->
-  <check level="error" class="org.scalastyle.scalariform.NumberOfMethodsInTypeChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.NumberOfMethodsInTypeChecker" enabled="false">
     <parameters><parameter name="maxMethods"><![CDATA[30]]></parameter></parameters>
   </check>
 
   <!-- Doesn't seem super big deal here, and we have a lot of magic numbers ... -->
-  <check level="error" class="org.scalastyle.scalariform.MagicNumberChecker" enabled="true">
+  <check level="error" class="org.scalastyle.scalariform.MagicNumberChecker" enabled="false">
     <parameters><parameter name="ignore">-1,0,1,2,3</parameter></parameters>
   </check>
 
