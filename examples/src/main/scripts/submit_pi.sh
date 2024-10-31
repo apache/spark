@@ -34,7 +34,6 @@ curl -XPOST http://$SPARK_MASTER:6066/v1/submissions/create \
   "appResource": "",
   "sparkProperties": {
     "spark.submit.deployMode": "cluster",
-    "spark.app.name": "SparkPi",
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
     "spark.executor.cores": "1",
