@@ -27,9 +27,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.errors.DataTypeErrors.{toSQLId, toSQLType}
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
@@ -267,38 +270,42 @@ private[aggregate] object CollectTopK {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the concatenated input values," +
+  usage = "_FUNC_(expr) - Returns the concatenated input non-null values," +
     " separated by the delimiter string.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);
-       a,b,c
-      > SELECT _FUNC_(col) FROM VALUES (NULL), ('a'), ('b') AS tab(col);
-       a,b
+       abc
+      > SELECT _FUNC_(col) FROM VALUES ('a'), (NULL), ('b') AS tab(col);
+       ab
       > SELECT _FUNC_(col) FROM VALUES ('a'), ('a') AS tab(col);
-       a,a
+       aa
       > SELECT _FUNC_(DISTINCT col) FROM VALUES ('a'), ('a'), ('b') AS tab(col);
-       a,b
-      > SELECT _FUNC_(col, '|') FROM VALUES ('a'), ('b') AS tab(col);
-       a|b
+       ab
+      > SELECT _FUNC_(col, ', ') FROM VALUES ('a'), ('b'), ('c') AS tab(col);
+       a, b, c
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
+      NULL
   """,
   group = "agg_funcs",
-  since = "4.0.0")
+  since = "4.0.0") // TODO change
 case class ListAgg(
     child: Expression,
     delimiter: Expression = Literal.create(",", StringType),// TODO replace with null (empty string)
     orderExpressions: Seq[SortOrder] = Nil,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]]
-  with SupportsOrderingWithinGroup {
+  with SupportsOrderingWithinGroup
+  with ImplicitCastInputTypes {
 
   def this(child: Expression) =
     this(child, Literal.create(",", StringType), Nil, 0, 0)
   def this(child: Expression, delimiter: Expression) =
     this(child, delimiter, Nil, 0, 0)
 
-  override def dataType: DataType = StringType // TODO add binary
+  override def dataType: DataType = child.dataType
+
+  override def nullable: Boolean = true
 
   override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 
@@ -313,8 +320,8 @@ case class ListAgg(
     (orderExpressions.size == 1 && orderExpressions.head.semanticEquals(child))
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
-  // TODO make null
-  override def defaultResult: Option[Literal] = Option(Literal.create("", StringType))
+
+  override def defaultResult: Option[Literal] = Option(Literal.create(null, dataType))
 
   override protected lazy val bufferElementType: DataType = {
     if (dontNeedSaveOrderValue) {
@@ -324,6 +331,36 @@ case class ListAgg(
         StructField("value", child.dataType),
         StructField("sortOrder", orderExpressions.head.dataType)))
     }
+  }
+
+  override def inputTypes: Seq[AbstractDataType] =
+    TypeCollection(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      BinaryType
+    ) +:
+    TypeCollection(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      BinaryType
+    ) +:
+      orderExpressions.map(_ => AnyDataType)
+
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val matchInputTypes = super.checkInputDataTypes()
+    if (matchInputTypes.isFailure) {
+      return matchInputTypes
+    }
+    if (!delimiter.foldable) {
+      return DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("delimiter"),
+          "inputType" -> toSQLType(delimiter.dataType),
+          "inputExpr" -> toSQLExpr(delimiter)
+        )
+      )
+    }
+    TypeUtils.checkForSameTypeInputExpr(child.dataType :: delimiter.dataType :: Nil, prettyName)
   }
 
   private[this] def sortBuffer(buffer: mutable.ArrayBuffer[Any]): mutable.ArrayBuffer[Any] = {
@@ -343,13 +380,24 @@ case class ListAgg(
     }
   }
 
+  private[this] def concatWSInternal(buffer: mutable.ArrayBuffer[Any]): Any = {
+    val delimiterValue = delimiter.eval()
+    dataType match {
+     case BinaryType =>
+      val inputs = buffer.map(_.asInstanceOf[Array[Byte]])
+      ByteArray.concatWS(delimiterValue.asInstanceOf[Array[Byte]], inputs.toSeq: _*)
+    case _: StringType =>
+      val inputs = buffer.map(_.asInstanceOf[UTF8String])
+      UTF8String.fromString(inputs.mkString(delimiterValue.toString))
+    }
+  }
+
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     if (buffer.nonEmpty) {
-      val sorted = sortBuffer(buffer)
-      UTF8String.fromString(sorted.map(_.toString)
-        .mkString(delimiter.eval().asInstanceOf[UTF8String].toString))
+      val sortedBufferWithoutNulls = sortBuffer(buffer).filter(_ != null)
+      concatWSInternal(sortedBufferWithoutNulls)
     } else {
-      UTF8String.fromString("") // TODO null
+      null
     }
   }
 

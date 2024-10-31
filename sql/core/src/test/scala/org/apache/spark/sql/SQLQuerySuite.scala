@@ -161,55 +161,115 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  private[this] def hexToBytes(s: String): Array[Byte] = {
+    val byteArray = BigInt(s, 16).toByteArray
+    if (byteArray.length > 1 && byteArray(0) == 0) {
+      // remove sign byte if exists
+      byteArray.tail
+    } else {
+      byteArray
+    }
+  }
+
   test("SPARK-42746: listagg function") {
     withTempView("df", "df2") {
       Seq(("a", "b"), ("a", "c"), ("b", "c"), ("b", "d"), (null, null)).toDF("a", "b")
         .createOrReplaceTempView("df")
       checkAnswer(
         sql("select listagg(b) from df group by a"),
-        Row("") :: Row("b,c") :: Row("c,d") :: Nil)
+        Row(null) :: Row("b,c") :: Row("c,d") :: Nil)
 
       checkAnswer(
         sql("select listagg(b) from df where 1 != 1"),
-        Row("") :: Nil)
+        Row(null) :: Nil)
 
       checkAnswer(
         sql("select listagg(b, '|') from df group by a"),
-        Row("b|c") :: Row("c|d") :: Row("") :: Nil)
+        Row("b|c") :: Row("c|d") :: Row(null) :: Nil)
 
       checkAnswer(
-        sql("SELECT LISTAGG(a) FROM df"),
+        sql("select listagg(a) from df"),
         Row("a,a,b,b") :: Nil)
 
       checkAnswer(
-        sql("SELECT LISTAGG(DISTINCT a) FROM df"),
+        sql("select listagg(distinct a) from df"),
         Row("a,b") :: Nil)
 
       checkAnswer(
-        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY a) FROM df"),
+        sql("select listagg(a) within group (order by a) from df"),
         Row("a,a,b,b") :: Nil)
 
       checkAnswer(
-        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY a DESC) FROM df"),
+        sql("select listagg(a) within group (order by a desc) from df"),
         Row("b,b,a,a") :: Nil)
 
       checkAnswer(
-        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY a DESC) " +
-          "OVER (PARTITION BY b) FROM df"),
-        Row("a") :: Row("b,a") :: Row("b,a") :: Row("b") :: Row("") :: Nil)
+        sql("""select listagg(a) within group (order by a desc) over (partition by b) from df"""),
+        Row("a") :: Row("b,a") :: Row("b,a") :: Row("b") :: Row(null) :: Nil)
 
       checkAnswer(
-        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b) FROM df"),
+        sql("select listagg(a) within group (order by b) from df"),
         Row("a,a,b,b") :: Nil)
 
       checkAnswer(
-        sql("SELECT LISTAGG(a) WITHIN GROUP (ORDER BY b DESC) FROM df"),
+        sql("select listagg(a) within group (order by b desc) from df"),
         Row("b,a,b,a") :: Nil)
 
       checkAnswer(
-        sql("SELECT LISTAGG(a, '|') WITHIN GROUP (ORDER BY b DESC) FROM df"),
+        sql("select listagg(a, '|') within group (order by b desc) from df"),
         Row("b|a|b|a") :: Nil)
 
+      checkAnswer(
+        sql("select listagg(c1, X'42')from values (X'DEAD'), (X'BEEF') as t(c1)"),
+        Row(hexToBytes("DEAD42BEEF")) :: Nil)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select listagg(c1) from values (array('a', 'b')) as t(c1)")
+        },
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"listagg(c1, ,)\"",
+          "paramIndex" -> "first",
+          "requiredType" -> "(\"STRING\" or \"BINARY\")",
+          "inputSql" -> "\"c1\"",
+          "inputType" -> "\"ARRAY<STRING>\""),
+        context = ExpectedContext(
+          fragment = "listagg(c1)",
+          start = 7,
+          stop = 17
+      ))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select listagg(c1, ', ')from values (X'DEAD'), (X'BEEF') as t(c1)")
+        },
+        condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+        parameters = Map(
+          "sqlExpr" -> "\"listagg(c1, , )\"",
+          "functionName" -> "`listagg`",
+          "dataType" -> "(\"BINARY\" or \"STRING\")"),
+        context = ExpectedContext(
+          fragment = "listagg(c1, ', ')",
+          start = 7,
+          stop = 23
+      ))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select listagg(b, a) from df group by a")
+        },
+        condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+        parameters = Map(
+          "sqlExpr" -> "\"listagg(b, a)\"",
+          "inputName" -> "`delimiter`",
+          "inputType" -> "\"STRING\"",
+          "inputExpr" -> "\"a\""),
+        context = ExpectedContext(
+          fragment = "listagg(b, a)",
+          start = 7,
+          stop = 19
+        ))
 //      checkError(
 //        exception = intercept[AnalysisException] {
 //          sql("SELECT LISTAGG(DISTINCT a) WITHIN GROUP (ORDER BY b) FROM df")
@@ -223,7 +283,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq((1, true), (2, false), (3, false)).toDF("a", "b").createOrReplaceTempView("df2")
 
       checkAnswer(
-        sql("SELECT LISTAGG(a), LISTAGG(b) FROM df2"),
+        sql("select listagg(a), listagg(b) from df2"),
         Row("1,2,3", "true,false,false") :: Nil)
     }
   }

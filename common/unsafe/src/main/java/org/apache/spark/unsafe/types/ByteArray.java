@@ -160,6 +160,39 @@ public final class ByteArray {
     return result;
   }
 
+  public static byte[] concatWS(byte[] delimiter, byte[]... inputs) {
+    // Compute the total length of the result
+    long totalLength = 0;
+    for (byte[] input : inputs) {
+      if (input != null) {
+        totalLength += input.length + delimiter.length;
+      } else {
+        return null;
+      }
+    }
+    if (totalLength > 0) totalLength -= delimiter.length;
+    // Allocate a new byte array, and copy the inputs one by one into it
+    final byte[] result = new byte[Ints.checkedCast(totalLength)];
+    int offset = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      byte[] input = inputs[i];
+      int len = input.length;
+      Platform.copyMemory(
+              input, Platform.BYTE_ARRAY_OFFSET,
+              result, Platform.BYTE_ARRAY_OFFSET + offset,
+              len);
+      offset += len;
+      if(i < inputs.length - 1) {
+        Platform.copyMemory(
+                delimiter, Platform.BYTE_ARRAY_OFFSET,
+                result, Platform.BYTE_ARRAY_OFFSET + offset,
+                delimiter.length);
+        offset += delimiter.length;
+      }
+    }
+    return result;
+  }
+
   // Helper method for implementing `lpad` and `rpad`.
   // If the padding pattern's length is 0, return the first `len` bytes of the input byte
   // sequence if it is longer than `len` bytes, or a copy of the byte sequence, otherwise.

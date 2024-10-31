@@ -644,7 +644,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       df3.select(listagg_distinct($"a"), listagg($"a"), listagg_distinct($"b"), listagg($"b"),
         listagg($"c")),
-      Seq(Row("a", "a,a", "b", "b,b", ""))
+      Seq(Row("a", "a,a", "b", "b,b", null))
     )
 
     // custom delimiter
