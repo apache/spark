@@ -314,7 +314,46 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.streaming.DataStreamReader.validateJsonSchema"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.streaming.DataStreamReader.validateXmlSchema"))
+        "org.apache.spark.sql.streaming.DataStreamReader.validateXmlSchema"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroCompressionCodec"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroDeserializer"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroDeserializer$ArrayDataUpdater"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroDeserializer$CatalystDataUpdater"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroDeserializer$RowUpdater"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroFileFormat"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroFileFormat$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroOptions"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroOptions$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroOutputWriter"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroOutputWriterFactory"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroSerializer"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroUtils"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroUtils$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroUtils$AvroMatchedField"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroUtils$AvroMatchedField$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroUtils$AvroSchemaHelper"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroUtils$RowReader"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.CustomDecimal"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.CustomDecimal$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.IncompatibleSchemaException"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.IncompatibleSchemaException$"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.SchemaConverters"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.SchemaConverters$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.SchemaConverters$SchemaType"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.SchemaConverters$SchemaType$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.UnsupportedAvroTypeException"))
 
     checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
   }
