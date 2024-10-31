@@ -1046,19 +1046,16 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
           StartStream(checkpointLocation = tmpDir.getCanonicalPath),
           AddData(inputData, (1, 1L), (2, 2L), (3, 3L)),
           ProcessAllAvailable(),
-          Execute { _ => Thread.sleep(2000) },
           AddData(inputData, (2, 2L), (3, 3L), (4, 4L)),
           ProcessAllAvailable(),
-          Execute { _ => Thread.sleep(2000) },
           AddData(inputData, (3, 3L), (4, 4L), (5, 5L)),
           ProcessAllAvailable(),
-          Execute { _ => Thread.sleep(2000) },
           AddData(inputData, (4, 4L), (5, 5L), (6, 6L)),
           ProcessAllAvailable(),
-          Execute { _ => Thread.sleep(2000) },
           AddData(inputData, (5, 5L), (6, 6L), (7, 7L)),
           ProcessAllAvailable(),
-          Execute { _ => Thread.sleep(2000) },
+          // Ensure that we get a chance to upload created snapshots
+          Execute { _ => Thread.sleep(5000) },
           StopStream
         )
       }
