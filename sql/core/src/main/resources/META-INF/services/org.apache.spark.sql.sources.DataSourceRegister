@@ -30,3 +30,4 @@ org.apache.spark.sql.execution.datasources.binaryfile.BinaryFileFormat
 org.apache.spark.sql.execution.streaming.sources.RatePerMicroBatchProvider
 org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataSource
 org.apache.spark.sql.execution.datasources.v2.state.StateDataSource
+org.apache.spark.sql.v2.avro.AvroDataSourceV2
