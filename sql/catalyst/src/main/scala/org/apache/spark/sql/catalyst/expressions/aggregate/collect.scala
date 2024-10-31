@@ -252,13 +252,16 @@ case class CollectTopK(
 }
 
 private[aggregate] object CollectTopK {
-  def expressionToReverse(e: Expression): Boolean = e match {
-    case BooleanLiteral(reverse) => reverse
+  def expressionToReverse(e: Expression): Boolean = e.eval() match {
+    case b: Boolean => b
     case _ => throw QueryCompilationErrors.invalidReverseParameter(e)
   }
 
-  def expressionToNum(e: Expression): Int = e match {
-    case IntegerLiteral(num) => num
+  def expressionToNum(e: Expression): Int = e.eval() match {
+    case l: Long => l.toInt
+    case i: Int => i
+    case s: Short => s.toInt
+    case b: Byte => b.toInt
     case _ => throw QueryCompilationErrors.invalidNumParameter(e)
   }
 }

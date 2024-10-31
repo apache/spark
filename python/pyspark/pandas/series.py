@@ -60,6 +60,7 @@ from pyspark.sql import (
     DataFrame as SparkDataFrame,
     Window as PySparkWindow,
 )
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -117,7 +118,6 @@ from pyspark.pandas.utils import (
     log_advice,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkSeriesMethods
 from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.typedef import (

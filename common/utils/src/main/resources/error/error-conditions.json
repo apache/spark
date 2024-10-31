@@ -2413,7 +2413,8 @@
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
-      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "Valid range for seconds is [0, 60] (inclusive), but the provided value is <secAndMicros>. To avoid this error, use `try_make_timestamp`, which returns NULL on error.",
+      "If you do not want to use the session default timestamp version of this function, use `try_make_timestamp_ntz` or `try_make_timestamp_ltz`."
     ],
     "sqlState" : "22023"
   },
@@ -5165,6 +5166,11 @@
           "Invalid partitioning: <cols> is missing or is in a map or array."
         ]
       },
+      "PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {
+        "message" : [
+          "The SQL pipe operator syntax with aggregation (using |> AGGREGATE) does not support <case>."
+        ]
+      },
       "PIVOT_AFTER_GROUP_BY" : {
         "message" : [
           "PIVOT clause following a GROUP BY clause. Consider pushing the GROUP BY into a subquery."
@@ -5757,11 +5763,6 @@
   "_LEGACY_ERROR_TEMP_0027" : {
     "message" : [
       "The value of from-to unit must be a string."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0028" : {
-    "message" : [
-      "Intervals FROM <from> TO <to> are not supported."
     ]
   },
   "_LEGACY_ERROR_TEMP_0029" : {
