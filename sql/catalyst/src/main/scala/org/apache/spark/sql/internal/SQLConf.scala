@@ -3938,7 +3938,7 @@ object SQLConf {
     .createWithDefault(20)
 
   val ARTIFACTS_SESSION_ISOLATION_ENABLED =
-    buildStaticConf("spark.sql.artifact.isolation.enabled")
+    buildConf("spark.sql.artifact.isolation.enabled")
       .internal()
       .doc("When enabled, artifacts (such as JARs, files, archives) added to one SparkSession " +
         "are isolated from other sessions within the same Spark instance.")
