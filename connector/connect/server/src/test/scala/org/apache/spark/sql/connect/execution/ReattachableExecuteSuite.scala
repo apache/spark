@@ -57,7 +57,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
   }
 
   test("reattach after connection expired") {
-   withClient { client =>
+    withClient { client =>
       val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
       val operationId = getReattachableIterator(iter).operationId
       // open the iterator
