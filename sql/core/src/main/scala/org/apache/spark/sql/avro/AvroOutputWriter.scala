@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 private[avro] class AvroOutputWriter(
     val path: String,
