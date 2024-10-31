@@ -1398,6 +1398,16 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "EXECUTE_QUERY" : {
+        "message" : [
+          "Execution of the query: <query>."
+        ]
+      },
+      "GET_SCHEMA" : {
+        "message" : [
+          "Schema fetching for an external query or a table: <query>."
+        ]
+      },
       "GET_TABLES" : {
         "message" : [
           "Get tables from the namespace: <namespace>."
@@ -1428,24 +1438,14 @@
           "Rename the table <oldName> to <newName>."
         ]
       },
-      "TABLE_EXISTS" : {
-        "message" : [
-          "Check that the table <tableName> exists."
-        ]
-      },
-      "GET_SCHEMA" : {
-        "message" : [
-          "Schema fetching for an external query or a table: <query>."
-        ]
-      },
       "SYNTAX_ERROR" : {
         "message" : [
           "Compilation of the query for an external DBMS: <query>."
         ]
       },
-      "EXECUTE_QUERY" : {
+      "TABLE_EXISTS" : {
         "message" : [
-          "Execution of the query: <query>."
+          "Check that the table <tableName> exists."
         ]
       },
       "UNCLASSIFIED" : {
