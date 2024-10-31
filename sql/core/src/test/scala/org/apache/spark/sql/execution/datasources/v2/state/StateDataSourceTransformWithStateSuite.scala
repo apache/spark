@@ -34,7 +34,7 @@ class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor 
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _valueState = getHandle.getValueState[TestClass](
-      "valueState", Encoders.product[TestClass])
+      "valueState", Encoders.product[TestClass], TTLConfig(Duration.ZERO))
   }
 
   override def handleInputRows(

@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
 import java.net.ServerSocket
+import java.time.Duration
 
 import scala.collection.mutable
 
@@ -121,7 +122,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle)
           .getValueState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
       } else {
-        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]])
+        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]],
+          TTLConfig(Duration.ZERO))
       }
       verify(outputStream).writeInt(0)
     }

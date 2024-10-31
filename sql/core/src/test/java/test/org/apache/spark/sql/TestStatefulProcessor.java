@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql;
 
 import java.util.*;
+import java.time.Duration;
 
 import scala.jdk.javaapi.CollectionConverters;
 
@@ -42,7 +43,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       OutputMode outputMode,
       TimeMode timeMode) {
     countState = this.getHandle().getValueState("countState",
-      Encoders.LONG());
+      Encoders.LONG(), new TTLConfig(Duration.ZERO));
 
     keyCountMap = this.getHandle().getMapState("keyCountMap",
       Encoders.STRING(), Encoders.LONG());

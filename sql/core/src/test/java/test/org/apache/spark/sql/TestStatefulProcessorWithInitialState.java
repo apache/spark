@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql;
 
 import java.util.*;
+import java.time.Duration;
 
 import scala.jdk.javaapi.CollectionConverters;
 
@@ -41,7 +42,7 @@ public class TestStatefulProcessorWithInitialState
       OutputMode outputMode,
       TimeMode timeMode) {
     testState = this.getHandle().getValueState("testState",
-      Encoders.STRING());
+      Encoders.STRING(), new TTLConfig(Duration.ZERO));
   }
 
   @Override
