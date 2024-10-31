@@ -194,7 +194,7 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
         prev = norm_b
     text_bins[-1] = text_bins[-1][:-1] + "]"  # replace ) to ] for the last bucket.
 
-    bins = 0.5 * (bins[:-1] + bins[1:])
+    bins = [(bins[i] + bins[i + 1]) / 2 for i in range(0, len(bins) - 1)]
     output_series = list(output_series)
     bars = []
     for series in output_series:
