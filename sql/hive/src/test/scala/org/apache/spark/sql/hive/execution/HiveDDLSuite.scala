@@ -835,8 +835,8 @@ class HiveDDLSuite
           exception = intercept[AnalysisException] {
             sql(s"ALTER VIEW $tabName RENAME TO $newViewName")
           },
-          condition = "_LEGACY_ERROR_TEMP_1253",
-          parameters = Map.empty
+          condition = "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE",
+          parameters = Map("operation" -> "ALTER VIEW", "tableName" -> "`tab1`")
         )
 
         checkError(

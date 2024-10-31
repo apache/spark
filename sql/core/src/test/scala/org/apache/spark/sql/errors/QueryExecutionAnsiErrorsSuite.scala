@@ -97,11 +97,13 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
     checkError(
       exception = intercept[SparkDateTimeException] {
-        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
+        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.1)").collect()
       },
       condition = "INVALID_FRACTION_OF_SECOND",
       sqlState = "22023",
-      parameters = Map("ansiConfig" -> ansiConf))
+      parameters = Map(
+        "secAndMicros" -> "60.100000"
+      ))
   }
 
   test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {

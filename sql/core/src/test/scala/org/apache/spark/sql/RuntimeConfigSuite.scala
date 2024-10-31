@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.DEFAULT_PARALLELISM
 import org.apache.spark.sql.internal.{RuntimeConfigImpl, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.CHECKPOINT_LOCATION
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -100,5 +101,11 @@ class RuntimeConfigSuite extends SparkFunSuite {
     conf.unset(key)
     // Get the unset config entry, which should return its defaultValue again.
     assert(conf.get(key) == SQLConf.SESSION_LOCAL_TIMEZONE.defaultValue.get)
+  }
+
+  test("SPARK-48773: set spark.default.parallelism does not fail") {
+    val conf = newConf()
+    // this set should not fail
+    conf.set(DEFAULT_PARALLELISM.key, "1")
   }
 }

@@ -1607,7 +1607,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1125",
+      errorClass = "MISSING_DATABASE_FOR_V1_SESSION_CATALOG",
       messageParameters = Map.empty)
   }
 
@@ -2780,10 +2780,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def alterTableSetSerdeNotSupportedError(): Throwable = {
+  def alterTableSetSerdeNotSupportedError(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1248",
-      messageParameters = Map.empty)
+      errorClass = "UNSUPPORTED_FEATURE.ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE",
+      messageParameters = Map("tableName" -> toSQLId(tableName)))
   }
 
   def cmdOnlyWorksOnPartitionedTablesError(
@@ -2834,10 +2834,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def cannotAlterTableWithAlterViewError(): Throwable = {
+  def cannotAlterTableWithAlterViewError(tableName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1253",
-      messageParameters = Map.empty)
+      errorClass = "EXPECT_VIEW_NOT_TABLE.USE_ALTER_TABLE",
+      messageParameters = Map(
+        "operation" -> "ALTER VIEW",
+        "tableName" -> toSQLId(tableName)
+      )
+    )
   }
 
   def cannotOverwritePathBeingReadFromError(path: String): Throwable = {
@@ -3649,18 +3653,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def implicitCollationMismatchError(): Throwable = {
+  def implicitCollationMismatchError(implicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.IMPLICIT",
-      messageParameters = Map.empty
+      messageParameters = Map(
+        "implicitTypes" -> implicitTypes.map(toSQLType).mkString(", ")
+      )
     )
   }
 
-  def explicitCollationMismatchError(explicitTypes: Seq[String]): Throwable = {
+  def explicitCollationMismatchError(explicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
       messageParameters = Map(
-        "explicitTypes" -> explicitTypes.map(toSQLId).mkString(", ")
+        "explicitTypes" -> explicitTypes.map(toSQLType).mkString(", ")
       )
     )
   }

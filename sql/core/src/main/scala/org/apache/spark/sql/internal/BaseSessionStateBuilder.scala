@@ -197,7 +197,7 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `catalog` fields.
    */
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
-    override val earlyResolutionRules: Seq[Rule[LogicalPlan]] =
+    override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
@@ -380,7 +380,9 @@ abstract class BaseSessionStateBuilder(
    * Resource manager that handles the storage of artifacts as well as preparing the artifacts for
    * use.
    */
-  protected def artifactManager: ArtifactManager = new ArtifactManager(session)
+  protected def artifactManager: ArtifactManager = {
+    parentState.map(_.artifactManager.clone(session)).getOrElse(new ArtifactManager(session))
+  }
 
   /**
    * Function used to make clones of the session state.

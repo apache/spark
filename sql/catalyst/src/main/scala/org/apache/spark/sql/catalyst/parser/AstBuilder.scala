@@ -40,12 +40,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AnyValue, First, Las
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils, SparkParserUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, IdentityColumnSpec, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryParsingErrors, SqlScriptingErrors}
@@ -428,7 +428,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a top-level plan with Common Table Expressions.
    */
   override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
-    val query = plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
+    val query = plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(
+      withQueryResultClauses(_, _, forPipeOperators = false))
 
     // Apply CTEs
     query.optionalMap(ctx.ctes)(withCTE)
@@ -449,7 +450,7 @@ class AstBuilder extends DataTypeAstBuilder
     val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
     if (duplicates.nonEmpty) {
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
-        duplicates.mkString("'", "', '", "'"), ctx)
+        duplicates.map(toSQLId).mkString(", "), ctx)
     }
     UnresolvedWith(plan, ctes.toSeq)
   }
@@ -491,7 +492,7 @@ class AstBuilder extends DataTypeAstBuilder
     val selects = ctx.fromStatementBody.asScala.map { body =>
       withFromStatementBody(body, from).
         // Add organization statements.
-        optionalMap(body.queryOrganization)(withQueryResultClauses)
+        optionalMap(body.queryOrganization)(withQueryResultClauses(_, _, forPipeOperators = false))
     }
     // If there are multiple SELECT just UNION them together into one query.
     if (selects.length == 1) {
@@ -537,7 +538,8 @@ class AstBuilder extends DataTypeAstBuilder
     val inserts = ctx.multiInsertQueryBody.asScala.map { body =>
       withInsertInto(body.insertInto,
         withFromStatementBody(body.fromStatementBody, from).
-          optionalMap(body.fromStatementBody.queryOrganization)(withQueryResultClauses))
+          optionalMap(body.fromStatementBody.queryOrganization)(
+            withQueryResultClauses(_, _, forPipeOperators = false)))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -976,31 +978,37 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Add ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY/LIMIT/WINDOWS clauses to the logical plan. These
    * clauses determine the shape (ordering/partitioning/rows) of the query result.
+   *
+   * If 'forPipeOperators' is true, throws an error if the WINDOW clause is present (since this is
+   * not currently supported) or if more than one clause is present (this can be useful when parsing
+   * clauses used with pipe operations which only allow one instance of these clauses each).
    */
   private def withQueryResultClauses(
       ctx: QueryOrganizationContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      forPipeOperators: Boolean): LogicalPlan = withOrigin(ctx) {
     import ctx._
+    var clause = ""
 
     // Handle ORDER BY, SORT BY, DISTRIBUTE BY, and CLUSTER BY clause.
     val withOrder = if (
       !order.isEmpty && sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
-      // ORDER BY ...
+      clause = PipeOperators.orderByClause
       Sort(order.asScala.map(visitSortItem).toSeq, global = true, query)
     } else if (order.isEmpty && !sort.isEmpty && distributeBy.isEmpty && clusterBy.isEmpty) {
-      // SORT BY ...
+      clause = PipeOperators.sortByClause
       Sort(sort.asScala.map(visitSortItem).toSeq, global = false, query)
     } else if (order.isEmpty && sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
-      // DISTRIBUTE BY ...
+      clause = PipeOperators.distributeByClause
       withRepartitionByExpression(ctx, expressionList(distributeBy), query)
     } else if (order.isEmpty && !sort.isEmpty && !distributeBy.isEmpty && clusterBy.isEmpty) {
-      // SORT BY ... DISTRIBUTE BY ...
+      clause = PipeOperators.sortByDistributeByClause
       Sort(
         sort.asScala.map(visitSortItem).toSeq,
         global = false,
         withRepartitionByExpression(ctx, expressionList(distributeBy), query))
     } else if (order.isEmpty && sort.isEmpty && distributeBy.isEmpty && !clusterBy.isEmpty) {
-      // CLUSTER BY ...
+      clause = PipeOperators.clusterByClause
       val expressions = expressionList(clusterBy)
       Sort(
         expressions.map(SortOrder(_, Ascending)),
@@ -1014,17 +1022,33 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // WINDOWS
-    val withWindow = withOrder.optionalMap(windowClause)(withWindowClause)
+    val withWindow = withOrder.optionalMap(windowClause) {
+      withWindowClause
+    }
+    if (forPipeOperators && windowClause != null) {
+      throw QueryParsingErrors.clausesWithPipeOperatorsUnsupportedError(
+        ctx, s"the ${PipeOperators.windowClause} clause")
+    }
 
     // OFFSET
     // - OFFSET 0 is the same as omitting the OFFSET clause
     val withOffset = withWindow.optional(offset) {
+      if (forPipeOperators && clause.nonEmpty) {
+        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+          ctx, clause, PipeOperators.offsetClause)
+      }
+      clause = PipeOperators.offsetClause
       Offset(typedVisit(offset), withWindow)
     }
 
     // LIMIT
     // - LIMIT ALL is the same as omitting the LIMIT clause
     withOffset.optional(limit) {
+      if (forPipeOperators && clause.nonEmpty && clause != PipeOperators.offsetClause) {
+        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+          ctx, clause, PipeOperators.limitClause)
+      }
+      clause = PipeOperators.limitClause
       Limit(typedVisit(limit), withOffset)
     }
   }
@@ -1266,7 +1290,8 @@ class AstBuilder extends DataTypeAstBuilder
         withHavingClause(havingClause, Aggregate(Nil, namedExpressions, withFilter))
       }
     } else if (aggregationClause != null) {
-      val aggregate = withAggregationClause(aggregationClause, namedExpressions, withFilter)
+      val aggregate = withAggregationClause(
+        aggregationClause, namedExpressions, withFilter, allowNamedGroupingExpressions = false)
       aggregate.optionalMap(havingClause)(withHavingClause)
     } else {
       // When hitting this branch, `having` must be null.
@@ -1479,9 +1504,27 @@ class AstBuilder extends DataTypeAstBuilder
   private def withAggregationClause(
       ctx: AggregationClauseContext,
       selectExpressions: Seq[NamedExpression],
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      allowNamedGroupingExpressions: Boolean): LogicalPlan = withOrigin(ctx) {
     if (ctx.groupingExpressionsWithGroupingAnalytics.isEmpty) {
-      val groupByExpressions = expressionList(ctx.groupingExpressions)
+      val groupByExpressions: Seq[Expression] =
+        ctx.groupingExpressions.asScala.map { n: NamedExpressionContext =>
+          if (!allowNamedGroupingExpressions && (n.name != null || n.identifierList != null)) {
+            // If we do not allow grouping expressions to have aliases in this context, we throw a
+            // syntax error here accordingly.
+            val error: String = (if (n.name != null) n.name else n.identifierList).getText
+            throw new ParseException(
+              command = Some(SparkParserUtils.command(n)),
+              start = Origin(),
+              stop = Origin(),
+              errorClass = "PARSE_SYNTAX_ERROR",
+              messageParameters = Map(
+                "error" -> s"'$error'",
+                "hint" -> s": extra input '$error'"),
+              queryContext = Array.empty)
+          }
+          visitNamedExpression(n)
+        }.toSeq
       if (ctx.GROUPING != null) {
         // GROUP BY ... GROUPING SETS (...)
         // `groupByExpressions` can be non-empty for Hive compatibility. It may add extra grouping
@@ -3711,58 +3754,6 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
   /**
-   * Parse and verify IDENTITY column definition.
-   *
-   * @param ctx      The parser context.
-   * @param dataType The data type of column defined as IDENTITY column. Used for verification.
-   * @return Tuple containing start, step and allowExplicitInsert.
-   */
-  protected def visitIdentityColumn(
-      ctx: IdentityColumnContext,
-      dataType: DataType): IdentityColumnSpec = {
-    if (dataType != LongType && dataType != IntegerType) {
-      throw QueryParsingErrors.identityColumnUnsupportedDataType(ctx, dataType.toString)
-    }
-    // We support two flavors of syntax:
-    // (1) GENERATED ALWAYS AS IDENTITY (...)
-    // (2) GENERATED BY DEFAULT AS IDENTITY (...)
-    // (1) forbids explicit inserts, while (2) allows.
-    val allowExplicitInsert = ctx.BY() != null && ctx.DEFAULT() != null
-    val (start, step) = visitIdentityColSpec(ctx.identityColSpec())
-
-    new IdentityColumnSpec(start, step, allowExplicitInsert)
-  }
-
-  override def visitIdentityColSpec(ctx: IdentityColSpecContext): (Long, Long) = {
-    val defaultStart = 1
-    val defaultStep = 1
-    if (ctx == null) {
-      return (defaultStart, defaultStep)
-    }
-    var (start, step): (Option[Long], Option[Long]) = (None, None)
-    ctx.sequenceGeneratorOption().asScala.foreach { option =>
-      if (option.start != null) {
-        if (start.isDefined) {
-          throw QueryParsingErrors.identityColumnDuplicatedSequenceGeneratorOption(ctx, "START")
-        }
-        start = Some(option.start.getText.toLong)
-      } else if (option.step != null) {
-        if (step.isDefined) {
-          throw QueryParsingErrors.identityColumnDuplicatedSequenceGeneratorOption(ctx, "STEP")
-        }
-        step = Some(option.step.getText.toLong)
-        if (step.get == 0L) {
-          throw QueryParsingErrors.identityColumnIllegalStep(ctx)
-        }
-      } else {
-        throw SparkException
-            .internalError(s"Invalid identity column sequence generator option: ${option.getText}")
-      }
-    }
-    (start.getOrElse(defaultStart), step.getOrElse(defaultStep))
-  }
-
-  /**
    * Create an optional comment string.
    */
   protected def visitCommentSpecList(ctx: java.util.List[CommentSpecContext]): Option[String] = {
@@ -5883,6 +5874,18 @@ class AstBuilder extends DataTypeAstBuilder
     if (!SQLConf.get.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
       operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
     }
+    // This helper function adds a table subquery boundary between the new operator to be added
+    // (such as a filter or sort) and the input plan if one does not already exist. This helps the
+    // analyzer behave as if we had added the corresponding SQL clause after a table subquery
+    // containing the input plan.
+    def withSubqueryAlias(): LogicalPlan = left match {
+      case s: SubqueryAlias =>
+        s
+      case u: UnresolvedRelation =>
+        u
+      case _ =>
+        SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
+    }
     Option(ctx.selectClause).map { c =>
       withSelectQuerySpecification(
         ctx = ctx,
@@ -5895,18 +5898,7 @@ class AstBuilder extends DataTypeAstBuilder
         relation = left,
         isPipeOperatorSelect = true)
     }.getOrElse(Option(ctx.whereClause).map { c =>
-      // Add a table subquery boundary between the new filter and the input plan if one does not
-      // already exist. This helps the analyzer behave as if we had added the WHERE clause after a
-      // table subquery containing the input plan.
-      val withSubqueryAlias = left match {
-        case s: SubqueryAlias =>
-          s
-        case u: UnresolvedRelation =>
-          u
-        case _ =>
-          SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
-      }
-      withWhereClause(c, withSubqueryAlias)
+      withWhereClause(c, withSubqueryAlias())
     }.getOrElse(Option(ctx.pivotClause()).map { c =>
       if (ctx.unpivotClause() != null) {
         throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
@@ -5924,7 +5916,73 @@ class AstBuilder extends DataTypeAstBuilder
     }.getOrElse(Option(ctx.operator).map { c =>
       val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
       visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
-    }.get))))))
+    }.getOrElse(Option(ctx.queryOrganization).map { c =>
+      withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
+    }.getOrElse(
+      visitOperatorPipeAggregate(ctx, left)
+    ))))))))
+  }
+
+  private def visitOperatorPipeAggregate(
+      ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
+    assert(ctx.AGGREGATE != null)
+    if (ctx.namedExpressionSeq() == null && ctx.aggregationClause() == null) {
+      operationNotAllowed(
+        "The AGGREGATE clause requires a list of aggregate expressions " +
+          "or a list of grouping expressions, or both", ctx)
+    }
+    val aggregateExpressions: Seq[NamedExpression] =
+      Option(ctx.namedExpressionSeq()).map { n: NamedExpressionSeqContext =>
+        visitNamedExpressionSeq(n).map {
+          case (e: NamedExpression, _) => e
+          case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+        }
+      }.getOrElse(Seq.empty)
+    Option(ctx.aggregationClause()).map { c: AggregationClauseContext =>
+      withAggregationClause(c, aggregateExpressions, left, allowNamedGroupingExpressions = true)
+      match {
+        case a: Aggregate =>
+          // GROUP BY ALL, GROUP BY CUBE, GROUPING_ID, GROUPING SETS, and GROUP BY ROLLUP are not
+          // supported yet.
+          def error(s: String): Unit =
+            throw QueryParsingErrors.pipeOperatorAggregateUnsupportedCaseError(s, c)
+          a.groupingExpressions match {
+            case Seq(key: UnresolvedAttribute) if key.equalsIgnoreCase("ALL") =>
+              error("GROUP BY ALL")
+            case _ =>
+          }
+          def visit(e: Expression): Unit = {
+            e match {
+              case _: Cube => error("GROUP BY CUBE")
+              case _: GroupingSets => error("GROUPING SETS")
+              case _: Rollup => error("GROUP BY ROLLUP")
+              case f: UnresolvedFunction if f.arguments.length == 1 && f.nameParts.length == 1 =>
+                Seq("GROUPING", "GROUPING_ID").foreach { name =>
+                  if (f.nameParts.head.equalsIgnoreCase(name)) error(name)
+                }
+              case _: WindowSpec => error("window functions")
+              case _ =>
+            }
+            e.children.foreach(visit)
+          }
+          a.groupingExpressions.foreach(visit)
+          a.aggregateExpressions.foreach(visit)
+          // Prepend grouping keys to the list of aggregate functions, since operator pipe AGGREGATE
+          // clause returns the GROUP BY expressions followed by the list of aggregate functions.
+          val namedGroupingExpressions: Seq[NamedExpression] =
+            a.groupingExpressions.map {
+              case n: NamedExpression => n
+              case e: Expression => UnresolvedAlias(e, None)
+            }
+          a.copy(aggregateExpressions = namedGroupingExpressions ++ a.aggregateExpressions)
+      }
+    }.getOrElse {
+      // This is a table aggregation with no grouping expressions.
+      Aggregate(
+        groupingExpressions = Seq.empty,
+        aggregateExpressions = aggregateExpressions,
+        child = left)
+    }
   }
 
   /**
