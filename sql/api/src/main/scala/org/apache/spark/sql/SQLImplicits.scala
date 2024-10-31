@@ -14,24 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
 
 import scala.collection.Map
 import scala.language.implicitConversions
 import scala.reflect.classTag
 import scala.reflect.runtime.universe.TypeTag
 
-import _root_.java
-
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{ColumnName, DatasetHolder, Encoder, Encoders}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, DEFAULT_SCALA_DECIMAL_ENCODER, IterableEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, StringEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
+
 
 /**
  * A collection of implicit methods for converting common Scala objects into
- * [[org.apache.spark.sql.api.Dataset]]s.
+ * [[org.apache.spark.sql.Dataset]]s.
  *
  * @since 1.6.0
  */

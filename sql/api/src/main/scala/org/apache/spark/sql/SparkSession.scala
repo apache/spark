@@ -14,25 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
 
+import java.{lang, util}
+import java.io.Closeable
+import java.net.URI
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicReference
+
+import scala.collection.mutable
 import scala.concurrent.duration.NANOSECONDS
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
-
-import _root_.java.io.Closeable
-import _root_.java.lang
-import _root_.java.net.URI
-import _root_.java.util
-import _root_.java.util.concurrent.atomic.AtomicReference
+import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row, RuntimeConfig, SparkSessionExtensions, SQLContext}
+import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.internal.{SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.SparkClassUtils
@@ -206,14 +209,14 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   @transient
-  def emptyDataFrame: Dataset[Row]
+  def emptyDataFrame: DataFrame
 
   /**
    * Creates a `DataFrame` from a local Seq of Product.
    *
    * @since 2.0.0
    */
-  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): Dataset[Row]
+  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame
 
   /**
    * :: DeveloperApi :: Creates a `DataFrame` from a `java.util.List` containing
@@ -224,7 +227,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rows: util.List[Row], schema: StructType): Dataset[Row]
+  def createDataFrame(rows: util.List[Row], schema: StructType): DataFrame
 
   /**
    * Applies a schema to a List of Java Beans.
@@ -234,7 +237,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 1.6.0
    */
-  def createDataFrame(data: util.List[_], beanClass: Class[_]): Dataset[Row]
+  def createDataFrame(data: util.List[_], beanClass: Class[_]): DataFrame
 
   /**
    * Creates a `DataFrame` from an RDD of Product (e.g. case classes, tuples).
@@ -243,7 +246,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
-  def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): Dataset[Row]
+  def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame
 
   /**
    * :: DeveloperApi :: Creates a `DataFrame` from an `RDD` containing
@@ -278,7 +281,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rowRDD: RDD[Row], schema: StructType): Dataset[Row]
+  def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame
 
   /**
    * :: DeveloperApi :: Creates a `DataFrame` from a `JavaRDD` containing
@@ -291,7 +294,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   @DeveloperApi
-  def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): Dataset[Row]
+  def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame
 
   /**
    * Applies a schema to an RDD of Java Beans.
@@ -301,7 +304,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def createDataFrame(rdd: RDD[_], beanClass: Class[_]): Dataset[Row]
+  def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame
 
   /**
    * Applies a schema to an RDD of Java Beans.
@@ -313,7 +316,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
-  def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): Dataset[Row]
+  def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame
 
   /**
    * Convert a `BaseRelation` created for external data sources into a `DataFrame`.
@@ -322,7 +325,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *   this method is not supported in Spark Connect.
    * @since 2.0.0
    */
-  def baseRelationToDataFrame(baseRelation: BaseRelation): Dataset[Row]
+  def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame
 
   /* ------------------------------- *
    |  Methods for creating DataSets  |
@@ -450,7 +453,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *   database. Note that, the global temporary view database is also valid here.
    * @since 2.0.0
    */
-  def table(tableName: String): Dataset[Row]
+  def table(tableName: String): DataFrame
 
   /* ----------------- *
    |  Everything else  |
@@ -472,7 +475,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 3.5.0
    */
   @Experimental
-  def sql(sqlText: String, args: Array[_]): Dataset[Row]
+  def sql(sqlText: String, args: Array[_]): DataFrame
 
   /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
@@ -490,7 +493,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, Any]): Dataset[Row]
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame
 
   /**
    * Executes a SQL query substituting named parameters by the given arguments, returning the
@@ -508,7 +511,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: util.Map[String, Any]): Dataset[Row] = {
+  def sql(sqlText: String, args: util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
 
@@ -518,7 +521,7 @@ abstract class SparkSession extends Serializable with Closeable {
    *
    * @since 2.0.0
    */
-  def sql(sqlText: String): Dataset[Row] = sql(sqlText, Map.empty[String, Any])
+  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
 
   /**
    * Execute an arbitrary string command inside an external execution engine rather than Spark.
@@ -541,7 +544,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 3.0.0
    */
   @Unstable
-  def executeCommand(runner: String, command: String, options: Map[String, String]): Dataset[Row]
+  def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame
 
   /**
    * Add a single artifact to the current session.
@@ -778,35 +781,129 @@ abstract class SparkSession extends Serializable with Closeable {
 object SparkSession extends SparkSessionCompanion {
   type Session = SparkSession
 
-  private[this] val companion: SparkSessionCompanion = {
-    val cls = SparkClassUtils.classForName("org.apache.spark.sql.SparkSession")
+  // Config key/values used to set the SparkSession API mode.
+  val API_MODE_KEY: String = "spark.api.mode"
+  val API_MODE_CLASSIC: String = "classic"
+  val API_MODE_CONNECT: String = "connect"
+
+  // Implementation specific companions
+  private lazy val CLASSIC_COMPANION = lookupCompanion("org.apache.spark.sql.classic.SparkSession")
+  private lazy val CONNECT_COMPANION = lookupCompanion("org.apache.spark.sql.connect.SparkSession")
+  private def DEFAULT_COMPANION = Try(CLASSIC_COMPANION).orElse(Try(CONNECT_COMPANION)).getOrElse {
+    throw new IllegalStateException("Cannot find an SparkSession implementation on the Classpath.")
+  }
+
+  private[this] def lookupCompanion(name: String): SparkSessionCompanion = {
+    val cls = SparkClassUtils.classForName(name)
     val mirror = scala.reflect.runtime.currentMirror
     val module = mirror.classSymbol(cls).companion.asModule
     mirror.reflectModule(module).instance.asInstanceOf[SparkSessionCompanion]
   }
 
   /** @inheritdoc */
-  override def builder(): SparkSessionBuilder = companion.builder()
+  override def builder(): Builder = new Builder
 
   /** @inheritdoc */
-  override def setActiveSession(session: SparkSession): Unit =
-    companion.setActiveSession(session.asInstanceOf[companion.Session])
+  override def setActiveSession(session: SparkSession): Unit = super.setActiveSession(session)
 
   /** @inheritdoc */
-  override def clearActiveSession(): Unit = companion.clearActiveSession()
+  override def setDefaultSession(session: SparkSession): Unit = super.setDefaultSession(session)
 
   /** @inheritdoc */
-  override def setDefaultSession(session: SparkSession): Unit =
-    companion.setDefaultSession(session.asInstanceOf[companion.Session])
+  override def getActiveSession: Option[SparkSession] = super.getActiveSession
 
   /** @inheritdoc */
-  override def clearDefaultSession(): Unit = companion.clearDefaultSession()
+  override def getDefaultSession: Option[SparkSession] = super.getDefaultSession
 
-  /** @inheritdoc */
-  override def getActiveSession: Option[SparkSession] = companion.getActiveSession
+  class Builder extends SparkSessionBuilder {
+    private val extensionModifications = mutable.Buffer.empty[SparkSessionExtensions => Unit]
 
-  /** @inheritdoc */
-  override def getDefaultSession: Option[SparkSession] = companion.getDefaultSession
+    /** @inheritdoc */
+    override def appName(name: String): this.type = super.appName(name)
+
+    /** @inheritdoc */
+    override def master(master: String): this.type = super.master(master)
+
+    /** @inheritdoc */
+    override def enableHiveSupport(): this.type = super.enableHiveSupport()
+
+    /** @inheritdoc */
+    override def config(key: String, value: String): this.type = super.config(key, value)
+
+    /** @inheritdoc */
+    override def config(key: String, value: Long): this.type = super.config(key, value)
+
+    /** @inheritdoc */
+    override def config(key: String, value: Double): this.type = super.config(key, value)
+
+    /** @inheritdoc */
+    override def config(key: String, value: Boolean): this.type = super.config(key, value)
+
+    /** @inheritdoc */
+    override def config(map: Map[String, Any]): this.type = super.config(map)
+
+    /** @inheritdoc */
+    override def config(map: util.Map[String, Any]): this.type = super.config(map)
+
+    /** @inheritdoc */
+    override def config(conf: SparkConf): this.type = super.config(conf)
+
+    /** @inheritdoc */
+    override def remote(connectionString: String): this.type = super.remote(connectionString)
+
+    /** @inheritdoc */
+    override def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
+      extensionModifications += f
+      this
+    }
+
+    /**
+     * Make the builder create a Classic SparkSession.
+     */
+    def classic(): this.type = super.config(API_MODE_KEY, API_MODE_CLASSIC)
+
+    /**
+     * Make the builder create a Connect SparkSession.
+     */
+    def connect(): this.type = super.config(API_MODE_KEY, API_MODE_CONNECT)
+
+    /** @inheritdoc */
+    override def getOrCreate(): SparkSession = {
+      val session = builder().getOrCreate()
+      setDefaultAndActiveSession(session)
+      session
+    }
+
+    /** @inheritdoc */
+    override def create(): SparkSession = {
+      val session = builder().create()
+      setDefaultAndActiveSession(session)
+      session
+    }
+
+    /**
+     * Create an API mode implementation specific builder.
+     */
+    private def builder(): SparkSessionBuilder = synchronized {
+      val companion = options.get(API_MODE_KEY).map(_.toLowerCase(Locale.ROOT)) match {
+        case None => DEFAULT_COMPANION
+        case Some(API_MODE_CLASSIC) => CLASSIC_COMPANION
+        case Some(API_MODE_CONNECT) => CONNECT_COMPANION
+        case Some(other) =>
+          throw new IllegalArgumentException(s"Unknown API mode: $other")
+      }
+
+      val builder = companion.builder()
+      options.foreach {
+        case (k, v) if k != API_MODE_KEY => builder.config(k, v)
+        case _ =>
+      }
+      extensionModifications.foreach { f =>
+        builder.withExtensions(f)
+      }
+      builder
+    }
+  }
 }
 
 /**
@@ -816,6 +913,12 @@ object SparkSession extends SparkSessionCompanion {
 private[sql] abstract class SparkSessionCompanion {
   private[sql] type Session <: SparkSession
 
+  /** The active SparkSession for the current thread. */
+  private val activeThreadSession = new InheritableThreadLocal[Session]
+
+  /** Reference to the root SparkSession. */
+  private val defaultSession = new AtomicReference[Session]
+
   /**
    * Changes the SparkSession that will be returned in this thread and its children when
    * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
@@ -823,7 +926,9 @@ private[sql] abstract class SparkSessionCompanion {
    *
    * @since 2.0.0
    */
-  def setActiveSession(session: Session): Unit
+  def setActiveSession(session: Session): Unit = {
+    activeThreadSession.set(session)
+  }
 
   /**
    * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
@@ -831,21 +936,27 @@ private[sql] abstract class SparkSessionCompanion {
    *
    * @since 2.0.0
    */
-  def clearActiveSession(): Unit
+  def clearActiveSession(): Unit = {
+    activeThreadSession.remove()
+  }
 
   /**
    * Sets the default SparkSession that is returned by the builder.
    *
    * @since 2.0.0
    */
-  def setDefaultSession(session: Session): Unit
+  def setDefaultSession(session: Session): Unit = {
+    defaultSession.set(session)
+  }
 
   /**
    * Clears the default SparkSession that is returned by the builder.
    *
    * @since 2.0.0
    */
-  def clearDefaultSession(): Unit
+  def clearDefaultSession(): Unit = {
+    defaultSession.set(null.asInstanceOf[Session])
+  }
 
   /**
    * Returns the active SparkSession for the current thread, returned by the builder.
@@ -855,7 +966,7 @@ private[sql] abstract class SparkSessionCompanion {
    *
    * @since 2.2.0
    */
-  def getActiveSession: Option[Session]
+  def getActiveSession: Option[Session] = usableSession(activeThreadSession.get())
 
   /**
    * Returns the default SparkSession that is returned by the builder.
@@ -865,7 +976,7 @@ private[sql] abstract class SparkSessionCompanion {
    *
    * @since 2.2.0
    */
-  def getDefaultSession: Option[Session]
+  def getDefaultSession: Option[Session] = usableSession(defaultSession.get())
 
   /**
    * Returns the currently active SparkSession, otherwise the default one. If there is no default
@@ -879,52 +990,6 @@ private[sql] abstract class SparkSessionCompanion {
         throw SparkException.internalError("No active or default Spark session found")))
   }
 
-  /**
-   * Creates a [[SparkSessionBuilder]] for constructing a [[SparkSession]].
-   *
-   * @since 2.0.0
-   */
-  def builder(): SparkSessionBuilder
-}
-
-/**
- * Abstract class for [[SparkSession]] companions. This implements active and default session
- * management.
- */
-private[sql] abstract class BaseSparkSessionCompanion extends SparkSessionCompanion {
-
-  /** The active SparkSession for the current thread. */
-  private val activeThreadSession = new InheritableThreadLocal[Session]
-
-  /** Reference to the root SparkSession. */
-  private val defaultSession = new AtomicReference[Session]
-
-  /** @inheritdoc */
-  def setActiveSession(session: Session): Unit = {
-    activeThreadSession.set(session)
-  }
-
-  /** @inheritdoc */
-  def clearActiveSession(): Unit = {
-    activeThreadSession.remove()
-  }
-
-  /** @inheritdoc */
-  def setDefaultSession(session: Session): Unit = {
-    defaultSession.set(session)
-  }
-
-  /** @inheritdoc */
-  def clearDefaultSession(): Unit = {
-    defaultSession.set(null.asInstanceOf[Session])
-  }
-
-  /** @inheritdoc */
-  def getActiveSession: Option[Session] = usableSession(activeThreadSession.get())
-
-  /** @inheritdoc */
-  def getDefaultSession: Option[Session] = usableSession(defaultSession.get())
-
   private def usableSession(session: Session): Option[Session] = {
     if ((session ne null) && canUseSession(session)) {
       Some(session)
@@ -937,7 +1002,7 @@ private[sql] abstract class BaseSparkSessionCompanion extends SparkSessionCompan
 
   /**
    * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
-   * they are not set yet or they are not usable.
+   * they are not set yet, or they are not usable.
    */
   protected def setDefaultAndActiveSession(session: Session): Unit = {
     val currentDefault = defaultSession.getAcquire
@@ -962,6 +1027,13 @@ private[sql] abstract class BaseSparkSessionCompanion extends SparkSessionCompan
       clearActiveSession()
     }
   }
+
+  /**
+   * Creates a [[SparkSessionBuilder]] for constructing a [[SparkSession]].
+   *
+   * @since 2.0.0
+   */
+  def builder(): SparkSessionBuilder
 }
 
 /**
@@ -1006,7 +1078,7 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Connect.
    * @since 3.5.0
    */
-  def remote(connectionString: String): this.type
+  def remote(connectionString: String): this.type = config("spark.connect.remote", connectionString)
 
   /**
    * Sets a config option. Options set using this method are automatically propagated to both

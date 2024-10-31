@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
 
 // scalastyle:off funsuite
 import org.scalatest.BeforeAndAfterAll

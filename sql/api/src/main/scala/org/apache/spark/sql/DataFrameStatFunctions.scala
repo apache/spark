@@ -14,14 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
+
+import java.{lang => jl, util => ju}
 
 import scala.jdk.CollectionConverters._
 
-import _root_.java.{lang => jl, util => ju}
-
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.BinaryEncoder
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.functions.{count_min_sketch, lit}
@@ -35,7 +34,7 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
  */
 @Stable
 abstract class DataFrameStatFunctions {
-  protected def df: Dataset[Row]
+  protected def df: DataFrame
 
   /**
    * Calculates the approximate quantiles of a numerical column of a DataFrame.
@@ -202,7 +201,7 @@ abstract class DataFrameStatFunctions {
    *
    * @since 1.4.0
    */
-  def crosstab(col1: String, col2: String): Dataset[Row]
+  def crosstab(col1: String, col2: String): DataFrame
 
   /**
    * Finding frequent items for columns, possibly with false positives. Using the frequent element
@@ -246,7 +245,7 @@ abstract class DataFrameStatFunctions {
    * }}}
    * @since 1.4.0
    */
-  def freqItems(cols: Array[String], support: Double): Dataset[Row] =
+  def freqItems(cols: Array[String], support: Double): DataFrame =
     freqItems(cols.toImmutableArraySeq, support)
 
   /**
@@ -263,7 +262,7 @@ abstract class DataFrameStatFunctions {
    *   A Local DataFrame with the Array of frequent items for each column.
    * @since 1.4.0
    */
-  def freqItems(cols: Array[String]): Dataset[Row] = freqItems(cols, 0.01)
+  def freqItems(cols: Array[String]): DataFrame = freqItems(cols, 0.01)
 
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
@@ -307,7 +306,7 @@ abstract class DataFrameStatFunctions {
    *
    * @since 1.4.0
    */
-  def freqItems(cols: Seq[String], support: Double): Dataset[Row]
+  def freqItems(cols: Seq[String], support: Double): DataFrame
 
   /**
    * (Scala-specific) Finding frequent items for columns, possibly with false positives. Using the
@@ -324,7 +323,7 @@ abstract class DataFrameStatFunctions {
    *   A Local DataFrame with the Array of frequent items for each column.
    * @since 1.4.0
    */
-  def freqItems(cols: Seq[String]): Dataset[Row] = freqItems(cols, 0.01)
+  def freqItems(cols: Seq[String]): DataFrame = freqItems(cols, 0.01)
 
   /**
    * Returns a stratified sample without replacement based on the fraction given on each stratum.
@@ -356,7 +355,7 @@ abstract class DataFrameStatFunctions {
    *
    * @since 1.5.0
    */
-  def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): Dataset[Row] = {
+  def sampleBy[T](col: String, fractions: Map[T, Double], seed: Long): DataFrame = {
     sampleBy(Column(col), fractions, seed)
   }
 
@@ -376,7 +375,7 @@ abstract class DataFrameStatFunctions {
    *
    * @since 1.5.0
    */
-  def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): Dataset[Row] = {
+  def sampleBy[T](col: String, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 
@@ -413,7 +412,7 @@ abstract class DataFrameStatFunctions {
    *
    * @since 3.0.0
    */
-  def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): Dataset[Row]
+  def sampleBy[T](col: Column, fractions: Map[T, Double], seed: Long): DataFrame
 
   /**
    * (Java-specific) Returns a stratified sample without replacement based on the fraction given
@@ -432,7 +431,7 @@ abstract class DataFrameStatFunctions {
    *   a new `DataFrame` that represents the stratified sample
    * @since 3.0.0
    */
-  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): Dataset[Row] = {
+  def sampleBy[T](col: Column, fractions: ju.Map[T, jl.Double], seed: Long): DataFrame = {
     sampleBy(col, fractions.asScala.toMap.asInstanceOf[Map[T, Double]], seed)
   }
 

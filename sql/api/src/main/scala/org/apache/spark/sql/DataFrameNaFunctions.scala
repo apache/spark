@@ -14,14 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
+
+import java.util
 
 import scala.jdk.CollectionConverters._
 
-import _root_.java.util
-
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.Row
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -37,7 +36,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(): Dataset[Row] = drop("any")
+  def drop(): DataFrame = drop("any")
 
   /**
    * Returns a new `DataFrame` that drops rows containing null or NaN values.
@@ -47,7 +46,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(how: String): Dataset[Row] = drop(toMinNonNulls(how))
+  def drop(how: String): DataFrame = drop(toMinNonNulls(how))
 
   /**
    * Returns a new `DataFrame` that drops rows containing any null or NaN values in the specified
@@ -55,7 +54,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(cols: Array[String]): Dataset[Row] = drop(cols.toImmutableArraySeq)
+  def drop(cols: Array[String]): DataFrame = drop(cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that drops rows containing any null or NaN values
@@ -63,7 +62,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(cols: Seq[String]): Dataset[Row] = drop(cols.size, cols)
+  def drop(cols: Seq[String]): DataFrame = drop(cols.size, cols)
 
   /**
    * Returns a new `DataFrame` that drops rows containing null or NaN values in the specified
@@ -74,7 +73,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(how: String, cols: Array[String]): Dataset[Row] = drop(how, cols.toImmutableArraySeq)
+  def drop(how: String, cols: Array[String]): DataFrame = drop(how, cols.toImmutableArraySeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that drops rows containing null or NaN values in
@@ -85,7 +84,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(how: String, cols: Seq[String]): Dataset[Row] = drop(toMinNonNulls(how), cols)
+  def drop(how: String, cols: Seq[String]): DataFrame = drop(toMinNonNulls(how), cols)
 
   /**
    * Returns a new `DataFrame` that drops rows containing less than `minNonNulls` non-null and
@@ -93,7 +92,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(minNonNulls: Int): Dataset[Row] = drop(Option(minNonNulls))
+  def drop(minNonNulls: Int): DataFrame = drop(Option(minNonNulls))
 
   /**
    * Returns a new `DataFrame` that drops rows containing less than `minNonNulls` non-null and
@@ -101,7 +100,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(minNonNulls: Int, cols: Array[String]): Dataset[Row] =
+  def drop(minNonNulls: Int, cols: Array[String]): DataFrame =
     drop(minNonNulls, cols.toImmutableArraySeq)
 
   /**
@@ -110,7 +109,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def drop(minNonNulls: Int, cols: Seq[String]): Dataset[Row] = drop(Option(minNonNulls), cols)
+  def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = drop(Option(minNonNulls), cols)
 
   private def toMinNonNulls(how: String): Option[Int] = {
     how.toLowerCase(util.Locale.ROOT) match {
@@ -120,29 +119,29 @@ abstract class DataFrameNaFunctions {
     }
   }
 
-  protected def drop(minNonNulls: Option[Int]): Dataset[Row]
+  protected def drop(minNonNulls: Option[Int]): DataFrame
 
-  protected def drop(minNonNulls: Option[Int], cols: Seq[String]): Dataset[Row]
+  protected def drop(minNonNulls: Option[Int], cols: Seq[String]): DataFrame
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    *
    * @since 2.2.0
    */
-  def fill(value: Long): Dataset[Row]
+  def fill(value: Long): DataFrame
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in numeric columns with `value`.
    * @since 1.3.1
    */
-  def fill(value: Double): Dataset[Row]
+  def fill(value: Double): DataFrame
 
   /**
    * Returns a new `DataFrame` that replaces null values in string columns with `value`.
    *
    * @since 1.3.1
    */
-  def fill(value: String): Dataset[Row]
+  def fill(value: String): DataFrame
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns. If a
@@ -150,7 +149,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 2.2.0
    */
-  def fill(value: Long, cols: Array[String]): Dataset[Row] = fill(value, cols.toImmutableArraySeq)
+  def fill(value: Long, cols: Array[String]): DataFrame = fill(value, cols.toImmutableArraySeq)
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns. If a
@@ -158,7 +157,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def fill(value: Double, cols: Array[String]): Dataset[Row] =
+  def fill(value: Double, cols: Array[String]): DataFrame =
     fill(value, cols.toImmutableArraySeq)
 
   /**
@@ -167,7 +166,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 2.2.0
    */
-  def fill(value: Long, cols: Seq[String]): Dataset[Row]
+  def fill(value: Long, cols: Seq[String]): DataFrame
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null or NaN values in specified
@@ -175,7 +174,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def fill(value: Double, cols: Seq[String]): Dataset[Row]
+  def fill(value: Double, cols: Seq[String]): DataFrame
 
   /**
    * Returns a new `DataFrame` that replaces null values in specified string columns. If a
@@ -183,7 +182,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def fill(value: String, cols: Array[String]): Dataset[Row] =
+  def fill(value: String, cols: Array[String]): DataFrame =
     fill(value, cols.toImmutableArraySeq)
 
   /**
@@ -192,14 +191,14 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def fill(value: String, cols: Seq[String]): Dataset[Row]
+  def fill(value: String, cols: Seq[String]): DataFrame
 
   /**
    * Returns a new `DataFrame` that replaces null values in boolean columns with `value`.
    *
    * @since 2.3.0
    */
-  def fill(value: Boolean): Dataset[Row]
+  def fill(value: Boolean): DataFrame
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified boolean
@@ -207,7 +206,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 2.3.0
    */
-  def fill(value: Boolean, cols: Seq[String]): Dataset[Row]
+  def fill(value: Boolean, cols: Seq[String]): DataFrame
 
   /**
    * Returns a new `DataFrame` that replaces null values in specified boolean columns. If a
@@ -215,7 +214,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 2.3.0
    */
-  def fill(value: Boolean, cols: Array[String]): Dataset[Row] =
+  def fill(value: Boolean, cols: Array[String]): DataFrame =
     fill(value, cols.toImmutableArraySeq)
 
   /**
@@ -234,7 +233,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def fill(valueMap: util.Map[String, Any]): Dataset[Row] = fillMap(valueMap.asScala.toSeq)
+  def fill(valueMap: util.Map[String, Any]): DataFrame = fillMap(valueMap.asScala.toSeq)
 
   /**
    * (Scala-specific) Returns a new `DataFrame` that replaces null values.
@@ -254,9 +253,9 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def fill(valueMap: Map[String, Any]): Dataset[Row] = fillMap(valueMap.toSeq)
+  def fill(valueMap: Map[String, Any]): DataFrame = fillMap(valueMap.toSeq)
 
-  protected def fillMap(values: Seq[(String, Any)]): Dataset[Row]
+  protected def fillMap(values: Seq[(String, Any)]): DataFrame
 
   /**
    * Replaces values matching keys in `replacement` map with the corresponding values.
@@ -283,7 +282,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def replace[T](col: String, replacement: util.Map[T, T]): Dataset[Row] = {
+  def replace[T](col: String, replacement: util.Map[T, T]): DataFrame = {
     replace[T](col, replacement.asScala.toMap)
   }
 
@@ -309,7 +308,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def replace[T](cols: Array[String], replacement: util.Map[T, T]): Dataset[Row] = {
+  def replace[T](cols: Array[String], replacement: util.Map[T, T]): DataFrame = {
     replace(cols.toImmutableArraySeq, replacement.asScala.toMap)
   }
 
@@ -336,7 +335,7 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def replace[T](col: String, replacement: Map[T, T]): Dataset[Row]
+  def replace[T](col: String, replacement: Map[T, T]): DataFrame
 
   /**
    * (Scala-specific) Replaces values matching keys in `replacement` map.
@@ -358,5 +357,5 @@ abstract class DataFrameNaFunctions {
    *
    * @since 1.3.1
    */
-  def replace[T](cols: Seq[String], replacement: Map[T, T]): Dataset[Row]
+  def replace[T](cols: Seq[String], replacement: Map[T, T]): DataFrame
 }

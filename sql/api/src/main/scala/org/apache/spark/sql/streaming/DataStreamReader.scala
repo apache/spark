@@ -14,14 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql.streaming
 
 import scala.jdk.CollectionConverters._
 
-import _root_.java
-
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.{Encoders, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoders}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -111,14 +109,14 @@ abstract class DataStreamReader {
    *
    * @since 2.0.0
    */
-  def load(): Dataset[Row]
+  def load(): DataFrame
 
   /**
    * Loads input in as a `DataFrame`, for data streams that read from some path.
    *
    * @since 2.0.0
    */
-  def load(path: String): Dataset[Row]
+  def load(path: String): DataFrame
 
   /**
    * Loads a JSON file stream and returns the results as a `DataFrame`.
@@ -140,7 +138,7 @@ abstract class DataStreamReader {
    *
    * @since 2.0.0
    */
-  def json(path: String): Dataset[Row] = {
+  def json(path: String): DataFrame = {
     validateJsonSchema()
     format("json").load(path)
   }
@@ -163,7 +161,7 @@ abstract class DataStreamReader {
    *
    * @since 2.0.0
    */
-  def csv(path: String): Dataset[Row] = format("csv").load(path)
+  def csv(path: String): DataFrame = format("csv").load(path)
 
   /**
    * Loads a XML file stream and returns the result as a `DataFrame`.
@@ -183,7 +181,7 @@ abstract class DataStreamReader {
    *
    * @since 4.0.0
    */
-  def xml(path: String): Dataset[Row] = {
+  def xml(path: String): DataFrame = {
     validateXmlSchema()
     format("xml").load(path)
   }
@@ -202,7 +200,7 @@ abstract class DataStreamReader {
    *
    * @since 2.3.0
    */
-  def orc(path: String): Dataset[Row] = {
+  def orc(path: String): DataFrame = {
     format("orc").load(path)
   }
 
@@ -220,7 +218,7 @@ abstract class DataStreamReader {
    *
    * @since 2.0.0
    */
-  def parquet(path: String): Dataset[Row] = {
+  def parquet(path: String): DataFrame = {
     format("parquet").load(path)
   }
 
@@ -231,7 +229,7 @@ abstract class DataStreamReader {
    *   The name of the table
    * @since 3.1.0
    */
-  def table(tableName: String): Dataset[Row]
+  def table(tableName: String): DataFrame
 
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
@@ -258,7 +256,7 @@ abstract class DataStreamReader {
    *
    * @since 2.0.0
    */
-  def text(path: String): Dataset[Row] = format("text").load(path)
+  def text(path: String): DataFrame = format("text").load(path)
 
   /**
    * Loads text file(s) and returns a `Dataset` of String. The underlying schema of the Dataset

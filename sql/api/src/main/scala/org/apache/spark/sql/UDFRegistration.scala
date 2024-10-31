@@ -14,13 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
 
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils
-import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.internal.ToScalaUDF
 import org.apache.spark.sql.types.DataType
 
@@ -62,6 +62,21 @@ abstract class UDFRegistration {
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
     register(name, udf, "scala_udf", validateParameterCount = false)
   }
+
+  /**
+   * Registers a user-defined aggregate function (UDAF).
+   *
+   * @param name the name of the UDAF.
+   * @param udaf the UDAF needs to be registered.
+   * @return the registered UDAF.
+   * @since 1.5.0
+   * @deprecated this method and the use of UserDefinedAggregateFunction are deprecated.
+   *             Aggregator[IN, BUF, OUT] should now be registered as a UDF via the
+   *             functions.udaf(agg) method.
+   */
+  @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
+    " via the functions.udaf(agg) method.", "3.0.0")
+  def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction
 
   private def registerScalaUDF(
       name: String,

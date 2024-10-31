@@ -14,15 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql.streaming
 
-import _root_.java
-import _root_.java.util.concurrent.TimeoutException
+import java.util.concurrent.TimeoutException
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
-import org.apache.spark.sql.{ForeachWriter, WriteConfigMethods}
-import org.apache.spark.sql.streaming.{OutputMode, Trigger}
+import org.apache.spark.sql.{Dataset, ForeachWriter, WriteConfigMethods}
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,

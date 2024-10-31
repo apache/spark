@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api
+package org.apache.spark.sql.streaming
 
-import _root_.java.util.UUID
-import _root_.java.util.concurrent.TimeoutException
+import java.util.UUID
+import java.util.concurrent.TimeoutException
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryProgress, StreamingQueryStatus}
+import org.apache.spark.sql.SparkSession
 
 /**
  * A handle to a query that is executing continuously in the background as new data arrives. All
@@ -72,7 +72,7 @@ trait StreamingQuery {
   def isActive: Boolean
 
   /**
-   * Returns the [[org.apache.spark.sql.streaming.StreamingQueryException]] if the query was
+   * Returns the [[StreamingQueryException]] if the query was
    * terminated by an exception.
    *
    * @since 2.0.0
@@ -87,7 +87,7 @@ trait StreamingQuery {
   def status: StreamingQueryStatus
 
   /**
-   * Returns an array of the most recent [[org.apache.spark.sql.streaming.StreamingQueryProgress]]
+   * Returns an array of the most recent [[StreamingQueryProgress]]
    * updates for this query. The number of progress updates retained for each stream is configured
    * by Spark session configuration `spark.sql.streaming.numRecentProgressUpdates`.
    *
@@ -96,7 +96,7 @@ trait StreamingQuery {
   def recentProgress: Array[StreamingQueryProgress]
 
   /**
-   * Returns the most recent [[org.apache.spark.sql.streaming.StreamingQueryProgress]] update of
+   * Returns the most recent [[StreamingQueryProgress]] update of
    * this streaming query.
    *
    * @since 2.1.0
@@ -111,7 +111,7 @@ trait StreamingQuery {
    * immediately (if the query was terminated by `stop()`), or throw the exception immediately (if
    * the query has terminated with exception).
    *
-   * @throws org.apache.spark.sql.streaming.StreamingQueryException
+   * @throws StreamingQueryException
    *   if the query has terminated with an exception.
    *
    * @since 2.0.0
@@ -128,7 +128,7 @@ trait StreamingQuery {
    * `true` immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws org.apache.spark.sql.streaming.StreamingQueryException
+   * @throws StreamingQueryException
    *   if the query has terminated with an exception
    *
    * @since 2.0.0

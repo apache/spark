@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api
+package org.apache.spark.sql.catalog
+
+import java.util
 
 import scala.jdk.CollectionConverters._
 
-import _root_.java.util
-
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
@@ -280,7 +279,7 @@ abstract class Catalog {
    * @since 2.0.0
    */
   @deprecated("use createTable instead.", "2.2.0")
-  def createExternalTable(tableName: String, path: String): Dataset[Row] = {
+  def createExternalTable(tableName: String, path: String): DataFrame = {
     createTable(tableName, path)
   }
 
@@ -293,7 +292,7 @@ abstract class Catalog {
    *   identifier is provided, it refers to a table in the current database.
    * @since 2.2.0
    */
-  def createTable(tableName: String, path: String): Dataset[Row]
+  def createTable(tableName: String, path: String): DataFrame
 
   /**
    * Creates a table from the given path based on a data source and returns the corresponding
@@ -305,7 +304,7 @@ abstract class Catalog {
    * @since 2.0.0
    */
   @deprecated("use createTable instead.", "2.2.0")
-  def createExternalTable(tableName: String, path: String, source: String): Dataset[Row] = {
+  def createExternalTable(tableName: String, path: String, source: String): DataFrame = {
     createTable(tableName, path, source)
   }
 
@@ -318,7 +317,7 @@ abstract class Catalog {
    *   identifier is provided, it refers to a table in the current database.
    * @since 2.2.0
    */
-  def createTable(tableName: String, path: String, source: String): Dataset[Row]
+  def createTable(tableName: String, path: String, source: String): DataFrame
 
   /**
    * Creates a table from the given path based on a data source and a set of options. Then,
@@ -333,7 +332,7 @@ abstract class Catalog {
   def createExternalTable(
       tableName: String,
       source: String,
-      options: util.Map[String, String]): Dataset[Row] = {
+      options: util.Map[String, String]): DataFrame = {
     createTable(tableName, source, options)
   }
 
@@ -349,7 +348,7 @@ abstract class Catalog {
   def createTable(
       tableName: String,
       source: String,
-      options: util.Map[String, String]): Dataset[Row] = {
+      options: util.Map[String, String]): DataFrame = {
     createTable(tableName, source, options.asScala.toMap)
   }
 
@@ -366,7 +365,7 @@ abstract class Catalog {
   def createExternalTable(
       tableName: String,
       source: String,
-      options: Map[String, String]): Dataset[Row] = {
+      options: Map[String, String]): DataFrame = {
     createTable(tableName, source, options)
   }
 
@@ -379,7 +378,7 @@ abstract class Catalog {
    *   identifier is provided, it refers to a table in the current database.
    * @since 2.2.0
    */
-  def createTable(tableName: String, source: String, options: Map[String, String]): Dataset[Row]
+  def createTable(tableName: String, source: String, options: Map[String, String]): DataFrame
 
   /**
    * Create a table from the given path based on a data source, a schema and a set of options.
@@ -395,7 +394,7 @@ abstract class Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: util.Map[String, String]): Dataset[Row] = {
+      options: util.Map[String, String]): DataFrame = {
     createTable(tableName, source, schema, options)
   }
 
@@ -412,7 +411,7 @@ abstract class Catalog {
       tableName: String,
       source: String,
       description: String,
-      options: util.Map[String, String]): Dataset[Row] = {
+      options: util.Map[String, String]): DataFrame = {
     createTable(
       tableName,
       source = source,
@@ -433,7 +432,7 @@ abstract class Catalog {
       tableName: String,
       source: String,
       description: String,
-      options: Map[String, String]): Dataset[Row]
+      options: Map[String, String]): DataFrame
 
   /**
    * Create a table based on the dataset in a data source, a schema and a set of options. Then,
@@ -448,7 +447,7 @@ abstract class Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: util.Map[String, String]): Dataset[Row] = {
+      options: util.Map[String, String]): DataFrame = {
     createTable(tableName, source, schema, options.asScala.toMap)
   }
 
@@ -466,7 +465,7 @@ abstract class Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: Map[String, String]): Dataset[Row] = {
+      options: Map[String, String]): DataFrame = {
     createTable(tableName, source, schema, options)
   }
 
@@ -483,7 +482,7 @@ abstract class Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: Map[String, String]): Dataset[Row]
+      options: Map[String, String]): DataFrame
 
   /**
    * Create a table based on the dataset in a data source, a schema and a set of options. Then,
@@ -499,7 +498,7 @@ abstract class Catalog {
       source: String,
       schema: StructType,
       description: String,
-      options: util.Map[String, String]): Dataset[Row] = {
+      options: util.Map[String, String]): DataFrame = {
     createTable(
       tableName,
       source = source,
@@ -522,7 +521,7 @@ abstract class Catalog {
       source: String,
       schema: StructType,
       description: String,
-      options: Map[String, String]): Dataset[Row]
+      options: Map[String, String]): DataFrame
 
   /**
    * Drops the local temporary view with the given view name in the catalog. If the view has been

@@ -14,14 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
 
-import org.apache.spark.api.java.function.{CoGroupFunction, FlatMapGroupsFunction, FlatMapGroupsWithStateFunction, MapFunction, MapGroupsFunction, MapGroupsWithStateFunction, ReduceFunction}
-import org.apache.spark.sql.{Column, Encoder, TypedColumn}
+import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.functions.{count => cnt, lit}
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
+import org.apache.spark.sql.streaming._
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not

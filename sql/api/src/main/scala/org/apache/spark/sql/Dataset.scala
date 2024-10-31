@@ -14,20 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql
+
+import java.util
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 
-import _root_.java.util
-
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
+import org.apache.spark.api.java.function._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
+import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -141,7 +141,7 @@ abstract class Dataset[T] extends Serializable {
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): Dataset[Row]
+  def toDF(): DataFrame
 
   /**
    * Returns a new Dataset where each record has been mapped on to the specified type. The method
@@ -180,7 +180,7 @@ abstract class Dataset[T] extends Serializable {
    * @group basic
    * @since 3.4.0
    */
-  def to(schema: StructType): Dataset[Row]
+  def to(schema: StructType): DataFrame
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
@@ -196,7 +196,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def toDF(colNames: String*): Dataset[Row]
+  def toDF(colNames: String*): DataFrame
 
   /**
    * Returns the schema of this Dataset.
@@ -611,7 +611,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_]): Dataset[Row]
+  def join(right: DS[_]): DataFrame
 
   /**
    * Inner equi-join with another `DataFrame` using the given column.
@@ -637,7 +637,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], usingColumn: String): Dataset[Row] = {
+  def join(right: DS[_], usingColumn: String): DataFrame = {
     join(right, Seq(usingColumn))
   }
 
@@ -653,7 +653,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: DS[_], usingColumns: Array[String]): Dataset[Row] = {
+  def join(right: DS[_], usingColumns: Array[String]): DataFrame = {
     join(right, usingColumns.toImmutableArraySeq)
   }
 
@@ -681,7 +681,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], usingColumns: Seq[String]): Dataset[Row] = {
+  def join(right: DS[_], usingColumns: Seq[String]): DataFrame = {
     join(right, usingColumns, "inner")
   }
 
@@ -711,7 +711,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: DS[_], usingColumn: String, joinType: String): Dataset[Row] = {
+  def join(right: DS[_], usingColumn: String, joinType: String): DataFrame = {
     join(right, Seq(usingColumn), joinType)
   }
 
@@ -732,7 +732,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: DS[_], usingColumns: Array[String], joinType: String): Dataset[Row] = {
+  def join(right: DS[_], usingColumns: Array[String], joinType: String): DataFrame = {
     join(right, usingColumns.toImmutableArraySeq, joinType)
   }
 
@@ -762,7 +762,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], usingColumns: Seq[String], joinType: String): Dataset[Row]
+  def join(right: DS[_], usingColumns: Seq[String], joinType: String): DataFrame
 
   /**
    * Inner join with another `DataFrame`, using the given join expression.
@@ -776,7 +776,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], joinExprs: Column): Dataset[Row] =
+  def join(right: DS[_], joinExprs: Column): DataFrame =
     join(right, joinExprs, "inner")
 
   /**
@@ -806,7 +806,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], joinExprs: Column, joinType: String): Dataset[Row]
+  def join(right: DS[_], joinExprs: Column, joinType: String): DataFrame
 
   /**
    * Explicit cartesian join with another `DataFrame`.
@@ -818,7 +818,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.1.0
    */
-  def crossJoin(right: DS[_]): Dataset[Row]
+  def crossJoin(right: DS[_]): DataFrame
 
   /**
    * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to true.
@@ -1047,7 +1047,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): Dataset[Row]
+  def select(cols: Column*): DataFrame
 
   /**
    * Selects a set of columns. This is a variant of `select` that can only select existing columns
@@ -1063,7 +1063,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): Dataset[Row] = select((col +: cols).map(Column(_)): _*)
+  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)): _*)
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts SQL expressions.
@@ -1078,7 +1078,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def selectExpr(exprs: String*): Dataset[Row] = select(exprs.map(functions.expr): _*)
+  def selectExpr(exprs: String*): DataFrame = select(exprs.map(functions.expr): _*)
 
   /**
    * Returns a new Dataset by computing the given [[org.apache.spark.sql.Column]] expression for
@@ -1395,7 +1395,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def agg(aggExpr: (String, String), aggExprs: (String, String)*): Dataset[Row] = {
+  def agg(aggExpr: (String, String), aggExprs: (String, String)*): DataFrame = {
     groupBy().agg(aggExpr, aggExprs: _*)
   }
 
@@ -1410,7 +1410,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def agg(exprs: Map[String, String]): Dataset[Row] = groupBy().agg(exprs)
+  def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * (Java-specific) Aggregates on the entire Dataset without groups.
@@ -1423,7 +1423,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def agg(exprs: util.Map[String, String]): Dataset[Row] = groupBy().agg(exprs)
+  def agg(exprs: util.Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * Aggregates on the entire Dataset without groups.
@@ -1437,7 +1437,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def agg(expr: Column, exprs: Column*): Dataset[Row] = groupBy().agg(expr, exprs: _*)
+  def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs: _*)
 
   /**
    * (Scala-specific) Reduces the elements of this Dataset using the specified binary function.
@@ -1540,7 +1540,7 @@ abstract class Dataset[T] extends Serializable {
       ids: Array[Column],
       values: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row]
+      valueColumnName: String): DataFrame
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns
@@ -1566,7 +1566,7 @@ abstract class Dataset[T] extends Serializable {
   def unpivot(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row]
+      valueColumnName: String): DataFrame
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns
@@ -1590,7 +1590,7 @@ abstract class Dataset[T] extends Serializable {
       ids: Array[Column],
       values: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row] =
+      valueColumnName: String): DataFrame =
     unpivot(ids, values, variableColumnName, valueColumnName)
 
   /**
@@ -1615,7 +1615,7 @@ abstract class Dataset[T] extends Serializable {
   def melt(
       ids: Array[Column],
       variableColumnName: String,
-      valueColumnName: String): Dataset[Row] =
+      valueColumnName: String): DataFrame =
     unpivot(ids, variableColumnName, valueColumnName)
 
   /**
@@ -1678,7 +1678,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 4.0.0
    */
-  def transpose(indexColumn: Column): Dataset[Row]
+  def transpose(indexColumn: Column): DataFrame
 
   /**
    * Transposes a DataFrame, switching rows to columns. This function transforms the DataFrame
@@ -1697,7 +1697,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 4.0.0
    */
-  def transpose(): Dataset[Row]
+  def transpose(): DataFrame
 
   /**
    * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
@@ -2067,7 +2067,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
-  def explode[A <: Product: TypeTag](input: Column*)(f: Row => IterableOnce[A]): Dataset[Row]
+  def explode[A <: Product: TypeTag](input: Column*)(f: Row => IterableOnce[A]): DataFrame
 
   /**
    * (Scala-specific) Returns a new Dataset where a single column has been expanded to zero or
@@ -2093,7 +2093,7 @@ abstract class Dataset[T] extends Serializable {
    */
   @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
   def explode[A, B: TypeTag](inputColumn: String, outputColumn: String)(
-      f: A => IterableOnce[B]): Dataset[Row]
+      f: A => IterableOnce[B]): DataFrame
 
   /**
    * Returns a new Dataset by adding a column or replacing the existing column that has the same
@@ -2110,7 +2110,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumn(colName: String, col: Column): Dataset[Row] = withColumns(Seq(colName), Seq(col))
+  def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
 
   /**
    * (Scala-specific) Returns a new Dataset by adding columns or replacing the existing columns
@@ -2122,7 +2122,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.3.0
    */
-  def withColumns(colsMap: Map[String, Column]): Dataset[Row] = {
+  def withColumns(colsMap: Map[String, Column]): DataFrame = {
     val (colNames, newCols) = colsMap.toSeq.unzip
     withColumns(colNames, newCols)
   }
@@ -2137,14 +2137,14 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.3.0
    */
-  def withColumns(colsMap: util.Map[String, Column]): Dataset[Row] = withColumns(
+  def withColumns(colsMap: util.Map[String, Column]): DataFrame = withColumns(
     colsMap.asScala.toMap)
 
   /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has the same
    * names.
    */
-  protected def withColumns(colNames: Seq[String], cols: Seq[Column]): Dataset[Row]
+  protected def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame
 
   /**
    * Returns a new Dataset with a column renamed. This is a no-op if schema doesn't contain
@@ -2153,7 +2153,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumnRenamed(existingName: String, newName: String): Dataset[Row] =
+  def withColumnRenamed(existingName: String, newName: String): DataFrame =
     withColumnsRenamed(Seq(existingName), Seq(newName))
 
   /**
@@ -2168,7 +2168,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 3.4.0
    */
   @throws[AnalysisException]
-  def withColumnsRenamed(colsMap: Map[String, String]): Dataset[Row] = {
+  def withColumnsRenamed(colsMap: Map[String, String]): DataFrame = {
     val (colNames, newColNames) = colsMap.toSeq.unzip
     withColumnsRenamed(colNames, newColNames)
   }
@@ -2182,10 +2182,10 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def withColumnsRenamed(colsMap: util.Map[String, String]): Dataset[Row] =
+  def withColumnsRenamed(colsMap: util.Map[String, String]): DataFrame =
     withColumnsRenamed(colsMap.asScala.toMap)
 
-  protected def withColumnsRenamed(colNames: Seq[String], newColNames: Seq[String]): Dataset[Row]
+  protected def withColumnsRenamed(colNames: Seq[String], newColNames: Seq[String]): DataFrame
 
   /**
    * Returns a new Dataset by updating an existing column with metadata.
@@ -2193,7 +2193,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.3.0
    */
-  def withMetadata(columnName: String, metadata: Metadata): Dataset[Row]
+  def withMetadata(columnName: String, metadata: Metadata): DataFrame
 
   /**
    * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain column
@@ -2266,7 +2266,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def drop(colName: String): Dataset[Row] = drop(colName :: Nil: _*)
+  def drop(colName: String): DataFrame = drop(colName :: Nil: _*)
 
   /**
    * Returns a new Dataset with columns dropped. This is a no-op if schema doesn't contain column
@@ -2279,7 +2279,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def drop(colNames: String*): Dataset[Row]
+  def drop(colNames: String*): DataFrame
 
   /**
    * Returns a new Dataset with column dropped.
@@ -2294,7 +2294,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def drop(col: Column): Dataset[Row] = drop(col, Nil: _*)
+  def drop(col: Column): DataFrame = drop(col, Nil: _*)
 
   /**
    * Returns a new Dataset with columns dropped.
@@ -2306,7 +2306,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(col: Column, cols: Column*): Dataset[Row]
+  def drop(col: Column, cols: Column*): DataFrame
 
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset. This is an alias
@@ -2486,7 +2486,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def describe(cols: String*): Dataset[Row]
+  def describe(cols: String*): DataFrame
 
   /**
    * Computes specified statistics for numeric and string columns. Available statistics are: <ul>
@@ -2556,7 +2556,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 2.3.0
    */
   @scala.annotation.varargs
-  def summary(statistics: String*): Dataset[Row]
+  def summary(statistics: String*): DataFrame
 
   /**
    * Returns the first `n` rows.

@@ -14,12 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.api
+package org.apache.spark.sql.streaming
 
-import _root_.java.util.UUID
+import java.util.UUID
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener}
 
 /**
  * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.

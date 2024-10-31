@@ -18,10 +18,9 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.api.Dataset
 
 /**
- * A container for a [[org.apache.spark.sql.api.Dataset]], used for implicit conversions in Scala.
+ * A container for a [[org.apache.spark.sql.Dataset]], used for implicit conversions in Scala.
  *
  * To use this, import implicit conversions in SQL:
  * {{{
