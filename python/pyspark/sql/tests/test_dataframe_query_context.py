@@ -22,6 +22,7 @@ from pyspark.errors import (
     QueryContextType,
     NumberFormatException,
 )
+from pyspark.sql import functions as sf
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
 )
@@ -472,6 +473,18 @@ class DataFrameQueryContextTestsMixin:
                 query_context_type=QueryContextType.DataFrame,
                 fragment="__truediv__",
             )
+
+    def test_dataframe_query_context_col(self):
+        with self.assertRaises(AnalysisException) as pe:
+            self.spark.range(1).select(sf.col("id") + sf.col("idd")).show()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            messageParameters={"objectName": "`idd`", "proposal": "`id`"},
+            query_context_type=QueryContextType.DataFrame,
+            fragment="col",
+        )
 
 
 class DataFrameQueryContextTests(DataFrameQueryContextTestsMixin, ReusedSQLTestCase):
