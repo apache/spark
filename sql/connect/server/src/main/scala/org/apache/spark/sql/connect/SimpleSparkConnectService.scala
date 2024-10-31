@@ -25,7 +25,6 @@ import scala.sys.exit
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A simple main class method to start the spark connect server as a service for client tests

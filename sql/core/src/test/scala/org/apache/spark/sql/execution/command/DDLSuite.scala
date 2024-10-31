@@ -23,11 +23,10 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
-import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
 
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
-import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -40,7 +39,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.util.Utils
 
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {

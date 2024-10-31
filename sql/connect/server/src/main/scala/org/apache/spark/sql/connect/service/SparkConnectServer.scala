@@ -20,7 +20,6 @@ package org.apache.spark.sql.connect.service
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{HOST, PORT}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The Spark Connect server
