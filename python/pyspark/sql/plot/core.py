@@ -26,9 +26,9 @@ from pyspark.errors import (
 )
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
-from pyspark.sql.pandas.utils import require_minimum_numpy_version, require_minimum_pandas_version
+from pyspark.sql.pandas.utils import require_minimum_pandas_version
 from pyspark.sql.types import NumericType
-from pyspark.sql.utils import require_minimum_plotly_version
+from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
 
 from pandas.core.dtypes.inference import is_integer
 
@@ -36,7 +36,6 @@ from pandas.core.dtypes.inference import is_integer
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, Row
     import pandas as pd
-    import numpy as np
     from plotly.graph_objs import Figure
 
 
@@ -411,7 +410,7 @@ class PySparkPlotAccessor:
         self,
         bw_method: Union[int, float],
         column: Optional[Union[str, List[str]]] = None,
-        ind: Optional[Union["np.ndarray", int]] = None,
+        ind: Optional[Union[Sequence[float], int]] = None,
         **kwargs: Any,
     ) -> "Figure":
         """
@@ -429,7 +428,7 @@ class PySparkPlotAccessor:
         column: str or list of str, optional
             Column name or list of names to be used for creating the kde plot.
             If None (default), all numeric columns will be used.
-        ind : NumPy array or integer, optional
+        ind : List of float, NumPy array or integer, optional
             Evaluation points for the estimated PDF. If None (default),
             1000 equally spaced points are used. If `ind` is a NumPy array, the
             KDE is evaluated at the points passed. If `ind` is an integer,
@@ -490,13 +489,6 @@ class PySparkPlotAccessor:
 
 class PySparkKdePlotBase:
     @staticmethod
-    def linspace(start, stop, num):  # type: ignore[no-untyped-def]
-        if num == 1:
-            return [float(start)]
-        step = float(stop - start) / (num - 1)
-        return [start + step * i for i in range(num)]
-
-    @staticmethod
     def get_ind(sdf: "DataFrame", ind: Optional[Union[Sequence[float], int]]) -> Sequence[float]:
         def calc_min_max() -> "Row":
             if len(sdf.columns) > 1:
@@ -510,7 +502,7 @@ class PySparkKdePlotBase:
         if ind is None:
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = PySparkKdePlotBase.linspace(
+            ind = NumpyHelper.linspace(
                 min_val - 0.5 * sample_range,
                 max_val + 0.5 * sample_range,
                 1000,
@@ -518,10 +510,10 @@ class PySparkKdePlotBase:
         elif is_integer(ind):
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = PySparkKdePlotBase.linspace(
+            ind = NumpyHelper.linspace(
                 min_val - 0.5 * sample_range,
                 max_val + 0.5 * sample_range,
-                ind,
+                ind,  # type: ignore[arg-type]
             )
         return ind  # type: ignore
 
@@ -539,7 +531,6 @@ class PySparkKdePlotBase:
         assert ind is not None, "'ind' must be a scalar array."
 
         bandwidth = float(bw_method)
-        points = [float(i) for i in ind]
         log_std_plus_half_log2_pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
 
         def norm_pdf(
@@ -563,17 +554,14 @@ class PySparkKdePlotBase:
                         F.lit(point),
                     )
                 )
-                for point in points
+                for point in ind
             ]
         )
 
 
 class PySparkHistogramPlotBase:
     @staticmethod
-    def get_bins(sdf: "DataFrame", bins: int) -> "np.ndarray":
-        require_minimum_numpy_version()
-        import numpy as np
-
+    def get_bins(sdf: "DataFrame", bins: int) -> Sequence[float]:
         if len(sdf.columns) > 1:
             min_col = F.least(*map(F.min, sdf))  # type: ignore
             max_col = F.greatest(*map(F.max, sdf))  # type: ignore
@@ -585,17 +573,14 @@ class PySparkHistogramPlotBase:
         if boundaries[0] == boundaries[1]:  # type: ignore
             boundaries = (boundaries[0] - 0.5, boundaries[1] + 0.5)  # type: ignore
 
-        return np.linspace(boundaries[0], boundaries[1], bins + 1)  # type: ignore
+        return NumpyHelper.linspace(boundaries[0], boundaries[1], bins + 1)  # type: ignore
 
     @staticmethod
-    def compute_hist(sdf: "DataFrame", bins: "np.ndarray") -> List["pd.Series"]:
-        require_minimum_numpy_version()
-        import numpy as np
-
+    def compute_hist(sdf: "DataFrame", bins: Sequence[float]) -> List["pd.Series"]:
         require_minimum_pandas_version()
         import pandas as pd
 
-        assert isinstance(bins, np.ndarray)
+        assert isinstance(bins, list)
 
         # 1. Make the bucket output flat to:
         #     +----------+-------+
@@ -702,7 +687,7 @@ class PySparkHistogramPlotBase:
             current_bucket_result = result[result["__group_id"] == i]
             # generates a pandas DF with one row for each bin
             # we need this as some of the bins may be empty
-            indexes = pd.DataFrame({"__bucket": np.arange(0, len(bins) - 1)})
+            indexes = pd.DataFrame({"__bucket": list(range(0, len(bins) - 1))})
             # merges the bins with counts on it and fills remaining ones with zeros
             pdf = indexes.merge(current_bucket_result, how="left", on=["__bucket"]).fillna(0)[
                 ["count"]
