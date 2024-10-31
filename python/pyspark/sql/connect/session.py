@@ -611,9 +611,11 @@ class SparkSession:
             if not isinstance(schema, StructType):
                 schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
+            safe_cast = self._client.get_configs("spark.sql.execution.castArrowTableSafely") == "true"
+
             _table = (
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
-                .cast(to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True))
+                .cast(to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True), safe=safe_cast)
                 .rename_columns(schema.names)
             )
 
