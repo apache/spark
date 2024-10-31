@@ -33,9 +33,9 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ArtifactStatusesRequest, ArtifactStatusesResponse, ExecutePlanRequest, ExecutePlanResponse, Relation, SparkConnectServiceGrpc, SQL}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.common.config.ConnectCommon
-import org.apache.spark.sql.test.ConnectFunSuite
+import org.apache.spark.sql.connect.test.ConnectFunSuite
 
 class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 

@@ -28,7 +28,7 @@ import static org.apache.spark.sql.Encoders.*;
 import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.RowFactory.create;
 import org.apache.spark.api.java.function.MapFunction;
-import org.apache.spark.sql.test.SparkConnectServerUtils;
+import org.apache.spark.sql.connect.test.SparkConnectServerUtils;
 import org.apache.spark.sql.types.StructType;
 
 /**
