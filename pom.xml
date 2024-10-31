@@ -125,23 +125,23 @@
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.1</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
-    <protobuf.version>3.25.5</protobuf.version>
+    <protobuf.version>4.28.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.9.2</zookeeper.version>
-    <curator.version>5.7.0</curator.version>
+    <zookeeper.version>3.9.3</zookeeper.version>
+    <curator.version>5.7.1</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.8.0</kafka.version>
+    <kafka.version>3.8.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.14.3</parquet.version>
     <orc.version>2.0.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.23</jetty.version>
+    <jetty.version>11.0.24</jetty.version>
     <jakartaservlet.version>5.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -173,7 +173,7 @@
     <scala.version>2.13.15</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.9.1</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.2</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.16.2</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -181,8 +181,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.18.0</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.18.0</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.18.1</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.18.1</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -226,7 +226,7 @@
     ./python/pyspark/sql/pandas/utils.py, ./python/packaging/classic/setup.py
     and ./python/packaging/connect/setup.py too.
     -->
-    <arrow.version>17.0.0</arrow.version>
+    <arrow.version>18.0.0</arrow.version>
     <ammonite.version>3.0.0</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
@@ -294,7 +294,7 @@
     <!-- Version used in Connect -->
     <connect.guava.version>33.2.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
-    <io.grpc.version>1.62.2</io.grpc.version>
+    <io.grpc.version>1.67.1</io.grpc.version>
     <mima.version>1.1.4</mima.version>
     <tomcat.annotations.api.version>6.0.53</tomcat.annotations.api.version>
 
@@ -726,7 +726,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.5.2</version>
+        <version>9.7.3</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -836,7 +836,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-6</version>
+        <version>1.5.6-7</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

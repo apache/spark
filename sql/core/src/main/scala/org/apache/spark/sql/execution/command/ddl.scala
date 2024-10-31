@@ -493,7 +493,7 @@ case class AlterTableSerDePropertiesCommand(
       throw QueryCompilationErrors.alterTableSetSerdeForSpecificPartitionNotSupportedError()
     }
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw QueryCompilationErrors.alterTableSetSerdeNotSupportedError()
+      throw QueryCompilationErrors.alterTableSetSerdeNotSupportedError(table.qualifiedName)
     }
     if (partSpec.isEmpty) {
       val newTable = table.withNewStorage(

@@ -95,7 +95,10 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq("a"), Seq("A"), true, "UTF8_LCASE"),
       (Seq("a", "B"), Seq("A", "b"), true, "UTF8_LCASE"),
       (Seq("a"), Seq("A"), false, "UNICODE"),
-      (Seq("a", "B"), Seq("A", "b"), true, "UNICODE_CI")
+      (Seq("a", "B"), Seq("A", "b"), true, "UNICODE_CI"),
+      (Seq("c"), Seq("C"), false, "SR"),
+      (Seq("c"), Seq("C"), true, "SR_CI"),
+      (Seq("a", "c"), Seq("b", "C"), true, "SR_CI_AI")
     )
     for ((inLeft, inRight, out, collName) <- overlap) {
       val left = arrayLiteral(inLeft, collName)

@@ -52,10 +52,13 @@ class TransformWithStateInPandasPythonRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None,
     hasInitialState: Boolean)
   extends TransformWithStateInPandasPythonBaseRunner[InType](
     funcs, evalType, argOffsets, _schema, processorHandle, _timeZoneId,
-    initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema, hasInitialState)
+    initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
+    batchTimestampMs, eventTimeWatermarkForEviction, hasInitialState)
   with PythonArrowInput[InType] {
 
   private var pandasWriter: BaseStreamingArrowWriter = _
@@ -105,10 +108,13 @@ class TransformWithStateInPandasPythonInitialStateRunner(
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None,
     hasInitialState: Boolean)
   extends TransformWithStateInPandasPythonBaseRunner[GroupedInType](
     funcs, evalType, argOffsets, dataSchema, processorHandle, _timeZoneId,
-    initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema, hasInitialState)
+    initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
+    batchTimestampMs, eventTimeWatermarkForEviction, hasInitialState)
   with PythonArrowInput[GroupedInType] {
 
   override protected lazy val schema: StructType = new StructType()
@@ -168,6 +174,8 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None,
     hasInitialState: Boolean)
   extends BasePythonRunner[I, ColumnarBatch](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
     with PythonArrowInput[I]
