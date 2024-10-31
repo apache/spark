@@ -231,6 +231,15 @@ struct<>
 -- !query output
 
 
+-- !query
+from t
+|> select 1 as x
+-- !query schema
+struct<x:int>
+-- !query output
+1
+1
+
 
 -- !query
 table t
