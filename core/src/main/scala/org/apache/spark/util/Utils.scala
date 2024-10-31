@@ -3253,3 +3253,18 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
     new String(nonCircularBuffer, StandardCharsets.UTF_8)
   }
 }
+
+object WebUrlUtils {
+  def getSparkWebUrl(context: SparkContext): Option[String] = {
+    if (context.getConf.getBoolean("spark.ui.reverseProxy", defaultValue = false)) {
+      val proxyUrl = context.getConf.get("spark.ui.reverseProxyUrl", defaultValue = null)
+      if (proxyUrl != null) {
+        Some(s"$proxyUrl/proxy/${context.applicationId}")
+      } else {
+        Some("Spark Master Public URL")
+      }
+    } else {
+      context.uiWebUrl
+    }
+  }
+}

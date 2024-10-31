@@ -85,6 +85,12 @@ class SparkSession private[sql] (
     client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
   }
 
+  lazy val webUrl: Option[String] = {
+    val sparkWebUrl =
+      client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_WEB_URL).getSparkWebUrl
+    if (sparkWebUrl.hasWebUrl) Some(sparkWebUrl.getWebUrl) else None
+  }
+
   private[sql] val observationRegistry = new ConcurrentHashMap[Long, Observation]()
 
   private[sql] def hijackServerSideSessionIdForTesting(suffix: String): Unit = {

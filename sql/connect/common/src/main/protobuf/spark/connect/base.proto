@@ -94,6 +94,7 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
+    SparkWebUrl spark_web_url = 18;
   }
 
   message Schema {
@@ -158,6 +159,8 @@ message AnalyzePlanRequest {
   }
 
   message SparkVersion { }
+
+  message SparkWebUrl { }
 
   message DDLParse {
     // (Required) The DDL formatted string to be parsed.
@@ -224,6 +227,7 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
+    SparkWebUrl spark_web_url = 16;
   }
 
   message Schema {
@@ -253,6 +257,10 @@ message AnalyzePlanResponse {
 
   message SparkVersion {
     string version = 1;
+  }
+
+  message SparkWebUrl {
+    optional string web_url = 1;
   }
 
   message DDLParse {
