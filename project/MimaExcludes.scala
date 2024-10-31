@@ -201,6 +201,9 @@ object MimaExcludes {
 
     // SPARK-50112: Moving the SchemaConverters class to sql/core
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.SchemaConverters$SchemaType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.SchemaConverters"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.SchemaConverters$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.SchemaConverters$SchemaType")
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
