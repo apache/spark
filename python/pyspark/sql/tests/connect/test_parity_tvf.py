@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,24 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
-#
-# This script follows the base format for testing pull requests against
-# another branch and returning results to be published. More details can be
-# found at dev/run-tests-jenkins.
-#
-# Arg1: The GitHub Pull Request Actual Commit
-# known as `ghprbActualCommit` in `run-tests-jenkins`
-# Arg2: The SHA1 hash
-# known as `sha1` in `run-tests-jenkins`
-#
+from pyspark.sql.tests.test_tvf import TVFTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
-ghprbActualCommit="$1"
-sha1="$2"
 
-# check PR merge-ability
-if [ "${sha1}" == "${ghprbActualCommit}" ]; then
-  echo " * This patch **does not merge cleanly**."
-else
-  echo " * This patch merges cleanly."
-fi
+class TVFParityTestsMixin(TVFTestsMixin, ReusedConnectTestCase):
+    pass
+
+
+if __name__ == "__main__":
+    from pyspark.sql.tests.connect.test_parity_tvf import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)

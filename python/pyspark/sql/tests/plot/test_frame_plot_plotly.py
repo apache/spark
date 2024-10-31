@@ -22,9 +22,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_plotly,
-    have_numpy,
     plotly_requirement_message,
-    numpy_requirement_message,
     have_pandas,
     pandas_requirement_message,
 )
@@ -324,8 +322,8 @@ class DataFramePlotPlotlyTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="PLOT_NOT_NUMERIC_COLUMN",
-            messageParameters={"arg_name": "y", "arg_type": "StringType()"},
+            errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
+            messageParameters={"arg_name": "y", "arg_type": "StringType"},
         )
 
     def test_box_plot(self):
@@ -392,7 +390,6 @@ class DataFramePlotPlotlyTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_kde_plot(self):
         fig = self.sdf4.plot.kde(column="math_score", bw_method=0.3, ind=5)
         expected_fig_data1 = {

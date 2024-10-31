@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import itertools
 import sys
 from typing import Any, Iterator, List, Union, TYPE_CHECKING, cast
 import warnings
@@ -26,6 +27,12 @@ from pyspark.sql.streaming.state import GroupStateTimeout
 from pyspark.sql.streaming.stateful_processor_api_client import (
     StatefulProcessorApiClient,
     StatefulProcessorHandleState,
+)
+from pyspark.sql.streaming.stateful_processor import (
+    ExpiredTimerInfo,
+    StatefulProcessor,
+    StatefulProcessorHandle,
+    TimerValues,
 )
 from pyspark.sql.streaming.stateful_processor import StatefulProcessor, StatefulProcessorHandle
 from pyspark.sql.types import StructType, _parse_datatype_string
@@ -501,7 +508,49 @@ class PandasGroupedOpsMixin:
                 )
 
             statefulProcessorApiClient.set_implicit_key(key)
-            result = statefulProcessor.handleInputRows(key, inputRows)
+
+            if timeMode != "none":
+                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
+                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
+            else:
+                batch_timestamp = -1
+                watermark_timestamp = -1
+            # process with invalid expiry timer info and emit data rows
+            data_iter = statefulProcessor.handleInputRows(
+                key,
+                inputRows,
+                TimerValues(batch_timestamp, watermark_timestamp),
+                ExpiredTimerInfo(False),
+            )
+            statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.DATA_PROCESSED)
+
+            if timeMode == "processingtime":
+                expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
+                    batch_timestamp
+                )
+            elif timeMode == "eventtime":
+                expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
+                    watermark_timestamp
+                )
+            else:
+                expiry_list_iter = iter([[]])
+
+            result_iter_list = [data_iter]
+            # process with valid expiry time info and with empty input rows,
+            # only timer related rows will be emitted
+            for expiry_list in expiry_list_iter:
+                for key_obj, expiry_timestamp in expiry_list:
+                    result_iter_list.append(
+                        statefulProcessor.handleInputRows(
+                            key_obj,
+                            iter([]),
+                            TimerValues(batch_timestamp, watermark_timestamp),
+                            ExpiredTimerInfo(True, expiry_timestamp),
+                        )
+                    )
+            # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
+
+            result = itertools.chain(*result_iter_list)
 
             return result
 

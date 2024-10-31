@@ -17,7 +17,7 @@
 
 import math
 
-from typing import Any, TYPE_CHECKING, List, Optional, Union
+from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
 from pyspark.errors import (
     PySparkRuntimeError,
@@ -27,13 +27,13 @@ from pyspark.errors import (
 from pyspark.sql import Column, functions as F
 from pyspark.sql.pandas.utils import require_minimum_numpy_version, require_minimum_pandas_version
 from pyspark.sql.types import NumericType
-from pyspark.sql.utils import is_remote, require_minimum_plotly_version
+from pyspark.sql.utils import require_minimum_plotly_version, _invoke_internal_function_over_columns
+
 from pandas.core.dtypes.inference import is_integer
 
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, Row
-    from pyspark.sql._typing import ColumnOrName
     import pandas as pd
     import numpy as np
     from plotly.graph_objs import Figure
@@ -352,10 +352,10 @@ class PySparkPlotAccessor:
         y_field = schema[y] if y in schema.names else None
         if y_field is None or not isinstance(y_field.dataType, NumericType):
             raise PySparkTypeError(
-                errorClass="PLOT_NOT_NUMERIC_COLUMN",
+                errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
                 messageParameters={
                     "arg_name": "y",
-                    "arg_type": str(y_field.dataType) if y_field else "None",
+                    "arg_type": str(y_field.dataType.__class__.__name__) if y_field else "None",
                 },
             )
         return self(kind="pie", x=x, y=y, **kwargs)
@@ -489,10 +489,14 @@ class PySparkPlotAccessor:
 
 class PySparkKdePlotBase:
     @staticmethod
-    def get_ind(sdf: "DataFrame", ind: Optional[Union["np.ndarray", int]]) -> "np.ndarray":
-        require_minimum_numpy_version()
-        import numpy as np
+    def linspace(start, stop, num):  # type: ignore[no-untyped-def]
+        if num == 1:
+            return [float(start)]
+        step = float(stop - start) / (num - 1)
+        return [start + step * i for i in range(num)]
 
+    @staticmethod
+    def get_ind(sdf: "DataFrame", ind: Optional[Union[Sequence[float], int]]) -> Sequence[float]:
         def calc_min_max() -> "Row":
             if len(sdf.columns) > 1:
                 min_col = F.least(*map(F.min, sdf))  # type: ignore
@@ -505,7 +509,7 @@ class PySparkKdePlotBase:
         if ind is None:
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = np.linspace(
+            ind = PySparkKdePlotBase.linspace(
                 min_val - 0.5 * sample_range,
                 max_val + 0.5 * sample_range,
                 1000,
@@ -513,7 +517,7 @@ class PySparkKdePlotBase:
         elif is_integer(ind):
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
-            ind = np.linspace(
+            ind = PySparkKdePlotBase.linspace(
                 min_val - 0.5 * sample_range,
                 max_val + 0.5 * sample_range,
                 ind,
@@ -524,7 +528,7 @@ class PySparkKdePlotBase:
     def compute_kde_col(
         input_col: Column,
         bw_method: Union[int, float],
-        ind: "np.ndarray",
+        ind: Sequence[float],
     ) -> Column:
         # refers to org.apache.spark.mllib.stat.KernelDensity
         assert bw_method is not None and isinstance(
@@ -564,6 +568,10 @@ class PySparkKdePlotBase:
 
 
 class PySparkHistogramPlotBase:
+    @staticmethod
+    def array_binary_search(col: Column, value: Column) -> Column:
+        return _invoke_internal_function_over_columns("array_binary_search", col, value)
+
     @staticmethod
     def get_bins(sdf: "DataFrame", bins: int) -> "np.ndarray":
         require_minimum_numpy_version()
@@ -615,7 +623,7 @@ class PySparkHistogramPlotBase:
         # determines which bucket a given value falls into, based on predefined bin intervals
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
         def binary_search_for_buckets(value: Column) -> Column:
-            index = array_binary_search(F.lit(bins), value)
+            index = PySparkHistogramPlotBase.array_binary_search(F.lit(bins), value)
             bucket = F.when(index >= 0, index).otherwise(-index - 2)
             unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
             return (
@@ -710,6 +718,12 @@ class PySparkHistogramPlotBase:
 
 class PySparkBoxPlotBase:
     @staticmethod
+    def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
+        return _invoke_internal_function_over_columns(
+            "collect_top_k", col, F.lit(num), F.lit(reverse)
+        )
+
+    @staticmethod
     def compute_box(
         sdf: "DataFrame", colnames: List[str], whis: float, precision: float, showfliers: bool
     ) -> Optional["Row"]:
@@ -763,7 +777,7 @@ class PySparkBoxPlotBase:
                     outlier,
                     F.struct(F.abs(value - med), value.alias("val")),
                 ).otherwise(F.lit(None))
-                topk = collect_top_k(pair, 1001, False)
+                topk = PySparkBoxPlotBase.collect_top_k(pair, 1001, False)
                 fliers = F.when(F.size(topk) > 0, topk["val"]).otherwise(F.lit(None))
             else:
                 fliers = F.lit(None)
@@ -782,29 +796,3 @@ class PySparkBoxPlotBase:
 
         sdf_result = sdf.join(sdf_stats.hint("broadcast")).select(*result_scols)
         return sdf_result.first()
-
-
-def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(name, *cols)
-
-    else:
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(
-            sc._jvm.PythonSQLUtils.internalFn(  # type: ignore
-                name, _to_seq(sc, cols, _to_java_column)  # type: ignore
-            )
-        )
-
-
-def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
-    return _invoke_internal_function_over_columns("collect_top_k", col, F.lit(num), F.lit(reverse))
-
-
-def array_binary_search(col: Column, value: Column) -> Column:
-    return _invoke_internal_function_over_columns("array_binary_search", col, value)
