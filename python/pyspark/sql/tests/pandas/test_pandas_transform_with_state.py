@@ -87,7 +87,6 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -536,7 +535,6 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results
         )
-    """
 
     def _test_transform_with_state_init_state_in_pandas(self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
@@ -587,7 +585,6 @@ class TransformWithStateInPandasTestsMixin:
                 # for key 1, it did not appear in the initial state df;
                 # for key 3, it did not appear in the first batch of input keys
                 # so it won't be emitted
-                print(f"I am at batch {batch_id}, batch df: {batch_df.sort('id').collect()}")
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46)),
                     Row(id="1", value=str(146 + 346)),
@@ -613,7 +610,9 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.value_state = handle.getValueState("value_state", state_schema)
 
-    def handleInputRows(self, key, rows, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
+    def handleInputRows(
+        self, key, rows, timer_values, expired_timer_info
+    ) -> Iterator[pd.DataFrame]:
         exists = self.value_state.exists()
         if exists:
             value_row = self.value_state.get()

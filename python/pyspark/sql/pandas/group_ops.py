@@ -503,9 +503,9 @@ class PandasGroupedOpsMixin:
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
         def handle_data_with_timers(
-                statefulProcessorApiClient: StatefulProcessorApiClient,
-                key: Any,
-                inputRows: Iterator["PandasDataFrameLike"]
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+            key: Any,
+            inputRows: Iterator["PandasDataFrameLike"],
         ) -> Iterator["PandasDataFrameLike"]:
             statefulProcessorApiClient.set_implicit_key(key)
             if timeMode != "none":
@@ -516,7 +516,11 @@ class PandasGroupedOpsMixin:
                 watermark_timestamp = -1
             # process with invalid expiry timer info and emit data rows
             data_iter = statefulProcessor.handleInputRows(
-                key, inputRows, TimerValues(batch_timestamp, watermark_timestamp), ExpiredTimerInfo(False),)
+                key,
+                inputRows,
+                TimerValues(batch_timestamp, watermark_timestamp),
+                ExpiredTimerInfo(False),
+            )
             statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.DATA_PROCESSED)
 
             if timeMode == "processingtime":
@@ -563,10 +567,10 @@ class PandasGroupedOpsMixin:
             return result
 
         def transformWithStateWithInitStateUDF(
-                statefulProcessorApiClient: StatefulProcessorApiClient,
-                key: Any,
-                inputRows: Iterator["PandasDataFrameLike"],
-                initialStates: Iterator["PandasDataFrameLike"] = None,
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+            key: Any,
+            inputRows: Iterator["PandasDataFrameLike"],
+            initialStates: Iterator["PandasDataFrameLike"] = None,
         ) -> Iterator["PandasDataFrameLike"]:
             """
             UDF for TWS operator with non-empty initial states. Possible input combinations
@@ -607,7 +611,7 @@ class PandasGroupedOpsMixin:
                 inputRows = itertools.chain([first], inputRows)
 
             if not input_rows_empty:
-                handle_data_with_timers(statefulProcessorApiClient, key, inputRows)
+                result = handle_data_with_timers(statefulProcessorApiClient, key, inputRows)
             else:
                 result = iter([])
 

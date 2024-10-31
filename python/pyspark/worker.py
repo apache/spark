@@ -1477,8 +1477,10 @@ def read_udfs(pickleSer, infile, eval_type):
         state_object_schema = None
         if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             state_object_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
-        elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF or\
-                eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
+        elif (
+            eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
+            or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
+        ):
             state_server_port = read_int(infile)
             key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
 

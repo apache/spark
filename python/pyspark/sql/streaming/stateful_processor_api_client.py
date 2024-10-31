@@ -340,7 +340,7 @@ class StatefulProcessorApiClient:
             raise PySparkRuntimeError(f"Error initializing map state: " f"{response_message[1]}")
 
     def is_first_batch(self) -> bool:
-        import pyspark.sql.streaming.proto.StateMessage_pb2  as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         is_first_batch = stateMessage.IsFirstBatch()
         request = stateMessage.UtilsCallCommand(isFirstBatch=is_first_batch)
