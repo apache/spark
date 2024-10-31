@@ -3946,16 +3946,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ARTIFACTS_REPL_CLASS_ISOLATION_ENABLED =
-    buildStaticConf("spark.sql.artifact.repl.class.isolation.enabled")
-      .internal()
-      .doc("When enabled, classes defined in-line in one REPL are isolated from " +
-        "other sessions within the same Spark instance. To activate this configuration, " +
-        s"ensure that ${ARTIFACTS_SESSION_ISOLATION_ENABLED.key} is also set to true.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
     buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
       .internal()

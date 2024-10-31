@@ -1028,10 +1028,7 @@ class SparkSession:
             os.environ["SPARK_LOCAL_CONNECT"] = "1"
 
             # Configurations to be set if unset.
-            default_conf = {
-                "spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin",
-                "spark.sql.artifact.repl.class.isolation.enabled": "true",
-            }
+            default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
 
             if "SPARK_TESTING" in os.environ:
                 # For testing, we use 0 to use an ephemeral port to allow parallel testing.

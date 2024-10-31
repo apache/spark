@@ -76,18 +76,9 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
   private lazy val sessionIsolated =
     session.sessionState.conf.getConf(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED)
-  private lazy val replIsolated =
-    session.sessionState.conf.getConf(SQLConf.ARTIFACTS_REPL_CLASS_ISOLATION_ENABLED)
 
-  protected[sql] lazy val state: JobArtifactState = {
-    (sessionIsolated, replIsolated) match {
-      case (true, true) => JobArtifactState(session.sessionUUID, Some(replClassURI))
-      case (true, false) => JobArtifactState(session.sessionUUID, None)
-      case (false, true) => throw SparkException.internalError(
-        "To enable REPL isolation, session isolation must also be enabled.")
-      case (false, false) => null
-    }
-  }
+  protected[sql] lazy val state: JobArtifactState =
+    if (sessionIsolated) JobArtifactState(session.sessionUUID, Some(replClassURI)) else null
 
   /**
    * Whether the [[withResources]] method should change the classloader of the current thread.
@@ -95,14 +86,13 @@ class ArtifactManager(session: SparkSession) extends Logging {
    */
   protected val shouldApplyClassLoader = new AtomicBoolean(false)
 
-  private var initialContextResourcesCopied = false
-
   private def withClassLoaderIfNeeded[T](f: => T): T = {
     // We should not consider `sessionIsolated` because classes are always added to the
     // session-specific directory.
     val log = s" classloader for session ${session.sessionUUID} because " +
-      s"replIsolated=$replIsolated and shouldApplyClassLoader=${shouldApplyClassLoader.get()}."
-    if (replIsolated || shouldApplyClassLoader.get()) {
+      s"sessionIsolated=$sessionIsolated and " +
+      s"shouldApplyClassLoader=${shouldApplyClassLoader.get()}."
+    if (sessionIsolated || shouldApplyClassLoader.get()) {
       logDebug(s"Applying $log")
       Utils.withContextClassLoader(classloader) {
         f
@@ -115,26 +105,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
   def withResources[T](f: => T): T = withClassLoaderIfNeeded {
     JobArtifactSet.withActiveJobArtifactState(state) {
-      // Copy over global initial resources to this session. Often used by spark-submit.
-      copyInitialContextResourcesIfNeeded()
       f
-    }
-  }
-
-  /**
-   * Duplicate all resources provided in SparkContext constructor into the current session.
-   * This method must be called from within a [[JobArtifactSet.withActiveJobArtifactState]] block.
-   */
-  private def copyInitialContextResourcesIfNeeded(): Unit = synchronized {
-    if (!initialContextResourcesCopied) {
-      val currentUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
-      if (currentUUID != "default") {
-        val sparkContext = session.sparkContext
-        sparkContext.files.foreach(sparkContext.addFile)
-        sparkContext.jars.foreach(sparkContext.addJar)
-        sparkContext.archives.foreach(sparkContext.addArchive)
-      }
-      initialContextResourcesCopied = true
     }
   }
 

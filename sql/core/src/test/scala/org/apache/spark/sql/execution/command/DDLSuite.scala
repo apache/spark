@@ -23,10 +23,11 @@ import java.util.Locale
 
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
 
-import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -39,6 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.util.Utils
 
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
@@ -2141,8 +2143,9 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       root = Utils.createTempDir().getCanonicalPath, namePrefix = "addDirectory")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
     spark.sql(s"ADD FILE $directoryToAdd")
-    val dirPath = spark.sql("LIST FILE").collect().map(_.getString(0)).head
-    assert(new File(new URI(s"$dirPath${testFile.getName}")).exists())
+    spark.artifactManager.withResources {
+      assert(new File(SparkFiles.get(s"${directoryToAdd.getName}/${testFile.getName}")).exists())
+    }
   }
 
   test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to true") {
