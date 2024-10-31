@@ -18,9 +18,7 @@
 package org.apache.spark.sql.avro
 
 import java.io.{IOException, OutputStream}
-
 import scala.jdk.CollectionConverters._
-
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.avro.mapred.AvroKey
@@ -29,11 +27,11 @@ import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
 
 import org.apache.spark.SPARK_VERSION_SHORT
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriter
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 
 // NOTE: This class is instantiated and used on executor side only, no need to be serializable.
 private[avro] class AvroOutputWriter(
