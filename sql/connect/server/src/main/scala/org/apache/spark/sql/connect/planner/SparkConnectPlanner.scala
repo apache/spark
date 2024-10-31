@@ -1508,17 +1508,17 @@ class SparkConnectPlanner(
   @DeveloperApi
   def transformExpression(
       exp: proto.Expression,
-      baseRelationOpt: Option[LogicalPlan]): Expression = if (exp.hasCommon) {
-    CurrentOrigin.withOrigin {
+      baseRelationOpt: Option[LogicalPlan]): Expression = CurrentOrigin.withOrigin {
+    if (exp.hasCommon) {
       val pythonOrigin = exp.getCommon.getOrigin.getPythonOrigin
       val pysparkErrorContext = (pythonOrigin.getFragment, pythonOrigin.getCallSite)
       val newOrigin = CurrentOrigin.get.copy(pysparkErrorContext = Some(pysparkErrorContext))
       CurrentOrigin.withOrigin(newOrigin) {
         doTransformExpression(exp, baseRelationOpt)
       }
+    } else {
+      doTransformExpression(exp, baseRelationOpt)
     }
-  } else {
-    doTransformExpression(exp, baseRelationOpt)
   }
 
   private def doTransformExpression(
