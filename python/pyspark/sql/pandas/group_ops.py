@@ -533,6 +533,7 @@ class PandasGroupedOpsMixin:
                 )
             else:
                 expiry_list_iter = iter([[]])
+
             result_iter_list = [data_iter]
             # process with valid expiry time info and with empty input rows,
             # only timer related rows will be emitted
@@ -547,6 +548,7 @@ class PandasGroupedOpsMixin:
                         )
                     )
             # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
+
             result = itertools.chain(*result_iter_list)
             return result
 
