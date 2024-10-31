@@ -1260,7 +1260,7 @@ case class CustomerAggregateHintResolutionRule(spark: SparkSession) extends Rule
 
   def isMax(expr: NamedExpression, attribute: String): Option[AttributeReference] = {
     expr match {
-      case Alias(AggregateExpression(Max(a@AttributeReference(name, _, _, _)), _, _, _, _), _)
+      case Alias(AggregateExpression(Max(a @ AttributeReference(name, _, _, _)), _, _, _, _), _)
         if name.equalsIgnoreCase(attribute) =>
         Some(a)
       case _ => None
@@ -1268,11 +1268,11 @@ case class CustomerAggregateHintResolutionRule(spark: SparkSession) extends Rule
   }
 
   private def applyMaxValueHint(
-                                 plan: LogicalPlan,
-                                 attribute: String,
-                                 max: Int): LogicalPlan = {
+      plan: LogicalPlan,
+      attribute: String,
+      max: Int): LogicalPlan = {
     val newPlan = plan match {
-      case a@Aggregate(keys, aggs, _, None) if keys.isEmpty && aggs.size == 1 =>
+      case a @ Aggregate(keys, aggs, _, None) if keys.isEmpty && aggs.size == 1 =>
         isMax(aggs.head, attribute) match {
           case Some(attr) => a.copy(hint = Some(CustomAggHint(attr, max)))
           case None => a
@@ -1295,7 +1295,7 @@ case class CustomerAggregateHintResolutionRule(spark: SparkSession) extends Rule
 case class CustomAggregateRule(spark: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan transformDown {
-      case a@Aggregate(groupingKeys, aggregates, _, Some(CustomAggHint(_, max)))
+      case a @ Aggregate(groupingKeys, aggregates, _, Some(CustomAggHint(_, max)))
         if groupingKeys.isEmpty && aggregates.size == 1 =>
         a.copy(aggregateExpressions = Seq(Alias(Cast(Literal(max), aggregates.head.dataType),
           aggregates.head.name)()), hint = None)
