@@ -318,7 +318,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
     val urls = (getAddedJars :+ classDir.toUri.toURL).toArray
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
-    val fallbackClassLoader = session.sharedState.jarClassLoader
+    val fallbackClassLoader = Utils.getContextOrSparkClassLoader
     val loader = if (prefixes.nonEmpty) {
       // Two things you need to know about classloader for all of this to make sense:
       // 1. A classloader needs to be able to fully define a class.

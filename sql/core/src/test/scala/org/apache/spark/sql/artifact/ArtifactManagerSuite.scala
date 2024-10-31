@@ -36,7 +36,6 @@ class ArtifactManagerSuite extends SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     val conf = super.sparkConf
     conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
-    conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, true)
     conf.set(SQLConf.ARTIFACTS_REPL_CLASS_ISOLATION_ENABLED, true)
   }
 
