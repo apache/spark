@@ -674,6 +674,153 @@ table windowTestData
 table windowTestData
 |> window w as (partition by cate order by val) limit 5;
 
+-- Aggregation operators: positive tests.
+-----------------------------------------
+
+-- Basic aggregation with a GROUP BY clause. The resulting table contains all the attributes from
+-- the grouping keys followed by all the attributes from the aggregate functions, in order.
+table other
+|> aggregate sum(b) as result group by a;
+
+-- Basic aggregation with a GROUP BY clause, followed by a SELECT of just the aggregate function.
+-- This restricts the output attributes to just the aggregate function.
+table other
+|> aggregate sum(b) as result group by a
+|> select result;
+
+-- Basic aggregation with a GROUP BY clause, followed by a SELECT of just the grouping expression.
+-- This restricts the output attributes to just the grouping expression. Note that we must use an
+-- alias for the grouping expression to refer to it in the SELECT clause.
+table other
+|> aggregate sum(b) group by a + 1 as gkey
+|> select gkey;
+
+-- Basic aggregation on a constant table.
+select 1 as x, 2 as y
+|> aggregate group by x, y;
+
+-- Basic aggregation with group by ordinals.
+select 3 as x, 4 as y
+|> aggregate group by 1, 2;
+
+-- Basic table aggregation.
+table t
+|> aggregate sum(x);
+
+-- Basic table aggregation with an alias.
+table t
+|> aggregate sum(x) + 1 as result_plus_one;
+
+-- Grouping with no aggregate functions.
+table other
+|> aggregate group by a
+|> where a = 1;
+
+-- Group by an expression on columns, all of which are already grouped.
+select 1 as x, 2 as y, 3 as z
+|> aggregate group by x, y, x + y as z;
+
+-- Group by an expression on columns, some of which (y) aren't already grouped.
+select 1 as x, 2 as y, 3 as z
+|> aggregate group by x as z, x + y as z;
+
+-- We get an output column for each item in GROUP BY, even when they are duplicate expressions.
+select 1 as x, 2 as y, named_struct('z', 3) as st
+|> aggregate group by x, y, x, x, st.z, (st).z, 1 + x, 2 + x;
+
+-- Chained aggregates.
+select 1 x, 2 y, 3 z
+|> aggregate sum(z) z group by x, y
+|> aggregate avg(z) z group by x
+|> aggregate count(distinct z) c;
+
+-- Ambiguous name from duplicate GROUP BY item. This is generally allowed.
+select 1 x, 3 z
+|> aggregate count(*) group by x, z, x
+|> select x;
+
+-- Grouping expressions are allowed in the aggregate functions list if they appear separately in the
+-- GROUP BY clause.
+table other
+|> aggregate a group by a;
+
+-- Aggregate expressions may contain a mix of aggregate functions and grouping expressions.
+table other
+|> aggregate a + count(b) group by a;
+
+-- Aggregation operators: negative tests.
+-----------------------------------------
+
+-- GROUP BY ALL is not currently supported.
+select 3 as x, 4 as y
+|> aggregate group by all;
+
+-- GROUP BY ROLLUP is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by rollup(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUP BY CUBE is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by cube(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING SETS is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by course, `year` grouping sets(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING/GROUPING_ID is not supported yet.
+table courseSales
+|> aggregate sum(earnings), grouping(course) + 1
+   group by course
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING/GROUPING_ID is not supported yet.
+table courseSales
+|> aggregate sum(earnings), grouping_id(course)
+   group by course
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUP BY () is not valid syntax.
+select 1 as x, 2 as y
+|> aggregate group by ();
+
+-- Non-aggregate expressions are not allowed in place of aggregate functions.
+table other
+|> aggregate a;
+
+-- Using aggregate functions without the AGGREGATE keyword is not allowed.
+table other
+|> select sum(a) as result;
+
+-- The AGGREGATE keyword requires a GROUP BY clause and/or aggregation function(s).
+table other
+|> aggregate;
+
+-- The AGGREGATE GROUP BY list cannot be empty.
+table other
+|> aggregate group by;
+
+-- The AGGREGATE keyword is required to perform grouping.
+table other
+|> group by a;
+
+-- Window functions are not allowed in the AGGREGATE expression list.
+table other
+|> aggregate sum(a) over () group by b;
+
+-- Ambiguous name from AGGREGATE list vs GROUP BY.
+select 1 x, 2 y, 3 z
+|> aggregate count(*) AS c, sum(x) AS x group by x
+|> where c = 1
+|> where x = 1;
+
+-- Aggregate expressions may not contain references to columns or expressions not otherwise listed
+-- in the GROUP BY clause.
+table other
+|> aggregate b group by a;
+
 -- Cleanup.
 -----------
 drop table t;

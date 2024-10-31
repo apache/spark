@@ -49,13 +49,13 @@ class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
       s"jdbc:mysql://$ip:$port/mysql?user=$principal"
 
     override def getEntryPoint: Option[String] =
-      Some("/docker-entrypoint/mariadb_docker_entrypoint.sh")
+      Some("/docker-entrypoint/mariadb-docker-entrypoint.sh")
 
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig,
         containerConfigBuilder: ContainerConfig): Unit = {
-      copyExecutableResource("mariadb_docker_entrypoint.sh", entryPointDir, replaceIp)
-      copyExecutableResource("mariadb_krb_setup.sh", initDbDir, replaceIp)
+      copyExecutableResource("mariadb-docker-entrypoint.sh", entryPointDir, replaceIp)
+      copyExecutableResource("mariadb-krb-setup.sh", initDbDir, replaceIp)
 
       val binds =
         Seq(entryPointDir -> "/docker-entrypoint", initDbDir -> "/docker-entrypoint-initdb.d")

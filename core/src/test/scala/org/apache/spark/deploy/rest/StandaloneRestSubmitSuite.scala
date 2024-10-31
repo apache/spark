@@ -94,7 +94,6 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val RANDOM_PORT = 9000
     val allMasters = s"$masterUrl,${Utils.localHostName()}:$RANDOM_PORT"
     conf.set("spark.master", allMasters)
-    conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
     val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
@@ -112,7 +111,6 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val masterUrl = startDummyServer(submitId = submittedDriverId, submitMessage = submitMessage)
     val conf = new SparkConf(loadDefaults = false)
     conf.set("spark.master", masterUrl)
-    conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
     val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
