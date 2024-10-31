@@ -1028,6 +1028,10 @@ class RocksDB(
     }
   }
 
+  private[state] def getAcquiredThreadInfo(): AcquiredThreadInfo = acquireLock.synchronized {
+    acquiredThreadInfo.copy()
+  }
+
   /** Create a native RocksDB logger that forwards native logs to log4j with correct log levels. */
   private def createLogger(): Logger = {
     val dbLogger = new Logger(rocksDbOptions.infoLogLevel()) {

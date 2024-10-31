@@ -2241,13 +2241,11 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   }
 
   test("Rocks DB task completion listener does not double unlock acquireThread") {
-    // Create a custom ExecutionContext with 3 threads
-    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
-      ThreadUtils.newDaemonFixedThreadPool(3, "pool-thread-executor"))
-    val timeout = 5.seconds
-
-    val stateLock = new Object()
-    var state = 0
+    // This test verifies that a thread that locks then unlocks the db and then
+    // fires a completion listener (Thread 1) does not unlock the lock validly
+    // acquired by another thread (Thread 2).
+    // Thread 3 verifies that Thread 2 still holds the lock by timing out.
+    //
     // Timeline of this test:
     // STATE | MAIN             | THREAD 1         | THREAD 2         | THREAD 3
     // ------| ---------------- | ---------------- | ---------------- | ----------------
@@ -2261,6 +2259,16 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // 3.    | wait for s4      |                  | commit           |
     //       |                  |                  | signal s4, END   |
     // 4.    | close db, END    |                  |                  |
+    //
+    // NOTE: state 3 and 4 are only for cleanup
+
+    // Create a custom ExecutionContext with 3 threads
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonFixedThreadPool(5, "pool-thread-executor"))
+    val timeout = 5.seconds
+
+    val stateLock = new Object()
+    var state = 0
 
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
@@ -2276,7 +2284,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       try {
         Future { // THREAD 1
           // Set thread 1's task context so that it is not a clone
-          // of withDB's taskContext, which will close the db when the
+          // of the main thread's taskContext, which will end if the
           // task is marked as complete
           val taskContext = TaskContext.empty()
           TaskContext.setTaskContext(taskContext)
@@ -2285,6 +2293,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           db.load(0)
           db.put("a", "1")
           db.commit()
+          assert(db.getAcquiredThreadInfo() == null,
+            s"acquired thread info after commit should be null but was "
+              + s"${db.getAcquiredThreadInfo()}")
 
           Future { // THREAD 2
             // Set thread 2's task context so that it is not a clone of thread 1's
@@ -2295,16 +2306,25 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
             // Load the db and signal that we have entered state 1
             stateLock.synchronized {
               db.load(1)
+
+              // Ensure we have the lock
+              assertAcquiredThreadIsCurrentThread(db)
+
               state = 1
               stateLock.notifyAll()
             }
 
             stateLock.synchronized {
-              // Wait until we have entered state 3, commit and signal
-              // that we have entered state 4
+              // Wait until we have entered state 3 (thread 1 completed and
+              // thread 3 timed out waiting for our lock)
               while (state != 3) {
                 stateLock.wait()
               }
+
+              // Ensure we still have the lock
+              assertAcquiredThreadIsCurrentThread(db)
+
+              // commit and signal that we have entered state 4
               db.commit()
               state = 4
               stateLock.notifyAll()
@@ -2312,7 +2332,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           }
 
           stateLock.synchronized {
-            // Wait until we have entered state 1
+            // Wait until we have entered state 1 (thread 2 has loaded db and acquired lock)
             while (state != 1) {
               stateLock.wait()
             }
@@ -2368,15 +2388,19 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
-  test("RocksDB task completion listener correctly releases failed task") {
-    // Create a custom ExecutionContext with 3 threads
+  test("RocksDB task completion listener correctly releases for failed task") {
+    // This test verifies that a thread that locks the DB and then fails
+    // can rely on the completion listener to release the lock.
+
+    // Create a custom ExecutionContext with 1 thread
     implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
-      ThreadUtils.newDaemonFixedThreadPool(3, "pool-thread-executor"))
+      ThreadUtils.newDaemonSingleThreadExecutor("single-thread-executor"))
     val timeout = 5.seconds
 
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       withDB(remoteDir) { db =>
+        // Release the lock acquired by withDB
         db.commit()
 
         // New task that will load and then complete with failure
@@ -2385,6 +2409,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           TaskContext.setTaskContext(taskContext)
 
           db.load(0)
+          assertAcquiredThreadIsCurrentThread(db)
 
           // Task completion listener should unlock
           taskContext.markTaskCompleted(
@@ -2393,11 +2418,23 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         ThreadUtils.awaitResult(fut, timeout)
 
-        // We should be able to load the db again here
+        // We should be able to load the db here because the
+        // above task failed
         db.load(0)
+        assertAcquiredThreadIsCurrentThread(db)
         db.commit()
       }
     }
+  }
+
+  private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
+    val threadInfo = db.getAcquiredThreadInfo()
+    assert(threadInfo != null,
+      "acquired thread info should not be null after load")
+    assert(
+      threadInfo.threadRef.get.get.getId == Thread.currentThread().getId,
+      s"acquired thread should be curent thread ${Thread.currentThread().getId} " +
+        s"after load but was ${threadInfo.threadRef.get.get.getId}")
   }
 
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
