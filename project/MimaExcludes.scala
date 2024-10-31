@@ -198,6 +198,9 @@ object MimaExcludes {
 
     // SPARK-49748: Add getCondition and deprecate getErrorClass in SparkThrowable
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.SparkThrowable.getCondition"),
+
+    // SPARK-50112: Moving the SchemaConverters class to sql/core
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.SchemaConverters$SchemaType$"),
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
