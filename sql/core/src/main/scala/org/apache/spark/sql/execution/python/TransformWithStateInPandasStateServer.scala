@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, UtilsCallCommand, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
@@ -60,6 +60,7 @@ class TransformWithStateInPandasStateServer(
     arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
     batchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForEviction: Option[Long] = None,
+    hasInitialState: Boolean = false,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
@@ -308,6 +309,8 @@ class TransformWithStateInPandasStateServer(
         } else None
         initializeStateVariable(stateName, userKeySchema, StateVariableType.MapState, ttlDurationMs,
           valueSchema)
+      case StatefulProcessorCall.MethodCase.UTILSCALL =>
+        handleStatefulProcessorUtilRequest(message.getUtilsCall)
       case StatefulProcessorCall.MethodCase.TIMERSTATECALL =>
         message.getTimerStateCall.getMethodCase match {
           case TimerStateCallCommand.MethodCase.REGISTER =>
@@ -345,6 +348,23 @@ class TransformWithStateInPandasStateServer(
         }
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private[sql] def handleStatefulProcessorUtilRequest(message: UtilsCallCommand): Unit = {
+    message.getMethodCase match {
+      case UtilsCallCommand.MethodCase.ISFIRSTBATCH =>
+        if (!hasInitialState) {
+          // In physical planning, hasInitialState will always be flipped
+          // if it is not first batch
+          sendResponse(1)
+        } else {
+          sendResponse(0)
+        }
+
+      case _ =>
+        throw new IllegalArgumentException(
+          s"Invalid method call for ${message.getMethodCase.toString}")
     }
   }
 

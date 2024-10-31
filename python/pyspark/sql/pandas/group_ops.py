@@ -373,6 +373,7 @@ class PandasGroupedOpsMixin:
         outputStructType: Union[StructType, str],
         outputMode: str,
         timeMode: str,
+        initialState: "GroupedData" = None,
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -409,6 +410,9 @@ class PandasGroupedOpsMixin:
             The output mode of the stateful processor.
         timeMode : str
             The time mode semantics of the stateful processor for timers and TTL.
+        initialState : :class:`pyspark.sql.GroupedData`
+            Optional. The grouped dataframe on given grouping key as initial states used for initialization
+            of state variables in the first batch.
 
         Examples
         --------
@@ -493,6 +497,10 @@ class PandasGroupedOpsMixin:
         from pyspark.sql.functions import pandas_udf
 
         assert isinstance(self, GroupedData)
+        if initialState is not None:
+            assert isinstance(initialState, GroupedData)
+        if isinstance(outputStructType, str):
+            outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
         def transformWithStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,
@@ -554,15 +562,114 @@ class PandasGroupedOpsMixin:
 
             return result
 
+        def transformWithStateWithInitStateUDF(
+                statefulProcessorApiClient: StatefulProcessorApiClient,
+                key: Any,
+                inputRows: Iterator["PandasDataFrameLike"],
+                initialStates: Iterator["PandasDataFrameLike"] = None,
+        ) -> Iterator["PandasDataFrameLike"]:
+            """
+            UDF for TWS operator with non-empty initial states. Possible input combinations
+            of inputRows and initialStates iterator:
+            - Both `inputRows` and `initialStates` are non-empty: for the given key, both input rows
+              and initial states contains the grouping key, both input rows and initial states contains data.
+            - `InitialStates` is non-empty, while `initialStates` is empty. For the given key, only
+              initial states contains the grouping key and data, and it is first batch.
+            - `initialStates` is empty, while `inputRows` is not empty. For the given grouping key, only inputRows
+              contains the grouping key and data, and it is first batch.
+            - `initialStates` is None, while `inputRows` is not empty. This is not first batch. `initialStates`
+              is initialized to the positional value as None.
+            """
+            handle = StatefulProcessorHandle(statefulProcessorApiClient)
+
+            if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
+                statefulProcessor.init(handle)
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.INITIALIZED
+                )
+
+            # only process initial state if first batch
+            is_first_batch = statefulProcessorApiClient.is_first_batch()
+            if is_first_batch and initialStates is not None:
+                for cur_initial_state in initialStates:
+                    statefulProcessorApiClient.set_implicit_key(key)
+                    # TODO(SPARK-50194) integration with new timer API & initial state timer register
+                    statefulProcessor.handleInitialState(key, cur_initial_state)
+
+            # if we don't have input rows for the given key but only have initial state
+            # for the grouping key, the inputRows iterator could be empty
+            input_rows_empty = False
+            try:
+                first = next(inputRows)
+            except StopIteration:
+                input_rows_empty = True
+            else:
+                inputRows = itertools.chain([first], inputRows)
+
+            if not input_rows_empty:
+                statefulProcessorApiClient.set_implicit_key(key)
+                if timeMode != "none":
+                    batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
+                    watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
+                else:
+                    batch_timestamp = -1
+                    watermark_timestamp = -1
+                # process with invalid expiry timer info and emit data rows
+                data_iter = statefulProcessor.handleInputRows(
+                    key, inputRows, TimerValues(batch_timestamp, watermark_timestamp), ExpiredTimerInfo(False),)
+                statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.DATA_PROCESSED)
+
+                if timeMode == "processingtime":
+                    expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
+                        batch_timestamp
+                    )
+                elif timeMode == "eventtime":
+                    expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
+                        watermark_timestamp
+                    )
+                else:
+                    expiry_list_iter = iter([[]])
+                result_iter_list = [data_iter]
+                # process with valid expiry time info and with empty input rows,
+                # only timer related rows will be emitted
+                for expiry_list in expiry_list_iter:
+                    for key_obj, expiry_timestamp in expiry_list:
+                        result_iter_list.append(
+                            statefulProcessor.handleInputRows(
+                                key_obj,
+                                iter([]),
+                                TimerValues(batch_timestamp, watermark_timestamp),
+                                ExpiredTimerInfo(True, expiry_timestamp),
+                            )
+                        )
+                # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
+                result = itertools.chain(*result_iter_list)
+
+            else:
+                result = iter([])
+
+            return result
+
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
-        udf = pandas_udf(
-            transformWithStateUDF,  # type: ignore
-            returnType=outputStructType,
-            functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
-        )
         df = self._df
+
+        if initialState is None:
+            initial_state_java_obj = None
+            udf = pandas_udf(
+                transformWithStateUDF,  # type: ignore
+                returnType=outputStructType,
+                functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            )
+        else:
+            initial_state_java_obj = initialState._jgd
+            udf = pandas_udf(
+                transformWithStateWithInitStateUDF,  # type: ignore
+                returnType=outputStructType,
+                functionType=PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            )
+
         udf_column = udf(*[df[col] for col in df.columns])
 
         jdf = self._jgd.transformWithStateInPandas(
@@ -570,6 +677,7 @@ class PandasGroupedOpsMixin:
             self.session._jsparkSession.parseDataType(outputStructType.json()),
             outputMode,
             timeMode,
+            initial_state_java_obj,
         )
         return DataFrame(jdf, self.session)
 
