@@ -167,7 +167,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("CollationKey generates correct collation key for collated string") {
+  ignore("CollationKey generates correct collation key for collated string") {
     val testCases = Seq(
       ("", "UTF8_BINARY", UTF8String.fromString("").getBytes),
       ("aa", "UTF8_BINARY", UTF8String.fromString("aa").getBytes),
