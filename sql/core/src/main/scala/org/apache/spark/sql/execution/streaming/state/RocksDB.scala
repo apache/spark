@@ -992,7 +992,9 @@ class RocksDB(
 
         if (acquiredThreadInfo.threadRef.get.isDefined
           && acquiredThreadInfo != releaseForThreadOpt.get) {
-          logInfo(log"Thread info does not match the acquired thread when attempting to" +
+          logInfo(log"Thread info for release" +
+            log" ${MDC(LogKeys.THREAD, releaseForThreadOpt.get)}" +
+            log" does not match the acquired thread when attempting to" +
             log" release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
             log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
           return
