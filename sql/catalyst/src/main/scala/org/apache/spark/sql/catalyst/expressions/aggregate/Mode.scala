@@ -37,7 +37,7 @@ case class Mode(
     inputAggBufferOffset: Int = 0,
     reverseOpt: Option[Boolean] = None)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
-    with SupportsOrderingWithinGroup with UnaryLike[Expression] {
+    with InverseDistributionFunction with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
 

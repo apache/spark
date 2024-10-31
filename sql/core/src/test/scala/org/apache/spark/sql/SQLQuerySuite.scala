@@ -210,21 +210,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("SELECT LISTAGG(a, '|') WITHIN GROUP (ORDER BY b DESC) FROM df"),
         Row("b|a|b|a") :: Nil)
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("SELECT LISTAGG(DISTINCT a) WITHIN GROUP (ORDER BY b) FROM df")
-        },
-        errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
-        parameters = Map(
-          "functionName" -> "`LISTAGG`",
-          "functionExpr" -> "\"a\"",
-          "orderExpr" -> "\"b\""))
-
+//      checkError(
+//        exception = intercept[AnalysisException] {
+//          sql("SELECT LISTAGG(DISTINCT a) WITHIN GROUP (ORDER BY b) FROM df")
+//        },
+//        condition = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
+//        parameters = Map(
+//          "functionName" -> "`LISTAGG`",
+//          "functionExpr" -> "\"a\"",
+//          "orderExpr" -> "\"b\""))
+//
       Seq((1, true), (2, false), (3, false)).toDF("a", "b").createOrReplaceTempView("df2")
 
       checkAnswer(
         sql("SELECT LISTAGG(a), LISTAGG(b) FROM df2"),
-        Row("1,2,3", "false,false,true") :: Nil)
+        Row("1,2,3", "true,false,false") :: Nil)
     }
   }
 

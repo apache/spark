@@ -18,14 +18,13 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.Growable
+import scala.collection.mutable.{ArrayBuffer, Growable}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils, UnsafeRowUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -283,31 +282,23 @@ private[aggregate] object CollectTopK {
       > SELECT _FUNC_(col, '|') FROM VALUES ('a'), ('b') AS tab(col);
        a|b
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
-
   """,
   group = "agg_funcs",
   since = "4.0.0")
 case class ListAgg(
     child: Expression,
-    orderExpression: Expression,
-    delimiter: Expression = Literal.create(",", StringType),
-    reverse: Boolean = false,
+    delimiter: Expression = Literal.create(",", StringType),// TODO replace with null (empty string)
+    orderExpressions: Seq[SortOrder] = Nil,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]]
-  with BinaryLike[Expression] {
+  with SupportsOrderingWithinGroup {
 
   def this(child: Expression) =
-    this(child, child, Literal.create(",", StringType), false, 0, 0)
+    this(child, Literal.create(",", StringType), Nil, 0, 0)
   def this(child: Expression, delimiter: Expression) =
-    this(child, child, delimiter, false, 0, 0)
+    this(child, delimiter, Nil, 0, 0)
 
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = StringType
-
-  override def left: Expression = child
-
-  override def right: Expression = orderExpression
+  override def dataType: DataType = StringType // TODO add binary
 
   override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 
@@ -318,66 +309,75 @@ case class ListAgg(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  private lazy val sameExpression = orderExpression.semanticEquals(child)
+  private lazy val dontNeedSaveOrderValue = orderExpressions.isEmpty ||
+    (orderExpressions.size == 1 && orderExpressions.head.semanticEquals(child))
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
+  // TODO make null
   override def defaultResult: Option[Literal] = Option(Literal.create("", StringType))
 
   override protected lazy val bufferElementType: DataType = {
-    if (sameExpression) {
+    if (dontNeedSaveOrderValue) {
       child.dataType
     } else {
       StructType(Seq(
         StructField("value", child.dataType),
-        StructField("sortOrder", orderExpression.dataType)))
+        StructField("sortOrder", orderExpressions.head.dataType)))
     }
   }
 
-  private lazy val sortFunc = {
-    val ordering = PhysicalDataType.ordering(orderExpression.dataType)
-    (sameExpression, reverse) match {
-      case (true, true) => (buffer: mutable.ArrayBuffer[Any]) =>
-        buffer.sorted(ordering.reverse)
-      case (true, false) => (buffer: mutable.ArrayBuffer[Any]) =>
-        buffer.sorted(ordering)
-      case (false, true) => (buffer: mutable.ArrayBuffer[Any]) =>
-        buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].sortBy(_.get(1,
-          orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]].reverse).map(_.get(0,
-          child.dataType))
-      case (false, false) => (buffer: mutable.ArrayBuffer[Any]) =>
-        buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]].sortBy(_.get(1,
-          orderExpression.dataType))(ordering.asInstanceOf[Ordering[AnyRef]]).map(_.get(0,
-          child.dataType))
+  private[this] def sortBuffer(buffer: mutable.ArrayBuffer[Any]): mutable.ArrayBuffer[Any] = {
+    if (!orderingFilled) {
+      return buffer
+    }
+    val ascendingOrdering = PhysicalDataType.ordering(orderExpressions.head.dataType)
+    val ordering = if (orderExpressions.head.direction == Ascending) ascendingOrdering
+      else ascendingOrdering.reverse
+
+    if (dontNeedSaveOrderValue) {
+      buffer.sorted(ordering)
+    } else {
+      buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]]
+        .sortBy(_.get(1, orderExpressions.head.dataType))(ordering.asInstanceOf[Ordering[AnyRef]])
+        .map(_.get(0, child.dataType))
     }
   }
 
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     if (buffer.nonEmpty) {
-      val sorted = sortFunc(buffer)
+      val sorted = sortBuffer(buffer)
       UTF8String.fromString(sorted.map(_.toString)
         .mkString(delimiter.eval().asInstanceOf[UTF8String].toString))
     } else {
-      UTF8String.fromString("")
+      UTF8String.fromString("") // TODO null
     }
   }
 
   override def update(buffer: ArrayBuffer[Any], input: InternalRow): ArrayBuffer[Any] = {
     val value = child.eval(input)
     if (value != null) {
-      val v = if (sameExpression) {
+      val v = if (dontNeedSaveOrderValue) {
         convertToBufferElement(value)
       } else {
         InternalRow.apply(convertToBufferElement(value),
-          convertToBufferElement(orderExpression.eval(input)))
+          convertToBufferElement(orderExpressions.head.child.eval(input)))
       }
       buffer += v
     }
     buffer
   }
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): Expression = {
-    copy(child = newLeft, orderExpression = newRight)
-  }
+  override def orderingFilled: Boolean = orderExpressions.nonEmpty
+  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction =
+    copy(orderExpressions = orderingWithinGroup)
+
+  override def children: Seq[Expression] = child +: delimiter +: orderExpressions.map(_.child)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(
+      child = newChildren.head,
+      delimiter = newChildren(1),
+        orderExpressions = newChildren.drop(2).zip(orderExpressions)
+          .map { case (newExpr, oldSortOrder) => oldSortOrder.copy(child = newExpr) }
+    )
 }

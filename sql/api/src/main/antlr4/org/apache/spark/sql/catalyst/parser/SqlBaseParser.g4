@@ -1661,7 +1661,6 @@ ansiNonReserved
     | LIMIT
     | LINES
     | LIST
-    | LISTAGG
     | LOAD
     | LOCAL
     | LOCATION
@@ -2022,7 +2021,6 @@ nonReserved
     | LIMIT
     | LINES
     | LIST
-    | LISTAGG
     | LOAD
     | LOCAL
     | LOCATION

@@ -2210,14 +2210,14 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         numArgs: Int,
         u: UnresolvedFunction): Expression = {
       func match {
-        case owg: SupportsOrderingWithinGroup if u.isDistinct =>
+        case owg: InverseDistributionFunction if u.isDistinct =>
           throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
             owg.prettyName)
-        case owg: SupportsOrderingWithinGroup
+        case owg: InverseDistributionFunction
           if !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
           throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
             owg.prettyName)
-        case owg: SupportsOrderingWithinGroup
+        case owg: InverseDistributionFunction
           if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
           throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
             owg.prettyName, 0, u.orderingWithinGroup.length)

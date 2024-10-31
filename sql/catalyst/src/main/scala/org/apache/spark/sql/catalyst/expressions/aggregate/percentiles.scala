@@ -360,7 +360,7 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   extends AggregateFunction
   with RuntimeReplaceableAggregate
   with ImplicitCastInputTypes
-  with SupportsOrderingWithinGroup
+  with InverseDistributionFunction
   with BinaryLike[Expression] {
   private lazy val percentile = new Percentile(left, right, reverse)
   override lazy val replacement: Expression = percentile
@@ -407,7 +407,7 @@ case class PercentileDisc(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     legacyCalculation: Boolean = SQLConf.get.getConf(SQLConf.LEGACY_PERCENTILE_DISC_CALCULATION))
-  extends PercentileBase with SupportsOrderingWithinGroup with BinaryLike[Expression] {
+  extends PercentileBase with InverseDistributionFunction with BinaryLike[Expression] {
 
   val frequencyExpression: Expression = Literal(1L)
 

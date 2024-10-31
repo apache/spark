@@ -181,7 +181,6 @@ LIKE	false
 LIMIT	false
 LINES	false
 LIST	false
-LISTAGG	false
 LOAD	false
 LOCAL	false
 LOCATION	false
