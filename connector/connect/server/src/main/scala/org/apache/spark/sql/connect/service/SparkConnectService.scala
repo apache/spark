@@ -361,6 +361,13 @@ object SparkConnectService extends Logging {
   }
 
   /**
+   * Used for testing
+   */
+  private[connect] def invalidateSession(userId: String, sessionId: String): Unit = {
+    userSessionMapping.invalidate((userId, sessionId))
+  }
+
+  /**
    * Used for testing.
    */
   private[connect] def putSessionForTesting(sessionHolder: SessionHolder): Unit = {

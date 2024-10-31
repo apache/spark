@@ -56,6 +56,26 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
     }
   }
 
+  test("reattach after connection expired") {
+   withClient { client =>
+      val iter = client.execute(buildPlan(MEDIUM_RESULTS_QUERY))
+      val operationId = getReattachableIterator(iter).operationId
+      // open the iterator
+      iter.next()
+
+      SparkConnectService.invalidateSession(defaultUserId, defaultSessionId)
+      withRawBlockingStub { stub =>
+        val iter2 = stub.reattachExecute(buildReattachExecuteRequest(operationId, None))
+
+        // session closed, bound to fail
+        val e = intercept[StatusRuntimeException] {
+          while (iter2.hasNext) iter2.next()
+        }
+        assert(e.getMessage.contains("INVALID_HANDLE.SESSION_NOT_FOUND"))
+      }
+    }
+  }
+
   test("raw interrupted RPC results in INVALID_CURSOR.DISCONNECTED error") {
     withRawBlockingStub { stub =>
       val iter = stub.executePlan(buildExecutePlanRequest(buildPlan(MEDIUM_RESULTS_QUERY)))

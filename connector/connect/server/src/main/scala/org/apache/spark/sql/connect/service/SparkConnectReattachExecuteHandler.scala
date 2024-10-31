@@ -29,6 +29,9 @@ class SparkConnectReattachExecuteHandler(
     extends Logging {
 
   def handle(v: proto.ReattachExecuteRequest): Unit = {
+    // An exception will be raised if the session is not available.
+    val _sessionHolder =
+      SparkConnectService.getIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
     val executeHolder = SparkConnectService.executionManager
       .getExecuteHolder(ExecuteKey(v.getUserContext.getUserId, v.getSessionId, v.getOperationId))
       .getOrElse {
