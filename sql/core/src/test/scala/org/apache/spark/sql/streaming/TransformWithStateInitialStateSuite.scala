@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
+import java.time.Duration
+
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{Dataset, Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -39,7 +41,8 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble)
+    _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble,
+      TTLConfig(Duration.ZERO))
     _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble)
     _mapState = getHandle.getMapState[Double, Int](
       "testMapInit", Encoders.scalaDouble, Encoders.scalaInt)
@@ -162,8 +165,10 @@ class StatefulProcessorWithInitialStateProcTimerClass
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode) : Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig(Duration.ZERO))
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig(Duration.ZERO))
   }
 
   override def handleInitialState(
@@ -209,8 +214,9 @@ class StatefulProcessorWithInitialStateEventTimerClass
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
-      Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+      Encoders.scalaLong, TTLConfig(Duration.ZERO))
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig(Duration.ZERO))
   }
 
   private def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
