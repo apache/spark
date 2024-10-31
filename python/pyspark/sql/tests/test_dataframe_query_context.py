@@ -449,6 +449,30 @@ class DataFrameQueryContextTestsMixin:
                 query_context_type=None,
             )
 
+    def test_query_context_complex(self):
+        with self.sql_conf({"spark.sql.ansi.enabled": True}):
+            # SQLQueryContext
+            with self.assertRaises(ArithmeticException) as pe:
+                self.spark.sql("select (10/0)*100").collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="DIVIDE_BY_ZERO",
+                messageParameters={"config": '"spark.sql.ansi.enabled"'},
+                query_context_type=QueryContextType.SQL,
+            )
+
+            # DataFrameQueryContext
+            df = self.spark.range(10)
+            with self.assertRaises(ArithmeticException) as pe:
+                df.withColumn("div_zero", (df.id / 0) * 10).collect()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="DIVIDE_BY_ZERO",
+                messageParameters={"config": '"spark.sql.ansi.enabled"'},
+                query_context_type=QueryContextType.DataFrame,
+                fragment="__truediv__",
+            )
+
 
 class DataFrameQueryContextTests(DataFrameQueryContextTestsMixin, ReusedSQLTestCase):
     pass
