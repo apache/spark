@@ -210,7 +210,7 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
     var stateServerSocket: ServerSocket = null
     var failed = false
     try {
-      stateServerSocket = new ServerSocket(/* port = */ 0,
+      stateServerSocket = new ServerSocket( /* port = */ 0,
         /* backlog = */ 1)
       stateServerSocketPort = stateServerSocket.getLocalPort
     } catch {

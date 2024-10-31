@@ -565,6 +565,13 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     verify(arrowStreamWriter).finalizeCurrentArrowBatch()
   }
 
+  test("stateful processor - is first batch") {
+    val message = UtilsCallCommand.newBuilder().setIsFirstBatch(
+      IsFirstBatch.newBuilder().build()).build()
+    stateServer.handleStatefulProcessorUtilRequest(message)
+    verify(outputStream).writeInt(0)
+  }
+
   private def getIntegerRow(value: Int): Row = {
     new GenericRowWithSchema(Array(value), stateSchema)
   }
