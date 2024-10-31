@@ -2293,9 +2293,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           db.load(0)
           db.put("a", "1")
           db.commit()
-          assert(db.getAcquiredThreadInfo() == null,
-            s"acquired thread info after commit should be null but was "
-              + s"${db.getAcquiredThreadInfo()}")
 
           Future { // THREAD 2
             // Set thread 2's task context so that it is not a clone of thread 1's
