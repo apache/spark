@@ -24,7 +24,7 @@ import scala.collection.mutable
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleState.PRE_INIT
 import org.apache.spark.sql.execution.streaming.state._
@@ -137,27 +137,37 @@ class StatefulProcessorHandleImpl(
 
   override def getValueState[T](
       stateName: String,
-      valEncoder: Encoder[T]): ValueState[T] = {
-    verifyStateVarOperations("get_value_state", CREATED)
-    val resultState = new ValueStateImpl[T](store, stateName, keyEncoder, valEncoder, metrics)
-    TWSMetricsUtils.incrementMetric(metrics, "numValueStateVars")
-    resultState
-  }
-
-  override def getValueState[T](
-      stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state", CREATED)
-    validateTTLConfig(ttlConfig, stateName)
+    val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
+      false
+    } else {
+      true
+    }
 
-    assert(batchTimestampMs.isDefined)
-    val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
+    val result = if (ttlEnabled) {
+      validateTTLConfig(ttlConfig, stateName)
+      assert(batchTimestampMs.isDefined)
+      val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
       keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, metrics)
-    ttlStates.add(valueStateWithTTL)
-    TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
+      ttlStates.add(valueStateWithTTL)
+      TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
+      valueStateWithTTL
+    } else {
+      val valueStateWithoutTTL = new ValueStateImpl[T](store, stateName,
+        keyEncoder, valEncoder, metrics)
+      TWSMetricsUtils.incrementMetric(metrics, "numValueStateVars")
+      valueStateWithoutTTL
+    }
+    result
+  }
 
-    valueStateWithTTL
+  override def getValueState[T: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): ValueState[T] = {
+    val encoder = encoderFor[T]
+    getValueState(stateName, encoder, ttlConfig)
   }
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
@@ -350,31 +360,32 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     stateVariableInfos.put(stateName, stateVariableInfo)
   }
 
-  override def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T] = {
-    verifyStateVarOperations("get_value_state", PRE_INIT)
-    val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getValueStateSchema(stateName, keyExprEnc, valEncoder, false)
-    checkIfDuplicateVariableDefined(stateName)
-    columnFamilySchemas.put(stateName, colFamilySchema)
-    val stateVariableInfo = TransformWithStateVariableUtils.
-      getValueState(stateName, ttlEnabled = false)
-    stateVariableInfos.put(stateName, stateVariableInfo)
-    null.asInstanceOf[ValueState[T]]
-  }
-
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
     verifyStateVarOperations("get_value_state", PRE_INIT)
+    val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
+      false
+    } else {
+      true
+    }
+
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getValueStateSchema(stateName, keyExprEnc, valEncoder, true)
+      getValueStateSchema(stateName, keyExprEnc, valEncoder, ttlEnabled)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.
-      getValueState(stateName, ttlEnabled = true)
+      getValueState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[ValueState[T]]
+  }
+
+  override def getValueState[T: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): ValueState[T] = {
+    val valEncoder = encoderFor[T]
+    getValueState(stateName, valEncoder, ttlConfig)
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {

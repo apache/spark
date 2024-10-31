@@ -36,6 +36,8 @@ class MapStateSuite extends StateVariableSuiteBase {
     .add("key", BinaryType)
     .add("userKey", BinaryType)
 
+  import testImplicits._
+
   test("Map state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
@@ -120,7 +122,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       val mapTestState2: MapState[String, Int] =
         handle.getMapState[String, Int]("mapTestState2", Encoders.STRING, Encoders.scalaInt)
       val valueTestState: ValueState[String] =
-        handle.getValueState[String]("valueTestState", Encoders.STRING)
+        handle.getValueState[String]("valueTestState", TTLConfig(Duration.ZERO))
       val listTestState: ListState[String] =
         handle.getListState[String]("listTestState", Encoders.STRING)
 

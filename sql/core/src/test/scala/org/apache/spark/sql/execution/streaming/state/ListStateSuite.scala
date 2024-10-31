@@ -56,6 +56,8 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 
+  import testImplicits._
+
   Seq("appendList", "put").foreach { listImplFunc =>
     test(s"Test list operation($listImplFunc) with null") {
       testMapStateWithNullUserKey() { listState =>
@@ -142,7 +144,7 @@ class ListStateSuite extends StateVariableSuiteBase {
       val listState1: ListState[Long] = handle.getListState[Long]("listState1", Encoders.scalaLong)
       val listState2: ListState[Long] = handle.getListState[Long]("listState2", Encoders.scalaLong)
       val valueState: ValueState[Long] = handle.getValueState[Long](
-        "valueState", Encoders.scalaLong)
+        "valueState", TTLConfig(Duration.ZERO))
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // simple put and get test

@@ -30,21 +30,6 @@ import org.apache.spark.sql.Encoder
 private[sql] trait StatefulProcessorHandle extends Serializable {
 
   /**
-   * Function to create new or return existing single value state variable of given type. The user
-   * must ensure to call this function only within the `init()` method of the StatefulProcessor.
-   *
-   * @param stateName
-   *   \- name of the state variable
-   * @param valEncoder
-   *   \- SQL encoder for state variable
-   * @tparam T
-   *   \- type of state variable
-   * @return
-   *   \- instance of ValueState of type T that can be used to store state persistently
-   */
-  def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T]
-
-  /**
    * Function to create new or return existing single value state variable of given type with ttl.
    * State values will not be returned past ttlDuration, and will be eventually removed from the
    * state store. Any state update resets the ttl to current processing time plus ttlDuration.
@@ -66,6 +51,27 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ValueState[T]
+
+  /**
+   * Function to create new or return existing single value state variable of given type with ttl.
+   * State values will not be returned past ttlDuration, and will be eventually removed from the
+   * state store. Any state update resets the ttl to current processing time plus ttlDuration.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
+   *
+   * @param stateName
+   *   \- name of the state variable
+   * @param ttlConfig
+   *   \- the ttl configuration (time to live duration etc.)
+   * @tparam T
+   *   \- type of state variable
+   * @return
+   *   \- instance of ValueState of type T that can be used to store state persistently
+   */
+  def getValueState[T: Encoder](
+      stateName: String,
       ttlConfig: TTLConfig): ValueState[T]
 
   /**
