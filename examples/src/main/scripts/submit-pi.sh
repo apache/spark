@@ -23,7 +23,7 @@
 #        Otherwise, use any cluster-accessible file via HTTP/HTTPS, S3, or HDFS
 #        - https://raw.githubusercontent.com/apache/spark/master/examples/src/main/python/pi.py
 #
-#    submit_pi.sh <spark_master_hostname> <location_of_python_script>
+#    submit-pi.sh <spark_master_hostname> <location_of_python_script>
 #
 
 SPARK_MASTER=${1:-localhost}
