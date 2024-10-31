@@ -546,14 +546,14 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
-  test("test custom aggregate hint") {
+  test("custom aggregate hint") {
     // The custom hint allows us to replace the aggregate (without grouping keys) with just
     // Literal.
     withSession(Seq(_.injectHintResolutionRule(CustomerAggregateHintResolutionRule),
       _.injectOptimizerRule(CustomAggregateRule))) { session =>
-      val res = ((session.range(10).agg(max("id")).as("max_id"))).
-        hint("MAX_VALUE", "id", 10).
-        queryExecution.optimizedPlan
+      val res = session.range(10).agg(max("id")).as("max_id")
+        .hint("MAX_VALUE", "id", 10)
+        .queryExecution.optimizedPlan
       assert(res.isInstanceOf[Aggregate])
       val expectedAlias = Alias(Literal(10L), "max(id)")()
       compareExpressions(expectedAlias, res.asInstanceOf[Aggregate].aggregateExpressions.head)
