@@ -30,9 +30,6 @@ from pyspark.sql.pandas.utils import require_minimum_pandas_version
 from pyspark.sql.types import NumericType
 from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
 
-from pandas.core.dtypes.inference import is_integer
-
-
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, Row
     import pandas as pd
@@ -507,15 +504,15 @@ class PySparkKdePlotBase:
                 max_val + 0.5 * sample_range,
                 1000,
             )
-        elif is_integer(ind):
+        elif isinstance(ind, int):
             min_val, max_val = calc_min_max()
             sample_range = max_val - min_val
             ind = NumpyHelper.linspace(
                 min_val - 0.5 * sample_range,
                 max_val + 0.5 * sample_range,
-                ind,  # type: ignore[arg-type]
+                ind,
             )
-        return ind  # type: ignore
+        return ind
 
     @staticmethod
     def compute_kde_col(
