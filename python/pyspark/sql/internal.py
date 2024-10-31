@@ -17,7 +17,7 @@
 
 from pyspark.sql import Column, functions as F, is_remote
 
-from typing import Union
+from typing import Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName
