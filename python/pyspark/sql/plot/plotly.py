@@ -130,6 +130,7 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
 
 
 def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
+    from pyspark.sql.utils import has_numpy
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
@@ -143,6 +144,12 @@ def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
     bw_method = kwargs.pop("bw_method", None)
     colnames = process_column_param(kwargs.pop("column", None), data)
     ind = PySparkKdePlotBase.get_ind(data.select(*colnames), kwargs.pop("ind", None))
+
+    if has_numpy:
+        import numpy as np
+
+        if isinstance(ind, np.ndarray):
+            ind = [float(i) for i in ind]
 
     kde_cols = [
         PySparkKdePlotBase.compute_kde_col(
