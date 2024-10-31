@@ -18,11 +18,13 @@
 package org.apache.spark.sql.avro
 
 import java.io._
+
 import scala.util.control.NonFatal
+
+import org.apache.avro.{LogicalType, LogicalTypes, Schema}
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
-import org.apache.avro.{LogicalType, LogicalTypes, Schema}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
