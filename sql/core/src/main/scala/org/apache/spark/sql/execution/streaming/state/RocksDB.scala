@@ -790,31 +790,29 @@ class RocksDB(
 
   /** Release all resources */
   def close(): Unit = {
+    // Acquire DB instance lock and release at the end to allow for synchronized access
+    acquire(CloseStore)
     try {
-      // Acquire DB instance lock and release at the end to allow for synchronized access
-      acquire(CloseStore)
-      try {
-        closeDB()
+      closeDB()
 
-        readOptions.close()
-        writeOptions.close()
-        flushOptions.close()
-        rocksDbOptions.close()
-        dbLogger.close()
+      readOptions.close()
+      writeOptions.close()
+      flushOptions.close()
+      rocksDbOptions.close()
+      dbLogger.close()
 
-        var snapshot = snapshotsToUploadQueue.poll()
-        while (snapshot != null) {
-          snapshot.close()
-          snapshot = snapshotsToUploadQueue.poll()
-        }
-
-        silentDeleteRecursively(localRootDir, "closing RocksDB")
-      } finally {
-        release(CloseStore)
+      var snapshot = snapshotsToUploadQueue.poll()
+      while (snapshot != null) {
+        snapshot.close()
+        snapshot = snapshotsToUploadQueue.poll()
       }
+
+      silentDeleteRecursively(localRootDir, "closing RocksDB")
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
+    } finally {
+      release(CloseStore)
     }
   }
 
@@ -908,16 +906,14 @@ class RocksDB(
    */
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
+    acquire(ReportStoreMetrics)
     try {
-      acquire(ReportStoreMetrics)
-      try {
-        rocksDBMetricsOpt = recordedMetrics
-      } finally {
-        release(ReportStoreMetrics)
-      }
+      rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
         logInfo(log"Failed to acquire metrics with exception=${MDC(LogKeys.ERROR, ex)}")
+    } finally {
+      release(ReportStoreMetrics)
     }
     rocksDBMetricsOpt
   }
