@@ -425,8 +425,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case _ if !plan.isStreaming => Nil
 
-      case EventTimeWatermark(columnName, delay, child) =>
-        EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
+      case EventTimeWatermark(nodeId, columnName, delay, child) =>
+        EventTimeWatermarkExec(nodeId, columnName, delay, planLater(child)) :: Nil
 
       case UpdateEventTimeWatermarkColumn(columnName, delay, child) =>
         // we expect watermarkDelay to be resolved before physical planning.
@@ -865,7 +865,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case MemoryPlan(sink, output) =>
         val encoder = ExpressionEncoder(DataTypeUtils.fromAttributes(output))
         val toRow = encoder.createSerializer()
-        LocalTableScanExec(output, sink.allData.map(r => toRow(r).copy())) :: Nil
+        LocalTableScanExec(output, sink.allData.map(r => toRow(r).copy()), None) :: Nil
 
       case logical.Distinct(child) =>
         throw SparkException.internalError(
@@ -985,8 +985,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
-      case logical.LocalRelation(output, data, _) =>
-        LocalTableScanExec(output, data) :: Nil
+      case logical.LocalRelation(output, data, _, stream) =>
+        LocalTableScanExec(output, data, stream) :: Nil
       case logical.EmptyRelation(l) => EmptyRelationExec(l) :: Nil
       case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       // We should match the combination of limit and offset first, to get the optimal physical
@@ -1036,7 +1036,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           shuffleOrigin, r.optAdvisoryPartitionSize) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
-        RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
+        RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering,
+          r.stream) :: Nil
       case _: UpdateTable =>
         throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("UPDATE TABLE")
       case _: MergeIntoTable =>
