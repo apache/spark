@@ -15,18 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import org.apache.spark.api.java.function._
+import org.apache.spark.sql
+import org.apache.spark.sql.{Column, Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.TypedAggUtils.{aggKeyColumn, withInputType}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
-import org.apache.spark.sql.internal.TypedAggUtils.{aggKeyColumn, withInputType}
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
 /**
@@ -42,7 +44,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     @transient private[sql] val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute])
-  extends api.KeyValueGroupedDataset[K, V] {
+  extends sql.KeyValueGroupedDataset[K, V] {
   type KVDS[KY, VL] = KeyValueGroupedDataset[KY, VL]
 
   private implicit def kEncoderImpl: Encoder[K] = kEncoder

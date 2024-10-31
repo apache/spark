@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.classic
 
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.{api, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -39,6 +38,7 @@ import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.streaming
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -49,7 +49,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * @since 2.0.0
  */
 @Evolving
-final class DataStreamReader private[sql](sparkSession: SparkSession) extends api.DataStreamReader {
+final class DataStreamReader private[sql](sparkSession: SparkSession)
+  extends streaming.DataStreamReader {
   /** @inheritdoc */
   def format(source: String): this.type = {
     this.source = source

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.classic
 
 import java.util.UUID
 import java.util.concurrent.{TimeoutException, TimeUnit}
@@ -27,7 +27,6 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
-import org.apache.spark.sql.{api, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
@@ -37,6 +36,8 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
+import org.apache.spark.sql.streaming
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamingQueryListener, Trigger}
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -48,7 +49,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 class StreamingQueryManager private[sql] (
     sparkSession: SparkSession,
     sqlConf: SQLConf)
-  extends api.StreamingQueryManager
+  extends streaming.StreamingQueryManager
   with Logging {
 
   private[sql] val stateStoreCoordinator =

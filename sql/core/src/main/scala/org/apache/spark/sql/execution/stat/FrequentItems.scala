@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, 
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.classic.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 

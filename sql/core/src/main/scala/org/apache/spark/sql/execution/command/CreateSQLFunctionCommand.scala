@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.catalog.SQLFunction
+import org.apache.spark.sql.classic.SparkSession
 
 /**
  * The DDL command that creates a SQL function.

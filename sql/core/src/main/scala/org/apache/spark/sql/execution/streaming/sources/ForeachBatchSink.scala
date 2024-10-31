@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.streaming.sources
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkThrowable}
-import org.apache.spark.sql._
+import org.apache.spark.sql.{DataFrame => DF, Row}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.streaming.DataStreamWriter
@@ -82,7 +84,7 @@ trait PythonForeachBatchFunction {
 
 object PythonForeachBatchHelper {
   def callForeachBatch(dsw: DataStreamWriter[Row], pythonFunc: PythonForeachBatchFunction): Unit = {
-    dsw.foreachBatch(pythonFunc.call _)
+    dsw.foreachBatch((df: DF, id: Long) => pythonFunc.call(castToImpl(df), id))
   }
 }
 

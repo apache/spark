@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.classic
 
 import scala.collection.mutable
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{Column, DataFrame, Dataset, MergeIntoWriter}
+import org.apache.spark.sql
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.functions.expr
@@ -39,7 +40,7 @@ import org.apache.spark.sql.functions.expr
  */
 @Experimental
 class MergeIntoWriterImpl[T] private[sql] (table: String, ds: Dataset[T], on: Column)
-  extends MergeIntoWriter[T] {
+  extends sql.MergeIntoWriter[T] {
 
   private val df: DataFrame = ds.toDF()
 
@@ -75,28 +76,28 @@ class MergeIntoWriterImpl[T] private[sql] (table: String, ds: Dataset[T], on: Co
     qe.assertCommandExecuted()
   }
 
-  override protected[sql] def insertAll(condition: Option[Column]): MergeIntoWriter[T] = {
+  override protected[sql] def insertAll(condition: Option[Column]): this.type = {
     this.notMatchedActions += InsertStarAction(condition.map(_.expr))
     this
   }
 
   override protected[sql] def insert(
     condition: Option[Column],
-    map: Map[String, Column]): MergeIntoWriter[T] = {
+    map: Map[String, Column]): this.type = {
     this.notMatchedActions += InsertAction(condition.map(_.expr), mapToAssignments(map))
     this
   }
 
   override protected[sql] def updateAll(
       condition: Option[Column],
-      notMatchedBySource: Boolean): MergeIntoWriter[T] = {
+      notMatchedBySource: Boolean): this.type = {
     appendUpdateDeleteAction(UpdateStarAction(condition.map(_.expr)), notMatchedBySource)
   }
 
   override protected[sql] def update(
       condition: Option[Column],
       map: Map[String, Column],
-      notMatchedBySource: Boolean): MergeIntoWriter[T] = {
+      notMatchedBySource: Boolean): this.type = {
     appendUpdateDeleteAction(
       UpdateAction(condition.map(_.expr), mapToAssignments(map)),
       notMatchedBySource)
@@ -104,13 +105,13 @@ class MergeIntoWriterImpl[T] private[sql] (table: String, ds: Dataset[T], on: Co
 
   override protected[sql] def delete(
       condition: Option[Column],
-      notMatchedBySource: Boolean): MergeIntoWriter[T] = {
+      notMatchedBySource: Boolean): this.type = {
     appendUpdateDeleteAction(DeleteAction(condition.map(_.expr)), notMatchedBySource)
   }
 
   private def appendUpdateDeleteAction(
       action: MergeAction,
-      notMatchedBySource: Boolean): MergeIntoWriter[T] = {
+      notMatchedBySource: Boolean): this.type = {
     if (notMatchedBySource) {
       notMatchedBySourceActions += action
     } else {

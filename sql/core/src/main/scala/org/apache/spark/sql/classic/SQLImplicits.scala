@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
+
+import org.apache.spark.sql
 
 /** @inheritdoc */
-abstract class SQLImplicits extends api.SQLImplicits {
+abstract class SQLImplicits extends sql.SQLImplicits {
   type DS[U] = Dataset[U]
 
   protected def session: SparkSession

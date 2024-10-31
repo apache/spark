@@ -30,7 +30,6 @@ import org.apache.spark.sql.{Dataset, ForeachWriter, WriteConfigMethods}
  */
 @Evolving
 abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T]] {
-  type DS[U] <: Dataset[U]
 
   /**
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink. <ul> <li>
@@ -83,7 +82,7 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
   def trigger(trigger: Trigger): this.type
 
   /**
-   * Specifies the name of the [[org.apache.spark.sql.api.StreamingQuery]] that can be started
+   * Specifies the name of the [[org.apache.spark.sql.streaming.StreamingQuery]] that can be started
    * with `start()`. This name must be unique among all the currently active queries in the
    * associated SparkSession.
    *
@@ -114,7 +113,7 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    * @since 2.4.0
    */
   @Evolving
-  def foreachBatch(function: (DS[T], Long) => Unit): this.type
+  def foreachBatch(function: (Dataset[T], Long) => Unit): this.type
 
   /**
    * :: Experimental ::
@@ -130,13 +129,13 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    * @since 2.4.0
    */
   @Evolving
-  def foreachBatch(function: VoidFunction2[DS[T], java.lang.Long]): this.type = {
-    foreachBatch((batchDs: DS[T], batchId: Long) => function.call(batchDs, batchId))
+  def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): this.type = {
+    foreachBatch((batchDs: Dataset[T], batchId: Long) => function.call(batchDs, batchId))
   }
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the
-   * given path as new data arrives. The returned [[org.apache.spark.sql.api.StreamingQuery]]
+   * given path as new data arrives. The returned [[org.apache.spark.sql.streaming.StreamingQuery]]
    * object can be used to interact with the stream.
    *
    * @since 2.0.0
@@ -145,7 +144,7 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the
-   * given path as new data arrives. The returned [[org.apache.spark.sql.api.StreamingQuery]]
+   * given path as new data arrives. The returned [[org.apache.spark.sql.streaming.StreamingQuery]]
    * object can be used to interact with the stream. Throws a `TimeoutException` if the following
    * conditions are met:
    *   - Another run of the same streaming query, that is a streaming query sharing the same
@@ -161,7 +160,7 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the
-   * given table as new data arrives. The returned [[org.apache.spark.sql.api.StreamingQuery]]
+   * given table as new data arrives. The returned [[org.apache.spark.sql.streaming.StreamingQuery]]
    * object can be used to interact with the stream.
    *
    * For v1 table, partitioning columns provided by `partitionBy` will be respected no matter the

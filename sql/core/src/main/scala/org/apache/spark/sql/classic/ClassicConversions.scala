@@ -19,9 +19,10 @@ package org.apache.spark.sql.classic
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql._
+import org.apache.spark.sql
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.internal.ExpressionUtils
+import org.apache.spark.sql.classic.ExpressionUtils
 
 /**
  * Conversions from sql interfaces to the Classic specific implementation.
@@ -36,16 +37,16 @@ import org.apache.spark.sql.internal.ExpressionUtils
  */
 @DeveloperApi
 trait ClassicConversions {
-  implicit def castToImpl(session: api.SparkSession): SparkSession =
+  implicit def castToImpl(session: sql.SparkSession): SparkSession =
     session.asInstanceOf[SparkSession]
 
-  implicit def castToImpl[T](ds: api.Dataset[T]): Dataset[T] =
+  implicit def castToImpl[T](ds: sql.Dataset[T]): Dataset[T] =
     ds.asInstanceOf[Dataset[T]]
 
-  implicit def castToImpl(rgds: api.RelationalGroupedDataset): RelationalGroupedDataset =
+  implicit def castToImpl(rgds: sql.RelationalGroupedDataset): RelationalGroupedDataset =
     rgds.asInstanceOf[RelationalGroupedDataset]
 
-  implicit def castToImpl[K, V](kvds: api.KeyValueGroupedDataset[K, V])
+  implicit def castToImpl[K, V](kvds: sql.KeyValueGroupedDataset[K, V])
   : KeyValueGroupedDataset[K, V] = kvds.asInstanceOf[KeyValueGroupedDataset[K, V]]
 
   /**

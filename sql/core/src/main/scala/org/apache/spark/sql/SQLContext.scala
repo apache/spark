@@ -32,6 +32,9 @@ import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ShowTables
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset.ofRows
+import org.apache.spark.sql.classic.SparkSession.{builder => newSparkSessionBuilder}
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
@@ -68,7 +71,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sc: SparkContext) = {
-    this(SparkSession.builder().sparkContext(sc).getOrCreate())
+    this(newSparkSessionBuilder().sparkContext(sc).getOrCreate())
   }
 
   @deprecated("Use SparkSession.builder instead", "2.0.0")
@@ -670,7 +673,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTables(CurrentNamespace, None))
+    ofRows(sparkSession, ShowTables(CurrentNamespace, None))
   }
 
   /**
@@ -682,7 +685,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
+    ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
   }
 
   /**
@@ -1021,7 +1024,7 @@ object SQLContext {
    */
   @deprecated("Use SparkSession.builder instead", "2.0.0")
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
-    SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
+    newSparkSessionBuilder().sparkContext(sparkContext).getOrCreate().sqlContext
   }
 
   /**

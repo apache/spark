@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import java.util.{Locale, Properties}
 
@@ -25,6 +25,8 @@ import org.apache.spark.Partition
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -55,7 +57,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @Stable
 class DataFrameReader private[sql](sparkSession: SparkSession)
-  extends api.DataFrameReader {
+  extends sql.DataFrameReader {
   override type DS[U] = Dataset[U]
 
   format(sparkSession.sessionState.conf.defaultDataSourceName)

@@ -14,38 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark
 
-class SparkContext
-class SparkConf {
-  def getAll: Array[(String, String)] = Array.empty
-}
+package org.apache.spark.sql
 
-package api.java {
-  class JavaRDD[T]
-}
-
-package rdd {
-  class RDD[T]
-}
-
-package sql {
-  class ExperimentalMethods
-  class SparkSessionExtensions
-  class SQLContext
-
-  package execution {
-    class QueryExecution
-    class SparkStrategy
-  }
-  package internal {
-    class SharedState
-    class SessionState
-  }
-  package util {
-    class ExecutionListenerManager
-  }
-  package sources {
-    class BaseRelation
-  }
+/**
+ * Allows the execution of relational queries, including those expressed in SQL using Spark.
+ *
+ *  @groupname dataType Data types
+ *  @groupdesc Spark SQL data types.
+ *  @groupprio dataType -3
+ *  @groupname field Field
+ *  @groupprio field -2
+ *  @groupname row Row
+ *  @groupprio row -1
+ */
+package object classic {
+  type DataFrame = Dataset[Row]
 }

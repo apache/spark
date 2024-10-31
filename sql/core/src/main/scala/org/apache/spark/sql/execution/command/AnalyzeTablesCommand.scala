@@ -21,13 +21,15 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.LogKeys.{DATABASE_NAME, ERROR, TABLE_NAME}
 import org.apache.spark.internal.MDC
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.classic.SparkSession
 
 
 /**
  * Analyzes all tables in the given database to generate statistics.
  */
-case class AnalyzeTablesCommand(
+case class
+AnalyzeTablesCommand(
     databaseName: Option[String],
     noScan: Boolean) extends LeafRunnableCommand {
 

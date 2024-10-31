@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import java.{lang => jl}
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -33,14 +35,14 @@ import org.apache.spark.sql.types._
  */
 @Stable
 final class DataFrameNaFunctions private[sql](df: DataFrame)
-  extends api.DataFrameNaFunctions {
+  extends sql.DataFrameNaFunctions {
   import df.sparkSession.RichColumn
 
-  protected def drop(minNonNulls: Option[Int]): Dataset[Row] = {
+  protected def drop(minNonNulls: Option[Int]): DataFrame = {
     drop0(minNonNulls, outputAttributes)
   }
 
-  override protected def drop(minNonNulls: Option[Int], cols: Seq[String]): Dataset[Row] = {
+  override protected def drop(minNonNulls: Option[Int], cols: Seq[String]): DataFrame = {
     drop0(minNonNulls, cols.map(df.resolve))
   }
 

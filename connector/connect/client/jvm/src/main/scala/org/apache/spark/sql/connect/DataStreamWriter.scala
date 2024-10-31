@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Command, WriteStreamOperationStart}
-import org.apache.spark.sql.ForeachWriter
+import org.apache.spark.sql.{Dataset => DS, ForeachWriter}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, ContinuousTrigger, OneTimeTrigger, ProcessingTimeTrigger}
 import org.apache.spark.sql.streaming
@@ -46,7 +46,6 @@ import org.apache.spark.util.SparkSerDeUtils
 @Evolving
 final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
   extends streaming.DataStreamWriter[T] {
-  override type DS[U] = Dataset[U]
 
   /** @inheritdoc */
   def outputMode(outputMode: OutputMode): this.type = {
@@ -133,7 +132,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
 
   /** @inheritdoc */
   @Evolving
-  def foreachBatch(function: (Dataset[T], Long) => Unit): this.type = {
+  def foreachBatch(function: (DS[T], Long) => Unit): this.type = {
     val serializedFn = SparkSerDeUtils.serialize(function)
     sinkBuilder.getForeachBatchBuilder.getScalaFunctionBuilder
       .setPayload(ByteString.copyFrom(serializedFn))
@@ -188,7 +187,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
 
   /** @inheritdoc */
   @Evolving
-  override def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): this.type =
+  override def foreachBatch(function: VoidFunction2[DS[T], java.lang.Long]): this.type =
     super.foreachBatch(function)
 
   private val sinkBuilder = WriteStreamOperationStart

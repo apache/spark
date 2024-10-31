@@ -14,12 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.classic
 
-import org.apache.spark.sql.{api, SparkSession}
+import org.apache.spark.sql.streaming
 
 /** @inheritdoc */
-trait StreamingQuery extends api.StreamingQuery {
+trait StreamingQuery extends streaming.StreamingQuery {
   /** @inheritdoc */
   override def sparkSession: SparkSession
 }

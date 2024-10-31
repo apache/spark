@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
+import org.apache.spark.sql.classic.SparkSession
 
 /**
  * Clear all cached data from the in-memory cache.

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.classic
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFo
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.internal.SQLConf
 
 private[sql] object TypedAggUtils {
 

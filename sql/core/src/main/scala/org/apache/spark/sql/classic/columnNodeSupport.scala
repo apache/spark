@@ -14,14 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.classic
 
 import scala.language.implicitConversions
 
 import UserDefinedFunctionUtils.toScalaUDF
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Column, Dataset, SparkSession}
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.{analysis, expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedAlias}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Generator, NamedExpression, Unevaluable}
@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
+import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, InvokeInlineUserDefinedFunction, LambdaFunction, Literal, SortOrder, SQLConf, SqlExpression, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
@@ -281,7 +282,7 @@ private[sql] object ExpressionColumnNode {
   }
 }
 
-private[internal] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
+private[classic] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil

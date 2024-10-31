@@ -14,11 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.classic
 
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.sql.{Dataset, Observation, SparkSession}
+import org.apache.spark.sql.Observation
 import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener

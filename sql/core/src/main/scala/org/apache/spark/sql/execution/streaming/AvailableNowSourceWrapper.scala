@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.types.StructType
 
 /**

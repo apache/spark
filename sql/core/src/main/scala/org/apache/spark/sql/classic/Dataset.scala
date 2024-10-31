@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 import java.util
@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{sql, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -38,6 +38,7 @@ import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.sql.{AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, Encoders, MergeIntoWriter, Observation, Row, SQLContext, TypedColumn}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -53,6 +54,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.TypedAggUtils.withInputType
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -62,9 +64,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf}
-import org.apache.spark.sql.internal.TypedAggUtils.withInputType
-import org.apache.spark.sql.streaming.DataStreamWriter
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
@@ -215,7 +215,7 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
-  extends api.Dataset[T] {
+  extends sql.Dataset[T] {
   type DS[U] = Dataset[U]
 
   @transient lazy val sparkSession: SparkSession = {

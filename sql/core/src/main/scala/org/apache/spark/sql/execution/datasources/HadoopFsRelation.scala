@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.types.{StructField, StructType}

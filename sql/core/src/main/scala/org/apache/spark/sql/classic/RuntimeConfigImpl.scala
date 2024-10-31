@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.classic
 
 import scala.jdk.CollectionConverters._
 
@@ -24,6 +24,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, DEFAULT_PARALLELISM}
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.

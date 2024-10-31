@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.classic
 
 import java.util.Locale
 import java.util.concurrent.TimeoutException
@@ -26,7 +26,8 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
-import org.apache.spark.sql._
+import org.apache.spark.sql.{streaming, Dataset => DS, ForeachWriter}
+import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer.CatalogAndIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -34,7 +35,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTabl
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -44,6 +46,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDat
 import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, Trigger}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -55,8 +58,7 @@ import org.apache.spark.util.Utils
  * @since 2.0.0
  */
 @Evolving
-final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends api.DataStreamWriter[T] {
-  type DS[U] = Dataset[U]
+final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.DataStreamWriter[T] {
 
   /** @inheritdoc */
   def outputMode(outputMode: OutputMode): this.type = {
@@ -139,9 +141,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends api.DataStr
   @Evolving
   @throws[TimeoutException]
   def toTable(tableName: String): StreamingQuery = {
-
-    import ds.sparkSession.sessionState.analyzer.CatalogAndIdentifier
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     val parser = ds.sparkSession.sessionState.sqlParser
     val originalMultipartIdentifier = parser.parseMultipartIdentifier(tableName)
     val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier
@@ -354,7 +353,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends api.DataStr
 
   /** @inheritdoc */
   @Evolving
-  def foreachBatch(function: (Dataset[T], Long) => Unit): this.type = {
+  def foreachBatch(function: (DS[T], Long) => Unit): this.type = {
     this.source = DataStreamWriter.SOURCE_NAME_FOREACH_BATCH
     if (function == null) throw new IllegalArgumentException("foreachBatch function cannot be null")
     this.foreachBatchWriter = function
@@ -409,7 +408,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends api.DataStr
 
   /** @inheritdoc */
   @Evolving
-  override def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): this.type =
+  override def foreachBatch(function: VoidFunction2[DS[T], java.lang.Long]): this.type =
     super.foreachBatch(function)
 
   ///////////////////////////////////////////////////////////////////////////////////////
@@ -429,7 +428,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends api.DataStr
   private var foreachWriterEncoder: ExpressionEncoder[Any] =
     ds.exprEnc.asInstanceOf[ExpressionEncoder[Any]]
 
-  private var foreachBatchWriter: (Dataset[T], Long) => Unit = _
+  private var foreachBatchWriter: (DS[T], Long) => Unit = _
 
   private var partitioningColumns: Option[Seq[String]] = None
 

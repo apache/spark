@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.classic
 
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.{DataFrameWriter, Dataset, SaveMode, SparkSession}
+import org.apache.spark.sql
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
@@ -38,6 +39,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -50,7 +52,7 @@ import org.apache.spark.util.ArrayImplicits._
  * @since 1.4.0
  */
 @Stable
-final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends DataFrameWriter[T] {
+final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends sql.DataFrameWriter[T] {
   format(ds.sparkSession.sessionState.conf.defaultDataSourceName)
 
   private val df = ds.toDF()

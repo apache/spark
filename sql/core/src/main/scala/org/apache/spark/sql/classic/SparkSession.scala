@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import java.net.URI
 import java.nio.file.Paths
@@ -36,7 +36,8 @@ import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
-import org.apache.spark.sql.SparkSession.applyAndLoadExtensions
+import org.apache.spark.sql
+import org.apache.spark.sql.{Artifact, Column, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, RuntimeConfig, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, SQLContext, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
@@ -47,6 +48,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
@@ -56,7 +58,6 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.{CallSite, SparkFileUtils, ThreadUtils, Utils}
@@ -96,7 +97,7 @@ class SparkSession private(
     @transient private[sql] val extensions: SparkSessionExtensions,
     @transient private[sql] val initialSessionOptions: Map[String, String],
     @transient private val parentManagedJobTags: Map[String, String])
-  extends api.SparkSession with Logging { self =>
+  extends sql.SparkSession with Logging { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -735,14 +736,14 @@ class SparkSession private(
 
 
 @Stable
-object SparkSession extends api.BaseSparkSessionCompanion with Logging {
+object SparkSession extends SparkSessionCompanion with Logging {
   override private[sql] type Session = SparkSession
 
   /**
    * Builder for [[SparkSession]].
    */
   @Stable
-  class Builder extends api.SparkSessionBuilder {
+  class Builder extends SparkSessionBuilder {
 
     private[this] val extensions = new SparkSessionExtensions
 

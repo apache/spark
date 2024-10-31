@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.text
 
 import org.apache.hadoop.fs.FileStatus
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileTable

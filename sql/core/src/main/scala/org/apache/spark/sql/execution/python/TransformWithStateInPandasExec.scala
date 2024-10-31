@@ -120,7 +120,7 @@ case class TransformWithStateInPandasExec(
       schemaForValueRow,
       NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
       session.sqlContext.sessionState,
-      Some(session.sqlContext.streams.stateStoreCoordinator),
+      Some(session.streams.stateStoreCoordinator),
       useColumnFamilies = true,
       useMultipleValuesPerKey = true
     ) {

@@ -15,24 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import java.lang.reflect.ParameterizedType
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.JavaTypeInference
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.classic.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
+
 
 /**
  * Functions for registering user-defined functions. Use `SparkSession.udf` to access this:
@@ -45,7 +47,7 @@ import org.apache.spark.util.Utils
  */
 @Stable
 class UDFRegistration private[sql] (functionRegistry: FunctionRegistry)
-  extends api.UDFRegistration
+  extends sql.UDFRegistration
   with Logging {
   protected[sql] def registerPython(name: String, udf: UserDefinedPythonFunction): Unit = {
     log.debug(

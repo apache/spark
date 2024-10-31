@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import java.{lang => jl, util => ju}
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.stat._
@@ -35,7 +37,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @Stable
 final class DataFrameStatFunctions private[sql](protected val df: DataFrame)
-  extends api.DataFrameStatFunctions {
+  extends sql.DataFrameStatFunctions {
 
   /** @inheritdoc */
   def approxQuantile(

@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql
+import org.apache.spark.sql.{AnalysisException, Column, Encoder}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -29,10 +31,10 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.ExpressionUtils.{column, generateAlias}
+import org.apache.spark.sql.classic.TypedAggUtils.withInputType
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.internal.ExpressionUtils.{column, generateAlias}
-import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -53,7 +55,7 @@ class RelationalGroupedDataset protected[sql](
     protected[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType)
-  extends api.RelationalGroupedDataset {
+  extends sql.RelationalGroupedDataset {
 
   import RelationalGroupedDataset._
   import df.sparkSession._
