@@ -3891,9 +3891,9 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedProjectList = projectList.map(trimNonTopLevelAliases)
       Project(cleanedProjectList, child)
 
-    case Aggregate(grouping, aggs, child, _) =>
+    case Aggregate(grouping, aggs, child, hint) =>
       val cleanedAggs = aggs.map(trimNonTopLevelAliases)
-      Aggregate(grouping.map(trimAliases), cleanedAggs, child)
+      Aggregate(grouping.map(trimAliases), cleanedAggs, child, hint)
 
     case Window(windowExprs, partitionSpec, orderSpec, child) =>
       val cleanedWindowExprs = windowExprs.map(trimNonTopLevelAliases)
