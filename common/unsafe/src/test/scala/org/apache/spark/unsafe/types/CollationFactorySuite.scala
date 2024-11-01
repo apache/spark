@@ -429,7 +429,7 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
     }
   }
 
-  ignore("invalid collationId") {
+  test("invalid collationId") {
     val badCollationIds = Seq(
       INDETERMINATE_COLLATION_ID, // Indeterminate collation.
       1 << 30, // User-defined collation range.
