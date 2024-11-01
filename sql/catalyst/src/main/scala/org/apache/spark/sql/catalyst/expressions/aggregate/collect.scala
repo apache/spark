@@ -323,13 +323,33 @@ case class ListAgg(
 
   override def defaultResult: Option[Literal] = Option(Literal.create(null, dataType))
 
+  private[this] def orderValuesField: Seq[StructField] = {
+    orderExpressions.zipWithIndex.map {
+      case (order, i) => StructField(s"sortOrderValue[$i]", order.dataType)
+    }
+  }
+
+  private[this] def evalOrderValues(internalRow: InternalRow): Seq[Any] = {
+    orderExpressions.map(order => convertToBufferElement(order.child.eval(internalRow)))
+  }
+
+  private[this] def bufferOrdering: Ordering[InternalRow] = {
+    val bufferSortOrder = orderExpressions.zipWithIndex.map {
+      case (originalOrder, i) =>
+        originalOrder.copy(
+          child = BoundReference(i + 1, originalOrder.dataType, nullable = true)
+        )
+    }
+    new InterpretedOrdering(bufferSortOrder)
+  }
+
   override protected lazy val bufferElementType: DataType = {
     if (dontNeedSaveOrderValue) {
       child.dataType
     } else {
-      StructType(Seq(
-        StructField("value", child.dataType),
-        StructField("sortOrderValue", orderExpressions.head.dataType)))
+      StructType(
+        StructField("value", child.dataType)
+        +: orderValuesField)
     }
   }
 
@@ -373,15 +393,14 @@ case class ListAgg(
     if (!orderingFilled) {
       return buffer
     }
-    val ascendingOrdering = PhysicalDataType.ordering(orderExpressions.head.dataType)
-    val ordering = if (orderExpressions.head.direction == Ascending) ascendingOrdering
-      else ascendingOrdering.reverse
-
     if (dontNeedSaveOrderValue) {
+      val ascendingOrdering = PhysicalDataType.ordering(orderExpressions.head.dataType)
+      val ordering = if (orderExpressions.head.direction == Ascending) ascendingOrdering
+        else ascendingOrdering.reverse
       buffer.sorted(ordering)
     } else {
       buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]]
-        .sortBy(_.get(1, orderExpressions.head.dataType))(ordering.asInstanceOf[Ordering[AnyRef]])
+        .sorted(bufferOrdering)
         .map(_.get(0, child.dataType))
     }
   }
@@ -426,8 +445,7 @@ case class ListAgg(
       val v = if (dontNeedSaveOrderValue) {
         convertToBufferElement(value)
       } else {
-        InternalRow.apply(convertToBufferElement(value),
-          convertToBufferElement(orderExpressions.head.child.eval(input)))
+        InternalRow.fromSeq(convertToBufferElement(value) +: evalOrderValues(input))
       }
       buffer += v
     }

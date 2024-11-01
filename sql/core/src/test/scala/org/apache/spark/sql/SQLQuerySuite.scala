@@ -228,6 +228,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row("b|a|b|a") :: Nil)
 
       checkAnswer(
+        sql("select listagg(a) within group (order by b desc, a asc) from df"),
+        Row("baba") :: Nil)
+
+      checkAnswer(
+        sql("select listagg(a) within group (order by b desc, a desc) from df"),
+        Row("bbaa") :: Nil)
+
+      checkAnswer(
         sql("select listagg(c1)from values (X'DEAD'), (X'BEEF') as t(c1)"),
         Row(hexToBytes("DEADBEEF")) :: Nil)
 
