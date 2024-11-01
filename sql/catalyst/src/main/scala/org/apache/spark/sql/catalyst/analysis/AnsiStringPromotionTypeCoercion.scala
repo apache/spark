@@ -99,7 +99,7 @@ object AnsiStringPromotionTypeCoercion {
       case (_: StringType, _: AnsiIntervalType) => None
       // [SPARK-50060] If a binary operation contains two collated string types with different
       // collation IDs, we can't decide which collation ID the result should have.
-      case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => None
+      case (st1: StringType, st2: StringType) if st1 != st2 => None
       case (_: StringType, a: AtomicType) => Some(a)
       case (other, st: StringType) if !other.isInstanceOf[StringType] =>
         findWiderTypeForString(st, other)

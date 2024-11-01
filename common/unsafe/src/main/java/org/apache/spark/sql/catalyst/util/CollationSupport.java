@@ -50,7 +50,7 @@ public final class CollationSupport {
     }
     public static String genCode(final String s, final String d, final int collationId) {
       String expr = "CollationSupport.StringSplitSQL.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", s, d);
       } else {
         return String.format(expr + "(%s, %s, %d)", s, d, collationId);
@@ -85,7 +85,7 @@ public final class CollationSupport {
     }
     public static String genCode(final String l, final String r, final int collationId) {
       String expr = "CollationSupport.Contains.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", l, r);
       } else {
         return String.format(expr + "(%s, %s, %d)", l, r, collationId);
@@ -125,7 +125,7 @@ public final class CollationSupport {
     }
     public static String genCode(final String l, final String r, final int collationId) {
       String expr = "CollationSupport.StartsWith.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", l, r);
       } else {
         return String.format(expr + "(%s, %s, %d)", l, r, collationId);
@@ -163,7 +163,7 @@ public final class CollationSupport {
     }
     public static String genCode(final String l, final String r, final int collationId) {
       String expr = "CollationSupport.EndsWith.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", l, r);
       } else {
         return String.format(expr + "(%s, %s, %d)", l, r, collationId);
@@ -303,7 +303,7 @@ public final class CollationSupport {
   public static class FindInSet {
     public static int exec(final UTF8String word, final UTF8String set, final int collationId) {
       // FindInSet does space trimming collation as comparison is space trimming collation aware
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return execBinary(word, set);
       } else {
         return execCollationAware(word, set, collationId);
@@ -311,7 +311,7 @@ public final class CollationSupport {
     }
     public static String genCode(final String word, final String set, final int collationId) {
       String expr = "CollationSupport.FindInSet.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", word, set);
       } else {
         return String.format(expr + "CollationAware(%s, %s, %d)", word, set, collationId);
@@ -344,7 +344,7 @@ public final class CollationSupport {
     public static String genCode(final String string, final String substring,
         final int collationId) {
       String expr = "CollationSupport.StringInstr.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", string, substring);
       } else {
         return String.format(expr + "(%s, %s, %d)", string, substring, collationId);
@@ -419,7 +419,7 @@ public final class CollationSupport {
     public static String genCode(final String string, final String substring, final int start,
         final int collationId) {
       String expr = "CollationSupport.StringLocate.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s, %d)", string, substring, start);
       } else {
         return String.format(expr + "(%s, %s, %d, %d)", string, substring, start, collationId);
@@ -457,7 +457,7 @@ public final class CollationSupport {
     public static String genCode(final String string, final String delimiter,
         final String count, final int collationId) {
       String expr = "CollationSupport.SubstringIndex.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s, %s)", string, delimiter, count);
       } else {
         return String.format(expr + "(%s, %s, %s, %d)", string, delimiter, count, collationId);
@@ -532,7 +532,7 @@ public final class CollationSupport {
         final String trimString,
         final int collationId) {
       String expr = "CollationSupport.StringTrim.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
       } else {
         return String.format(expr + "(%s, %s, %d)", srcString, trimString, collationId);
@@ -594,7 +594,7 @@ public final class CollationSupport {
         final String trimString,
         final int collationId) {
       String expr = "CollationSupport.StringTrimLeft.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
       } else {
         return String.format(expr + "(%s, %s, %d)", srcString, trimString, collationId);
@@ -651,7 +651,7 @@ public final class CollationSupport {
         final String trimString,
         final int collationId) {
       String expr = "CollationSupport.StringTrimRight.exec";
-      if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      if (CollationFactory.isUTF8BinaryCollation(collationId)) {
         return String.format(expr + "Binary(%s, %s)", srcString, trimString);
       } else {
         return String.format(expr + "(%s, %s, %d)", srcString, trimString, collationId);

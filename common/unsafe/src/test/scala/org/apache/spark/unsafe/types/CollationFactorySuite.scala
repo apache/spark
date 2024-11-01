@@ -38,7 +38,13 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
 
-    assert(UTF8_BINARY_COLLATION_ID == 0)
+    assert(NON_COLLATED_STRING_COLLATION_ID == 0)
+    val nonCollatedStringCollation = fetchCollation(NON_COLLATED_STRING_COLLATION_ID)
+    assert(nonCollatedStringCollation.collationName == "UTF8_BINARY")
+    assert(nonCollatedStringCollation.isUtf8BinaryType)
+    assert(nonCollatedStringCollation.version == currentIcuVersion)
+
+    assert(UTF8_BINARY_COLLATION_ID == (1 << 17))
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
     assert(utf8Binary.collationName == "UTF8_BINARY")
     assert(utf8Binary.isUtf8BinaryType)
@@ -435,32 +441,57 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       1 << 30, // User-defined collation range.
       (1 << 30) | 1, // User-defined collation range.
       (1 << 30) | (1 << 29), // User-defined collation range.
-      1 << 1, // UTF8_BINARY mandatory zero bit 1 breach.
-      1 << 2, // UTF8_BINARY mandatory zero bit 2 breach.
-      1 << 3, // UTF8_BINARY mandatory zero bit 3 breach.
-      1 << 4, // UTF8_BINARY mandatory zero bit 4 breach.
-      1 << 5, // UTF8_BINARY mandatory zero bit 5 breach.
-      1 << 6, // UTF8_BINARY mandatory zero bit 6 breach.
-      1 << 7, // UTF8_BINARY mandatory zero bit 7 breach.
-      1 << 8, // UTF8_BINARY mandatory zero bit 8 breach.
-      1 << 9, // UTF8_BINARY mandatory zero bit 9 breach.
-      1 << 10, // UTF8_BINARY mandatory zero bit 10 breach.
-      1 << 11, // UTF8_BINARY mandatory zero bit 11 breach.
-      1 << 12, // UTF8_BINARY mandatory zero bit 12 breach.
-      1 << 13, // UTF8_BINARY mandatory zero bit 13 breach.
-      1 << 14, // UTF8_BINARY mandatory zero bit 14 breach.
-      1 << 15, // UTF8_BINARY mandatory zero bit 15 breach.
-      1 << 16, // UTF8_BINARY mandatory zero bit 16 breach.
-      1 << 17, // UTF8_BINARY mandatory zero bit 17 breach.
-      1 << 19, // UTF8_BINARY mandatory zero bit 19 breach.
-      1 << 20, // UTF8_BINARY mandatory zero bit 20 breach.
-      1 << 21, // UTF8_BINARY mandatory zero bit 21 breach.
-      1 << 23, // UTF8_BINARY mandatory zero bit 23 breach.
-      1 << 24, // UTF8_BINARY mandatory zero bit 24 breach.
-      1 << 25, // UTF8_BINARY mandatory zero bit 25 breach.
-      1 << 26, // UTF8_BINARY mandatory zero bit 26 breach.
-      1 << 27, // UTF8_BINARY mandatory zero bit 27 breach.
-      1 << 28, // UTF8_BINARY mandatory zero bit 28 breach.
+      1 << 1, // NON_COLLATED_STRING mandatory zero bit 1 breach.
+      1 << 2, // NON_COLLATED_STRING mandatory zero bit 2 breach.
+      1 << 3, // NON_COLLATED_STRING mandatory zero bit 3 breach.
+      1 << 4, // NON_COLLATED_STRING mandatory zero bit 4 breach.
+      1 << 5, // NON_COLLATED_STRING mandatory zero bit 5 breach.
+      1 << 6, // NON_COLLATED_STRING mandatory zero bit 6 breach.
+      1 << 7, // NON_COLLATED_STRING mandatory zero bit 7 breach.
+      1 << 8, // NON_COLLATED_STRING mandatory zero bit 8 breach.
+      1 << 9, // NON_COLLATED_STRING mandatory zero bit 9 breach.
+      1 << 10, // NON_COLLATED_STRING mandatory zero bit 10 breach.
+      1 << 11, // NON_COLLATED_STRING mandatory zero bit 11 breach.
+      1 << 12, // NON_COLLATED_STRING mandatory zero bit 12 breach.
+      1 << 13, // NON_COLLATED_STRING mandatory zero bit 13 breach.
+      1 << 14, // NON_COLLATED_STRING mandatory zero bit 14 breach.
+      1 << 15, // NON_COLLATED_STRING mandatory zero bit 15 breach.
+      1 << 16, // NON_COLLATED_STRING mandatory zero bit 16 breach.
+      1 << 18, // NON_COLLATED_STRING mandatory zero bit 18 breach.
+      1 << 19, // NON_COLLATED_STRING mandatory zero bit 19 breach.
+      1 << 20, // NON_COLLATED_STRING mandatory zero bit 20 breach.
+      1 << 21, // NON_COLLATED_STRING mandatory zero bit 21 breach.
+      1 << 23, // NON_COLLATED_STRING mandatory zero bit 23 breach.
+      1 << 24, // NON_COLLATED_STRING mandatory zero bit 24 breach.
+      1 << 25, // NON_COLLATED_STRING mandatory zero bit 25 breach.
+      1 << 26, // NON_COLLATED_STRING mandatory zero bit 26 breach.
+      1 << 27, // NON_COLLATED_STRING mandatory zero bit 27 breach.
+      1 << 28, // NON_COLLATED_STRING mandatory zero bit 28 breach.
+      (1 << 17) | (1 << 1), // UTF8_BINARY mandatory zero bit 1 breach.
+      (1 << 17) | (1 << 2), // UTF8_BINARY mandatory zero bit 2 breach.
+      (1 << 17) | (1 << 3), // UTF8_BINARY mandatory zero bit 3 breach.
+      (1 << 17) | (1 << 4), // UTF8_BINARY mandatory zero bit 4 breach.
+      (1 << 17) | (1 << 5), // UTF8_BINARY mandatory zero bit 5 breach.
+      (1 << 17) | (1 << 6), // UTF8_BINARY mandatory zero bit 6 breach.
+      (1 << 17) | (1 << 7), // UTF8_BINARY mandatory zero bit 7 breach.
+      (1 << 17) | (1 << 8), // UTF8_BINARY mandatory zero bit 8 breach.
+      (1 << 17) | (1 << 9), // UTF8_BINARY mandatory zero bit 9 breach.
+      (1 << 17) | (1 << 10), // UTF8_BINARY mandatory zero bit 10 breach.
+      (1 << 17) | (1 << 11), // UTF8_BINARY mandatory zero bit 11 breach.
+      (1 << 17) | (1 << 12), // UTF8_BINARY mandatory zero bit 12 breach.
+      (1 << 17) | (1 << 13), // UTF8_BINARY mandatory zero bit 13 breach.
+      (1 << 17) | (1 << 14), // UTF8_BINARY mandatory zero bit 14 breach.
+      (1 << 17) | (1 << 15), // UTF8_BINARY mandatory zero bit 15 breach.
+      (1 << 17) | (1 << 16), // UTF8_BINARY mandatory zero bit 16 breach.
+      (1 << 17) | (1 << 19), // UTF8_BINARY mandatory zero bit 19 breach.
+      (1 << 17) | (1 << 20), // UTF8_BINARY mandatory zero bit 20 breach.
+      (1 << 17) | (1 << 21), // UTF8_BINARY mandatory zero bit 21 breach.
+      (1 << 17) | (1 << 23), // UTF8_BINARY mandatory zero bit 23 breach.
+      (1 << 17) | (1 << 24), // UTF8_BINARY mandatory zero bit 24 breach.
+      (1 << 17) | (1 << 25), // UTF8_BINARY mandatory zero bit 25 breach.
+      (1 << 17) | (1 << 26), // UTF8_BINARY mandatory zero bit 26 breach.
+      (1 << 17) | (1 << 27), // UTF8_BINARY mandatory zero bit 27 breach.
+      (1 << 17) | (1 << 28), // UTF8_BINARY mandatory zero bit 28 breach.
       (1 << 29) | (1 << 12), // ICU mandatory zero bit 12 breach.
       (1 << 29) | (1 << 13), // ICU mandatory zero bit 13 breach.
       (1 << 29) | (1 << 14), // ICU mandatory zero bit 14 breach.

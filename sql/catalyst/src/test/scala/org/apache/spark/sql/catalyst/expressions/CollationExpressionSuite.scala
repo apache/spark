@@ -25,10 +25,11 @@ import org.apache.spark.unsafe.types.UTF8String
 class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("validate default collation") {
     val collationId = CollationFactory.collationNameToId("UTF8_BINARY")
-    assert(collationId == 0)
+    assert(collationId == CollationFactory.UTF8_BINARY_COLLATION_ID)
     val collateExpr = Collate(Literal("abc"), "UTF8_BINARY")
     assert(collateExpr.dataType === StringType(collationId))
-    assert(collateExpr.dataType.asInstanceOf[StringType].collationId == 0)
+    assert(collateExpr.dataType.asInstanceOf[StringType].collationId ==
+      CollationFactory.UTF8_BINARY_COLLATION_ID)
     checkEvaluation(collateExpr, "abc")
   }
 
