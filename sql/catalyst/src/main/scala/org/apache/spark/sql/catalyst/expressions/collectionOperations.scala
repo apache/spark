@@ -1349,7 +1349,7 @@ case class Reverse(child: Expression)
 
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeWithCollation, ArrayType))
+    Seq(TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -2119,12 +2119,12 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(AbstractArrayType(StringTypeWithCollation),
-      StringTypeWithCollation,
-        StringTypeWithCollation)
+    Seq(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+      StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true))
   } else {
-    Seq(AbstractArrayType(StringTypeWithCollation),
-        StringTypeWithCollation)
+    Seq(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+        StringTypeWithCollation(supportsTrimCollation = true))
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
@@ -2845,7 +2845,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   with QueryErrorsBase {
 
   private def allowedTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, BinaryType, ArrayType)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), BinaryType, ArrayType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 

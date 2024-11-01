@@ -318,7 +318,8 @@ abstract class TypeCoercionHelper {
         }
 
       case aj @ ArrayJoin(arr, d, nr)
-          if !AbstractArrayType(StringTypeWithCollation).acceptsType(arr.dataType) &&
+          if !AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)).
+            acceptsType(arr.dataType) &&
           ArrayType.acceptsType(arr.dataType) =>
         val containsNull = arr.dataType.asInstanceOf[ArrayType].containsNull
         implicitCast(arr, ArrayType(StringType, containsNull)) match {

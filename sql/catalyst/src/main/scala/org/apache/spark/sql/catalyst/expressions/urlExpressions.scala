@@ -59,13 +59,14 @@ case class UrlEncode(child: Expression)
       SQLConf.get.defaultStringType,
       "encode",
       Seq(child),
-      Seq(StringTypeWithCollation))
+      Seq(StringTypeWithCollation(supportsTrimCollation = true)))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def prettyName: String = "url_encode"
 }
@@ -98,13 +99,14 @@ case class UrlDecode(child: Expression, failOnError: Boolean = true)
       SQLConf.get.defaultStringType,
       "decode",
       Seq(child, Literal(failOnError)),
-      Seq(StringTypeWithCollation, BooleanType))
+      Seq(StringTypeWithCollation(supportsTrimCollation = true), BooleanType))
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(child = newChild)
   }
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def prettyName: String = "url_decode"
 }
@@ -221,7 +223,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
 
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(children.size)(StringTypeWithCollation)
+    Seq.fill(children.size)(StringTypeWithCollation(supportsTrimCollation = true))
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "parse_url"
 

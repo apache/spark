@@ -133,7 +133,9 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, StringTypeWithCollation)
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
@@ -490,7 +492,8 @@ case class JsonTuple(children: Seq[Expression])
       )
     } else if (
       children.forall(
-        child => StringTypeWithCollation.acceptsType(child.dataType))) {
+        child => StringTypeWithCollation(supportsTrimCollation = true)
+          .acceptsType(child.dataType))) {
       TypeCheckResult.TypeCheckSuccess
     } else {
       DataTypeMismatch(
@@ -682,7 +685,8 @@ case class JsonToStructs(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) :: Nil
 
   override def sql: String = schema match {
     case _: MapType => "entries"
@@ -910,7 +914,8 @@ case class LengthOfJsonArray(child: Expression)
   with ExpectsInputTypes
   with RuntimeReplaceable {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override def prettyName: String = "json_array_length"
@@ -955,7 +960,8 @@ case class JsonObjectKeys(child: Expression)
   with ExpectsInputTypes
   with RuntimeReplaceable {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
   override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"

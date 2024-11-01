@@ -38,8 +38,18 @@ class CollationSQLExpressionsSuite
     with SharedSparkSession
     with ExpressionEvalHelper {
 
-  private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
-  private val testAdditionalCollations = Seq("UNICODE", "SR", "SR_CI", "SR_AI", "SR_CI_AI")
+  private val testSuppCollations =
+    Seq(
+      "UTF8_BINARY",
+      "UTF8_BINARY_RTRIM",
+      "UTF8_LCASE",
+      "UTF8_LCASE_RTRIM",
+      "UNICODE",
+      "UNICODE_RTRIM",
+      "UNICODE_CI",
+      "UNICODE_CI_RTRIM")
+  private val testAdditionalCollations = Seq("UNICODE",
+    "SR", "SR_RTRIM", "SR_CI", "SR_AI", "SR_CI_AI")
 
   test("Support Md5 hash expression with collation") {
     case class Md5TestCase(
@@ -262,11 +272,19 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       UrlEncodeTestCase("https://spark.apache.org", "UTF8_BINARY",
         "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UTF8_BINARY_RTRIM",
+        "https%3A%2F%2Fspark.apache.org"),
       UrlEncodeTestCase("https://spark.apache.org", "UTF8_LCASE",
+        "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UTF8_LCASE_RTRIM",
         "https%3A%2F%2Fspark.apache.org"),
       UrlEncodeTestCase("https://spark.apache.org", "UNICODE",
         "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UNICODE_RTRIM",
+        "https%3A%2F%2Fspark.apache.org"),
       UrlEncodeTestCase("https://spark.apache.org", "UNICODE_CI",
+        "https%3A%2F%2Fspark.apache.org"),
+      UrlEncodeTestCase("https://spark.apache.org", "UNICODE_CI_RTRIM",
         "https%3A%2F%2Fspark.apache.org")
     )
 
@@ -296,11 +314,19 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_BINARY",
         "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_BINARY_RTRIM",
+        "https://spark.apache.org"),
       UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_LCASE",
+        "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UTF8_LCASE_RTRIM",
         "https://spark.apache.org"),
       UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UNICODE",
         "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UNICODE_RTRIM",
+        "https://spark.apache.org"),
       UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UNICODE_CI",
+        "https://spark.apache.org"),
+      UrlDecodeTestCase("https%3A%2F%2Fspark.apache.org", "UNICODE_CI_RTRIM",
         "https://spark.apache.org")
     )
 
@@ -331,11 +357,19 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       ParseUrlTestCase("http://spark.apache.org/path?query=1", "UTF8_BINARY", "HOST",
         "spark.apache.org"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=1", "UTF8_BINARY_RTRIM", "HOST",
+        "spark.apache.org"),
       ParseUrlTestCase("http://spark.apache.org/path?query=2", "UTF8_LCASE", "PATH",
+        "/path"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=2", "UTF8_LCASE_RTRIM", "PATH",
         "/path"),
       ParseUrlTestCase("http://spark.apache.org/path?query=3", "UNICODE", "QUERY",
         "query=3"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=3", "UNICODE_RTRIM", "QUERY",
+        "query=3"),
       ParseUrlTestCase("http://spark.apache.org/path?query=4", "UNICODE_CI", "PROTOCOL",
+        "http"),
+      ParseUrlTestCase("http://spark.apache.org/path?query=4", "UNICODE_CI_RTRIM", "PROTOCOL",
         "http")
     )
 
@@ -370,7 +404,16 @@ class CollationSQLExpressionsSuite
         Row(1), Seq(
           StructField("a", IntegerType, nullable = true)
         )),
+      CsvToStructsTestCase("1", "UTF8_BINARY_RTRIM", "'a INT'", "",
+        Row(1), Seq(
+          StructField("a", IntegerType, nullable = true)
+        )),
       CsvToStructsTestCase("true, 0.8", "UTF8_LCASE", "'A BOOLEAN, B DOUBLE'", "",
+        Row(true, 0.8), Seq(
+          StructField("A", BooleanType, nullable = true),
+          StructField("B", DoubleType, nullable = true)
+        )),
+      CsvToStructsTestCase("true, 0.8", "UTF8_LCASE_RTRIM", "'A BOOLEAN, B DOUBLE'", "",
         Row(true, 0.8), Seq(
           StructField("A", BooleanType, nullable = true),
           StructField("B", DoubleType, nullable = true)
@@ -378,6 +421,10 @@ class CollationSQLExpressionsSuite
       CsvToStructsTestCase("\"Spark\"", "UNICODE", "'a STRING'", "",
         Row("Spark"), Seq(
           StructField("a", StringType("UNICODE"), nullable = true)
+        )),
+      CsvToStructsTestCase("\"Spark\"", "UNICODE_RTRIM", "'a STRING'", "",
+        Row("Spark"), Seq(
+          StructField("a", StringType("UNICODE_RTRIM"), nullable = true)
         )),
       CsvToStructsTestCase("26/08/2015", "UTF8_BINARY", "'time Timestamp'",
         ", map('timestampFormat', 'dd/MM/yyyy')", Row(
@@ -413,10 +460,16 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       SchemaOfCsvTestCase("1", "UTF8_BINARY", "STRUCT<_c0: INT>"),
+      SchemaOfCsvTestCase("1", "UTF8_BINARY_RTRIM", "STRUCT<_c0: INT>"),
       SchemaOfCsvTestCase("true,0.8", "UTF8_LCASE",
         "STRUCT<_c0: BOOLEAN, _c1: DOUBLE>"),
+      SchemaOfCsvTestCase("true,0.8", "UTF8_LCASE_RTRIM",
+        "STRUCT<_c0: BOOLEAN, _c1: DOUBLE>"),
       SchemaOfCsvTestCase("2015-08-26", "UNICODE", "STRUCT<_c0: DATE>"),
+      SchemaOfCsvTestCase("2015-08-26", "UNICODE_RTRIM", "STRUCT<_c0: DATE>"),
       SchemaOfCsvTestCase("abc", "UNICODE_CI",
+        "STRUCT<_c0: STRING>"),
+      SchemaOfCsvTestCase("abc", "UNICODE_CI_RTRIM",
         "STRUCT<_c0: STRING>")
     )
 
@@ -445,9 +498,14 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       StructsToCsvTestCase("named_struct('a', 1, 'b', 2)", "UTF8_BINARY", "1,2"),
+      StructsToCsvTestCase("named_struct('a', 1, 'b', 2)", "UTF8_BINARY_RTRIM", "1,2"),
       StructsToCsvTestCase("named_struct('A', true, 'B', 2.0)", "UTF8_LCASE", "true,2.0"),
+      StructsToCsvTestCase("named_struct('A', true, 'B', 2.0)", "UTF8_LCASE_RTRIM", "true,2.0"),
       StructsToCsvTestCase("named_struct()", "UNICODE", null),
+      StructsToCsvTestCase("named_struct()", "UNICODE_RTRIM", null),
       StructsToCsvTestCase("named_struct('time', to_timestamp('2015-08-26'))", "UNICODE_CI",
+        "2015-08-26T00:00:00.000-07:00"),
+      StructsToCsvTestCase("named_struct('time', to_timestamp('2015-08-26'))", "UNICODE_CI_RTRIM",
         "2015-08-26T00:00:00.000-07:00")
     )
 
@@ -478,9 +536,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       ConvTestCase("100", "2", "10", "UTF8_BINARY", "4"),
+      ConvTestCase("100", "2", "10", "UTF8_BINARY_RTRIM", "4"),
       ConvTestCase("100", "2", "10", "UTF8_LCASE", "4"),
+      ConvTestCase("100", "2", "10", "UTF8_LCASE_RTRIM", "4"),
       ConvTestCase("100", "2", "10", "UNICODE", "4"),
-      ConvTestCase("100", "2", "10", "UNICODE_CI", "4")
+      ConvTestCase("100", "2", "10", "UNICODE_RTRIM", "4"),
+      ConvTestCase("100", "2", "10", "UNICODE_CI", "4"),
+      ConvTestCase("100", "2", "10", "UNICODE_CI_RTRIM", "4")
     )
     testCases.foreach(t => {
       val query =
@@ -502,9 +564,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       BinTestCase("13", "UTF8_BINARY", "1101"),
+      BinTestCase("13", "UTF8_BINARY_RTRIM", "1101"),
       BinTestCase("13", "UTF8_LCASE", "1101"),
+      BinTestCase("13", "UTF8_LCASE_RTRIM", "1101"),
       BinTestCase("13", "UNICODE", "1101"),
-      BinTestCase("13", "UNICODE_CI", "1101")
+      BinTestCase("13", "UNICODE_RTRIM", "1101"),
+      BinTestCase("13", "UNICODE_CI", "1101"),
+      BinTestCase("13", "UNICODE_CI_RTRIM", "1101")
     )
     testCases.foreach(t => {
       val query =
@@ -527,9 +593,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       HexTestCase("13", "UTF8_BINARY", "D"),
+      HexTestCase("13", "UTF8_BINARY_RTRIM", "D"),
       HexTestCase("13", "UTF8_LCASE", "D"),
+      HexTestCase("13", "UTF8_LCASE_RTRIM", "D"),
       HexTestCase("13", "UNICODE", "D"),
-      HexTestCase("13", "UNICODE_CI", "D")
+      HexTestCase("13", "UNICODE_RTRIM", "D"),
+      HexTestCase("13", "UNICODE_CI", "D"),
+      HexTestCase("13", "UNICODE_CI_RTRIM", "D")
     )
     testCases.foreach(t => {
       val query =
@@ -552,10 +622,15 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       HexTestCase("Spark SQL", "UTF8_BINARY", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "UTF8_BINARY_RTRIM", "537061726B2053514C"),
       HexTestCase("Spark SQL", "UTF8_LCASE", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "UTF8_LCASE_RTRIM", "537061726B2053514C"),
       HexTestCase("Spark SQL", "UNICODE", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "UNICODE_RTRIM", "537061726B2053514C"),
       HexTestCase("Spark SQL", "UNICODE_CI", "537061726B2053514C"),
-      HexTestCase("Spark SQL", "DE_CI_AI", "537061726B2053514C")
+      HexTestCase("Spark SQL", "UNICODE_CI_RTRIM", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "DE_CI_AI", "537061726B2053514C"),
+      HexTestCase("Spark SQL", "DE_CI_AI_RTRIM", "537061726B2053514C")
     )
     testCases.foreach(t => {
       val query =
@@ -576,9 +651,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       UnHexTestCase("537061726B2053514C", "UTF8_BINARY", "Spark SQL"),
+      UnHexTestCase("537061726B2053514C", "UTF8_BINARY_RTRIM", "Spark SQL"),
       UnHexTestCase("537061726B2053514C", "UTF8_LCASE", "Spark SQL"),
+      UnHexTestCase("537061726B2053514C", "UTF8_LCASE_RTRIM", "Spark SQL"),
       UnHexTestCase("537061726B2053514C", "UNICODE", "Spark SQL"),
+      UnHexTestCase("537061726B2053514C", "UNICODE_RTRIM", "Spark SQL"),
       UnHexTestCase("537061726B2053514C", "UNICODE_CI", "Spark SQL"),
+      UnHexTestCase("537061726B2053514C", "UNICODE_CI_RTRIM", "Spark SQL"),
       UnHexTestCase("537061726B2053514C", "DE", "Spark SQL")
     )
     testCases.foreach(t => {
@@ -607,16 +686,30 @@ class CollationSQLExpressionsSuite
         "xpath_boolean", "UTF8_BINARY", true, BooleanType),
       XPathTestCase("<A><B>1</B><B>2</B></A>", "sum(A/B)",
         "xpath_short", "UTF8_BINARY", 3, ShortType),
+      XPathTestCase("<a><b>1</b></a>", "a/b",
+        "xpath_boolean", "UTF8_BINARY_RTRIM", true, BooleanType),
+      XPathTestCase("<A><B>1</B><B>2</B></A>", "sum(A/B)",
+        "xpath_short", "UTF8_BINARY_RTRIM", 3, ShortType),
       XPathTestCase("<a><b>3</b><b>4</b></a>", "sum(a/b)",
         "xpath_int", "UTF8_LCASE", 7, IntegerType),
       XPathTestCase("<A><B>5</B><B>6</B></A>", "sum(A/B)",
         "xpath_long", "UTF8_LCASE", 11, LongType),
+      XPathTestCase("<a><b>3</b><b>4</b></a>", "sum(a/b)",
+        "xpath_int", "UTF8_LCASE_RTRIM", 7, IntegerType),
+      XPathTestCase("<A><B>5</B><B>6</B></A>", "sum(A/B)",
+        "xpath_long", "UTF8_LCASE_RTRIM", 11, LongType),
       XPathTestCase("<a><b>7</b><b>8</b></a>", "sum(a/b)",
         "xpath_float", "UNICODE", 15.0, FloatType),
       XPathTestCase("<A><B>9</B><B>0</B></A>", "sum(A/B)",
         "xpath_double", "UNICODE", 9.0, DoubleType),
+      XPathTestCase("<a><b>7</b><b>8</b></a>", "sum(a/b)",
+        "xpath_float", "UNICODE_RTRIM", 15.0, FloatType),
+      XPathTestCase("<A><B>9</B><B>0</B></A>", "sum(A/B)",
+        "xpath_double", "UNICODE_RTRIM", 9.0, DoubleType),
       XPathTestCase("<a><b>b</b><c>cc</c></a>", "a/c",
         "xpath_string", "UNICODE_CI", "cc", StringType("UNICODE_CI")),
+      XPathTestCase("<a><b>b</b><c>cc </c></a>", "a/c",
+        "xpath_string", "UNICODE_CI_RTRIM", "cc ", StringType("UNICODE_CI_RTRIM")),
       XPathTestCase("<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>", "a/b/text()",
         "xpath", "UNICODE_CI", Array("b1", "b2", "b3"), ArrayType(StringType("UNICODE_CI")))
     )
@@ -645,10 +738,15 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       StringSpaceTestCase(1, "UTF8_BINARY", " "),
+      StringSpaceTestCase(1, "UTF8_BINARY_RTRIM", " "),
       StringSpaceTestCase(2, "UTF8_LCASE", "  "),
+      StringSpaceTestCase(2, "UTF8_LCASE_RTRIM", "  "),
       StringSpaceTestCase(3, "UNICODE", "   "),
+      StringSpaceTestCase(3, "UNICODE_RTRIM", "   "),
       StringSpaceTestCase(4, "UNICODE_CI", "    "),
-      StringSpaceTestCase(5, "AF_CI_AI", "     ")
+      StringSpaceTestCase(4, "UNICODE_CI_RTRIM", "    "),
+      StringSpaceTestCase(5, "AF_CI_AI", "     "),
+      StringSpaceTestCase(5, "AF_CI_AI_RTRIM", "     ")
     )
 
     // Supported collations
@@ -678,9 +776,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       ToNumberTestCase("123", "UTF8_BINARY", "999", 123, DecimalType(3, 0)),
+      ToNumberTestCase("123", "UTF8_BINARY_RTRIM", "999", 123, DecimalType(3, 0)),
       ToNumberTestCase("1", "UTF8_LCASE", "0.00", 1.00, DecimalType(3, 2)),
+      ToNumberTestCase("1", "UTF8_LCASE_RTRIM", "0.00", 1.00, DecimalType(3, 2)),
       ToNumberTestCase("99,999", "UNICODE", "99,999", 99999, DecimalType(5, 0)),
-      ToNumberTestCase("$14.99", "UNICODE_CI", "$99.99", 14.99, DecimalType(4, 2))
+      ToNumberTestCase("99,999", "UNICODE_RTRIM", "99,999", 99999, DecimalType(5, 0)),
+      ToNumberTestCase("$14.99", "UNICODE_CI", "$99.99", 14.99, DecimalType(4, 2)),
+      ToNumberTestCase("$14.99", "UNICODE_CI_RTRIM", "$99.99", 14.99, DecimalType(4, 2))
     )
 
     // Supported collations (ToNumber)
@@ -748,9 +850,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       ToCharTestCase(12, "UTF8_BINARY", "999", " 12"),
+      ToCharTestCase(12, "UTF8_BINARY_RTRIM", "999", " 12"),
       ToCharTestCase(34, "UTF8_LCASE", "000D00", "034.00"),
+      ToCharTestCase(34, "UTF8_LCASE_RTRIM", "000D00", "034.00"),
       ToCharTestCase(56, "UNICODE", "$99.99", "$56.00"),
-      ToCharTestCase(78, "UNICODE_CI", "99D9S", "78.0+")
+      ToCharTestCase(56, "UNICODE_RTRIM", "$99.99", "$56.00"),
+      ToCharTestCase(78, "UNICODE_CI", "99D9S", "78.0+"),
+      ToCharTestCase(78, "UNICODE_CI_RTRIM", "99D9S", "78.0+")
     )
 
     // Supported collations
@@ -779,9 +885,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       GetJsonObjectTestCase("{\"a\":\"b\"}", "$.a", "UTF8_BINARY", "b"),
+      GetJsonObjectTestCase("{\"a\":\"b\"}", "$.a", "UTF8_BINARY_RTRIM", "b"),
       GetJsonObjectTestCase("{\"A\":\"1\"}", "$.A", "UTF8_LCASE", "1"),
+      GetJsonObjectTestCase("{\"A\":\"1\"}", "$.A", "UTF8_LCASE_RTRIM", "1"),
       GetJsonObjectTestCase("{\"x\":true}", "$.x", "UNICODE", "true"),
-      GetJsonObjectTestCase("{\"X\":1}", "$.X", "UNICODE_CI", "1")
+      GetJsonObjectTestCase("{\"x\":true}", "$.x", "UNICODE_RTRIM", "true"),
+      GetJsonObjectTestCase("{\"X\":1}", "$.X", "UNICODE_CI", "1"),
+      GetJsonObjectTestCase("{\"X\":1}", "$.X", "UNICODE_CI_RTRIM", "1")
     )
 
     // Supported collations
@@ -811,9 +921,15 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       JsonTupleTestCase("{\"a\":1, \"b\":2}", "'a', 'b'", "UTF8_BINARY",
         Row("1", "2")),
+      JsonTupleTestCase("{\"a\":1, \"b\":2}", "'a', 'b'", "UTF8_BINARY_RTRIM",
+        Row("1", "2")),
       JsonTupleTestCase("{\"A\":\"3\", \"B\":\"4\"}", "'A', 'B'", "UTF8_LCASE",
         Row("3", "4")),
+      JsonTupleTestCase("{\"A\":\"3\", \"B\":\"4\"}", "'A', 'B'", "UTF8_LCASE_RTRIM",
+        Row("3", "4")),
       JsonTupleTestCase("{\"x\":true, \"y\":false}", "'x', 'y'", "UNICODE",
+        Row("true", "false")),
+      JsonTupleTestCase("{\"x\":true, \"y\":false}", "'x', 'y'", "UNICODE_RTRIM",
         Row("true", "false")),
       JsonTupleTestCase("{\"X\":null, \"Y\":null}", "'X', 'Y'", "UNICODE_CI",
         Row(null, null))
@@ -846,12 +962,20 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       JsonToStructsTestCase("{\"a\":1, \"b\":2.0}", "a INT, b DOUBLE",
         "UTF8_BINARY", Row(Row(1, 2.0))),
+      JsonToStructsTestCase("{\"a\":1, \"b\":2.0}", "a INT, b DOUBLE",
+        "UTF8_BINARY_RTRIM", Row(Row(1, 2.0))),
       JsonToStructsTestCase("{\"A\":\"3\", \"B\":4}", "A STRING COLLATE UTF8_LCASE, B INT",
         "UTF8_LCASE", Row(Row("3", 4))),
+      JsonToStructsTestCase("{\"A\":\"3\", \"B\":4}", "A STRING COLLATE UTF8_LCASE, B INT",
+        "UTF8_LCASE_RTRIM", Row(Row("3", 4))),
       JsonToStructsTestCase("{\"x\":true, \"y\":null}", "x BOOLEAN, y VOID",
         "UNICODE", Row(Row(true, null))),
+      JsonToStructsTestCase("{\"x\":true, \"y\":null}", "x BOOLEAN, y VOID",
+        "UNICODE_RTRIM", Row(Row(true, null))),
       JsonToStructsTestCase("{\"X\":null, \"Y\":false}", "X VOID, Y BOOLEAN",
-        "UNICODE_CI", Row(Row(null, false)))
+        "UNICODE_CI", Row(Row(null, false))),
+      JsonToStructsTestCase("{\"X\":null, \"Y\":false}", "X VOID, Y BOOLEAN",
+        "UNICODE_CI_RTRIM", Row(Row(null, false)))
     )
 
     // Supported collations
@@ -880,12 +1004,20 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       StructsToJsonTestCase("named_struct('a', 1, 'b', 2)",
         "UTF8_BINARY", Row("{\"a\":1,\"b\":2}")),
+      StructsToJsonTestCase("named_struct('a', 1, 'b', 2)",
+        "UTF8_BINARY_RTRIM", Row("{\"a\":1,\"b\":2}")),
       StructsToJsonTestCase("array(named_struct('a', 1, 'b', 2))",
         "UTF8_LCASE", Row("[{\"a\":1,\"b\":2}]")),
+      StructsToJsonTestCase("array(named_struct('a', 1, 'b', 2))",
+        "UTF8_LCASE_RTRIM", Row("[{\"a\":1,\"b\":2}]")),
       StructsToJsonTestCase("map('a', named_struct('b', 1))",
         "UNICODE", Row("{\"a\":{\"b\":1}}")),
+      StructsToJsonTestCase("map('a', named_struct('b', 1))",
+        "UNICODE_RTRIM", Row("{\"a\":{\"b\":1}}")),
       StructsToJsonTestCase("array(map('a', 1))",
-        "UNICODE_CI", Row("[{\"a\":1}]"))
+        "UNICODE_CI", Row("[{\"a\":1}]")),
+      StructsToJsonTestCase("array(map('a', 1))",
+        "UNICODE_CI_RTRIM", Row("[{\"a\":1}]"))
     )
 
     // Supported collations
@@ -913,9 +1045,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       LengthOfJsonArrayTestCase("'[1,2,3,4]'", "UTF8_BINARY", Row(4)),
+      LengthOfJsonArrayTestCase("'[1,2,3,4]'", "UTF8_BINARY_RTRIM", Row(4)),
       LengthOfJsonArrayTestCase("'[1,2,3,{\"f1\":1,\"f2\":[5,6]},4]'", "UTF8_LCASE", Row(5)),
+      LengthOfJsonArrayTestCase("'[1,2,3,{\"f1\":1,\"f2\":[5,6]},4]'", "UTF8_LCASE_RTRIM", Row(5)),
       LengthOfJsonArrayTestCase("'[1,2'", "UNICODE", Row(null)),
-      LengthOfJsonArrayTestCase("'['", "UNICODE_CI", Row(null))
+      LengthOfJsonArrayTestCase("'[1,2'", "UNICODE_RTRIM", Row(null)),
+      LengthOfJsonArrayTestCase("'['", "UNICODE_CI", Row(null)),
+      LengthOfJsonArrayTestCase("'['", "UNICODE_CI_RTRIM", Row(null))
     )
 
     // Supported collations
@@ -943,11 +1079,19 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       JsonObjectKeysJsonArrayTestCase("{}", "UTF8_BINARY",
         Row(Seq())),
+      JsonObjectKeysJsonArrayTestCase("{}", "UTF8_BINARY_RTRIM",
+        Row(Seq())),
       JsonObjectKeysJsonArrayTestCase("{\"k\":", "UTF8_LCASE",
+        Row(null)),
+      JsonObjectKeysJsonArrayTestCase("{\"k\":", "UTF8_LCASE_RTRIM",
         Row(null)),
       JsonObjectKeysJsonArrayTestCase("{\"k1\": \"v1\"}", "UNICODE",
         Row(Seq("k1"))),
+      JsonObjectKeysJsonArrayTestCase("{\"k1\": \"v1\"}", "UNICODE_RTRIM",
+        Row(Seq("k1"))),
       JsonObjectKeysJsonArrayTestCase("{\"k1\":1,\"k2\":{\"k3\":3, \"k4\":4}}", "UNICODE_CI",
+        Row(Seq("k1", "k2"))),
+      JsonObjectKeysJsonArrayTestCase("{\"k1\":1,\"k2\":{\"k3\":3, \"k4\":4}}", "UNICODE_CI_RTRIM",
         Row(Seq("k1", "k2")))
     )
 
@@ -977,12 +1121,20 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       SchemaOfJsonTestCase("'[{\"col\":0}]'",
         "UTF8_BINARY", Row("ARRAY<STRUCT<col: BIGINT>>")),
+      SchemaOfJsonTestCase("'[{\"col\":0}]'",
+        "UTF8_BINARY_RTRIM", Row("ARRAY<STRUCT<col: BIGINT>>")),
       SchemaOfJsonTestCase("'[{\"col\":01}]', map('allowNumericLeadingZeros', 'true')",
         "UTF8_LCASE", Row("ARRAY<STRUCT<col: BIGINT>>")),
+      SchemaOfJsonTestCase("'[{\"col\":01}]', map('allowNumericLeadingZeros', 'true')",
+        "UTF8_LCASE_RTRIM", Row("ARRAY<STRUCT<col: BIGINT>>")),
       SchemaOfJsonTestCase("'[]'",
         "UNICODE", Row("ARRAY<STRING>")),
+      SchemaOfJsonTestCase("'[]'",
+        "UNICODE_RTRIM", Row("ARRAY<STRING>")),
       SchemaOfJsonTestCase("''",
-        "UNICODE_CI", Row("STRING"))
+        "UNICODE_CI", Row("STRING")),
+      SchemaOfJsonTestCase("''",
+        "UNICODE_CI_RTRIM", Row("STRING"))
     )
 
     // Supported collations
@@ -1011,9 +1163,15 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       StringToMapTestCase("a:1,b:2,c:3", ",", ":", "UTF8_BINARY",
         Map("a" -> "1", "b" -> "2", "c" -> "3")),
+      StringToMapTestCase("a:1,b:2,c:3", ",", ":", "UTF8_BINARY_RTRIM",
+        Map("a" -> "1", "b" -> "2", "c" -> "3")),
       StringToMapTestCase("A-1xB-2xC-3", "X", "-", "UTF8_LCASE",
         Map("A" -> "1", "B" -> "2", "C" -> "3")),
+      StringToMapTestCase("A-1xB-2xC-3", "X", "-", "UTF8_LCASE_RTRIM",
+        Map("A" -> "1", "B" -> "2", "C" -> "3")),
       StringToMapTestCase("1:ax2:bx3:c", "x", ":", "UNICODE",
+        Map("1" -> "a", "2" -> "b", "3" -> "c")),
+      StringToMapTestCase("1:ax2:bx3:c", "x", ":", "UNICODE_RTRIM",
         Map("1" -> "a", "2" -> "b", "3" -> "c")),
       StringToMapTestCase("1/AX2/BX3/C", "x", "/", "UNICODE_CI",
         Map("1" -> "A", "2" -> "B", "3" -> "C")),
@@ -1023,10 +1181,7 @@ class CollationSQLExpressionsSuite
         Map("c" -> "1", "č" -> "2", "ć" -> "3"))
     )
     val unsupportedTestCases = Seq(
-      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_AI", null),
-      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_RTRIM", null),
-      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_BINARY_RTRIM", null),
-      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UTF8_LCASE_RTRIM", null))
+      StringToMapTestCase("a:1,b:2,c:3", "?", "?", "UNICODE_AI", null))
     testCases.foreach(t => {
       // Unit test.
       val text = Literal.create(t.text, StringType(t.collation))
@@ -1073,9 +1228,13 @@ class CollationSQLExpressionsSuite
     case class RaiseErrorTestCase(errorMessage: String, collationName: String)
     val testCases = Seq(
       RaiseErrorTestCase("custom error message 1", "UTF8_BINARY"),
+      RaiseErrorTestCase("custom error message 1", "UTF8_BINARY_RTRIM"),
       RaiseErrorTestCase("custom error message 2", "UTF8_LCASE"),
+      RaiseErrorTestCase("custom error message 2", "UTF8_LCASE_RTRIM"),
       RaiseErrorTestCase("custom error message 3", "UNICODE"),
-      RaiseErrorTestCase("custom error message 4", "UNICODE_CI")
+      RaiseErrorTestCase("custom error message 3", "UNICODE_RTRIM"),
+      RaiseErrorTestCase("custom error message 4", "UNICODE_CI"),
+      RaiseErrorTestCase("custom error message 4", "UNICODE_CI_RTRIM")
     )
     testCases.foreach(t => {
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
@@ -1094,7 +1253,13 @@ class CollationSQLExpressionsSuite
 
   test("Support CurrentDatabase/Catalog/User expressions with collation") {
     // Supported collations
-    Seq("UTF8_LCASE", "UNICODE", "UNICODE_CI", "SR_CI_AI").foreach(collationName =>
+    Seq(
+      "UTF8_LCASE",
+      "UTF8_LCASE_RTRIM",
+      "UNICODE",
+      "UNICODE_RTRIM",
+      "UNICODE_CI",
+      "SR_CI_AI").foreach(collationName =>
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val queryDatabase = sql("SELECT current_schema()")
         val queryCatalog = sql("SELECT current_catalog()")
@@ -1110,7 +1275,14 @@ class CollationSQLExpressionsSuite
 
   test("Support Uuid misc expression with collation") {
     // Supported collations
-    Seq("UTF8_LCASE", "UNICODE", "UNICODE_CI", "NO_CI_AI").foreach(collationName =>
+    Seq(
+      "UTF8_LCASE",
+      "UTF8_LCASE_RTRIM",
+      "UNICODE",
+      "UNICODE_RTRIM",
+      "UNICODE_CI",
+      "UNICODE_CI_RTRIM",
+      "NO_CI_AI").foreach(collationName =>
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> collationName) {
         val query = s"SELECT uuid()"
         // Result & data type
@@ -1270,6 +1442,7 @@ class CollationSQLExpressionsSuite
     )
   }
 
+  // TODO: fix
   test("Support XmlToStructs xml expression with collation") {
     case class XmlToStructsTestCase(
      input: String,
@@ -1285,7 +1458,16 @@ class CollationSQLExpressionsSuite
         Row(1), Seq(
           StructField("a", IntegerType, nullable = true)
         )),
+      XmlToStructsTestCase("<p><a>1</a></p>", "UTF8_BINARY_RTRIM", "'a INT'", "",
+        Row(1), Seq(
+          StructField("a", IntegerType, nullable = true)
+        )),
       XmlToStructsTestCase("<p><A>true</A><B>0.8</B></p>", "UTF8_LCASE",
+        "'A BOOLEAN, B DOUBLE'", "", Row(true, 0.8), Seq(
+          StructField("A", BooleanType, nullable = true),
+          StructField("B", DoubleType, nullable = true)
+        )),
+      XmlToStructsTestCase("<p><A>true</A><B>0.8</B></p>", "UTF8_LCASE_RTRIM",
         "'A BOOLEAN, B DOUBLE'", "", Row(true, 0.8), Seq(
           StructField("A", BooleanType, nullable = true),
           StructField("B", DoubleType, nullable = true)
@@ -1293,6 +1475,10 @@ class CollationSQLExpressionsSuite
       XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE", "'s STRING'", "",
         Row("Spark"), Seq(
           StructField("s", StringType("UNICODE"), nullable = true)
+        )),
+      XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE_RTRIM", "'s STRING'", "",
+        Row("Spark"), Seq(
+          StructField("s", StringType("UNICODE_RTRIM"), nullable = true)
         )),
       XmlToStructsTestCase("<p><time>26/08/2015</time></p>", "UNICODE_CI", "'time Timestamp'",
         ", map('timestampFormat', 'dd/MM/yyyy')", Row(
@@ -1327,10 +1513,16 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       SchemaOfXmlTestCase("<p><a>1</a></p>", "UTF8_BINARY", "STRUCT<a: BIGINT>"),
+      SchemaOfXmlTestCase("<p><a>1</a></p>", "UTF8_BINARY_RTRIM", "STRUCT<a: BIGINT>"),
       SchemaOfXmlTestCase("<p><A>true</A><B>0.8</B></p>", "UTF8_LCASE",
         "STRUCT<A: BOOLEAN, B: DOUBLE>"),
+      SchemaOfXmlTestCase("<p><A>true</A><B>0.8</B></p>", "UTF8_LCASE_RTRIM",
+        "STRUCT<A: BOOLEAN, B: DOUBLE>"),
       SchemaOfXmlTestCase("<p></p>", "UNICODE", "STRUCT<>"),
+      SchemaOfXmlTestCase("<p></p>", "UNICODE_RTRIM", "STRUCT<>"),
       SchemaOfXmlTestCase("<p><A>1</A><A>2</A><A>3</A></p>", "UNICODE_CI",
+        "STRUCT<A: ARRAY<BIGINT>>"),
+      SchemaOfXmlTestCase("<p><A>1</A><A>2</A><A>3</A></p>", "UNICODE_CI_RTRIM",
         "STRUCT<A: ARRAY<BIGINT>>")
     )
 
@@ -1363,6 +1555,11 @@ class CollationSQLExpressionsSuite
            |    <a>1</a>
            |    <b>2</b>
            |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct('a', 1, 'b', 2)", "UTF8_BINARY_RTRIM",
+        s"""<ROW>
+           |    <a>1</a>
+           |    <b>2</b>
+           |</ROW>""".stripMargin),
       StructsToXmlTestCase("named_struct('A', true, 'B', 2.0)", "UTF8_LCASE",
         s"""<ROW>
            |    <A>true</A>
@@ -1373,12 +1570,19 @@ class CollationSQLExpressionsSuite
            |    <A>aa</A>
            |    <B>bb</B>
            |</ROW>""".stripMargin),
+      StructsToXmlTestCase("named_struct('A', 'aa', 'B', 'bb')", "UTF8_LCASE_RTRIM",
+        s"""<ROW>
+           |    <A>aa</A>
+           |    <B>bb</B>
+           |</ROW>""".stripMargin),
       StructsToXmlTestCase("named_struct('A', 'aa', 'B', 'bb')", "UTF8_BINARY",
         s"""<ROW>
            |    <A>aa</A>
            |    <B>bb</B>
            |</ROW>""".stripMargin),
       StructsToXmlTestCase("named_struct()", "UNICODE",
+        "<ROW/>"),
+      StructsToXmlTestCase("named_struct()", "UNICODE_RTRIM",
         "<ROW/>"),
       StructsToXmlTestCase("named_struct('time', to_timestamp('2015-08-26'))", "UNICODE_CI",
         s"""<ROW>
@@ -1411,9 +1615,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       ParseJsonTestCase("{\"a\":1,\"b\":2}", "UTF8_BINARY", "{\"a\":1,\"b\":2}"),
+      ParseJsonTestCase("{\"a\":1,\"b\":2}", "UTF8_BINARY_RTRIM", "{\"a\":1,\"b\":2}"),
       ParseJsonTestCase("{\"A\":3,\"B\":4}", "UTF8_LCASE", "{\"A\":3,\"B\":4}"),
+      ParseJsonTestCase("{\"A\":3,\"B\":4}", "UTF8_LCASE_RTRIM", "{\"A\":3,\"B\":4}"),
       ParseJsonTestCase("{\"c\":5,\"d\":6}", "UNICODE", "{\"c\":5,\"d\":6}"),
-      ParseJsonTestCase("{\"C\":7,\"D\":8}", "UNICODE_CI", "{\"C\":7,\"D\":8}")
+      ParseJsonTestCase("{\"c\":5,\"d\":6}", "UNICODE_RTRIM", "{\"c\":5,\"d\":6}"),
+      ParseJsonTestCase("{\"C\":7,\"D\":8}", "UNICODE_CI", "{\"C\":7,\"D\":8}"),
+      ParseJsonTestCase("{\"C\":7,\"D\":8}", "UNICODE_CI_RTRIM", "{\"C\":7,\"D\":8}")
     )
 
     // Supported collations (ParseJson)
@@ -1483,9 +1691,13 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       IsVariantNullTestCase("'null'", "UTF8_BINARY", result = true),
+      IsVariantNullTestCase("'null'", "UTF8_BINARY_RTRIM", result = true),
       IsVariantNullTestCase("'\"null\"'", "UTF8_LCASE", result = false),
+      IsVariantNullTestCase("'\"null\"'", "UTF8_LCASE_RTRIM", result = false),
       IsVariantNullTestCase("'13'", "UNICODE", result = false),
-      IsVariantNullTestCase("null", "UNICODE_CI", result = false)
+      IsVariantNullTestCase("'13'", "UNICODE_RTRIM", result = false),
+      IsVariantNullTestCase("null", "UNICODE_CI", result = false),
+      IsVariantNullTestCase("null", "UNICODE_CI_RTRIM", result = false)
     )
 
     // Supported collations
@@ -1514,10 +1726,14 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       VariantGetTestCase("{\"a\": 1}", "$.a", "int", "UTF8_BINARY", 1, IntegerType),
+      VariantGetTestCase("{\"a\": 1}", "$.a", "int", "UTF8_BINARY_RTRIM", 1, IntegerType),
       VariantGetTestCase("{\"a\": 1}", "$.b", "int", "UTF8_LCASE", null, IntegerType),
+      VariantGetTestCase("{\"a\": 1}", "$.b", "int", "UTF8_LCASE_RTRIM", null, IntegerType),
       VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE", "2", StringType("UNICODE")),
-      VariantGetTestCase("[1, \"2\"]", "$[2]", "string", "UNICODE_CI", null,
-        StringType("UNICODE_CI"))
+      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE_RTRIM", "2",
+        StringType("UNICODE_RTRIM")),
+      VariantGetTestCase("[1, \"2\"]", "$[2]", "string", "UNICODE_CI_RTRIM", null,
+        StringType("UNICODE_CI_RTRIM"))
     )
 
     // Supported collations (VariantGet)
@@ -1595,6 +1811,14 @@ class CollationSQLExpressionsSuite
               StructField("value", VariantType, nullable = false)
           )
       ),
+      VariantExplodeTestCase("[\"hello\", \"world\"]", "UTF8_BINARY_RTRIM",
+        Row(0, "null", "\"hello\"").toString() + Row(1, "null", "\"world\"").toString(),
+        Seq[StructField](
+          StructField("pos", IntegerType, nullable = false),
+          StructField("key", StringType("UTF8_BINARY_RTRIM")),
+          StructField("value", VariantType, nullable = false)
+        )
+      ),
       VariantExplodeTestCase("[\"Spark\", \"SQL\"]", "UTF8_LCASE",
         Row(0, "null", "\"Spark\"").toString() + Row(1, "null", "\"SQL\"").toString(),
         Seq[StructField](
@@ -1603,11 +1827,27 @@ class CollationSQLExpressionsSuite
           StructField("value", VariantType, nullable = false)
         )
       ),
+      VariantExplodeTestCase("[\"Spark\", \"SQL\"]", "UTF8_LCASE_RTRIM",
+        Row(0, "null", "\"Spark\"").toString() + Row(1, "null", "\"SQL\"").toString(),
+        Seq[StructField](
+          StructField("pos", IntegerType, nullable = false),
+          StructField("key", StringType("UTF8_LCASE_RTRIM")),
+          StructField("value", VariantType, nullable = false)
+        )
+      ),
       VariantExplodeTestCase("{\"a\": true, \"b\": 3.14}", "UNICODE",
         Row(0, "a", "true").toString() + Row(1, "b", "3.14").toString(),
         Seq[StructField](
           StructField("pos", IntegerType, nullable = false),
           StructField("key", StringType("UNICODE")),
+          StructField("value", VariantType, nullable = false)
+        )
+      ),
+      VariantExplodeTestCase("{\"a\": true, \"b\": 3.14}", "UNICODE_RTRIM",
+        Row(0, "a", "true").toString() + Row(1, "b", "3.14").toString(),
+        Seq[StructField](
+          StructField("pos", IntegerType, nullable = false),
+          StructField("key", StringType("UNICODE_RTRIM")),
           StructField("value", VariantType, nullable = false)
         )
       ),
@@ -1646,11 +1886,17 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       SchemaOfVariantTestCase("null", "UTF8_BINARY", "VOID"),
+      SchemaOfVariantTestCase("null", "UTF8_BINARY_RTRIM", "VOID"),
       SchemaOfVariantTestCase("[]", "UTF8_LCASE", "ARRAY<VOID>"),
+      SchemaOfVariantTestCase("[]", "UTF8_LCASE_RTRIM", "ARRAY<VOID>"),
       SchemaOfVariantTestCase("[{\"a\":true,\"b\":0}]", "UNICODE",
         "ARRAY<OBJECT<a: BOOLEAN, b: BIGINT>>"),
+      SchemaOfVariantTestCase("[{\"a\":true,\"b\":0}]", "UNICODE_RTRIM",
+        "ARRAY<OBJECT<a: BOOLEAN, b: BIGINT>>"),
       SchemaOfVariantTestCase("[{\"A\":\"x\",\"B\":-1.00}]", "UNICODE_CI",
-        "ARRAY<OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>")
+        "ARRAY<OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>"),
+      SchemaOfVariantTestCase("[{\"A\":\"x\",\"B\":-1.00}]", "UNICODE_CI_RTRIM",
+        "ARRAY<OBJECT<A: STRING COLLATE UNICODE_CI_RTRIM, B: DECIMAL(1,0)>>")
     )
 
     // Supported collations
@@ -1677,11 +1923,18 @@ class CollationSQLExpressionsSuite
 
     val testCases = Seq(
       SchemaOfVariantAggTestCase("('1'), ('2'), ('3')", "UTF8_BINARY", "BIGINT"),
+      SchemaOfVariantAggTestCase("('1'), ('2'), ('3')", "UTF8_BINARY_RTRIM", "BIGINT"),
       SchemaOfVariantAggTestCase("('true'), ('false'), ('true')", "UTF8_LCASE", "BOOLEAN"),
+      SchemaOfVariantAggTestCase("('true'), ('false'), ('true')", "UTF8_LCASE_RTRIM", "BOOLEAN"),
       SchemaOfVariantAggTestCase("('{\"a\": 1}'), ('{\"b\": true}'), ('{\"c\": 1.23}')",
         "UNICODE", "OBJECT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
+      SchemaOfVariantAggTestCase("('{\"a\": 1}'), ('{\"b\": true}'), ('{\"c\": 1.23}')",
+        "UNICODE_RTRIM", "OBJECT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
       SchemaOfVariantAggTestCase("('{\"A\": \"x\"}'), ('{\"B\": 9.99}'), ('{\"C\": 0}')",
-        "UNICODE_CI", "OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>")
+        "UNICODE_CI", "OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>"),
+      SchemaOfVariantAggTestCase("('{\"A\": \"x\"}'), ('{\"B\": 9.99}'), ('{\"C\": 0}')",
+        "UNICODE_CI_RTRIM", "OBJECT<A: STRING COLLATE UNICODE_CI_RTRIM, B: DECIMAL(3,2), C: BIGINT>"
+      )
     )
 
     // Supported collations
@@ -1701,7 +1954,16 @@ class CollationSQLExpressionsSuite
 
   test("Support InputFileName expression with collation") {
     // Supported collations
-    Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI", "MT_CI_AI").foreach(collationName => {
+    Seq(
+      "UTF8_BINARY",
+      "UTF8_BINARY_RTRIM",
+      "UTF8_LCASE",
+      "UTF8_LCASE_RTRIM",
+      "UNICODE",
+      "UNICODE_RTRIM",
+      "UNICODE_CI",
+      "UNICODE_CI_RTRIM",
+      "MT_CI_AI").foreach(collationName => {
       val query =
         s"""
            |select input_file_name()
@@ -1720,9 +1982,13 @@ class CollationSQLExpressionsSuite
     case class DateFormatTestCase[R](date: String, format: String, collation: String, result: R)
     val testCases = Seq(
       DateFormatTestCase("2021-01-01", "yyyy-MM-dd", "UTF8_BINARY", "2021-01-01"),
+      DateFormatTestCase("2021-01-01", "yyyy-MM-dd", "UTF8_BINARY_RTRIM", "2021-01-01"),
       DateFormatTestCase("2021-01-01", "yyyy-dd", "UTF8_LCASE", "2021-01"),
+      DateFormatTestCase("2021-01-01", "yyyy-dd", "UTF8_LCASE_RTRIM", "2021-01"),
       DateFormatTestCase("2021-01-01", "yyyy-MM-dd", "UNICODE", "2021-01-01"),
-      DateFormatTestCase("2021-01-01", "yyyy", "UNICODE_CI", "2021")
+      DateFormatTestCase("2021-01-01", "yyyy-MM-dd", "UNICODE_RTRIM", "2021-01-01"),
+      DateFormatTestCase("2021-01-01", "yyyy", "UNICODE_CI", "2021"),
+      DateFormatTestCase("2021-01-01", "yyyy", "UNICODE_CI_RTRIM", "2021")
     )
 
     for {
@@ -1749,7 +2015,16 @@ class CollationSQLExpressionsSuite
   }
 
   test("Support mode for string expression with collation - Basic Test") {
-    Seq("utf8_binary", "UTF8_LCASE", "unicode_ci", "unicode", "NL_AI").foreach { collationId =>
+    Seq(
+      "utf8_binary",
+      "utf8_binary_rtrim",
+      "UTF8_LCASE",
+      "UTF8_LCASE_RTRIM",
+      "unicode_ci",
+      "unicode_ci_rtrim",
+      "unicode",
+      "unicode_rtrim",
+      "NL_AI").foreach { collationId =>
       val query = s"SELECT mode(collate('abc', '${collationId}'))"
       checkAnswer(sql(query), Row("abc"))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(collationId)))
@@ -1760,9 +2035,13 @@ class CollationSQLExpressionsSuite
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("UTF8_LCASE_RTRIM", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode_ci_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("SR", Map("c" -> 3L, "č" -> 2L, "Č" -> 2L), "c")
     )
     testCases.foreach(t => {
@@ -1797,9 +2076,14 @@ class CollationSQLExpressionsSuite
 
     val testCasesUTF8String = Seq(
       UTF8StringModeTestCase("utf8_binary", bufferValuesUTF8String, "a"),
+      UTF8StringModeTestCase("utf8_binary_rtrim", bufferValuesUTF8String, "a"),
       UTF8StringModeTestCase("UTF8_LCASE", bufferValuesUTF8String, "b"),
+      UTF8StringModeTestCase("UTF8_LCASE_RTRIM", bufferValuesUTF8String, "b"),
       UTF8StringModeTestCase("unicode_ci", bufferValuesUTF8String, "b"),
-      UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"))
+      UTF8StringModeTestCase("unicode_ci_rtrim", bufferValuesUTF8String, "b"),
+      UTF8StringModeTestCase("unicode", bufferValuesUTF8String, "a"),
+      UTF8StringModeTestCase("unicode_rtrim", bufferValuesUTF8String, "a")
+    )
 
     testCasesUTF8String.foreach ( t => {
       val buffer = new OpenHashMap[AnyRef, Long](5)
@@ -1827,9 +2111,13 @@ class CollationSQLExpressionsSuite
     }
     val testCasesUTF8String = Seq(
       UTF8StringModeTestCase("utf8_binary", bufferValuesComplex, "[a,a,a]"),
+      UTF8StringModeTestCase("utf8_binary_rtrim", bufferValuesComplex, "[a,a,a]"),
       UTF8StringModeTestCase("UTF8_LCASE", bufferValuesComplex, "[b,b,b]"),
+      UTF8StringModeTestCase("UTF8_LCASE_rtrim", bufferValuesComplex, "[b,b,b]"),
       UTF8StringModeTestCase("unicode_ci", bufferValuesComplex, "[b,b,b]"),
-      UTF8StringModeTestCase("unicode", bufferValuesComplex, "[a,a,a]"))
+      UTF8StringModeTestCase("unicode_ci_rtrim", bufferValuesComplex, "[b,b,b]"),
+      UTF8StringModeTestCase("unicode", bufferValuesComplex, "[a,a,a]"),
+      UTF8StringModeTestCase("unicode_rtrim", bufferValuesComplex, "[a,a,a]"))
 
     testCasesUTF8String.foreach { t =>
       val buffer = new OpenHashMap[AnyRef, Long](5)
@@ -1847,9 +2135,13 @@ class CollationSQLExpressionsSuite
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("UTF8_LCASE_RTRIM", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
-      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+      ModeTestCase("unicode_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode_ci_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
     testCases.foreach(t => {
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
@@ -1872,9 +2164,13 @@ class CollationSQLExpressionsSuite
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("UTF8_LCASE_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
-      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+      ModeTestCase("unicode_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode_ci_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
     testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
@@ -1897,9 +2193,13 @@ class CollationSQLExpressionsSuite
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("UTF8_LCASE_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
-      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+      ModeTestCase("unicode_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode_ci_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
     testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
@@ -1923,9 +2223,13 @@ class CollationSQLExpressionsSuite
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("UTF8_LCASE_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
-      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+      ModeTestCase("unicode_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode_ci_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
     testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
@@ -1949,9 +2253,13 @@ class CollationSQLExpressionsSuite
     case class ModeTestCase[R](collationId: String, bufferValues: Map[String, Long], result: R)
     val testCases = Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("utf8_binary_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
       ModeTestCase("UTF8_LCASE", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("UTF8_LCASE_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
-      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
+      ModeTestCase("unicode_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "a"),
+      ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b"),
+      ModeTestCase("unicode_ci_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "b")
     )
     testCases.foreach { t =>
       val valuesToAdd = t.bufferValues.map { case (elt, numRepeats) =>
@@ -1976,8 +2284,11 @@ class CollationSQLExpressionsSuite
     case class ModeTestCase(collationId: String, bufferValues: Map[String, Long], result: String)
     Seq(
       ModeTestCase("utf8_binary", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
+      ModeTestCase("utf8_binary_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
       ModeTestCase("unicode", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
+      ModeTestCase("unicode_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{a -> 1}"),
       ModeTestCase("utf8_lcase", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}"),
+      ModeTestCase("utf8_lcase_rtrim", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}"),
       ModeTestCase("unicode_ci", Map("a" -> 3L, "b" -> 2L, "B" -> 2L), "{b -> 1}")
     ).foreach { t1 =>
       def getValuesToAdd(t: ModeTestCase): String = {
@@ -2006,7 +2317,12 @@ class CollationSQLExpressionsSuite
     for {
       collateKey <- Seq(true, false)
       collateVal <- Seq(true, false)
-      defaultCollation <- Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE")
+      defaultCollation <- Seq(
+        "UTF8_BINARY",
+        "UTF8_BINARY_RTRIM",
+        "UTF8_LCASE",
+        "UTF8_LCASE_RTRIM",
+        "UNICODE")
     } {
       val mapKey = if (collateKey) "'a' collate utf8_lcase" else "'a'"
       val mapVal = if (collateVal) "'b' collate utf8_lcase" else "'b'"
@@ -2760,6 +3076,7 @@ class CollationSQLExpressionsSuite
     }
   }
 
+  // TODO: fix
   test("element_at supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
@@ -2887,6 +3204,7 @@ class CollationSQLExpressionsSuite
     }
   }
 
+  // TODO: fix
   test("zip_with supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
@@ -3144,11 +3462,19 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       HyperLogLogPlusPlusTestCase("utf8_binary", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
         "aA", "Aa", "aa"), Seq(Row(10))),
+      HyperLogLogPlusPlusTestCase("utf8_binary_rtrim", Seq("a", "a", "A", "z", "zz", "ZZ", "w",
+        "AA", "aA", "Aa", "aa"), Seq(Row(10))),
       HyperLogLogPlusPlusTestCase("utf8_lcase", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(5))),
+      HyperLogLogPlusPlusTestCase("utf8_lcase_rtrim", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
         "aA", "Aa", "aa"), Seq(Row(5))),
       HyperLogLogPlusPlusTestCase("UNICODE", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
         "aA", "Aa", "aa"), Seq(Row(10))),
+      HyperLogLogPlusPlusTestCase("UNICODE_RTRIM", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(10))),
       HyperLogLogPlusPlusTestCase("UNICODE_CI", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
+        "aA", "Aa", "aa"), Seq(Row(5))),
+      HyperLogLogPlusPlusTestCase("UNICODE_CI_RTRIM", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
         "aA", "Aa", "aa"), Seq(Row(5)))
     )
 

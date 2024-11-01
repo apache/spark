@@ -3531,9 +3531,9 @@ case class Sentences(
     ArrayType(ArrayType(str.dataType, containsNull = false), containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeWithCollation,
-      StringTypeWithCollation,
-      StringTypeWithCollation
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true)
     )
   override def first: Expression = str
   override def second: Expression = language

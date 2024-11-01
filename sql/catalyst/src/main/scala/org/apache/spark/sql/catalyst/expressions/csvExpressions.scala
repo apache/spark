@@ -147,7 +147,8 @@ case class CsvToStructs(
     converter(parser.parse(csv))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) :: Nil
 
   override def prettyName: String = "from_csv"
 

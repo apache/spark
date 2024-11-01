@@ -66,7 +66,8 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     inputTypes :+ BooleanType :+ BooleanType,
     returnNullable = !failOnError)
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) :: Nil
 
   override def dataType: DataType = VariantType
 
@@ -272,7 +273,7 @@ case class VariantGet(
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(VARIANT_GET)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(VariantType, StringTypeWithCollation)
+    Seq(VariantType, StringTypeWithCollation(supportsTrimCollation = true))
 
   override def prettyName: String = if (failOnError) "variant_get" else "try_variant_get"
 

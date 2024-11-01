@@ -42,7 +42,9 @@ abstract class XPathExtract
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, StringTypeWithCollation)
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!path.foldable) {
@@ -50,7 +52,7 @@ abstract class XPathExtract
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(StringTypeWithCollation),
+          "inputType" -> toSQLType(StringTypeWithCollation(supportsTrimCollation = true)),
           "inputExpr" -> toSQLExpr(path)
         )
       )

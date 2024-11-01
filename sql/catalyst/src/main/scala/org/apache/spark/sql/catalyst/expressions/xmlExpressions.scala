@@ -124,7 +124,8 @@ case class XmlToStructs(
     defineCodeGen(ctx, ev, input => s"(InternalRow) $expr.nullSafeEval($input)")
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) :: Nil
 
   override def prettyName: String = "from_xml"
 
