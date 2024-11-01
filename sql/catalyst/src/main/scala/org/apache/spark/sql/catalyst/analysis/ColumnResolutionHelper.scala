@@ -72,7 +72,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
               newProject.copyTagsFrom(p)
               (newExprs, newProject)
 
-            case a @ Aggregate(groupExprs, aggExprs, child) =>
+            case a @ Aggregate(groupExprs, aggExprs, child, _) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
                 // All the missing attributes are grouping expressions, valid case.
                 (newExprs,
