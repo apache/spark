@@ -316,8 +316,8 @@ case class ListAgg(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  private lazy val dontNeedSaveOrderValue = orderExpressions.isEmpty ||
-    (orderExpressions.size == 1 && orderExpressions.head.semanticEquals(child))
+  /** Indicates that the result of [[child]] is enough for evaluation  */
+  private lazy val dontNeedSaveOrderValue = isOrderCompatible(orderExpressions)
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
@@ -329,7 +329,7 @@ case class ListAgg(
     } else {
       StructType(Seq(
         StructField("value", child.dataType),
-        StructField("sortOrder", orderExpressions.head.dataType)))
+        StructField("sortOrderValue", orderExpressions.head.dataType)))
     }
   }
 
@@ -428,4 +428,20 @@ case class ListAgg(
         orderExpressions = newChildren.drop(2).zip(orderExpressions)
           .map { case (newExpr, oldSortOrder) => oldSortOrder.copy(child = newExpr) }
     )
+
+  /**
+   * Utility func to check if given order is defined and different from [[child]].
+   *
+   * @see [[QueryCompilationErrors.functionAndOrderExpressionMismatchError]]
+   * @see [[dontNeedSaveOrderValue]]
+   */
+  def isOrderCompatible(someOrder: Seq[SortOrder]): Boolean = {
+    if (someOrder.isEmpty) {
+      return true
+    }
+    if (someOrder.size == 1 && someOrder.head.child.semanticEquals(child)) {
+      return true
+    }
+    false
+  }
 }

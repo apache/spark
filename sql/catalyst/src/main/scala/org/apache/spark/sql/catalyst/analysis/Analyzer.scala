@@ -2225,6 +2225,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           if !f.isInstanceOf[SupportsOrderingWithinGroup] && u.orderingWithinGroup.nonEmpty =>
           throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
             func.prettyName, "WITHIN GROUP (ORDER BY ...)")
+        case listAgg: ListAgg
+          if u.isDistinct && !listAgg.isOrderCompatible(u.orderingWithinGroup) =>
+            throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+              listAgg.prettyName, listAgg.child, u.orderingWithinGroup)
         // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
         // the context of a Window clause. They do not need to be wrapped in an
         // AggregateExpression.

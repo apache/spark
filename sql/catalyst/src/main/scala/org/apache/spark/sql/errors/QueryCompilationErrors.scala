@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentif
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SortOrder, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AnyValue
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, InputParameter, Join, LogicalPlan, SerdeInfo, Window}
@@ -1052,13 +1052,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def functionAndOrderExpressionMismatchError(
       functionName: String,
       functionExpr: Expression,
-      orderExpr: Expression): Throwable = {
+      orderExpr: Seq[SortOrder]): Throwable = {
     new AnalysisException(
       errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
         "functionExpr" -> toSQLExpr(functionExpr),
-        "orderExpr" -> toSQLExpr(orderExpr)))
+        "orderExpr" -> orderExpr.map(order => toSQLExpr(order.child)).mkString(",")))
   }
 
   def wrongCommandForObjectTypeError(

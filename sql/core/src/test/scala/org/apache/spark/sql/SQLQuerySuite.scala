@@ -237,8 +237,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         context = ExpectedContext(
           fragment = "listagg(c1)",
           start = 7,
-          stop = 17
-      ))
+          stop = 17))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -252,8 +251,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         context = ExpectedContext(
           fragment = "listagg(c1, ', ')",
           start = 7,
-          stop = 23
-      ))
+          stop = 23))
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -268,18 +266,68 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         context = ExpectedContext(
           fragment = "listagg(b, a)",
           start = 7,
-          stop = 19
-        ))
-//      checkError(
-//        exception = intercept[AnalysisException] {
-//          sql("SELECT LISTAGG(DISTINCT a) WITHIN GROUP (ORDER BY b) FROM df")
-//        },
-//        condition = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
-//        parameters = Map(
-//          "functionName" -> "`LISTAGG`",
-//          "functionExpr" -> "\"a\"",
-//          "orderExpr" -> "\"b\""))
-//
+          stop = 19))
+
+      checkAnswer(
+        sql("select listagg(a) over (order by a) from df"),
+        Row(null) :: Row("a,a") :: Row("a,a") :: Row("a,a,b,b") :: Row("a,a,b,b") :: Nil)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select listagg(a) within group (order by a) over (order by a) from df")
+        },
+        condition = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+        parameters = Map("aggFunc" -> "\"listagg(a, ,, a)\""),
+        context = ExpectedContext(
+          fragment = "listagg(a) within group (order by a) over (order by a)",
+          start = 7,
+          stop = 60))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select listagg(distinct a) over (order by a) from df")
+        },
+        condition = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+        parameters = Map("windowExpr" ->
+          ("\"listagg(DISTINCT a, ,) " +
+          "OVER (ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"")),
+        context = ExpectedContext(
+          fragment = "listagg(distinct a) over (order by a)",
+          start = 7,
+          stop = 43))
+
+      checkAnswer(
+        sql("select listagg(distinct a) within group (order by a DESC) from df"),
+        Row("b,a") :: Nil)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select listagg(distinct a) within group (order by b) from df")
+        },
+        condition = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
+        parameters = Map(
+          "functionName" -> "`listagg`",
+          "functionExpr" -> "\"a\"",
+          "orderExpr" -> "\"b\""),
+        context = ExpectedContext(
+          fragment = "listagg(distinct a) within group (order by b)",
+          start = 7,
+          stop = 51))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select listagg(distinct a) within group (order by a, b) from df")
+        },
+        condition = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
+        parameters = Map(
+          "functionName" -> "`listagg`",
+          "functionExpr" -> "\"a\"",
+          "orderExpr" -> "\"a\",\"b\""),
+        context = ExpectedContext(
+          fragment = "listagg(distinct a) within group (order by a, b)",
+          start = 7,
+          stop = 54))
+
       Seq((1, true), (2, false), (3, false)).toDF("a", "b").createOrReplaceTempView("df2")
 
       checkAnswer(
