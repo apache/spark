@@ -2244,7 +2244,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // This test verifies that a thread that locks then unlocks the db and then
     // fires a completion listener (Thread 1) does not unlock the lock validly
     // acquired by another thread (Thread 2).
-    // Thread 3 verifies that Thread 2 still holds the lock by timing out.
     //
     // Timeline of this test (* means thread is active):
     // STATE | MAIN             | THREAD 1         | THREAD 2         |
