@@ -139,6 +139,13 @@ class StatefulProcessorHandleImpl(
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
+    getValueState(stateName, ttlConfig)(valEncoder)
+  }
+
+  override def getValueState[T: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): ValueState[T] = {
+    val stateEncoder = encoderFor[T].asInstanceOf[ExpressionEncoder[Any]]
     verifyStateVarOperations("get_value_state", CREATED)
     val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
       false
@@ -150,24 +157,17 @@ class StatefulProcessorHandleImpl(
       validateTTLConfig(ttlConfig, stateName)
       assert(batchTimestampMs.isDefined)
       val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-      keyEncoder, valEncoder, ttlConfig, batchTimestampMs.get, metrics)
+      keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
       ttlStates.add(valueStateWithTTL)
       TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
       valueStateWithTTL
     } else {
       val valueStateWithoutTTL = new ValueStateImpl[T](store, stateName,
-        keyEncoder, valEncoder, metrics)
+        keyEncoder, stateEncoder, metrics)
       TWSMetricsUtils.incrementMetric(metrics, "numValueStateVars")
       valueStateWithoutTTL
     }
     result
-  }
-
-  override def getValueState[T: Encoder](
-      stateName: String,
-      ttlConfig: TTLConfig): ValueState[T] = {
-    val encoder = encoderFor[T]
-    getValueState(stateName, encoder, ttlConfig)
   }
 
   override def getQueryInfo(): QueryInfo = currQueryInfo
@@ -364,6 +364,13 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
       stateName: String,
       valEncoder: Encoder[T],
       ttlConfig: TTLConfig): ValueState[T] = {
+    getValueState(stateName, ttlConfig)(valEncoder)
+  }
+
+  override def getValueState[T: Encoder](
+      stateName: String,
+      ttlConfig: TTLConfig): ValueState[T] = {
+    val stateEncoder = encoderFor[T]
     verifyStateVarOperations("get_value_state", PRE_INIT)
     val ttlEnabled = if (ttlConfig.ttlDuration != null && ttlConfig.ttlDuration.isZero) {
       false
@@ -372,20 +379,13 @@ class DriverStatefulProcessorHandleImpl(timeMode: TimeMode, keyExprEnc: Expressi
     }
 
     val colFamilySchema = StateStoreColumnFamilySchemaUtils.
-      getValueStateSchema(stateName, keyExprEnc, valEncoder, ttlEnabled)
+      getValueStateSchema(stateName, keyExprEnc, stateEncoder, ttlEnabled)
     checkIfDuplicateVariableDefined(stateName)
     columnFamilySchemas.put(stateName, colFamilySchema)
     val stateVariableInfo = TransformWithStateVariableUtils.
       getValueState(stateName, ttlEnabled = ttlEnabled)
     stateVariableInfos.put(stateName, stateVariableInfo)
     null.asInstanceOf[ValueState[T]]
-  }
-
-  override def getValueState[T: Encoder](
-      stateName: String,
-      ttlConfig: TTLConfig): ValueState[T] = {
-    val valEncoder = encoderFor[T]
-    getValueState(stateName, valEncoder, ttlConfig)
   }
 
   override def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T] = {
