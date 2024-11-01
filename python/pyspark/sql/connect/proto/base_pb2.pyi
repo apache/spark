@@ -319,6 +319,13 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self,
         ) -> None: ...
 
+    class SparkWebUrl(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
     class DDLParse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -494,6 +501,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    SPARK_WEB_URL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -542,6 +550,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanRequest.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
+    @property
+    def spark_web_url(self) -> global___AnalyzePlanRequest.SparkWebUrl: ...
     def __init__(
         self,
         *,
@@ -562,6 +572,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         persist: global___AnalyzePlanRequest.Persist | None = ...,
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
+        spark_web_url: global___AnalyzePlanRequest.SparkWebUrl | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -598,6 +609,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"semantic_hash",
             "spark_version",
             b"spark_version",
+            "spark_web_url",
+            b"spark_web_url",
             "tree_string",
             b"tree_string",
             "unpersist",
@@ -643,6 +656,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"session_id",
             "spark_version",
             b"spark_version",
+            "spark_web_url",
+            b"spark_web_url",
             "tree_string",
             b"tree_string",
             "unpersist",
@@ -680,6 +695,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "spark_web_url",
         ]
         | None
     ): ...
@@ -798,6 +814,28 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["version", b"version"]
         ) -> None: ...
 
+    class SparkWebUrl(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        WEB_URL_FIELD_NUMBER: builtins.int
+        web_url: builtins.str
+        def __init__(
+            self,
+            *,
+            web_url: builtins.str | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_web_url", b"_web_url", "web_url", b"web_url"],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["_web_url", b"_web_url", "web_url", b"web_url"],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_web_url", b"_web_url"]
+        ) -> typing_extensions.Literal["web_url"] | None: ...
+
     class DDLParse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -892,6 +930,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    SPARK_WEB_URL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     server_side_session_id: builtins.str
     """Server-side generated idempotency key that the client can use to assert that the server side
@@ -923,6 +962,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanResponse.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
+    @property
+    def spark_web_url(self) -> global___AnalyzePlanResponse.SparkWebUrl: ...
     def __init__(
         self,
         *,
@@ -941,6 +982,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         persist: global___AnalyzePlanResponse.Persist | None = ...,
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
+        spark_web_url: global___AnalyzePlanResponse.SparkWebUrl | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -969,6 +1011,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"semantic_hash",
             "spark_version",
             b"spark_version",
+            "spark_web_url",
+            b"spark_web_url",
             "tree_string",
             b"tree_string",
             "unpersist",
@@ -1006,6 +1050,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"session_id",
             "spark_version",
             b"spark_version",
+            "spark_web_url",
+            b"spark_web_url",
             "tree_string",
             b"tree_string",
             "unpersist",
@@ -1029,6 +1075,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             "persist",
             "unpersist",
             "get_storage_level",
+            "spark_web_url",
         ]
         | None
     ): ...
