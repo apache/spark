@@ -999,7 +999,8 @@ class RocksDB(
       }
 
       if (release) {
-        logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD, AcquiredThreadInfo())}. " +
+        logInfo(log"RocksDB instance was released by " +
+          log"${MDC(LogKeys.THREAD, AcquiredThreadInfo())}. " +
           log"acquiredThreadInfo: ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
           log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
         acquiredThreadInfo = null
@@ -1031,7 +1032,8 @@ class RocksDB(
     }
   }
 
-  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] = acquireLock.synchronized {
+  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] =
+      acquireLock.synchronized {
     Option(acquiredThreadInfo).map(_.copy())
   }
 

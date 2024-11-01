@@ -2246,21 +2246,26 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // acquired by another thread (Thread 2).
     // Thread 3 verifies that Thread 2 still holds the lock by timing out.
     //
-    // Timeline of this test:
-    // STATE | MAIN             | THREAD 1         | THREAD 2         | THREAD 3
-    // ------| ---------------- | ---------------- | ---------------- | ----------------
-    // 0.    | wait for s2      | Load, commit     |                  |
-    //       |                  | wait for s1      | load, signal s1  |
-    // 1.    |                  | task complete    | wait for s3      |
-    //       |                  | signal s2, END   |                  |
-    // 2.    | start thread 3   |                  |                  | load, commit
-    //       | wait for timeout |                  |                  | timeout, END
-    //       | signal s3        |                  |                  |
-    // 3.    | wait for s4      |                  | commit           |
-    //       |                  |                  | signal s4, END   |
-    // 4.    | close db, END    |                  |                  |
+    // Timeline of this test (* means thread is active):
+    // STATE | MAIN             | THREAD 1         | THREAD 2         |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 0.    | wait for s3      | *load, commit    | wait for s1      |
+    //       |                  | *signal s1       |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 1.    |                  | wait for s2      | *load, signal s2 |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 2.    |                  | *task complete   | wait for s4      |
+    //       |                  | *signal s3, END  |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 3.    | *verify locked   |                  |                  |
+    //       | *signal s4       |                  |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 4.    | wait for s5      |                  | *commit          |
+    //       |                  |                  | *signal s5, END  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 5.    | *close db, END   |                  |                  |
     //
-    // NOTE: state 3 and 4 are only for cleanup
+    // NOTE: state 4 and 5 are only for cleanup
 
     // Create a custom ExecutionContext with 3 threads
     implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
@@ -2289,93 +2294,87 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
           val taskContext = TaskContext.empty()
           TaskContext.setTaskContext(taskContext)
 
-          // Simulate a task that loads and commits, db should be unlocked after
-          db.load(0)
-          db.put("a", "1")
-          db.commit()
-
-          Future { // THREAD 2
-            // Set thread 2's task context so that it is not a clone of thread 1's
-            // so it won't be marked as complete
-            val taskContext = TaskContext.empty()
-            TaskContext.setTaskContext(taskContext)
-
-            // Load the db and signal that we have entered state 1
-            stateLock.synchronized {
-              db.load(1)
-
-              // Ensure we have the lock
-              assertAcquiredThreadIsCurrentThread(db)
-
-              state = 1
-              stateLock.notifyAll()
-            }
-
-            stateLock.synchronized {
-              // Wait until we have entered state 3 (thread 1 completed and
-              // thread 3 timed out waiting for our lock)
-              while (state != 3) {
-                stateLock.wait()
-              }
-
-              // Ensure we still have the lock
-              assertAcquiredThreadIsCurrentThread(db)
-
-              // commit and signal that we have entered state 4
-              db.commit()
-              state = 4
-              stateLock.notifyAll()
-            }
-          }
-
           stateLock.synchronized {
-            // Wait until we have entered state 1 (thread 2 has loaded db and acquired lock)
-            while (state != 1) {
+            // -------------------- STATE 0 --------------------
+            // Simulate a task that loads and commits, db should be unlocked after
+            db.load(0)
+            db.put("a", "1")
+            db.commit()
+            // Signal that we have entered state 1
+            state = 1
+            stateLock.notifyAll()
+
+            // -------------------- STATE 2 --------------------
+            // Wait until we have entered state 2 (thread 2 has loaded db and acquired lock)
+            while (state != 2) {
               stateLock.wait()
             }
 
             // thread 1's task context is marked as complete and signal
-            // that we have entered state 2
+            // that we have entered state 3
             // At this point, thread 2 should still hold the DB lock.
             taskContext.markTaskCompleted(None)
-            state = 2
+            state = 3
             stateLock.notifyAll()
           }
         }
 
-        stateLock.synchronized {
-          // Wait until we have entered state 2 (thread 1 is complete)
-          while (state != 2) {
-            stateLock.wait()
-          }
-        }
-
-        // Thread 3 tries to load db, but it is still locked by thread 2
-        val thread3 = Future {
+        Future { // THREAD 2
+          // Set thread 2's task context so that it is not a clone of thread 1's
+          // so it won't be marked as complete
           val taskContext = TaskContext.empty()
           TaskContext.setTaskContext(taskContext)
 
-          db.load(1)
-          db.commit()
+          stateLock.synchronized {
+            // -------------------- STATE 1 --------------------
+            // Wait until we have entered state 1 (thread 1 finished loading and committing)
+            while (state != 1) {
+              stateLock.wait()
+            }
+
+            // Load the db and signal that we have entered state 2
+            db.load(1)
+            assertAcquiredThreadIsCurrentThread(db)
+            state = 2
+            stateLock.notifyAll()
+
+            // -------------------- STATE 4 --------------------
+            // Wait until we have entered state 4 (thread 1 completed and
+            // main thread confirmed that lock is held)
+            while (state != 4) {
+              stateLock.wait()
+            }
+
+            // Ensure we still have the lock
+            assertAcquiredThreadIsCurrentThread(db)
+
+            // commit and signal that we have entered state 5
+            db.commit()
+            state = 5
+            stateLock.notifyAll()
+          }
         }
 
-        // Therefore it should timeout
-        val e = intercept[SparkException] {
-          ThreadUtils.awaitResult(thread3, 10.seconds)
-        }
-        assert(e.getCause.getMessage.contains(
-          "CANNOT_LOAD_STATE_STORE.UNRELEASED_THREAD_ERROR"))
-
+        // MAIN THREAD
         stateLock.synchronized {
-          // Signal that we have entered state 3 (thread 2 can now release lock)
-          state = 3
+          // -------------------- STATE 3 --------------------
+          // Wait until we have entered state 3 (thread 1 is complete)
+          while (state != 3) {
+            stateLock.wait()
+          }
+
+          // Verify that the lock is being held
+          val threadInfo = db.getAcquiredThreadInfo()
+          assert(threadInfo.nonEmpty, s"acquiredThreadInfo was None when it should be Some")
+
+          // Signal that we have entered state 4 (thread 2 can now release lock)
+          state = 4
           stateLock.notifyAll()
-        }
 
-        stateLock.synchronized {
-          // Wait until we have entered state 4 (thread 2 has released lock)
+          // -------------------- STATE 5 --------------------
+          // Wait until we have entered state 5 (thread 2 has released lock)
           // so that we can clean up
-          while (state != 4) {
+          while (state != 5) {
             stateLock.wait()
           }
         }
@@ -2415,11 +2414,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
         ThreadUtils.awaitResult(fut, timeout)
 
-        // We should be able to load the db here because the
-        // above task failed
-        db.load(0)
-        assertAcquiredThreadIsCurrentThread(db)
-        db.commit()
+        // Assert that db is not locked
+        val threadInfo = db.getAcquiredThreadInfo()
+        assert(threadInfo.isEmpty, s"acquiredThreadInfo should be None but was $threadInfo")
       }
     }
   }
