@@ -52,7 +52,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
 
     plan.transform {
       case a @ Aggregate(_, aggExprs, child @ PhysicalOperation(
-          projectList, filters, PartitionedRelation(partAttrs, rel))) =>
+          projectList, filters, PartitionedRelation(partAttrs, rel)), _) =>
         // We only apply this optimization when only partitioned attributes are scanned.
         if (AttributeSet((projectList ++ filters).flatMap(_.references)).subsetOf(partAttrs)) {
           // The project list and filters all only refer to partition attributes, which means the
