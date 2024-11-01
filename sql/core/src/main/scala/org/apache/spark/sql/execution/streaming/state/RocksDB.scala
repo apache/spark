@@ -291,6 +291,7 @@ class RocksDB(
     acquire(LoadStore)
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)}")
+    // Updating the current version, so the mapping can correctly identify reusable files.
     rocksDBFileMapping.currentVersion = version
     try {
       if (loadedVersion != version ||
