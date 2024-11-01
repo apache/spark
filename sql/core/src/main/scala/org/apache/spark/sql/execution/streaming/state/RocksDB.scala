@@ -978,33 +978,33 @@ class RocksDB(
       opType: RocksDBOpType,
       releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
     if (acquiredThreadInfo != null) {
-      if (releaseForThreadOpt.nonEmpty) {
-        if (releaseForThreadOpt.get.threadRef.get.isEmpty) {
+      val release = releaseForThreadOpt match {
+        case Some(releaseForThread) if releaseForThread.threadRef.get.isEmpty =>
           logInfo(log"Thread reference is empty when attempting to release for" +
             log" opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
             log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
-          return
-        }
-
-        if (acquiredThreadInfo.threadRef.get.isDefined
-          // NOTE: we compare the entire acquiredThreadInfo object to ensure that we are
-          // releasing not only for the right thread but the right task as well. This is
-          // inconsistent with the logic for acquire which uses only the thread ID, consider
-          // updating this in future.
-          && acquiredThreadInfo != releaseForThreadOpt.get) {
+          false
+        // NOTE: we compare the entire acquiredThreadInfo object to ensure that we are
+        // releasing not only for the right thread but the right task as well. This is
+        // inconsistent with the logic for acquire which uses only the thread ID, consider
+        // updating this in future.
+        case Some(releaseForThread) if acquiredThreadInfo != releaseForThread =>
           logInfo(log"Thread info for release" +
             log" ${MDC(LogKeys.THREAD, releaseForThreadOpt.get)}" +
             log" does not match the acquired thread when attempting to" +
             log" release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
             log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
-          return
-        }
+          false
+        case _ => true
       }
 
-      logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD,
-        acquiredThreadInfo)} " + log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-      acquiredThreadInfo = null
-      acquireLock.notifyAll()
+      if (release) {
+        logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD, AcquiredThreadInfo())}. " +
+          log"acquiredThreadInfo: ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
+          log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
+        acquiredThreadInfo = null
+        acquireLock.notifyAll()
+      }
     }
   }
 
