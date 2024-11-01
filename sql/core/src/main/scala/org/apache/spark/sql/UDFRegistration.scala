@@ -136,19 +136,8 @@ class UDFRegistration private[sql] (session: SparkSession, functionRegistry: Fun
   }
 
   // scalastyle:off line.size.limit
-  /**
-   * Register a Java UDF class using it's class name. The class must implement one of the UDF
-   * interfaces in the [[org.apache.spark.sql.api.java]] package, and discoverable by the current
-   * session's class loader.
-   *
-   * @param name           Name of the UDF.
-   * @param className      Fully qualified class name of the UDF.
-   * @param returnDataType Return type of UDF. If it is `null`, Spark would try to infer
-   *                       via reflection.
-   *
-   * @since 4.0.0
-   */
-  def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
+
+  override def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
     try {
       val clazz = session.artifactManager.classloader.loadClass(className)
       val udfInterfaces = clazz.getGenericInterfaces
