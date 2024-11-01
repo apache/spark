@@ -19,9 +19,13 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal}
+import org.apache.spark.sql.catalyst.parser.SingleStatement
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
 
@@ -636,3 +640,96 @@ class LoopStatementExec(
     body.reset()
   }
 }
+
+/**
+ * Executable node for WhileStatement.
+ * @param condition Executable node for the condition.
+ * @param body Executable node for the body.
+ * @param label Label set to WhileStatement by user or None otherwise.
+ * @param session Spark session that SQL script is executed within.
+ */
+class ForStatementExec(
+  query: SingleStatementExec,
+  identifier: Option[String],
+  body: CompoundBodyExec,
+  label: Option[String],
+  session: SparkSession) extends NonLeafStatementExec {
+
+  private val queryDataframe = {
+    query.isExecuted = true
+    Dataset.ofRows(session, query.parsedPlan)
+  }
+  private lazy val queryResult = queryDataframe.collect()
+
+  private object ForState extends Enumeration {
+    val VariableAssignment, Body = Value
+  }
+  private var state = ForState.VariableAssignment
+  private var currRow = 0
+
+  /**
+   * Loop can be interrupted by LeaveStatementExec
+   */
+  private var interrupted: Boolean = false
+
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+      override def hasNext: Boolean = !interrupted && currRow < queryResult.length
+
+      override def next(): CompoundStatementExec = state match {
+        case ForState.VariableAssignment =>
+
+          val namedStructArgs: Array[Expression] = queryDataframe.schema.names.flatMap { colName =>
+            List(UnresolvedAttribute(colName), Literal(queryResult(0).getAs(colName)))
+          }
+          val namedStruct = Project(
+            Seq(Alias(CreateNamedStruct(namedStructArgs), identifier.get)()),
+            OneRowRelation())
+
+          val setIdentifierToCurrentRow =
+            SetVariable(Seq(UnresolvedAttribute(identifier.get)), namedStruct)
+
+          val setExec = new SingleStatementExec(setIdentifierToCurrentRow, Origin(), false)
+
+          state = ForState.Body
+          currRow += 1
+          body.reset()
+
+          setExec
+        case ForState.Body =>
+          val retStmt = body.getTreeIterator.next()
+
+          // Handle LEAVE or ITERATE statement if it has been encountered.
+          retStmt match {
+            case leaveStatementExec: LeaveStatementExec if !leaveStatementExec.hasBeenMatched =>
+              if (label.contains(leaveStatementExec.label)) {
+                leaveStatementExec.hasBeenMatched = true
+              }
+              interrupted = true
+              return retStmt
+            case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
+              if (label.contains(iterStatementExec.label)) {
+                iterStatementExec.hasBeenMatched = true
+              }
+              state = ForState.VariableAssignment
+              return retStmt
+            case _ =>
+          }
+
+          if (!body.getTreeIterator.hasNext) {
+            state = ForState.VariableAssignment
+          }
+          retStmt
+      }
+    }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    state = ForState.VariableAssignment
+    body.reset()
+  }
+}
+
+//        val attributes = DataTypeUtils.toAttributes(queryResult.head.schema)
+//        LocalRelation.fromExternalRows(attributes, Seq(queryResult(0)))

@@ -347,6 +347,16 @@ class AstBuilder extends DataTypeAstBuilder
     RepeatStatement(condition, body, Some(labelText))
   }
 
+  override def visitForStatement(ctx: ForStatementContext): ForStatement = {
+    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+
+    val query = SingleStatement(visitQuery(ctx.query()))
+    val identifier = Option(ctx.multipartIdentifier()).map(_.getText)
+    val body = visitCompoundBody(ctx.compoundBody())
+
+    ForStatement(query, identifier, body, Some(labelText))
+  }
+
   private def leaveOrIterateContextHasLabel(
       ctx: RuleContext, label: String, isIterate: Boolean): Boolean = {
     ctx match {
@@ -366,6 +376,10 @@ class AstBuilder extends DataTypeAstBuilder
           c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
         => true
       case c: LoopStatementContext
+        if Option(c.beginLabel()).isDefined &&
+          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        => true
+      case c: ForStatementContext
         if Option(c.beginLabel()).isDefined &&
           c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
         => true

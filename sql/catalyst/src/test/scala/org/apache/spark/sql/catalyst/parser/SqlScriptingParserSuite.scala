@@ -40,6 +40,28 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   }
 
   // Tests
+  test("testtest") {
+    val sqlScriptText =
+      """SELECT named_struct('a', 1, 'b', 2, 'c', 3); """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[ForStatement])
+  }
+
+  test("initial for") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  FOR x AS (SELECT 1) DO
+        |    SELECT 1;
+        |    SELECT 2;
+        |  END FOR;
+        |END""".stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[ForStatement])
+  }
+
   test("single select") {
     val sqlScriptText = "SELECT 1;"
     val statement = parsePlan(sqlScriptText)

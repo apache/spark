@@ -70,6 +70,7 @@ compoundStatement
     | leaveStatement
     | iterateStatement
     | loopStatement
+    | forStatement
     ;
 
 setStatementWithOptionalVarKeyword
@@ -109,6 +110,10 @@ caseStatement
 
 loopStatement
     : beginLabel? LOOP compoundBody END LOOP endLabel?
+    ;
+
+forStatement
+    : beginLabel? FOR (multipartIdentifier AS)? query DO compoundBody END FOR endLabel?
     ;
 
 singleStatement

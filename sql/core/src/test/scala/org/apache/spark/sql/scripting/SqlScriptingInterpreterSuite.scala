@@ -60,6 +60,30 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
   }
 
+
+  test("for test") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (a INT, b STRING, c DOUBLE) USING parquet;
+          | INSERT INTO t VALUES (1, 'a', 1.0);
+          | INSERT INTO t VALUES (2, 'b', 2.0);
+          | FOR x AS SELECT * FROM t DO
+          |   SELECT x;
+          | END FOR;
+          |END
+          |""".stripMargin
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // select with filter
+        Seq(Row(1)) // select
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {

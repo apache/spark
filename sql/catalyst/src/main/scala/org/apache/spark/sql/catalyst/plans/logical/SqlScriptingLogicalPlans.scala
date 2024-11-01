@@ -267,3 +267,18 @@ case class LoopStatement(
     LoopStatement(newChildren(0).asInstanceOf[CompoundBody], label)
   }
 }
+
+/**
+ * Logical operator for REPEAT statement.
+ * @param body Compound body is a collection of statements that are executed once no matter what,
+ *             and then as long as condition is false.
+ * @param label An optional label for the loop which is unique amongst all labels for statements
+ *              within which the REPEAT statement is contained.
+ *              If an end label is specified it must match the beginning label.
+ *              The label can be used to LEAVE or ITERATE the loop.
+ */
+case class ForStatement(
+  query: SingleStatement,
+  identifier: Option[String],
+  body: CompoundBody,
+  label: Option[String]) extends CompoundPlanStatement

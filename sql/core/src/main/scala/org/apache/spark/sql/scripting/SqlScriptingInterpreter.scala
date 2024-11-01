@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.catalyst.trees.Origin
 
 /**
@@ -122,6 +122,12 @@ case class SqlScriptingInterpreter() {
       case LoopStatement(body, label) =>
         val bodyExec = transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec]
         new LoopStatementExec(bodyExec, label)
+
+      case ForStatement(query, identifier, body, label) =>
+        val queryExec = new SingleStatementExec(query.parsedPlan, query.origin, isInternal = false)
+        val bodyExec =
+          transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec]
+        new ForStatementExec(queryExec, identifier, bodyExec, label, session)
 
       case leaveStatement: LeaveStatement =>
         new LeaveStatementExec(leaveStatement.label)
