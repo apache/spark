@@ -92,7 +92,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
     val log = s" classloader for session ${session.sessionUUID} because " +
       s"sessionIsolated=$sessionIsolated and " +
       s"shouldApplyClassLoader=${shouldApplyClassLoader.get()}."
-    if (sessionIsolated || shouldApplyClassLoader.get()) {
+    if (sessionIsolated && shouldApplyClassLoader.get()) {
       logDebug(s"Applying $log")
       Utils.withContextClassLoader(classloader) {
         f
