@@ -373,6 +373,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.newDataset"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession.execute"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.webUrl"),
       // Experimental
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession.registerClassFinder"),
