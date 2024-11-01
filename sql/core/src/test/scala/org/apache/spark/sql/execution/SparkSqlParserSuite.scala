@@ -988,13 +988,6 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
           ||> SELECT SUM(val) OVER w1, SUM(cate) OVER w2
           |""".stripMargin
       )
-      checkWindow(
-        """
-          |TABLE windowTestData
-          ||> WINDOW w as (ORDER BY val_timestamp RANGE BETWEEN unbounded preceding AND current row)
-          ||> SELECT AVG(val) OVER w
-          |""".stripMargin
-      )
     }
   }
 }

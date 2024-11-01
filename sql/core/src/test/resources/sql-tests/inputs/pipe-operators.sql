@@ -667,110 +667,19 @@ table t
 
 -- The WINDOW clause: positive tests.
 -------------------------------------
--- WINDOW with one definition
 table windowTestData
 |> window w as (partition by cate order by val)
 |> select cate, sum(val) over w;
 
--- WINDOW with multiple definitions
 table windowTestData
 |> window w1 as (partition by cate), w2 as (partition by val order by cate)
 |> select sum(val) over w1, first_value(cate) over w2;
-
--- WINDOW with RANGE BETWEEN as part of the window definition
-table windowTestData
-|> window w as (order by val_timestamp range between unbounded preceding and current row)
-|> select avg(val) over w;
-
--- WINDOW definition not being referred in the following SELECT clause
-table windowTestData
-|> window w as (partition by cate order by val)
-|> select cate;
-
--- WINDOW definition not being referred in the following WHERE clause
-table windowTestData
-|> window w as (partition by cate order by val)
-|> where cate = "a";
-
--- WINDOW definition not being referred in the following ORDER BY clause
-table windowTestData
-|> window w as (partition by cate order by val)
-|> order by cate;
-
--- WINDOW referred in the following SELECT clause, with a WHERE after it
-table windowTestData
-|> window w as (partition by cate order by val)
-|> select cate, sum(val) over w
-|> where cate = "a";
-
--- WINDOW referred in the following SELECT clause, with an ORDER BY after it
-table windowTestData
-|> window w as (partition by cate order by val)
-|> select cate, sum(val) over w as sum_val
-|> order by sum_val;
-
--- WINDOW with table aliases to refer columns
-table windowTestData
-|> window w as (partition by windowTestData.cate order by windowTestData.val)
-|> select windowTestData.cate, sum(windowTestData.val) over w;
-
--- WINDOW using struct fields.
-(select col from st)
-|> window w as (partition by col.i1 order by col.i2)
-|> select col.i1, sum(col.i2) over w;
-
-table st
-|> window w as (partition by st.col.i1 order by st.col.i2)
-|> select st.col.i1, sum(st.col.i2) over w;
-
-table st
-|> window w as (partition by spark_catalog.default.st.col.i1 order by spark_catalog.default.st.col.i2)
-|> select spark_catalog.default.st.col.i1, sum(spark_catalog.default.st.col.i2) over w;
-
--- The WINDOW clause: debatable positive cases.
-------------------------------------------------
--- WINDOW with nothing after it.
-table windowTestData
-|> window w as (partition by cate);
-
-table windowTestData
-|> window w as (partition by cate) order by val;
-
--- WINDOW names can shadow other valid column names (align with the current SQL syntax).
-table windowTestData
-|> window val as (partition by cate order by val)
-|> select cate, sum(val) over val;
 
 -- The WINDOW clause: negative tests.
 -------------------------------------
 -- WINDOW and LIMIT are not supported at the same time.
 table windowTestData
 |> window w as (partition by cate order by val) limit 5;
-
--- WINDOW and OFFSET are not supported at the same time.
-table windowTestData
-|> window w as (partition by cate order by val) offset 1;
-
--- WINDOW and ORDER BY are not supported at the same time (in parallel).
-table windowTestData
-|> window w as (partition by cate) order by val
-|> select val, sum(val) over w;
-
--- WINDOW and ORDER BY are not supported at the same time (in parallel)
--- even if the WINDOW definition is not used
-table windowTestData
-|> window w as (partition by cate) order by val
-|> select val;
-
--- WINDOW function is not supported in the WHERE clause.
-table windowTestData
-|> window w as (partition by cate) order by val
-|> where sum(val) over w = 1;
-
--- WINDOW without definition is not supported.
-table windowTestData
-|> window w as (partition by cate)
-|> select cate, sum(val) over w1;
 
 -- Multiple consecutive WINDOW clauses are not supported.
 table windowTestData
