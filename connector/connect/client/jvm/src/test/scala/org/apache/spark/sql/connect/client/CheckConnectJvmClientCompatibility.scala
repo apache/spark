@@ -315,7 +315,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.DataStreamReader.validateJsonSchema"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.streaming.DataStreamReader.validateXmlSchema"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroCompressionCodec"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroCompressionCodec"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroDeserializer"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.avro.AvroDeserializer$ArrayDataUpdater"),
@@ -339,7 +340,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.avro.AvroUtils$AvroMatchedField$"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.avro.AvroUtils$AvroSchemaHelper"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.AvroUtils$RowReader"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.avro.AvroUtils$RowReader"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.CustomDecimal"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.avro.CustomDecimal$"),
       ProblemFilters.exclude[MissingClassProblem](
