@@ -1917,38 +1917,26 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 table windowTestData
-|> window w as (partition by cate order by val)
+|> window w as (partition by cte order by val)
 |> select cate, sum(val) over w
 -- !query schema
-struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+struct<>
 -- !query output
-NULL	3
-NULL	NULL
-a	2
-a	2
-a	4
-a	NULL
-b	1
-b	3
-b	6
-
-
--- !query
-table windowTestData
-|> window w1 as (partition by cate), w2 as (partition by val order by cate)
-|> select sum(val) over w1, first_value(cate) over w2
--- !query schema
-struct<sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,first_value(cate) OVER (PARTITION BY val ORDER BY cate ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
--- !query output
-3	NULL
-3	NULL
-4	NULL
-4	a
-4	a
-4	a
-6	NULL
-6	a
-6	a
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clauses" : "the WINDOW clause"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 25,
+    "stopIndex" : 67,
+    "fragment" : "window w as (partition by cte order by val)"
+  } ]
+}
 
 
 -- !query
@@ -1959,11 +1947,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS",
-  "sqlState" : "42000",
+  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "clause1" : "WINDOW",
-    "clause2" : "LIMIT"
+    "clauses" : "the WINDOW clause"
   },
   "queryContext" : [ {
     "objectType" : "",

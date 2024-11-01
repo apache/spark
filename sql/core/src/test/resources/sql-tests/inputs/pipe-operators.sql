@@ -665,27 +665,14 @@ table t
 table t
 |> order by x sort by x;
 
--- The WINDOW clause: positive tests.
--------------------------------------
+-- The WINDOW clause is not supported yet.
 table windowTestData
-|> window w as (partition by cate order by val)
+|> window w as (partition by cte order by val)
 |> select cate, sum(val) over w;
 
-table windowTestData
-|> window w1 as (partition by cate), w2 as (partition by val order by cate)
-|> select sum(val) over w1, first_value(cate) over w2;
-
--- The WINDOW clause: negative tests.
--------------------------------------
 -- WINDOW and LIMIT are not supported at the same time.
 table windowTestData
 |> window w as (partition by cate order by val) limit 5;
-
--- multiple WINDOW clause are not supported.
-table windowTestData
-|> window w1 as (partition by cate)
-|> window w2 as (partition by val order by cate)
-|> select sum(val) over w1, first_value(cate) over w2;
 
 -- Aggregation operators: positive tests.
 -----------------------------------------

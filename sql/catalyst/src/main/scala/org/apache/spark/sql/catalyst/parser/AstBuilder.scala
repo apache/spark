@@ -1023,25 +1023,19 @@ class AstBuilder extends DataTypeAstBuilder
 
     // WINDOWS
     val withWindow = withOrder.optionalMap(windowClause) {
-      if (forPipeOperators && clause.nonEmpty && windowClause != null) {
-        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-          ctx, clause, PipeOperators.windowClause)
-      }
       withWindowClause
+    }
+    if (forPipeOperators && windowClause != null) {
+      throw QueryParsingErrors.clausesWithPipeOperatorsUnsupportedError(
+        ctx, s"the ${PipeOperators.windowClause} clause")
     }
 
     // OFFSET
     // - OFFSET 0 is the same as omitting the OFFSET clause
     val withOffset = withWindow.optional(offset) {
-      if (forPipeOperators) {
-        if (clause.nonEmpty) {
-          throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-            ctx, clause, PipeOperators.offsetClause)
-        } else if (windowClause != null) {
-          // WINDOW and OFFSET are not supported at the same time
-          throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-            ctx, PipeOperators.windowClause, PipeOperators.offsetClause)
-        }
+      if (forPipeOperators && clause.nonEmpty) {
+        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+          ctx, clause, PipeOperators.offsetClause)
       }
       clause = PipeOperators.offsetClause
       Offset(typedVisit(offset), withWindow)
@@ -1050,15 +1044,9 @@ class AstBuilder extends DataTypeAstBuilder
     // LIMIT
     // - LIMIT ALL is the same as omitting the LIMIT clause
     withOffset.optional(limit) {
-      if (forPipeOperators) {
-        if (clause.nonEmpty && clause != PipeOperators.offsetClause) {
-          throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-            ctx, clause, PipeOperators.limitClause)
-        } else if (windowClause != null) {
-          // WINDOW and LIMIT are not supported at the same time
-          throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
-            ctx, PipeOperators.windowClause, PipeOperators.limitClause)
-        }
+      if (forPipeOperators && clause.nonEmpty && clause != PipeOperators.offsetClause) {
+        throw QueryParsingErrors.multipleQueryResultClausesWithPipeOperatorsUnsupportedError(
+          ctx, clause, PipeOperators.limitClause)
       }
       clause = PipeOperators.limitClause
       Limit(typedVisit(limit), withOffset)
@@ -5886,72 +5874,53 @@ class AstBuilder extends DataTypeAstBuilder
     if (!SQLConf.get.getConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED)) {
       operationNotAllowed("Operator pipe SQL syntax using |>", ctx)
     }
-
-    // Extract the base child and a list of WithWindowDefinition nodes from the plan
-    var baseChild = left
-    var withWindowDefinitions = List.empty[WithWindowDefinition]
-    while (baseChild.isInstanceOf[WithWindowDefinition]) {
-      val wwd = baseChild.asInstanceOf[WithWindowDefinition]
-      withWindowDefinitions = withWindowDefinitions :+ wwd
-      baseChild = wwd.child
+    // This helper function adds a table subquery boundary between the new operator to be added
+    // (such as a filter or sort) and the input plan if one does not already exist. This helps the
+    // analyzer behave as if we had added the corresponding SQL clause after a table subquery
+    // containing the input plan.
+    def withSubqueryAlias(): LogicalPlan = left match {
+      case s: SubqueryAlias =>
+        s
+      case u: UnresolvedRelation =>
+        u
+      case _ =>
+        SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
     }
-
-    // Process the base child
-    val newChild = {
-      // This helper function adds a table subquery boundary between the new operator to be added
-      // (such as a filter or sort) and the input plan if one does not already exist. This helps the
-      // analyzer behave as if we had added the corresponding SQL clause after a table subquery
-      // containing the input plan.
-      def withSubqueryAlias(): LogicalPlan = baseChild match {
-        case s: SubqueryAlias =>
-          s
-        case u: UnresolvedRelation =>
-          u
-        case _ =>
-          SubqueryAlias(SubqueryAlias.generateSubqueryName(), baseChild)
+    Option(ctx.selectClause).map { c =>
+      withSelectQuerySpecification(
+        ctx = ctx,
+        selectClause = c,
+        lateralView = new java.util.ArrayList[LateralViewContext](),
+        whereClause = null,
+        aggregationClause = null,
+        havingClause = null,
+        windowClause = null,
+        relation = left,
+        isPipeOperatorSelect = true)
+    }.getOrElse(Option(ctx.whereClause).map { c =>
+      withWhereClause(c, withSubqueryAlias())
+    }.getOrElse(Option(ctx.pivotClause()).map { c =>
+      if (ctx.unpivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
       }
-
-      Option(ctx.selectClause).map { c =>
-        withSelectQuerySpecification(
-          ctx = ctx,
-          selectClause = c,
-          lateralView = new java.util.ArrayList[LateralViewContext](),
-          whereClause = null,
-          aggregationClause = null,
-          havingClause = null,
-          windowClause = null,
-          relation = baseChild,
-          isPipeOperatorSelect = true)
-      }.getOrElse(Option(ctx.whereClause).map { c =>
-        withWhereClause(c, withSubqueryAlias())
-      }.getOrElse(Option(ctx.pivotClause()).map { c =>
-        if (ctx.unpivotClause() != null) {
-          throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
-        }
-        withPivot(c, baseChild)
-      }.getOrElse(Option(ctx.unpivotClause()).map { c =>
-        if (ctx.pivotClause() != null) {
-          throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
-        }
-        withUnpivot(c, baseChild)
-      }.getOrElse(Option(ctx.sample).map { c =>
-        withSample(c, baseChild)
-      }.getOrElse(Option(ctx.joinRelation()).map { c =>
-        withJoinRelation(c, baseChild)
-      }.getOrElse(Option(ctx.operator).map { c =>
-        val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
-        visitSetOperationImpl(baseChild, plan(ctx.right), all, c.getType)
-      }.getOrElse(Option(ctx.queryOrganization).map { c =>
-        withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
-      }.getOrElse(
-        visitOperatorPipeAggregate(ctx, left)
-      ))))))))
-    }
-
-    // Reconstruct the WithWindowDefinition nodes on top of the new child
-    withWindowDefinitions.foldRight(newChild) { (wwd, child) =>
-      wwd.copy(child = child)
-    }
+      withPivot(c, left)
+    }.getOrElse(Option(ctx.unpivotClause()).map { c =>
+      if (ctx.pivotClause() != null) {
+        throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
+      }
+      withUnpivot(c, left)
+    }.getOrElse(Option(ctx.sample).map { c =>
+      withSample(c, left)
+    }.getOrElse(Option(ctx.joinRelation()).map { c =>
+      withJoinRelation(c, left)
+    }.getOrElse(Option(ctx.operator).map { c =>
+      val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
+      visitSetOperationImpl(left, plan(ctx.right), all, c.getType)
+    }.getOrElse(Option(ctx.queryOrganization).map { c =>
+      withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
+    }.getOrElse(
+      visitOperatorPipeAggregate(ctx, left)
+    ))))))))
   }
 
   private def visitOperatorPipeAggregate(
