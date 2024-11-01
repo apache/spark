@@ -42,6 +42,7 @@ private[sql] object SimpleSparkConnectService {
     val conf = new SparkConf()
       .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
       .set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, true)
+      .set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER, true)
     val sparkSession = SparkSession.builder().config(conf).getOrCreate()
     val sparkContext = sparkSession.sparkContext // init spark context
     // scalastyle:off println

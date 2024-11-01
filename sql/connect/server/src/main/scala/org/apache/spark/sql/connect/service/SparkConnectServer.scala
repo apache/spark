@@ -32,6 +32,7 @@ object SparkConnectServer extends Logging {
     val session = SparkSession
       .builder()
       .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, true)
+      .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key, true)
       .getOrCreate()
     try {
       try {

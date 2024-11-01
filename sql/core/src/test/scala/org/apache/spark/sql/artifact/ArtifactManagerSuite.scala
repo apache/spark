@@ -37,6 +37,7 @@ class ArtifactManagerSuite extends SharedSparkSession {
     val conf = super.sparkConf
     conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
     conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, true)
+    conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER, true)
   }
 
   private val artifactPath = new File("src/test/resources/artifact-tests").toPath
