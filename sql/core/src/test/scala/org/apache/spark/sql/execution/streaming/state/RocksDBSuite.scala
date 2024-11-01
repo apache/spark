@@ -2269,17 +2269,14 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // Create a custom ExecutionContext with 3 threads
     implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
       ThreadUtils.newDaemonFixedThreadPool(3, "pool-thread-executor"))
-    val timeout = 5.seconds
-
     val stateLock = new Object()
     var state = 0
 
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
-      val conf = dbConf.copy(lockAcquireTimeoutMs = timeout.toMillis.toInt)
       val db = new RocksDB(
         remoteDir,
-        conf = conf,
+        conf = dbConf,
         localRootDir = Utils.createTempDir(),
         hadoopConf = new Configuration(),
         loggingId = s"[Thread-${Thread.currentThread.getId}]",
