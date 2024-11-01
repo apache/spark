@@ -22,7 +22,7 @@ import scala.collection.mutable.{ArrayBuffer, Growable}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
@@ -291,7 +291,7 @@ private[aggregate] object CollectTopK {
   since = "4.0.0") // TODO change
 case class ListAgg(
     child: Expression,
-    delimiter: Expression = Literal.create(",", StringType),// TODO replace with null (empty string)
+    delimiter: Expression = Literal(null),
     orderExpressions: Seq[SortOrder] = Nil,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]]
@@ -299,7 +299,7 @@ case class ListAgg(
   with ImplicitCastInputTypes {
 
   def this(child: Expression) =
-    this(child, Literal.create(",", StringType), Nil, 0, 0)
+    this(child, Literal(null), Nil, 0, 0)
   def this(child: Expression, delimiter: Expression) =
     this(child, delimiter, Nil, 0, 0)
 
@@ -340,7 +340,8 @@ case class ListAgg(
     ) +:
     TypeCollection(
       StringTypeWithCollation(supportsTrimCollation = true),
-      BinaryType
+      BinaryType,
+      NullType
     ) +:
       orderExpressions.map(_ => AnyDataType)
 
@@ -360,7 +361,12 @@ case class ListAgg(
         )
       )
     }
-    TypeUtils.checkForSameTypeInputExpr(child.dataType :: delimiter.dataType :: Nil, prettyName)
+    if (delimiter.dataType == NullType) {
+      // null is the default empty delimiter so type is not important
+      TypeCheckSuccess
+    } else {
+      TypeUtils.checkForSameTypeInputExpr(child.dataType :: delimiter.dataType :: Nil, prettyName)
+    }
   }
 
   private[this] def sortBuffer(buffer: mutable.ArrayBuffer[Any]): mutable.ArrayBuffer[Any] = {
@@ -380,22 +386,35 @@ case class ListAgg(
     }
   }
 
-  private[this] def concatWSInternal(buffer: mutable.ArrayBuffer[Any]): Any = {
+  private[this] def getDelimiterValue: Any = {
     val delimiterValue = delimiter.eval()
+    if (delimiterValue == null) {
+      // default delimiter value
+      dataType match {
+        case StringType => UTF8String.fromString("")
+        case BinaryType => ByteArray.EMPTY_BYTE
+      }
+    } else {
+      delimiterValue
+    }
+  }
+
+  private[this] def concatSkippingNulls(buffer: mutable.ArrayBuffer[Any]): Any = {
+    val delimiterValue = getDelimiterValue
     dataType match {
      case BinaryType =>
-      val inputs = buffer.map(_.asInstanceOf[Array[Byte]])
+      val inputs = buffer.filter(_ != null).map(_.asInstanceOf[Array[Byte]])
       ByteArray.concatWS(delimiterValue.asInstanceOf[Array[Byte]], inputs.toSeq: _*)
     case _: StringType =>
-      val inputs = buffer.map(_.asInstanceOf[UTF8String])
+      val inputs = buffer.filter(_ != null).map(_.asInstanceOf[UTF8String])
       UTF8String.fromString(inputs.mkString(delimiterValue.toString))
     }
   }
 
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     if (buffer.nonEmpty) {
-      val sortedBufferWithoutNulls = sortBuffer(buffer).filter(_ != null)
-      concatWSInternal(sortedBufferWithoutNulls)
+      val sortedBufferWithoutNulls = sortBuffer(buffer)
+      concatSkippingNulls(sortedBufferWithoutNulls)
     } else {
       null
     }

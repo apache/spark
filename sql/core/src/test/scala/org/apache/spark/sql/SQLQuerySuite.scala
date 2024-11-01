@@ -171,13 +171,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-42746: listagg function") {
+  test("listagg function") {
     withTempView("df", "df2") {
       Seq(("a", "b"), ("a", "c"), ("b", "c"), ("b", "d"), (null, null)).toDF("a", "b")
         .createOrReplaceTempView("df")
       checkAnswer(
         sql("select listagg(b) from df group by a"),
-        Row(null) :: Row("b,c") :: Row("c,d") :: Nil)
+        Row(null) :: Row("bc") :: Row("cd") :: Nil)
+
+      checkAnswer(
+        sql("select listagg(b, null) from df group by a"),
+        Row(null) :: Row("bc") :: Row("cd") :: Nil)
 
       checkAnswer(
         sql("select listagg(b) from df where 1 != 1"),
@@ -188,36 +192,48 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row("b|c") :: Row("c|d") :: Row(null) :: Nil)
 
       checkAnswer(
+        spark.sql("select listagg(b, :param || ' ') from df group by a", Map("param" -> ",")),
+        Row("b, c") :: Row("c, d") :: Row(null) :: Nil)
+
+      checkAnswer(
         sql("select listagg(a) from df"),
-        Row("a,a,b,b") :: Nil)
+        Row("aabb") :: Nil)
 
       checkAnswer(
         sql("select listagg(distinct a) from df"),
-        Row("a,b") :: Nil)
+        Row("ab") :: Nil)
 
       checkAnswer(
         sql("select listagg(a) within group (order by a) from df"),
-        Row("a,a,b,b") :: Nil)
+        Row("aabb") :: Nil)
 
       checkAnswer(
         sql("select listagg(a) within group (order by a desc) from df"),
-        Row("b,b,a,a") :: Nil)
+        Row("bbaa") :: Nil)
 
       checkAnswer(
         sql("""select listagg(a) within group (order by a desc) over (partition by b) from df"""),
-        Row("a") :: Row("b,a") :: Row("b,a") :: Row("b") :: Row(null) :: Nil)
+        Row("a") :: Row("ba") :: Row("ba") :: Row("b") :: Row(null) :: Nil)
 
       checkAnswer(
         sql("select listagg(a) within group (order by b) from df"),
-        Row("a,a,b,b") :: Nil)
+        Row("aabb") :: Nil)
 
       checkAnswer(
         sql("select listagg(a) within group (order by b desc) from df"),
-        Row("b,a,b,a") :: Nil)
+        Row("baba") :: Nil)
 
       checkAnswer(
         sql("select listagg(a, '|') within group (order by b desc) from df"),
         Row("b|a|b|a") :: Nil)
+
+      checkAnswer(
+        sql("select listagg(c1)from values (X'DEAD'), (X'BEEF') as t(c1)"),
+        Row(hexToBytes("DEADBEEF")) :: Nil)
+
+      checkAnswer(
+        sql("select listagg(c1, null)from values (X'DEAD'), (X'BEEF') as t(c1)"),
+        Row(hexToBytes("DEADBEEF")) :: Nil)
 
       checkAnswer(
         sql("select listagg(c1, X'42')from values (X'DEAD'), (X'BEEF') as t(c1)"),
@@ -229,7 +245,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         },
         condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
         parameters = Map(
-          "sqlExpr" -> "\"listagg(c1, ,)\"",
+          "sqlExpr" -> "\"listagg(c1, NULL)\"",
           "paramIndex" -> "first",
           "requiredType" -> "(\"STRING\" or \"BINARY\")",
           "inputSql" -> "\"c1\"",
@@ -270,14 +286,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       checkAnswer(
         sql("select listagg(a) over (order by a) from df"),
-        Row(null) :: Row("a,a") :: Row("a,a") :: Row("a,a,b,b") :: Row("a,a,b,b") :: Nil)
+        Row(null) :: Row("aa") :: Row("aa") :: Row("aabb") :: Row("aabb") :: Nil)
 
       checkError(
         exception = intercept[AnalysisException] {
           sql("select listagg(a) within group (order by a) over (order by a) from df")
         },
         condition = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
-        parameters = Map("aggFunc" -> "\"listagg(a, ,, a)\""),
+        parameters = Map("aggFunc" -> "\"listagg(a, NULL, a)\""),
         context = ExpectedContext(
           fragment = "listagg(a) within group (order by a) over (order by a)",
           start = 7,
@@ -289,7 +305,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         },
         condition = "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
         parameters = Map("windowExpr" ->
-          ("\"listagg(DISTINCT a, ,) " +
+          ("\"listagg(DISTINCT a, NULL) " +
           "OVER (ORDER BY a ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\"")),
         context = ExpectedContext(
           fragment = "listagg(distinct a) over (order by a)",
@@ -298,7 +314,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       checkAnswer(
         sql("select listagg(distinct a) within group (order by a DESC) from df"),
-        Row("b,a") :: Nil)
+        Row("ba") :: Nil)
 
       checkError(
         exception = intercept[AnalysisException] {
@@ -331,8 +347,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Seq((1, true), (2, false), (3, false)).toDF("a", "b").createOrReplaceTempView("df2")
 
       checkAnswer(
-        sql("select listagg(a), listagg(b) from df2"),
-        Row("1,2,3", "true,false,false") :: Nil)
+        sql("select listagg(a), listagg(b, ',') from df2"),
+        Row("123", "true,false,false") :: Nil)
     }
   }
 

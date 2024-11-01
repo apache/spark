@@ -625,18 +625,18 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq(("a", "b"), ("b", "c"), ("c", "d")).toDF("a", "b")
     checkAnswer(
       df.selectExpr("listagg(a)", "listagg(b)"),
-      Seq(Row("a,b,c", "b,c,d"))
+      Seq(Row("abc", "bcd"))
     )
     checkAnswer(
       df.select(listagg($"a"), listagg($"b")),
-      Seq(Row("a,b,c", "b,c,d"))
+      Seq(Row("abc", "bcd"))
     )
 
     // distinct case
     val df2 = Seq(("a", "b"), ("a", "b"), ("b", "d")).toDF("a", "b")
     checkAnswer(
       df2.select(listagg_distinct($"a"), listagg_distinct($"b")),
-      Seq(Row("a,b", "b,d"))
+      Seq(Row("ab", "bd"))
     )
 
     // null case
@@ -644,7 +644,7 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(
       df3.select(listagg_distinct($"a"), listagg($"a"), listagg_distinct($"b"), listagg($"b"),
         listagg($"c")),
-      Seq(Row("a", "a,a", "b", "b,b", null))
+      Seq(Row("a", "aa", "b", "bb", null))
     )
 
     // custom delimiter
