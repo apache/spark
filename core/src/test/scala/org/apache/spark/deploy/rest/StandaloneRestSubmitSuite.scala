@@ -530,6 +530,21 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(conn.getResponseCode === HttpServletResponse.SC_FORBIDDEN)
   }
 
+  test("SPARK-50195: Fix StandaloneRestServer to propagate app name to SparkSubmit properly") {
+    Seq((classOf[SparkSubmit].getName, Seq("-c", "spark.app.name=app1")),
+        ("", Seq.empty)).foreach { case (mainClass, expectedArguments) =>
+      val request = new CreateSubmissionRequest
+      request.appResource = ""
+      request.mainClass = mainClass
+      request.appArgs = Array.empty[String]
+      request.sparkProperties = Map("spark.app.name" -> "app1")
+      request.environmentVariables = Map.empty[String, String]
+      val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+      val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+      assert(desc.command.arguments.slice(3, 5) === expectedArguments)
+    }
+  }
+
   /* --------------------- *
    |     Helper methods    |
    * --------------------- */

@@ -26,7 +26,7 @@ import org.scalatest.matchers.must.Matchers.be
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -1948,5 +1948,25 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         }
       }
     )
+  }
+
+  test("transformWithState - validate timeModes") {
+    // validation tests should pass for TimeMode.None
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.None(), None)
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.None(), Some(10L))
+
+    // validation tests should fail for TimeMode.ProcessingTime and TimeMode.EventTime
+    // when time values are not provided
+    val ex = intercept[SparkException] {
+      TransformWithStateVariableUtils.validateTimeMode(TimeMode.ProcessingTime(), None)
+    }
+    assert(ex.getMessage.contains("Failed to find time values"))
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.ProcessingTime(), Some(10L))
+
+    val ex1 = intercept[SparkException] {
+      TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), None)
+    }
+    assert(ex1.getMessage.contains("Failed to find time values"))
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), Some(10L))
   }
 }
