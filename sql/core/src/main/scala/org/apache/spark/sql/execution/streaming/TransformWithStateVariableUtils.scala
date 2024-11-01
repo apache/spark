@@ -25,6 +25,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.streaming.StateVariableType.StateVariableType
 import org.apache.spark.sql.execution.streaming.state.StateStoreErrors
+import org.apache.spark.sql.streaming.TimeMode
 
 /**
  * This file contains utility classes and functions for managing state variables in
@@ -46,6 +47,12 @@ object TransformWithStateVariableUtils {
 
   def getTimerState(stateName: String): TransformWithStateVariableInfo = {
     TransformWithStateVariableInfo(stateName, StateVariableType.TimerState, ttlEnabled = false)
+  }
+
+  def validateTimeMode(timeMode: TimeMode, timestampOpt: Option[Long]): Unit = {
+    if (timeMode != TimeMode.None() && timestampOpt.isEmpty) {
+      throw StateStoreErrors.missingTimeValues(timeMode.toString)
+    }
   }
 }
 
