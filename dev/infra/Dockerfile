@@ -142,7 +142,7 @@ RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PI
     python3.12 -m pip cache purge
 
 # Install Python 3.13 at the last stage to avoid breaking the existing Python installations
-RUN apt-get updatne && apt-get install -y \
+RUN apt-get update && apt-get install -y \
     python3.13 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.13
