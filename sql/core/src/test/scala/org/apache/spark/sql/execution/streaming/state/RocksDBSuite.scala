@@ -2426,12 +2426,13 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
 
   private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
     val threadInfo = db.getAcquiredThreadInfo()
-    assert(threadInfo != null,
+    assert(threadInfo != None,
       "acquired thread info should not be null after load")
+    val threadId = threadInfo.get.threadRef.get.get.getId
     assert(
-      threadInfo.threadRef.get.get.getId == Thread.currentThread().getId,
+      threadId == Thread.currentThread().getId,
       s"acquired thread should be curent thread ${Thread.currentThread().getId} " +
-        s"after load but was ${threadInfo.threadRef.get.get.getId}")
+        s"after load but was $threadId")
   }
 
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))

@@ -1031,8 +1031,8 @@ class RocksDB(
     }
   }
 
-  private[state] def getAcquiredThreadInfo(): AcquiredThreadInfo = acquireLock.synchronized {
-    acquiredThreadInfo.copy()
+  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] = acquireLock.synchronized {
+    Option(acquiredThreadInfo).map(_.copy())
   }
 
   /** Create a native RocksDB logger that forwards native logs to log4j with correct log levels. */
