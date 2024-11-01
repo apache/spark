@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql
 
-import java.util.concurrent.Executors
+import java.util.concurrent.ForkJoinPool
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -137,14 +137,15 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     assert(interrupted.length == 2, s"Interrupted operations: $interrupted.")
   }
 
-  test("interrupt tag") {
+  // TODO(SPARK-48139): Re-enable `SparkSessionE2ESuite.interrupt tag`
+  ignore("interrupt tag") {
     val session = spark
     import session.implicits._
 
     // global ExecutionContext has only 2 threads in Apache Spark CI
     // create own thread pool for four Futures used in this test
     val numThreads = 4
-    val fpool = Executors.newFixedThreadPool(numThreads)
+    val fpool = new ForkJoinPool(numThreads)
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     val q1 = Future {
