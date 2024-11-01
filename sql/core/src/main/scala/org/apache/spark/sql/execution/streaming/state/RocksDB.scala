@@ -987,8 +987,11 @@ class RocksDB(
         }
 
         if (acquiredThreadInfo.threadRef.get.isDefined
-          && releaseForThreadOpt.get.threadRef.get.get.getId
-          != acquiredThreadInfo.threadRef.get.get.getId) {
+          // NOTE: we compare the entire acquiredThreadInfo object to ensure that we are
+          // releasing not only for the right thread but the right task as well. This is
+          // inconsistent with the logic for acquire which uses only the thread ID, consider
+          // updating this in future.
+          && acquiredThreadInfo != releaseForThreadOpt.get) {
           logInfo(log"Thread info for release" +
             log" ${MDC(LogKeys.THREAD, releaseForThreadOpt.get)}" +
             log" does not match the acquired thread when attempting to" +
