@@ -1977,6 +1977,58 @@ class PlanGenerationTestSuite
       fn.col("b"))
   }
 
+  functionTest("try_make_timestamp with timezone") {
+    fn.try_make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("try_make_timestamp without timezone") {
+    fn.try_make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp_ltz with timezone") {
+    fn.try_make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("try_make_timestamp_ltz without timezone") {
+    fn.try_make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp_ntz") {
+    fn.try_make_timestamp_ntz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
   functionTest("make_ym_interval years months") {
     fn.make_ym_interval(fn.col("a"), fn.col("a"))
   }
@@ -2689,6 +2741,14 @@ class PlanGenerationTestSuite
 
   functionTest("parse_url with key") {
     fn.parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url with key") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
   }
 
   functionTest("printf") {

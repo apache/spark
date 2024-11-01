@@ -2413,7 +2413,8 @@
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
-      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "Valid range for seconds is [0, 60] (inclusive), but the provided value is <secAndMicros>. To avoid this error, use `try_make_timestamp`, which returns NULL on error.",
+      "If you do not want to use the session default timestamp version of this function, use `try_make_timestamp_ntz` or `try_make_timestamp_ltz`."
     ],
     "sqlState" : "22023"
   },
@@ -3477,6 +3478,12 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
+    "message" : [
+      "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
+    ],
+    "sqlState" : "3F000"
+  },
   "MISSING_GROUP_BY" : {
     "message" : [
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
@@ -3538,6 +3545,12 @@
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ],
     "sqlState" : "0A000"
+  },
+  "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION" : {
+    "message" : [
+      "Found the negative value in <frequencyExpression>: <negativeValue>, but expected a positive integral value."
+    ],
+    "sqlState" : "22003"
   },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -5013,6 +5026,11 @@
           "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
         ]
       },
+      "ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE" : {
+        "message" : [
+          "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -5146,6 +5164,11 @@
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
         "message" : [
           "Invalid partitioning: <cols> is missing or is in a map or array."
+        ]
+      },
+      "PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {
+        "message" : [
+          "The SQL pipe operator syntax with aggregation (using |> AGGREGATE) does not support <case>."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
@@ -5742,11 +5765,6 @@
       "The value of from-to unit must be a string."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0028" : {
-    "message" : [
-      "Intervals FROM <from> TO <to> are not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0029" : {
     "message" : [
       "Cannot mix year-month and day-time fields: <literal>."
@@ -6146,11 +6164,6 @@
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1125" : {
-    "message" : [
-      "Database from v1 session catalog is not specified."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1126" : {
     "message" : [
       "Nested databases are not supported by v1 session catalog: <catalog>."
@@ -6538,11 +6551,6 @@
       "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1248" : {
-    "message" : [
-      "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1250" : {
     "message" : [
       "<action> is not allowed on <tableName> since filesource partition management is disabled (spark.sql.hive.manageFilesourcePartitions = false)."
@@ -6801,11 +6809,6 @@
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2013" : {
-    "message" : [
-      "Negative values found in <frequencyExpression>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2017" : {

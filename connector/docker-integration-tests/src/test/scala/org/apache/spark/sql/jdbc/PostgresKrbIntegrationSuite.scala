@@ -51,7 +51,7 @@ class PostgresKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig,
         containerConfigBuilder: ContainerConfig): Unit = {
-      copyExecutableResource("postgres_krb_setup.sh", initDbDir, replaceIp)
+      copyExecutableResource("postgres-krb-setup.sh", initDbDir, replaceIp)
       val newBind = new Bind(
         initDbDir.getAbsolutePath,
         new Volume("/docker-entrypoint-initdb.d"),
