@@ -743,17 +743,20 @@ class RocksDB(
    */
   def rollback(): Unit = {
     acquire(RollbackStore)
-    numKeysOnWritingVersion = numKeysOnLoadedVersion
-    loadedVersion = -1L
-    lastCommitBasedStateStoreCkptId = None
-    lastCommittedStateStoreCkptId = None
-    loadedStateStoreCkptId = None
-    sessionStateStoreCkptId = None
-    changelogWriter.foreach(_.abort())
-    // Make sure changelogWriter gets recreated next time.
-    changelogWriter = None
-    release(RollbackStore)
-    logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
+    try {
+      numKeysOnWritingVersion = numKeysOnLoadedVersion
+      loadedVersion = -1L
+      lastCommitBasedStateStoreCkptId = None
+      lastCommittedStateStoreCkptId = None
+      loadedStateStoreCkptId = None
+      sessionStateStoreCkptId = None
+      changelogWriter.foreach(_.abort())
+      // Make sure changelogWriter gets recreated next time.
+      changelogWriter = None
+      logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
+    } finally {
+      release(RollbackStore)
+    }
   }
 
   def doMaintenance(): Unit = {
@@ -787,9 +790,9 @@ class RocksDB(
 
   /** Release all resources */
   def close(): Unit = {
+    // Acquire DB instance lock and release at the end to allow for synchronized access
+    acquire(CloseStore)
     try {
-      // Acquire DB instance lock and release at the end to allow for synchronized access
-      acquire(CloseStore)
       closeDB()
 
       readOptions.close()
@@ -903,8 +906,8 @@ class RocksDB(
    */
   def metricsOpt: Option[RocksDBMetrics] = {
     var rocksDBMetricsOpt: Option[RocksDBMetrics] = None
+    acquire(ReportStoreMetrics)
     try {
-      acquire(ReportStoreMetrics)
       rocksDBMetricsOpt = recordedMetrics
     } catch {
       case ex: Exception =>
@@ -956,7 +959,7 @@ class RocksDB(
       acquiredThreadInfo = newAcquiredThreadInfo
       // Add a listener to always release the lock when the task (if active) completes
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit] {
-        _ => this.release(StoreTaskCompletionListener)
+        _ => this.release(StoreTaskCompletionListener, Some(newAcquiredThreadInfo))
       })
       logInfo(log"RocksDB instance was acquired by ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
         log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
@@ -965,16 +968,44 @@ class RocksDB(
 
   /**
    * Function to release RocksDB instance lock that allows for synchronized access to the state
-   * store instance
+   * store instance. Optionally provide a thread to check against, and release only if provided
+   * thread is the one that acquired the lock.
    *
    * @param opType - operation type releasing the lock
+   * @param releaseForThreadOpt - optional thread to check against acquired thread
    */
-  private def release(opType: RocksDBOpType): Unit = acquireLock.synchronized {
+  private def release(
+      opType: RocksDBOpType,
+      releaseForThreadOpt: Option[AcquiredThreadInfo] = None): Unit = acquireLock.synchronized {
     if (acquiredThreadInfo != null) {
-      logInfo(log"RocksDB instance was released by ${MDC(LogKeys.THREAD,
-        acquiredThreadInfo)} " + log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
-      acquiredThreadInfo = null
-      acquireLock.notifyAll()
+      val release = releaseForThreadOpt match {
+        case Some(releaseForThread) if releaseForThread.threadRef.get.isEmpty =>
+          logInfo(log"Thread reference is empty when attempting to release for" +
+            log" opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
+            log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
+          false
+        // NOTE: we compare the entire acquiredThreadInfo object to ensure that we are
+        // releasing not only for the right thread but the right task as well. This is
+        // inconsistent with the logic for acquire which uses only the thread ID, consider
+        // updating this in future.
+        case Some(releaseForThread) if acquiredThreadInfo != releaseForThread =>
+          logInfo(log"Thread info for release" +
+            log" ${MDC(LogKeys.THREAD, releaseForThreadOpt.get)}" +
+            log" does not match the acquired thread when attempting to" +
+            log" release for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}, ignoring release." +
+            log" Lock is held by ${MDC(LogKeys.THREAD, acquiredThreadInfo)}")
+          false
+        case _ => true
+      }
+
+      if (release) {
+        logInfo(log"RocksDB instance was released by " +
+          log"${MDC(LogKeys.THREAD, AcquiredThreadInfo())}. " +
+          log"acquiredThreadInfo: ${MDC(LogKeys.THREAD, acquiredThreadInfo)} " +
+          log"for opType=${MDC(LogKeys.OP_TYPE, opType.toString)}")
+        acquiredThreadInfo = null
+        acquireLock.notifyAll()
+      }
     }
   }
 
@@ -999,6 +1030,11 @@ class RocksDB(
       }
       db = null
     }
+  }
+
+  private[state] def getAcquiredThreadInfo(): Option[AcquiredThreadInfo] =
+      acquireLock.synchronized {
+    Option(acquiredThreadInfo).map(_.copy())
   }
 
   /** Create a native RocksDB logger that forwards native logs to log4j with correct log levels. */
@@ -1456,10 +1492,9 @@ object RocksDBNativeHistogram {
   }
 }
 
-case class AcquiredThreadInfo() {
-  val threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread())
-  val tc: TaskContext = TaskContext.get()
-
+case class AcquiredThreadInfo(
+    threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread()),
+    tc: TaskContext = TaskContext.get()) {
   override def toString(): String = {
     val taskStr = if (tc != null) {
       val taskDetails =
