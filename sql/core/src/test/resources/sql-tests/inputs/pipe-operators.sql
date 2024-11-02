@@ -885,7 +885,7 @@ table windowTestData
 table windowTestData
 |> select cate, sum(val) over w;
 
--- Multiple WINDOW clauses are not supported in the pipe operator SELECT.
+-- Multiple WINDOW clauses are not supported in the pipe operator SELECT clause.
 table windowTestData
 |> select cate, val, sum(val) over w1, first_value(cate) over w2
    window w1 as (partition by cate)
