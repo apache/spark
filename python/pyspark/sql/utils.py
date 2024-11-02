@@ -58,10 +58,8 @@ if TYPE_CHECKING:
         JVMView,
     )
     from pyspark import SparkContext
-    from pyspark.sql import Column
     from pyspark.sql.session import SparkSession
     from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql._typing import ColumnOrName
     from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 
 has_numpy: bool = False
@@ -216,24 +214,6 @@ def to_str(value: Any) -> Optional[str]:
 def enum_to_value(value: Any) -> Any:
     """Convert an Enum to its value if it is not None."""
     return enum_to_value(value.value) if value is not None and isinstance(value, Enum) else value
-
-
-def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> "Column":
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(name, *cols)
-
-    else:
-        from pyspark.sql.classic.column import Column, _to_seq, _to_java_column
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(
-            sc._jvm.PythonSQLUtils.internalFn(  # type: ignore
-                name, _to_seq(sc, cols, _to_java_column)  # type: ignore
-            )
-        )
 
 
 def is_timestamp_ntz_preferred() -> bool:
@@ -469,3 +449,12 @@ def get_lit_sql_str(val: str) -> str:
     # See `sql` definition in `sql/catalyst/src/main/scala/org/apache/spark/
     # sql/catalyst/expressions/literals.scala`
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+class NumpyHelper:
+    @staticmethod
+    def linspace(start: float, stop: float, num: int) -> Sequence[float]:
+        if num == 1:
+            return [float(start)]
+        step = (float(stop) - float(start)) / (num - 1)
+        return [start + step * i for i in range(num)]

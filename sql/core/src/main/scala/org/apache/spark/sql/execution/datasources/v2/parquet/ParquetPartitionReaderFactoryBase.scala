@@ -42,7 +42,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * A base factory used to create Parquet readers.
@@ -261,12 +261,14 @@ abstract class ParquetPartitionReaderFactoryBase(
     val int96RebaseSpec = DataSourceUtils.int96RebaseSpec(
       footerFileMetaData.getKeyValueMetaData.get,
       int96RebaseModeInRead)
-    val reader = buildReaderFunc(
+    Utils.tryInitializeResource(
+      buildReaderFunc(
       file.partitionValues,
       pushed,
       convertTz,
       datetimeRebaseSpec,
       int96RebaseSpec)
+    ) { reader =>
     reader match {
       case vectorizedReader: VectorizedParquetRecordReader =>
         vectorizedReader.initialize(split, hadoopAttemptContext, Option.apply(fileFooter))
@@ -274,6 +276,7 @@ abstract class ParquetPartitionReaderFactoryBase(
         reader.initialize(split, hadoopAttemptContext)
     }
     reader
+  }
   }
 
   private def createRowBaseReader(file: PartitionedFile): RecordReader[Void, InternalRow] = {

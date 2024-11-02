@@ -45,7 +45,7 @@ abstract class ParquetTableBase(
   protected def newScanBuilderArgs(options: CaseInsensitiveStringMap): (
     SparkSession, PartitioningAwareFileIndex, StructType, StructType, CaseInsensitiveStringMap
     ) =
-    (sparkSession, fileIndex, schema, dataSchema, options)
+    (sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     ParquetUtils.inferSchema(sparkSession, options.asScala.toMap, files)
