@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{StringBuilder => JStringBuilder}
 import java.util.Locale
 import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
 
@@ -681,7 +682,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
   // result buffer write by Matcher
-  @transient private lazy val result: StringBuffer = new StringBuffer
+  @transient private lazy val result: JStringBuilder = new JStringBuilder
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
@@ -727,7 +728,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termResult = ctx.freshName("termResult")
 
-    val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
+    val classNameStringBuilder = classOf[JStringBuilder].getCanonicalName
 
     val matcher = ctx.freshName("matcher")
     val source = ctx.freshName("source")
@@ -753,7 +754,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       String $source = $subject.toString();
       int $position = $pos - 1;
       if ($position == 0 || $position < $source.length()) {
-        $classNameStringBuffer $termResult = new $classNameStringBuffer();
+        $classNameStringBuilder $termResult = new $classNameStringBuilder();
         $matcher.region($position, $source.length());
 
         while ($matcher.find()) {

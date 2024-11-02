@@ -197,6 +197,8 @@ abstract class BaseSessionStateBuilder(
    * Note: this depends on the `conf` and `catalog` fields.
    */
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+    override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
+      customHintResolutionRules
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
@@ -237,6 +239,13 @@ abstract class BaseSessionStateBuilder(
    */
   protected def customResolutionRules: Seq[Rule[LogicalPlan]] = {
     extensions.buildResolutionRules(session)
+  }
+
+  /**
+   * Custom hint resolution rules to add to the Analyzer.
+   */
+  protected def customHintResolutionRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildHintResolutionRules(session)
   }
 
   /**
