@@ -246,7 +246,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         Encoders.STRING, TTLConfig(Duration.ofHours(1)))
 
       // create another state without TTL, this should not be captured in the handle
-      handle.getListState("testState", Encoders.STRING)
+      handle.getListState("testState", Encoders.STRING, TTLConfig(Duration.ZERO))
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === listStateWithTTL)
@@ -278,7 +278,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         UUID.randomUUID(), stringEncoder, TimeMode.None())
 
       handle.getValueState("testValueState", Encoders.STRING, TTLConfig(Duration.ZERO))
-      handle.getListState("testListState", Encoders.STRING)
+      handle.getListState("testListState", Encoders.STRING, TTLConfig(Duration.ZERO))
       handle.getMapState("testMapState", Encoders.STRING, Encoders.STRING)
 
       assert(handle.ttlStates.isEmpty)

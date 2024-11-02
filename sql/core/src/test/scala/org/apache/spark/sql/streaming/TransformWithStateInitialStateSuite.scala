@@ -43,7 +43,8 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
       timeMode: TimeMode): Unit = {
     _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble,
       TTLConfig(Duration.ZERO))
-    _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble)
+    _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble,
+      TTLConfig(Duration.ZERO))
     _mapState = getHandle.getMapState[Double, Int](
       "testMapInit", Encoders.scalaDouble, Encoders.scalaInt)
   }

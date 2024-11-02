@@ -73,21 +73,6 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   def getValueState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ValueState[T]
 
   /**
-   * Creates new or returns existing list state associated with stateName. The ListState persists
-   * values of type T.
-   *
-   * @param stateName
-   *   \- name of the state variable
-   * @param valEncoder
-   *   \- SQL encoder for state variable
-   * @tparam T
-   *   \- type of state variable
-   * @return
-   *   \- instance of ListState of type T that can be used to store state persistently
-   */
-  def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T]
-
-  /**
    * Function to create new or return existing list state variable of given type with ttl. State
    * values will not be returned past ttlDuration, and will be eventually removed from the state
    * store. Any values in listState which have expired after ttlDuration will not be returned on
@@ -110,6 +95,28 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   def getListState[T](
       stateName: String,
       valEncoder: Encoder[T],
+      ttlConfig: TTLConfig): ListState[T]
+
+  /**
+   * Function to create new or return existing list state variable of given type with ttl. State
+   * values will not be returned past ttlDuration, and will be eventually removed from the state
+   * store. Any values in listState which have expired after ttlDuration will not be returned on
+   * get() and will be eventually removed from the state.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
+   *
+   * @param stateName
+   *   \- name of the state variable
+   * @param ttlConfig
+   *   \- the ttl configuration (time to live duration etc.)
+   * @tparam T
+   *   \- type of state variable
+   * @return
+   *   \- instance of ListState of type T that can be used to store state persistently
+   */
+  def getListState[T: Encoder](
+      stateName: String,
       ttlConfig: TTLConfig): ListState[T]
 
   /**

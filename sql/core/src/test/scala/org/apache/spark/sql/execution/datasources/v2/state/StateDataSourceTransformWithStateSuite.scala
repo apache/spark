@@ -81,7 +81,7 @@ class SessionGroupsStatefulProcessor extends
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _groupsList = getHandle.getListState("groupsList", Encoders.STRING)
+    _groupsList = getHandle.getListState("groupsList", Encoders.STRING, TTLConfig(Duration.ZERO))
   }
 
   override def handleInputRows(

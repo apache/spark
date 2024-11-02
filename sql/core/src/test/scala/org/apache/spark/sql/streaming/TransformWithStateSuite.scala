@@ -107,7 +107,7 @@ class RunningCountListStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getListState[Long](
-      "countState", Encoders.scalaLong)
+      "countState", Encoders.scalaLong, TTLConfig(Duration.ZERO))
   }
 
   override def handleInputRows(
@@ -394,7 +394,7 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
       TTLConfig(Duration.ZERO))
     _listState = getHandle.getListState[TestClass](
-      "listState", Encoders.product[TestClass])
+      "listState", Encoders.product[TestClass], TTLConfig(Duration.ZERO))
     _mapState = getHandle.getMapState[POJOTestClass, String](
       "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING)
   }

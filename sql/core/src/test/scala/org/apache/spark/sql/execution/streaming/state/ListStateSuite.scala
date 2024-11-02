@@ -31,6 +31,8 @@ import org.apache.spark.sql.streaming.{ListState, TimeMode, TTLConfig, ValueStat
  * operators such as transformWithState
  */
 class ListStateSuite extends StateVariableSuiteBase {
+  import testImplicits._
+
   // overwrite useMultipleValuesPerKey in base suite to be true for list state
   override def useMultipleValuesPerKey: Boolean = true
 
@@ -40,7 +42,8 @@ class ListStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val listState: ListState[Long] = handle.getListState[Long]("listState", Encoders.scalaLong)
+      val listState: ListState[Long] = handle.getListState[Long]("listState",
+        TTLConfig(Duration.ZERO))
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       val e = intercept[SparkIllegalArgumentException] {
@@ -55,8 +58,6 @@ class ListStateSuite extends StateVariableSuiteBase {
       )
     }
   }
-
-  import testImplicits._
 
   Seq("appendList", "put").foreach { listImplFunc =>
     test(s"Test list operation($listImplFunc) with null") {
@@ -75,7 +76,8 @@ class ListStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState: ListState[Long] = handle.getListState[Long]("testState", Encoders.scalaLong)
+      val testState: ListState[Long] = handle.getListState[Long]("testState",
+        TTLConfig(Duration.ZERO))
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
       // simple put and get test
@@ -103,8 +105,10 @@ class ListStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState1: ListState[Long] = handle.getListState[Long]("testState1", Encoders.scalaLong)
-      val testState2: ListState[Long] = handle.getListState[Long]("testState2", Encoders.scalaLong)
+      val testState1: ListState[Long] = handle.getListState[Long]("testState1",
+        TTLConfig(Duration.ZERO))
+      val testState2: ListState[Long] = handle.getListState[Long]("testState2",
+        TTLConfig(Duration.ZERO))
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
@@ -141,8 +145,10 @@ class ListStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val listState1: ListState[Long] = handle.getListState[Long]("listState1", Encoders.scalaLong)
-      val listState2: ListState[Long] = handle.getListState[Long]("listState2", Encoders.scalaLong)
+      val listState1: ListState[Long] = handle.getListState[Long]("listState1",
+        TTLConfig(Duration.ZERO))
+      val listState2: ListState[Long] = handle.getListState[Long]("listState2",
+        TTLConfig(Duration.ZERO))
       val valueState: ValueState[Long] = handle.getValueState[Long](
         "valueState", TTLConfig(Duration.ZERO))
 
@@ -220,7 +226,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("test negative or zero TTL duration throws error") {
+  test("test null or negative TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
@@ -228,7 +234,7 @@ class ListStateSuite extends StateVariableSuiteBase {
         stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
 
-      Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
+      Seq(null, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)
         val ex = intercept[SparkUnsupportedOperationException] {
           handle.getListState[String]("testState", Encoders.STRING, ttlConfig)

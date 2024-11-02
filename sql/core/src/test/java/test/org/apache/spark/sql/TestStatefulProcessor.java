@@ -49,7 +49,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       Encoders.STRING(), Encoders.LONG());
 
     keysList = this.getHandle().getListState("keyList",
-      Encoders.STRING());
+      Encoders.STRING(), new TTLConfig(Duration.ZERO));
   }
 
   @Override

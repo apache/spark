@@ -606,7 +606,8 @@ class TransformWithStateInPandasStateServer(
 
       case StateVariableType.ListState => if (!listStates.contains(stateName)) {
         val state = if (ttlDurationMs.isEmpty) {
-          statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema))
+          statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema),
+            TTLConfig(Duration.ZERO))
         } else {
           statefulProcessorHandle.getListState(
             stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))

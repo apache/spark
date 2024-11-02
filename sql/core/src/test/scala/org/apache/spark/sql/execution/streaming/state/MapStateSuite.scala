@@ -124,7 +124,7 @@ class MapStateSuite extends StateVariableSuiteBase {
       val valueTestState: ValueState[String] =
         handle.getValueState[String]("valueTestState", TTLConfig(Duration.ZERO))
       val listTestState: ListState[String] =
-        handle.getListState[String]("listTestState", Encoders.STRING)
+        handle.getListState[String]("listTestState", TTLConfig(Duration.ZERO))
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial values
