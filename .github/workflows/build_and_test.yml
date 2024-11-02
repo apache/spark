@@ -276,7 +276,7 @@ jobs:
     - name: Install Python packages (Python 3.11)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect')
       run: |
-        python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.62.0' 'grpcio-status==1.62.0' 'protobuf==4.25.1'
+        python3.11 -m pip install 'numpy>=1.20.0' pyarrow pandas scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.67.0' 'grpcio-status==1.67.0' 'protobuf==5.28.3'
         python3.11 -m pip list
     # Run the tests.
     - name: Run tests
@@ -614,7 +614,7 @@ jobs:
         python-version: '3.11'
     - name: Install dependencies for Python CodeGen check
       run: |
-        python3.11 -m pip install 'black==23.9.1' 'protobuf==4.25.1' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
+        python3.11 -m pip install 'black==23.9.1' 'protobuf==5.28.3' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
     - name: Python CodeGen check
       run: ./dev/connect-check-protos.py
@@ -702,13 +702,6 @@ jobs:
       run: ./dev/lint-java
     - name: Spark connect jvm client mima check
       run: ./dev/connect-jvm-client-mima-check
-    - name: Install Python linter dependencies for branch-3.4
-      if: inputs.branch == 'branch-3.4'
-      run: |
-        # SPARK-44554: Copy from https://github.com/apache/spark/blob/a05c27e85829fe742c1828507a1fd180cdc84b54/.github/workflows/build_and_test.yml#L571-L578
-        # Should delete this section after SPARK 3.4 EOL.
-        python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.920' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
-        python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.48.1' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Install Python linter dependencies for branch-3.5
       if: inputs.branch == 'branch-3.5'
       run: |
@@ -717,7 +710,7 @@ jobs:
         python3.9 -m pip install 'flake8==3.9.0' pydata_sphinx_theme 'mypy==0.982' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' numpydoc 'jinja2<3.0.0' 'black==22.6.0'
         python3.9 -m pip install 'pandas-stubs==1.2.0.53' ipython 'grpcio==1.56.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0'
     - name: Install Python dependencies for python linter and documentation generation
-      if: inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
+      if: inputs.branch != 'branch-3.5'
       run: |
         # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
         # See 'ipython_genutils' in SPARK-38517
@@ -725,7 +718,7 @@ jobs:
         python3.9 -m pip install 'sphinx==4.5.0' mkdocs 'pydata_sphinx_theme>=0.13' sphinx-copybutton nbsphinx numpydoc jinja2 markupsafe 'pyzmq<24.0.0' \
           ipython ipython_genutils sphinx_plotly_directive numpy pyarrow pandas 'plotly>=4.8' 'docutils<0.18.0' \
           'flake8==3.9.0' 'mypy==1.8.0' 'pytest==7.1.3' 'pytest-mypy-plugins==1.9.3' 'black==23.9.1' \
-          'pandas-stubs==1.2.0.53' 'grpcio==1.62.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
+          'pandas-stubs==1.2.0.53' 'grpcio==1.67.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
           'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
         python3.9 -m pip list
     - name: Python linter
@@ -745,16 +738,16 @@ jobs:
       if: inputs.branch == 'branch-3.5'
       run: if test -f ./dev/connect-check-protos.py; then PATH=$PATH:$HOME/buf/bin PYTHON_EXECUTABLE=python3.9 ./dev/connect-check-protos.py; fi
     # Should delete this section after SPARK 3.5 EOL.
-    - name: Install JavaScript linter dependencies for branch-3.4, branch-3.5
-      if: inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
+    - name: Install JavaScript linter dependencies for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: |
         apt update
         apt-get install -y nodejs npm
     - name: JS linter
       run: ./dev/lint-js
     # Should delete this section after SPARK 3.5 EOL.
-    - name: Install R linter dependencies for branch-3.4, branch-3.5
-      if: inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
+    - name: Install R linter dependencies for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: |
         apt update
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev \
@@ -834,7 +827,7 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.java }}
     - name: Install Python dependencies for python linter and documentation generation
-      if: inputs.branch != 'branch-3.4' && inputs.branch != 'branch-3.5'
+      if: inputs.branch != 'branch-3.5'
       run: |
         # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
         # See 'ipython_genutils' in SPARK-38517
@@ -845,8 +838,8 @@ jobs:
           'pandas-stubs==1.2.0.53' 'grpcio==1.62.0' 'grpc-stubs==1.24.11' 'googleapis-common-protos-stubs==2.2.0' \
           'sphinxcontrib-applehelp==1.0.4' 'sphinxcontrib-devhelp==1.0.2' 'sphinxcontrib-htmlhelp==2.0.1' 'sphinxcontrib-qthelp==1.0.3' 'sphinxcontrib-serializinghtml==1.1.5'
         python3.9 -m pip list
-    - name: Install dependencies for documentation generation for branch-3.4, branch-3.5
-      if: inputs.branch == 'branch-3.4' || inputs.branch == 'branch-3.5'
+    - name: Install dependencies for documentation generation for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: |
         # pandoc is required to generate PySpark APIs as well in nbsphinx.
         apt-get update -y
@@ -1134,7 +1127,7 @@ jobs:
           export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
           minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --gid=0 --uid=185 &
           kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
-          if [[ "${{ inputs.branch }}" == 'branch-3.5' || "${{ inputs.branch }}" == 'branch-3.4' ]]; then
+          if [[ "${{ inputs.branch }}" == 'branch-3.5' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml || true
           else
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.9.0/installer/volcano-development.yaml || true

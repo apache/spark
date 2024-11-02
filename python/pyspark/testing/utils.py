@@ -59,7 +59,7 @@ from pyspark.errors.exceptions.base import QueryContextType
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import Row
-from pyspark.sql.types import StructType, StructField
+from pyspark.sql.types import StructType, StructField, VariantVal
 from pyspark.sql.functions import col, when
 
 
@@ -899,6 +899,8 @@ def assertDataFrameEqual(
             elif isinstance(val1, Decimal) and isinstance(val2, Decimal):
                 if abs(val1 - val2) > (Decimal(atol) + Decimal(rtol) * abs(val2)):
                     return False
+            elif isinstance(val1, VariantVal) and isinstance(val2, VariantVal):
+                return compare_vals(val1.toPython(), val2.toPython())
             else:
                 if val1 != val2:
                     return False

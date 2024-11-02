@@ -244,7 +244,7 @@ object UnsupportedOperationChecker extends Logging {
      * data.
      */
     def containsCompleteData(subplan: LogicalPlan): Boolean = {
-      val aggs = subplan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      val aggs = subplan.collect { case a@Aggregate(_, _, _, _) if a.isStreaming => a }
       // Either the subplan has no streaming source, or it has aggregation with Complete mode
       !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
     }
@@ -264,7 +264,7 @@ object UnsupportedOperationChecker extends Logging {
       // Operations that cannot exists anywhere in a streaming plan
       subPlan match {
 
-        case Aggregate(groupingExpressions, aggregateExpressions, child) =>
+        case Aggregate(groupingExpressions, aggregateExpressions, child, _) =>
           val distinctAggExprs = aggregateExpressions.flatMap { expr =>
             expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
           }

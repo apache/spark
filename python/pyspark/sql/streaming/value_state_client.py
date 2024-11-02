@@ -28,7 +28,7 @@ class ValueStateClient:
         self._stateful_processor_api_client = stateful_processor_api_client
 
     def exists(self, state_name: str) -> bool:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         exists_call = stateMessage.Exists()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, exists=exists_call)
@@ -50,7 +50,7 @@ class ValueStateClient:
             )
 
     def get(self, state_name: str) -> Optional[Tuple]:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         get_call = stateMessage.Get()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, get=get_call)
@@ -70,7 +70,7 @@ class ValueStateClient:
             raise PySparkRuntimeError(f"Error getting value state: " f"{response_message[1]}")
 
     def update(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
@@ -90,7 +90,7 @@ class ValueStateClient:
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
     def clear(self, state_name: str) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         clear_call = stateMessage.Clear()
         value_state_call = stateMessage.ValueStateCall(stateName=state_name, clear=clear_call)
