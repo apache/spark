@@ -1502,7 +1502,7 @@ version
     ;
 
 operatorPipeRightSide
-    : selectClause
+    : selectClause windowClause?
     | whereClause
     // The following two cases match the PIVOT or UNPIVOT clause, respectively.
     // For each one, we add the other clause as an option in order to return high-quality error

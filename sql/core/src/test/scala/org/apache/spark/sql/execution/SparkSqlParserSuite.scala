@@ -972,6 +972,14 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a) AS result GROUP BY b")
       checkAggregate("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
       checkAggregate("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b")
+      // Window
+      def checkWindow(query: String): Unit = check(query, Seq(WITH_WINDOW_DEFINITION))
+      checkWindow(
+        """
+          |TABLE windowTestData
+          ||> SELECT cate, SUM(val) OVER w
+          |   WINDOW w AS (PARTITION BY cate ORDER BY val)
+          |""".stripMargin)
     }
   }
 }
