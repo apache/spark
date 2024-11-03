@@ -625,7 +625,7 @@ class TransformWithStateInPandasStateServer(
         val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
         val state = if (ttlDurationMs.isEmpty) {
           statefulProcessorHandle.getMapState[Row, Row](stateName,
-            Encoders.row(schema), Encoders.row(valueSchema))
+            Encoders.row(schema), Encoders.row(valueSchema), TTLConfig(Duration.ZERO))
         } else {
           statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
             Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
