@@ -46,7 +46,8 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
     _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble,
       TTLConfig(Duration.ZERO))
     _mapState = getHandle.getMapState[Double, Int](
-      "testMapInit", Encoders.scalaDouble, Encoders.scalaInt)
+      "testMapInit", Encoders.scalaDouble, Encoders.scalaInt,
+        TTLConfig(Duration.ZERO))
   }
 
   override def handleInputRows(

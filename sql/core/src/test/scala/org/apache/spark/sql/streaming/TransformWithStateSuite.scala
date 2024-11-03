@@ -396,7 +396,8 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
     _listState = getHandle.getListState[TestClass](
       "listState", Encoders.product[TestClass], TTLConfig(Duration.ZERO))
     _mapState = getHandle.getMapState[POJOTestClass, String](
-      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING)
+      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING,
+      TTLConfig(Duration.ZERO))
   }
 }
 

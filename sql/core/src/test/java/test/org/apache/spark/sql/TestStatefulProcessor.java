@@ -46,7 +46,7 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       Encoders.LONG(), new TTLConfig(Duration.ZERO));
 
     keyCountMap = this.getHandle().getMapState("keyCountMap",
-      Encoders.STRING(), Encoders.LONG());
+      Encoders.STRING(), Encoders.LONG(), new TTLConfig(Duration.ZERO));
 
     keysList = this.getHandle().getListState("keyList",
       Encoders.STRING(), new TTLConfig(Duration.ZERO));

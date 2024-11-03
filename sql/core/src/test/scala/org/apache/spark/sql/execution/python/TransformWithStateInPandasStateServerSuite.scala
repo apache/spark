@@ -180,7 +180,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
           .getMapState[Row, Row](any[String], any[Encoder[Row]], any[Encoder[Row]], any[TTLConfig])
       } else {
         verify(statefulProcessorHandle).getMapState[Row, Row](any[String], any[Encoder[Row]],
-          any[Encoder[Row]])
+          any[Encoder[Row]], any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
