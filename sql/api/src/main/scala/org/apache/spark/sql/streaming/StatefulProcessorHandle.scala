@@ -167,9 +167,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * @return
    *   \- instance of MapState of type [K,V] that can be used to store state persistently
    */
-  def getMapState[K: Encoder, V: Encoder](
-      stateName: String,
-      ttlConfig: TTLConfig): MapState[K, V]
+  def getMapState[K: Encoder, V: Encoder](stateName: String, ttlConfig: TTLConfig): MapState[K, V]
 
   /** Function to return queryInfo for currently running task */
   def getQueryInfo(): QueryInfo
