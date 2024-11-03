@@ -209,9 +209,10 @@ private[spark] class Executor(
   // The default isolation group
   val defaultSessionState: IsolatedSessionState = newSessionState(JobArtifactState("default", None))
 
+  private val cacheExpiryTime = 30 * 60 * 1000
   val isolatedSessionCache: Cache[String, IsolatedSessionState] = CacheBuilder.newBuilder()
     .maximumSize(100)
-    .expireAfterAccess(30, TimeUnit.MINUTES)
+    .expireAfterAccess(cacheExpiryTime, TimeUnit.MILLISECONDS)
     .removalListener(new RemovalListener[String, IsolatedSessionState]() {
       override def onRemoval(
           notification: RemovalNotification[String, IsolatedSessionState]): Unit = {
@@ -295,7 +296,7 @@ private[spark] class Executor(
 
   private val pollOnHeartbeat = if (METRICS_POLLING_INTERVAL_MS > 0) false else true
 
-  private val timer = new Timer()
+  private val timer = new Timer("executor-state-timer", true)
 
   // Poller for the memory metrics. Visible for testing.
   private[executor] val metricsPoller = new ExecutorMetricsPoller(
@@ -564,19 +565,16 @@ private[spark] class Executor(
     override def run(): Unit = {
 
       // Classloader isolation
-      var maybeTask: Option[TimerTask] = None
+      var maybeTimerTask: Option[TimerTask] = None
       val isolatedSession = taskDescription.artifacts.state match {
         case Some(jobArtifactState) =>
           val state = isolatedSessionCache.get(
             jobArtifactState.uuid, () => newSessionState(jobArtifactState))
-          maybeTask = Some(new TimerTask {
-            def run(): Unit = {
-              // Resets the expire time till the task ends.
-              val v = isolatedSessionCache.getIfPresent(jobArtifactState.uuid)
-              if (v != null) isolatedSessionCache.put(jobArtifactState.uuid, v)
-            }
+          maybeTimerTask = Some(new TimerTask {
+            // Resets the expire time till the task ends.
+            def run(): Unit = isolatedSessionCache.getIfPresent(jobArtifactState.uuid)
           })
-          maybeTask.foreach(timer.schedule(_, 60000L, 60000L))
+          maybeTimerTask.foreach(timer.schedule(_, cacheExpiryTime / 10, cacheExpiryTime / 10))
           state
         case _ => defaultSessionState
       }
@@ -878,7 +876,7 @@ private[spark] class Executor(
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
-        maybeTask.foreach(_.cancel)
+        maybeTimerTask.foreach(_.cancel)
         cleanMDCForTask(taskName, mdcProperties)
         runningTasks.remove(taskId)
         if (taskStarted) {
