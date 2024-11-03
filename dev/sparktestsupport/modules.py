@@ -113,6 +113,14 @@ tags = Module(
     ],
 )
 
+utils = Module(
+    name="utils",
+    dependencies=[tags],
+    source_file_regexes=[
+        "common/utils/",
+    ],
+)
+
 kvstore = Module(
     name="kvstore",
     dependencies=[tags],
@@ -185,6 +193,14 @@ core = Module(
     ],
     sbt_test_goals=[
         "core/test",
+    ],
+)
+
+api = Module(
+    name="api",
+    dependencies=[utils, unsafe],
+    source_file_regexes=[
+        "sql/api/",
     ],
 )
 
