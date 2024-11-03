@@ -297,7 +297,6 @@ class RocksDB(
         (loadedStateStoreCkptId.isEmpty || stateStoreCkptId.get != loadedStateStoreCkptId.get))) {
         closeDB(ignoreException = false)
         val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        rocksDBFileMapping.currentVersion = latestSnapshotVersion
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
           workingDir, rocksDBFileMapping)
         loadedVersion = latestSnapshotVersion
@@ -402,7 +401,6 @@ class RocksDB(
    */
   private def replayFromCheckpoint(snapshotVersion: Long, endVersion: Long): Any = {
     closeDB()
-    rocksDBFileMapping.currentVersion = snapshotVersion
     val metadata = fileManager.loadCheckpointFromDfs(snapshotVersion,
       workingDir, rocksDBFileMapping)
     loadedVersion = snapshotVersion
@@ -1148,22 +1146,53 @@ class RocksDBFileMapping {
   // from reusing SST files which have not been yet persisted to DFS,
   val snapshotsPendingUpload: Set[RocksDBVersionSnapshotInfo] = ConcurrentHashMap.newKeySet()
 
-  // Current State Store version which has been loaded.
-  var currentVersion: Long = 0
-
-  // If the local file (with localFileName) has already been persisted to DFS, returns the
-  // DFS file, else returns None.
-  // If the currently mapped DFS file was committed in a newer version (or was generated
-  // in a version which has not been uploaded to DFS yet), the mapped DFS file is ignored (because
-  // it cannot be reused in this version). In this scenario, the local mapping to this DFS file
-  // will be cleared, and function will return None.
-  def getDfsFile(
+  /**
+   * Get the mapped DFS file for the given local file for a DFS load operation.
+   * If the currently mapped DFS file was mapped in the same or newer version as the version we
+   * want to load (or was generated in a version which has not been uploaded to DFS yet),
+   * the mapped DFS file is ignored. In this scenario, the local mapping to this DFS file
+   * will be cleared, and function will return None.
+   *
+   * @note For same version number, this is because we want to make sure we are using
+   *       the latest files in DFS, in case the previous zip file has been overwritten in DFS.
+   *
+   * @return - Option with the DFS file or None
+   */
+  def getDfsFileForLoad(
       fileManager: RocksDBFileManager,
-      localFileName: String): Option[RocksDBImmutableFile] = {
-    localFileMappings.get(localFileName).map { case (dfsFileCommitVersion, dfsFile) =>
+      localFileName: String,
+      versionToLoad: Long): Option[RocksDBImmutableFile] = {
+    getDfsFileWithVersionCheck(fileManager, localFileName, _ >= versionToLoad)
+  }
+
+  /**
+   * Get the mapped DFS file for the given local file for a DFS save (i.e. checkpoint) operation.
+   * If the currently mapped DFS file was mapped in the same or newer version as the version we
+   * want to save (or was generated in a version which has not been uploaded to DFS yet),
+   * the mapped DFS file is ignored. In this scenario, the local mapping to this DFS file
+   * will be cleared, and function will return None.
+   *
+   * @note If the file was added in current version (i.e. versionToSave - 1), we can reuse it.
+   *       e.g. we load(v1) -> save(v2), the loaded SST files from version 1 can be reused
+   *       in version 2 upload.
+   *
+   * @return - Option with the DFS file or None
+   */
+  private def getDfsFileForSave(
+      fileManager: RocksDBFileManager,
+      localFileName: String,
+      versionToSave: Long): Option[RocksDBImmutableFile] = {
+    getDfsFileWithVersionCheck(fileManager, localFileName, _ >= versionToSave)
+  }
+
+  private def getDfsFileWithVersionCheck(
+      fileManager: RocksDBFileManager,
+      localFileName: String,
+      isIncompatibleVersion: Long => Boolean): Option[RocksDBImmutableFile] = {
+    localFileMappings.get(localFileName).map { case (dfsFileMappedVersion, dfsFile) =>
       val dfsFileSuffix = fileManager.dfsFileSuffix(dfsFile)
-      val versionSnapshotInfo = RocksDBVersionSnapshotInfo(dfsFileCommitVersion, dfsFileSuffix)
-      if (dfsFileCommitVersion >= currentVersion ||
+      val versionSnapshotInfo = RocksDBVersionSnapshotInfo(dfsFileMappedVersion, dfsFileSuffix)
+      if (isIncompatibleVersion(dfsFileMappedVersion) ||
         snapshotsPendingUpload.contains(versionSnapshotInfo)) {
         // the mapped dfs file cannot be used, delete from mapping
         remove(localFileName)
@@ -1174,7 +1203,7 @@ class RocksDBFileMapping {
     }.getOrElse(None)
   }
 
-  private def mapToDfsFile(
+  def mapToDfsFile(
       localFileName: String,
       dfsFile: RocksDBImmutableFile,
       version: Long): Unit = {
@@ -1183,10 +1212,6 @@ class RocksDBFileMapping {
 
   def remove(localFileName: String): Unit = {
     localFileMappings.remove(localFileName)
-  }
-
-  def mapToDfsFileForCurrentVersion(localFileName: String, dfsFile: RocksDBImmutableFile): Unit = {
-    localFileMappings.put(localFileName, (currentVersion, dfsFile))
   }
 
   private def syncWithLocalState(localFiles: Seq[File]): Unit = {
@@ -1209,7 +1234,7 @@ class RocksDBFileMapping {
     val dfsFilesSuffix = UUID.randomUUID().toString
     val snapshotFileMapping = localImmutableFiles.map { f =>
       val localFileName = f.getName
-      val existingDfsFile = getDfsFile(fileManager, localFileName)
+      val existingDfsFile = getDfsFileForSave(fileManager, localFileName, version)
       val dfsFile = existingDfsFile.getOrElse {
         val newDfsFileName = fileManager.newDFSFileName(localFileName, dfsFilesSuffix)
         val newDfsFile = RocksDBImmutableFile(localFileName, newDfsFileName, sizeBytes = f.length())
