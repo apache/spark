@@ -813,25 +813,6 @@ class SparkSession(SparkConversionMixin):
         return self._jsparkSession.version()
 
     @property
-    def webUrl(self) -> Optional[str]:
-        """
-        The url of Spark context Web UI.
-
-        .. versionadded:: 4.0.0
-            Supports Spark Connect.
-
-        Returns
-        -------
-        str
-            the url of Spark context Web UI.
-
-        Examples
-        --------
-        >>> _ = spark.webUrl
-        """
-        return self._jsparkSession.webUrl()
-
-    @property
     def conf(self) -> RuntimeConfig:
         """Runtime configuration interface for Spark.
 

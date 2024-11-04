@@ -126,7 +126,10 @@ if is_remote():
         url = "sc://localhost"  # only for display in the console.
     print("Client connected to the Spark Connect server at %s" % urlparse(url).netloc)
     if spark.webUrl is not None:
-        print("Spark Connect server context Web UI available at %s" % (spark.webUrl))  # type: ignore[union-attr]
+        print(
+            "Spark Connect server context Web UI available at %s."
+            % (spark.webUrl)  # type: ignore[union-attr]
+        )
 else:
     print("Spark context Web UI available at %s" % (sc.uiWebUrl))  # type: ignore[union-attr]
     print(
