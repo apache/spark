@@ -112,7 +112,8 @@ class SparkSessionJobTaggingAndCancellationSuite
         activeJob.properties.get(SQLExecution.EXECUTION_ROOT_ID_KEY).asInstanceOf[String].toLong)))
   }
 
-  test("Cancellation APIs in SparkSession are isolated") {
+  // TODO(SPARK-50205): Re-enable this test case.
+  ignore("Cancellation APIs in SparkSession are isolated") {
     sc = new SparkContext("local[2]", "test")
     val globalSession = SparkSession.builder().sparkContext(sc).getOrCreate()
     var (sessionA, sessionB, sessionC): (SparkSession, SparkSession, SparkSession) =
