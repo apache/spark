@@ -149,10 +149,10 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
       ttlConfig: TTLConfig): MapState[K, V]
 
   /**
-   * (Scala-specific) Function to create new or return existing map state variable of given
-   * type with ttl. State values will not be returned past ttlDuration, and will be eventually
-   * removed from the state store. Any values in mapState which have expired after ttlDuration
-   * will not returned on get() and will be eventually removed from the state.
+   * (Scala-specific) Function to create new or return existing map state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in mapState which have expired after ttlDuration will not be
+   * returned on get() and will be eventually removed from the state.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
