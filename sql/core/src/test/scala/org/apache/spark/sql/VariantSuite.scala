@@ -33,6 +33,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.types.variant.VariantUtil._
 import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -117,7 +118,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         rand.nextBytes(value)
         val metadata = new Array[Byte](rand.nextInt(50))
         rand.nextBytes(metadata)
-        new VariantVal(value, metadata)
+        // Generate a valid metadata, otherwise the shredded reader will fail.
+        new VariantVal(value, Array[Byte](VERSION, 0, 0) ++ metadata)
       }
     }
 
@@ -151,7 +153,8 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
         val metadata = new Array[Byte](rand.nextInt(50))
         rand.nextBytes(metadata)
         val numElements = 3 // rand.nextInt(10)
-        Seq.fill(numElements)(new VariantVal(value, metadata))
+        // Generate a valid metadata, otherwise the shredded reader will fail.
+        Seq.fill(numElements)(new VariantVal(value, Array[Byte](VERSION, 0, 0) ++ metadata))
       }
     }
 
@@ -299,7 +302,9 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
             df.write.parquet(file)
             val schema = StructType(Seq(StructField("v", VariantType)))
             val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
-            val e = intercept[org.apache.spark.SparkException](result.collect())
+            val e = withSQLConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "false") {
+              intercept[org.apache.spark.SparkException](result.collect())
+            }
             checkError(
               exception = e.getCause.asInstanceOf[AnalysisException],
               condition = condition,
