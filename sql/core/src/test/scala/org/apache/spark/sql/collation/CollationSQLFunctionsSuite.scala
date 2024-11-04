@@ -23,9 +23,7 @@ import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CollationSQLFunctionsSuite
-  extends QueryTest
-  with SharedSparkSession {
+class CollationSQLFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("from_json and from_xml work correctly with session collation") {
     val spark = this.spark
@@ -44,8 +42,7 @@ class CollationSQLFunctionsSuite
         StringType,
         StringType("UTF8_BINARY"),
         StringType("UNICODE"),
-        StringType("UNICODE_CI_AI"),
-      ).foreach { stringType =>
+        StringType("UNICODE_CI_AI")).foreach { stringType =>
         val dataSchema = StructType(Seq(StructField("fieldName", stringType)))
         val expectedSchema = StructType(Seq(StructField("result", dataSchema)))
 
