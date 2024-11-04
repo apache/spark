@@ -65,6 +65,8 @@ class FunctionTestSuite extends ConnectFunSuite {
   testEquals("avg/mean", avg("a"), avg(a), mean(a), mean("a"))
   testEquals("collect_list", collect_list("a"), collect_list(a))
   testEquals("collect_set", collect_set("a"), collect_set(a))
+  testEquals("listagg", listagg("a"), listagg(a))
+  testEquals("listagg_distinct", listagg_distinct("a"), listagg_distinct(a))
   testEquals("corr", corr("a", "b"), corr(a, b))
   testEquals(
     "count_distinct",

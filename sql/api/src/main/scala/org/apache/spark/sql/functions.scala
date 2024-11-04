@@ -1148,7 +1148,7 @@ object functions {
   def sum_distinct(e: Column): Column = Column.fn("sum", isDistinct = true, e)
 
   /**
-   * Aggregate function: returns the concatenated input values.
+   * Aggregate function: returns the concatenation of non-null input values.
    *
    * @group agg_funcs
    * @since 4.0.0
@@ -1156,7 +1156,16 @@ object functions {
   def listagg(e: Column): Column = Column.fn("listagg", e)
 
   /**
-   * Aggregate function: returns the concatenated input values, separated by the delimiter string.
+   * Aggregate function: returns the concatenation of non-null input values.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg(columnName: String): Column = listagg(Column(columnName))
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values,
+   * separated by the delimiter string.
    *
    * @group agg_funcs
    * @since 4.0.0
@@ -1164,7 +1173,17 @@ object functions {
   def listagg(e: Column, delimiter: Column): Column = Column.fn("listagg", e, delimiter)
 
   /**
-   * Aggregate function: returns the concatenated input values, separated by the delimiter string.
+   * Aggregate function: returns the concatenation of non-null input values,
+   * separated by the delimiter string.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg(columnName: String, delimiter: String): Column =
+    listagg(Column(columnName), lit(delimiter))
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values.
    *
    * @group agg_funcs
    * @since 4.0.0
@@ -1172,13 +1191,32 @@ object functions {
   def listagg_distinct(e: Column): Column = Column.fn("listagg", isDistinct = true, e)
 
   /**
-   * Aggregate function: returns the concatenated input values, separated by the delimiter string.
+   * Aggregate function: returns the concatenation of distinct non-null input values.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg_distinct(columnName: String): Column = listagg_distinct(Column(columnName))
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values,
+   * separated by the delimiter string.
    *
    * @group agg_funcs
    * @since 4.0.0
    */
   def listagg_distinct(e: Column, delimiter: Column): Column =
     Column.fn("listagg", isDistinct = true, e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values,
+   * separated by the delimiter string.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg_distinct(columnName: String, delimiter: String): Column =
+    listagg_distinct(Column(columnName), lit(delimiter))
 
   /**
    * Aggregate function: alias for `var_samp`.

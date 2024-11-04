@@ -287,8 +287,12 @@ private[aggregate] object CollectTopK {
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
       NULL
   """,
+  note = """
+    If order is not specified the function is non-deterministic because
+    the order of the rows may be non-deterministic after a shuffle.
+  """,
   group = "agg_funcs",
-  since = "4.0.0") // TODO change
+  since = "4.0.0")
 case class ListAgg(
     child: Expression,
     delimiter: Expression = Literal(null),
@@ -317,11 +321,21 @@ case class ListAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   /** Indicates that the result of [[child]] is enough for evaluation  */
-  private lazy val dontNeedSaveOrderValue = isOrderCompatible(orderExpressions)
+  private lazy val noNeedSaveOrderValue: Boolean = isOrderCompatible(orderExpressions)
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
   override def defaultResult: Option[Literal] = Option(Literal.create(null, dataType))
+
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    val withinGroup = if (orderingFilled) {
+      s" WITHIN GROUP (ORDER BY ${orderExpressions.map(_.sql).mkString(", ")})"
+    } else {
+      ""
+    }
+    s"$prettyName($distinct${child.sql}, ${delimiter.sql})$withinGroup"
+  }
 
   private[this] def orderValuesField: Seq[StructField] = {
     orderExpressions.zipWithIndex.map {
@@ -337,14 +351,15 @@ case class ListAgg(
     val bufferSortOrder = orderExpressions.zipWithIndex.map {
       case (originalOrder, i) =>
         originalOrder.copy(
-          child = BoundReference(i + 1, originalOrder.dataType, nullable = true)
+          // first value is the evaluated child so add +1 for order's values
+          child = BoundReference(i + 1, originalOrder.dataType, originalOrder.child.nullable)
         )
     }
     new InterpretedOrdering(bufferSortOrder)
   }
 
   override protected lazy val bufferElementType: DataType = {
-    if (dontNeedSaveOrderValue) {
+    if (noNeedSaveOrderValue) {
       child.dataType
     } else {
       StructType(
@@ -393,7 +408,7 @@ case class ListAgg(
     if (!orderingFilled) {
       return buffer
     }
-    if (dontNeedSaveOrderValue) {
+    if (noNeedSaveOrderValue) {
       val ascendingOrdering = PhysicalDataType.ordering(orderExpressions.head.dataType)
       val ordering = if (orderExpressions.head.direction == Ascending) ascendingOrdering
         else ascendingOrdering.reverse
@@ -401,6 +416,7 @@ case class ListAgg(
     } else {
       buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]]
         .sorted(bufferOrdering)
+        // drop order values after sort
         .map(_.get(0, child.dataType))
     }
   }
@@ -442,7 +458,7 @@ case class ListAgg(
   override def update(buffer: ArrayBuffer[Any], input: InternalRow): ArrayBuffer[Any] = {
     val value = child.eval(input)
     if (value != null) {
-      val v = if (dontNeedSaveOrderValue) {
+      val v = if (noNeedSaveOrderValue) {
         convertToBufferElement(value)
       } else {
         InternalRow.fromSeq(convertToBufferElement(value) +: evalOrderValues(input))
@@ -470,7 +486,7 @@ case class ListAgg(
    * Utility func to check if given order is defined and different from [[child]].
    *
    * @see [[QueryCompilationErrors.functionAndOrderExpressionMismatchError]]
-   * @see [[dontNeedSaveOrderValue]]
+   * @see [[noNeedSaveOrderValue]]
    */
   def isOrderCompatible(someOrder: Seq[SortOrder]): Boolean = {
     if (someOrder.isEmpty) {

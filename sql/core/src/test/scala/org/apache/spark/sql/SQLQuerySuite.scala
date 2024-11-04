@@ -164,7 +164,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   private[this] def hexToBytes(s: String): Array[Byte] = {
     val byteArray = BigInt(s, 16).toByteArray
     if (byteArray.length > 1 && byteArray(0) == 0) {
-      // remove sign byte if exists
+      // remove sign byte for positive numbers if exists
       byteArray.tail
     } else {
       byteArray
