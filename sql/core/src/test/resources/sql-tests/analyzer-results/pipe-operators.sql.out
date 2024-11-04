@@ -704,7 +704,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 -- !query
 table t
-|> where first_value(x) over (partition by y) = 1
+|> where sum(x) over (partition by y) = 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -717,20 +717,21 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 table t
-|> where first_value(x) over w = 1
+|> where sum(x) over w = 1
    window w as (partition by y)
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "clauseName" : "WHERE"
+    "message" : "Cannot find main error class 'NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE'"
   }
 }
 
 
 -- !query
-select * from t where first_value(x) over (partition by y) = 1
+select * from t where sum(x) over (partition by y) = 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -2793,11 +2794,11 @@ table windowTestData
 |> select cate, val, sum(val) over w as sum_val
    window w as (partition by cate)
 |> select cate, val, sum_val, first_value(cate) over w
-   window w as (partition by val)
+   window w as (order by val)
 -- !query analysis
-Project [cate#x, val#x, sum_val#xL, first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-+- Project [cate#x, val#x, sum_val#xL, first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-   +- Window [first_value(cate#x, false) windowspecdefinition(val#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [val#x]
+Project [cate#x, val#x, sum_val#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [cate#x, val#x, sum_val#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [first_value(cate#x, false) windowspecdefinition(val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [val#x ASC NULLS FIRST]
       +- Project [cate#x, val#x, sum_val#xL]
          +- Project [cate#x, val#x, sum_val#xL]
             +- Project [cate#x, val#x, _we0#xL, pipeselect(_we0#xL) AS sum_val#xL]
@@ -2814,11 +2815,11 @@ Project [cate#x, val#x, sum_val#xL, first_value(cate) OVER (PARTITION BY val ROW
 -- !query
 table windowTestData
 |> select cate, val, sum(val) over w1, first_value(cate) over w2
-   window w1 as (partition by cate), w2 as (partition by val)
+   window w1 as (partition by cate), w2 as (order by val)
 -- !query analysis
-Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-+- Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
-   +- Window [first_value(cate#x, false) windowspecdefinition(val#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [val#x]
+Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [first_value(cate#x, false) windowspecdefinition(val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [val#x ASC NULLS FIRST]
       +- Window [sum(val#x) windowspecdefinition(cate#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL], [cate#x]
          +- Project [cate#x, val#x]
             +- SubqueryAlias windowtestdata
@@ -2906,15 +2907,15 @@ Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST R
 table windowTestData
 |> select cate, val, first_value(cate) over w as first_val
 |> select cate, val, sum(val) over w as sum_val
-   window w as (partition by cate)
+   window w as (order by val)
 -- !query analysis
 Project [cate#x, val#x, sum_val#xL]
 +- Project [cate#x, val#x, _we0#xL, pipeselect(_we0#xL) AS sum_val#xL]
-   +- Window [sum(val#x) windowspecdefinition(cate#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL], [cate#x]
+   +- Window [sum(val#x) windowspecdefinition(val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS _we0#xL], [val#x ASC NULLS FIRST]
       +- Project [cate#x, val#x]
          +- Project [cate#x, val#x, first_val#x]
             +- Project [cate#x, val#x, _we0#x, pipeselect(_we0#x) AS first_val#x]
-               +- Window [first_value(cate#x, false) windowspecdefinition(cate#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#x], [cate#x]
+               +- Window [first_value(cate#x, false) windowspecdefinition(val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS _we0#x], [val#x ASC NULLS FIRST]
                   +- Project [cate#x, val#x]
                      +- SubqueryAlias windowtestdata
                         +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
@@ -2943,7 +2944,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 table windowTestData
 |> select cate, val, sum(val) over w1, first_value(cate) over w2
    window w1 as (partition by cate)
-   window w2 as (partition by val)
+   window w2 as (order by val)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -2959,7 +2960,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 table windowTestData
 |> select cate, val, sum(val) over w as sum_val
-   window w as (partition by cate)
+   window w as (partition by cate order by val)
 |> select cate, val, sum_val, first_value(cate) over w
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException

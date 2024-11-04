@@ -1503,7 +1503,10 @@ version
 
 operatorPipeRightSide
     : selectClause windowClause?
-    | whereClause
+    // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
+    // the grammar simply for purposes of catching this invalid syntax and throwing a specific
+    // dedicated error message.
+    | whereClause windowClause?
     // The following two cases match the PIVOT or UNPIVOT clause, respectively.
     // For each one, we add the other clause as an option in order to return high-quality error
     // messages in the event that both are present (this is not allowed).

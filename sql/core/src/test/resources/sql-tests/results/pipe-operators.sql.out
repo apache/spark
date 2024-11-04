@@ -637,7 +637,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 -- !query
 table t
-|> where first_value(x) over (partition by y) = 1
+|> where sum(x) over (partition by y) = 1
 -- !query schema
 struct<>
 -- !query output
@@ -652,22 +652,23 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 table t
-|> where first_value(x) over w = 1
+|> where sum(x) over w = 1
    window w as (partition by y)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "clauseName" : "WHERE"
+    "message" : "Cannot find main error class 'NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE'"
   }
 }
 
 
 -- !query
-select * from t where first_value(x) over (partition by y) = 1
+select * from t where sum(x) over (partition by y) = 1
 -- !query schema
 struct<>
 -- !query output
@@ -2470,37 +2471,37 @@ table windowTestData
 |> select cate, val, sum(val) over w as sum_val
    window w as (partition by cate)
 |> select cate, val, sum_val, first_value(cate) over w
-   window w as (partition by val)
+   window w as (order by val)
 -- !query schema
-struct<cate:string,val:int,sum_val:bigint,first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):string>
+struct<cate:string,val:int,sum_val:bigint,first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
 -- !query output
-NULL	3	3	NULL
-NULL	NULL	3	NULL
+NULL	3	3	a
+NULL	NULL	3	a
 a	1	4	a
 a	1	4	a
 a	2	4	a
-a	NULL	4	NULL
+a	NULL	4	a
 b	1	6	a
 b	2	6	a
-b	3	6	NULL
+b	3	6	a
 
 
 -- !query
 table windowTestData
 |> select cate, val, sum(val) over w1, first_value(cate) over w2
-   window w1 as (partition by cate), w2 as (partition by val)
+   window w1 as (partition by cate), w2 as (order by val)
 -- !query schema
-struct<cate:string,val:int,sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,first_value(cate) OVER (PARTITION BY val ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):string>
+struct<cate:string,val:int,sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
 -- !query output
-NULL	3	3	NULL
-NULL	NULL	3	NULL
+NULL	3	3	a
+NULL	NULL	3	a
 a	1	4	a
 a	1	4	a
 a	2	4	a
-a	NULL	4	NULL
+a	NULL	4	a
 b	1	6	a
 b	2	6	a
-b	3	6	NULL
+b	3	6	a
 
 
 -- !query
@@ -2573,19 +2574,19 @@ b	6
 table windowTestData
 |> select cate, val, first_value(cate) over w as first_val
 |> select cate, val, sum(val) over w as sum_val
-   window w as (partition by cate)
+   window w as (order by val)
 -- !query schema
 struct<cate:string,val:int,sum_val:bigint>
 -- !query output
-NULL	3	3
-NULL	NULL	3
-a	1	4
-a	1	4
-a	2	4
-a	NULL	4
-b	1	6
-b	2	6
-b	3	6
+NULL	3	13
+NULL	NULL	NULL
+a	1	3
+a	1	3
+a	2	7
+a	NULL	NULL
+b	1	3
+b	2	7
+b	3	13
 
 
 -- !query
@@ -2609,7 +2610,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 table windowTestData
 |> select cate, val, sum(val) over w1, first_value(cate) over w2
    window w1 as (partition by cate)
-   window w2 as (partition by val)
+   window w2 as (order by val)
 -- !query schema
 struct<>
 -- !query output
@@ -2627,7 +2628,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 table windowTestData
 |> select cate, val, sum(val) over w as sum_val
-   window w as (partition by cate)
+   window w as (partition by cate order by val)
 |> select cate, val, sum_val, first_value(cate) over w
 -- !query schema
 struct<>

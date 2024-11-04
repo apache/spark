@@ -232,13 +232,13 @@ table t
 -- clause and then add a pipe-operator WHERE clause referring to the result of the window function
 -- expression(s) therein).
 table t
-|> where first_value(x) over (partition by y) = 1;
+|> where sum(x) over (partition by y) = 1;
 
 table t
-|> where first_value(x) over w = 1
+|> where sum(x) over w = 1
    window w as (partition by y);
 
-select * from t where first_value(x) over (partition by y) = 1;
+select * from t where sum(x) over (partition by y) = 1;
 
 -- Pipe operators may only refer to attributes produced as output from the directly-preceding
 -- pipe operator, not from earlier ones.
@@ -842,12 +842,12 @@ table windowTestData
 |> select cate, val, sum(val) over w as sum_val
    window w as (partition by cate)
 |> select cate, val, sum_val, first_value(cate) over w
-   window w as (partition by val);
+   window w as (order by val);
 
 -- SELECT with a WINDOW clause for multiple window definitions.
 table windowTestData
 |> select cate, val, sum(val) over w1, first_value(cate) over w2
-   window w1 as (partition by cate), w2 as (partition by val);
+   window w1 as (partition by cate), w2 as (order by val);
 
 -- SELECT with a WINDOW clause for multiple window functions over one window definition
 table windowTestData
@@ -876,7 +876,7 @@ table windowTestData
 table windowTestData
 |> select cate, val, first_value(cate) over w as first_val
 |> select cate, val, sum(val) over w as sum_val
-   window w as (partition by cate);
+   window w as (order by val);
 
 -- WINDOW operators (within SELECT): negative tests.
 ---------------------------------------------------
@@ -889,12 +889,12 @@ table windowTestData
 table windowTestData
 |> select cate, val, sum(val) over w1, first_value(cate) over w2
    window w1 as (partition by cate)
-   window w2 as (partition by val);
+   window w2 as (order by val);
 
 -- WINDOW definition cannot be referred in the upstream SELECT clause.
 table windowTestData
 |> select cate, val, sum(val) over w as sum_val
-   window w as (partition by cate)
+   window w as (partition by cate order by val)
 |> select cate, val, sum_val, first_value(cate) over w;
 
 -- Cleanup.

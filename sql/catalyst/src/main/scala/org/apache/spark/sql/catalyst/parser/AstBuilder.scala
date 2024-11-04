@@ -5899,6 +5899,9 @@ class AstBuilder extends DataTypeAstBuilder
         relation = left,
         isPipeOperatorSelect = true)
     }.getOrElse(Option(ctx.whereClause).map { c =>
+      if (ctx.windowClause() != null) {
+        throw QueryParsingErrors.windowClauseInOperatorPipeWhereClauseNotAllowedError(ctx)
+      }
       withWhereClause(c, withSubqueryAlias())
     }.getOrElse(Option(ctx.pivotClause()).map { c =>
       if (ctx.unpivotClause() != null) {
