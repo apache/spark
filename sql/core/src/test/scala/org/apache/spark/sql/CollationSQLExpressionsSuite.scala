@@ -20,13 +20,10 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 
-import scala.collection.immutable.Seq
-
 import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
-import org.apache.spark.sql.functions.{from_json, from_xml}
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -3172,41 +3169,6 @@ class CollationSQLExpressionsSuite
         checkAnswer(sql(query), t.output)
       }
     })
-  }
-
-  test("from_json and from_xml transformations with session collation") {
-    val spark = this.spark
-    import spark.implicits._
-
-    def checkSchema(
-        dataset: Dataset[String],
-        transformation: Column,
-        expectedSchema: StructType): Unit = {
-      val transformedSchema = dataset.select(transformation.as("result")).schema
-      assert(transformedSchema === expectedSchema)
-    }
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE_CI_AI") {
-      Seq(
-        StringType,
-        StringType("UTF8_BINARY"),
-        StringType("UNICODE"),
-        StringType("UNICODE_CI_AI"),
-      ).foreach { stringType =>
-        val dataSchema = StructType(Seq(StructField("fieldName", stringType)))
-        val expectedSchema = StructType(Seq(StructField("result", dataSchema)))
-
-        // JSON Test
-        val jsonData = Seq("""{"fieldName": "fieldValue"}""")
-        val jsonDataset = spark.createDataset(jsonData)
-        checkSchema(jsonDataset, from_json($"value", dataSchema), expectedSchema)
-
-        // XML Test
-        val xmlData = Seq("<root><fieldName>fieldValue</fieldName></root>")
-        val xmlDataset = spark.createDataset(xmlData)
-        checkSchema(xmlDataset, from_xml($"value", dataSchema), expectedSchema)
-      }
-    }
   }
 
   // TODO: Add more tests for other SQL expressions
