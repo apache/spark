@@ -87,6 +87,8 @@ class FunctionsTestsMixin:
             # TODO: listagg functions will soon be added and removed from this list
             "listagg_distinct",
             "listagg",
+            "string_agg",
+            "string_agg_distinct",
         }
 
         self.assertEqual(
