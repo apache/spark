@@ -180,6 +180,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(null) :: Row("bc") :: Row("cd") :: Nil)
 
       checkAnswer(
+        sql("select string_agg(b) from df group by a"),
+        Row(null) :: Row("bc") :: Row("cd") :: Nil)
+
+      checkAnswer(
         sql("select listagg(b, null) from df group by a"),
         Row(null) :: Row("bc") :: Row("cd") :: Nil)
 
@@ -306,6 +310,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           fragment = "listagg(a) within group (order by a) over (order by a)",
           start = 7,
           stop = 60))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("select string_agg(a) within group (order by a) over (order by a) from df")
+        },
+        condition = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+        parameters = Map("aggFunc" -> "\"listagg(a, NULL, a)\""),
+        context = ExpectedContext(
+          fragment = "string_agg(a) within group (order by a) over (order by a)",
+          start = 7,
+          stop = 63))
 
       checkError(
         exception = intercept[AnalysisException] {
