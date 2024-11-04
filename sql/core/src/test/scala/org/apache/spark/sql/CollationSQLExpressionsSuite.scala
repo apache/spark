@@ -3174,26 +3174,6 @@ class CollationSQLExpressionsSuite
     })
   }
 
-  test("from json works with session collation") {
-    val spark = this.spark
-    import spark.implicits._
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE_CI_AI") {
-
-      val jsonData = "{\"fieldName\": \"fieldValue\"}"
-      val jsonSchema = new StructType().add("fieldName", StringType)
-      val expectedSchema = StructType(Seq(StructField("result", jsonSchema)))
-
-      val stringDataset = spark.createDataset(Seq(jsonData)).toDF("c1")
-
-      val actualSchema = stringDataset
-        .select(from_json($"c1", jsonSchema).as("result"))
-        .schema
-
-      assert(actualSchema === expectedSchema)
-    }
-  }
-
   test("from_json and from_xml transformations with session collation") {
     val spark = this.spark
     import spark.implicits._
