@@ -168,6 +168,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("CollationKey generates correct collation key for collated string") {
+    // In version `75.1`, its value is 0x2A (42), while in version `76.1`, its value is 0x2B (43)
     val b: Byte = 0x2B
     val testCases = Seq(
       ("", "UTF8_BINARY", UTF8String.fromString("").getBytes),
