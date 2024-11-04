@@ -40,6 +40,7 @@ from typing import (
 )
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors.utils import _with_origin
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.types import (
@@ -293,6 +294,7 @@ def lit(col: Any) -> Column:
 
 
 @_try_remote_functions
+@_with_origin
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.
