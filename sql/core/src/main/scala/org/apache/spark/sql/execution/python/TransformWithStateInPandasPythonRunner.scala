@@ -113,7 +113,7 @@ class TransformWithStateInPandasPythonInitialStateRunner(
     funcs, evalType, argOffsets, dataSchema, processorHandle, _timeZoneId,
     initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
-    with PythonArrowInput[GroupedInType] {
+  with PythonArrowInput[GroupedInType] {
 
   override protected lazy val schema: StructType = new StructType()
     .add("inputData", dataSchema)
@@ -177,6 +177,7 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
   with PythonArrowInput[I]
   with BasicPythonArrowOutput
   with Logging {
+
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
 

@@ -616,11 +616,13 @@ class TransformWithStateInPandasTestsMixin:
             SimpleStatefulProcessorWithInitialState(), check_results
         )
 
-    def _test_transform_with_state_non_contiguous_grouping_cols(self, stateful_processor, check_results):
-
+    def _test_transform_with_state_non_contiguous_grouping_cols(
+        self, stateful_processor, check_results
+    ):
         input_path = tempfile.mkdtemp()
-        self._prepare_input_data_with_3_cols(input_path + "/text-test1.txt",
-                                             [0, 0, 1, 1], [123, 46, 146, 346], [1, 1, 2, 2])
+        self._prepare_input_data_with_3_cols(
+            input_path + "/text-test1.txt", [0, 0, 1, 1], [123, 46, 146, 346], [1, 1, 2, 2]
+        )
 
         df = self.build_test_df_with_3_cols(input_path)
 
@@ -696,7 +698,9 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
         self.value_state.update((accumulated_value,))
 
         if len(key) > 1:
-            yield pd.DataFrame({"id1": (key[0],), "id2": (key[1],), "value": str(accumulated_value)})
+            yield pd.DataFrame(
+                {"id1": (key[0],), "id2": (key[1],), "value": str(accumulated_value)}
+            )
         else:
             yield pd.DataFrame({"id": key, "value": str(accumulated_value)})
 

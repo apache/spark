@@ -16,7 +16,7 @@
 #
 import itertools
 import sys
-from typing import Any, Iterator, List, Union, TYPE_CHECKING, cast
+from typing import Any, Iterator, List, Optional, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkTypeError
@@ -373,7 +373,7 @@ class PandasGroupedOpsMixin:
         outputStructType: Union[StructType, str],
         outputMode: str,
         timeMode: str,
-        initialState: "GroupedData" = None,
+        initialState: Optional["GroupedData"] = None,
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -572,19 +572,19 @@ class PandasGroupedOpsMixin:
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
-            initialStates: Iterator["PandasDataFrameLike"] = None,
+            initialStates: Optional[Iterator["PandasDataFrameLike"]] = None,
         ) -> Iterator["PandasDataFrameLike"]:
             """
             UDF for TWS operator with non-empty initial states. Possible input combinations
             of inputRows and initialStates iterator:
-            - Both `inputRows` and `initialStates` are non-empty. Both input rows and initial states
-             contains the grouping key and data.
-            - `InitialStates` is non-empty, while `inputRows` is empty. Only initial states contains
-             the grouping key and data, and it is first batch.
+            - Both `inputRows` and `initialStates` are non-empty. Both input rows and initial
+             states contains the grouping key and data.
+            - `InitialStates` is non-empty, while `inputRows` is empty. Only initial states
+             contains the grouping key and data, and it is first batch.
             - `initialStates` is empty, while `inputRows` is non-empty. Only inputRows contains the
              grouping key and data, and it is first batch.
-            - `initialStates` is None, while `inputRows` is not empty. This is not first batch. `initialStates`
-              is initialized to the positional value as None.
+            - `initialStates` is None, while `inputRows` is not empty. This is not first batch.
+             `initialStates` is initialized to the positional value as None.
             """
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 

@@ -1238,8 +1238,8 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             schema: StructType = new StructType()
                 .add("inputData", dataSchema)
                 .add("initState", initStateSchema)
-            We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python data generator.
-            All rows in the same batch have the same grouping key.
+            We'll parse batch into Tuples of (key, inputData, initState) and pass into the Python
+             data generator. All rows in the same batch have the same grouping key.
             """
             for batch in batches:
                 flatten_state_table = flatten_columns(batch, "inputData")
