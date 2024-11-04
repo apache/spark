@@ -395,11 +395,7 @@ public final class CollationFactory {
         // instance.
         assert (collationId >= 0 && getDefinitionOrigin(collationId)
           == DefinitionOrigin.PREDEFINED);
-        if (collationId == NON_COLLATED_STRING_COLLATION_ID) {
-          // Skip cache.
-          return CollationSpecUTF8.NON_COLLATED_STRING_COLLATION;
-        }
-        else if (collationId == UTF8_BINARY_COLLATION_ID) {
+        if (collationId == UTF8_BINARY_COLLATION_ID || collationId == DEFAULT_COLLATION_ID) {
           // Skip cache.
           return CollationSpecUTF8.UTF8_BINARY_COLLATION;
         } else if (collationMap.containsKey(collationId)) {
@@ -479,7 +475,7 @@ public final class CollationFactory {
        * explicit/implicit/default UTF8_BINARY collation.
        */
       private enum Utf8BinaryCollationType {
-        STRING, UTF8_BINARY
+        DEFAULT, UTF8_BINARY
       }
 
       /**
@@ -505,10 +501,10 @@ public final class CollationFactory {
       private static final String UTF8_BINARY_COLLATION_NAME = "UTF8_BINARY";
       private static final String UTF8_LCASE_COLLATION_NAME = "UTF8_LCASE";
 
-      private static final int NON_COLLATED_STRING_COLLATION_ID =
+      private static final int DEFAULT_COLLATION_ID =
         new CollationSpecUTF8(
                 CaseSensitivity.UNSPECIFIED,
-                Utf8BinaryCollationType.STRING,
+                Utf8BinaryCollationType.DEFAULT,
                 SpaceTrimming.NONE).collationId;
       private static final int UTF8_BINARY_COLLATION_ID =
         new CollationSpecUTF8(
@@ -518,13 +514,8 @@ public final class CollationFactory {
       private static final int UTF8_LCASE_COLLATION_ID =
         new CollationSpecUTF8(
                 CaseSensitivity.LCASE,
-                Utf8BinaryCollationType.STRING,
+                Utf8BinaryCollationType.DEFAULT,
                 SpaceTrimming.NONE).collationId;
-      protected static Collation NON_COLLATED_STRING_COLLATION =
-        new CollationSpecUTF8(
-                CaseSensitivity.UNSPECIFIED,
-                Utf8BinaryCollationType.STRING,
-                SpaceTrimming.NONE).buildCollation();
       protected static Collation UTF8_BINARY_COLLATION =
         new CollationSpecUTF8(
                 CaseSensitivity.UNSPECIFIED,
@@ -532,7 +523,7 @@ public final class CollationFactory {
                 SpaceTrimming.NONE).buildCollation();
       protected static Collation UTF8_LCASE_COLLATION =
         new CollationSpecUTF8(CaseSensitivity.LCASE,
-                Utf8BinaryCollationType.STRING,
+                Utf8BinaryCollationType.DEFAULT,
                 SpaceTrimming.NONE).buildCollation();
 
       private final CaseSensitivity caseSensitivity;
@@ -1190,8 +1181,8 @@ public final class CollationFactory {
   public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
   public static final String COLLATION_PAD_ATTRIBUTE = "NO_PAD";
 
-  public static final int NON_COLLATED_STRING_COLLATION_ID =
-    Collation.CollationSpecUTF8.NON_COLLATED_STRING_COLLATION_ID;
+  public static final int DEFAULT_COLLATION_ID =
+    Collation.CollationSpecUTF8.DEFAULT_COLLATION_ID;
   public static final int UTF8_BINARY_COLLATION_ID =
     Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION_ID;
   public static final int UTF8_LCASE_COLLATION_ID =
@@ -1268,7 +1259,7 @@ public final class CollationFactory {
    */
   public static boolean isUTF8BinaryCollation(int collationId) {
     return collationId == UTF8_BINARY_COLLATION_ID ||
-      collationId == NON_COLLATED_STRING_COLLATION_ID;
+      collationId == DEFAULT_COLLATION_ID;
   }
 
   public static void assertValidProvider(String provider) throws SparkException {

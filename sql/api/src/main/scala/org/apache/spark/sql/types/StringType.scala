@@ -56,9 +56,6 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
   private[sql] def isUTF8BinaryCollation: Boolean =
     CollationFactory.isUTF8BinaryCollation(collationId)
 
-  private[sql] def isNonCollatedString: Boolean =
-    collationId == CollationFactory.NON_COLLATED_STRING_COLLATION_ID
-
   private[sql] def isUTF8LcaseCollation: Boolean =
     collationId == CollationFactory.UTF8_LCASE_COLLATION_ID
 
@@ -77,7 +74,7 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
    * `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (isNonCollatedString) "string"
+    if (isUTF8BinaryCollation) "string"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
 
   // Due to backwards compatibility and compatibility with other readers
@@ -87,7 +84,7 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
 
   override def equals(obj: Any): Boolean =
     obj.isInstanceOf[StringType] && (obj.asInstanceOf[StringType].collationId == collationId ||
-        (isUTF8BinaryCollation && obj.asInstanceOf[StringType].isUTF8BinaryCollation))
+      (isUTF8BinaryCollation && obj.asInstanceOf[StringType].isUTF8BinaryCollation))
 
   override def hashCode(): Int = collationId.hashCode()
 
