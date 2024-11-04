@@ -19,13 +19,11 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal}
-import org.apache.spark.sql.catalyst.parser.SingleStatement
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
 
@@ -654,8 +652,9 @@ class ForStatementExec(
   body: CompoundBodyExec,
   label: Option[String],
   session: SparkSession) extends NonLeafStatementExec {
+  // fali reset, drop variable, izvlaciti metode
 
-  private val queryDataframe = {
+  private lazy val queryDataframe = {
     query.isExecuted = true
     Dataset.ofRows(session, query.parsedPlan)
   }
@@ -666,6 +665,8 @@ class ForStatementExec(
   }
   private var state = ForState.VariableAssignment
   private var currRow = 0
+
+  private var isVariableDeclared = false
 
   /**
    * Loop can be interrupted by LeaveStatementExec
@@ -678,21 +679,33 @@ class ForStatementExec(
 
       override def next(): CompoundStatementExec = state match {
         case ForState.VariableAssignment =>
+          val namedStructArgs: Seq[Expression] =
+            queryDataframe.schema.names.toSeq.flatMap { colName =>
+              Seq(Literal(colName), Literal(queryResult(currRow).getAs(colName)))
+            }
+          val namedStruct = CreateNamedStruct(namedStructArgs)
 
-          val namedStructArgs: Array[Expression] = queryDataframe.schema.names.flatMap { colName =>
-            List(UnresolvedAttribute(colName), Literal(queryResult(0).getAs(colName)))
+          if (!isVariableDeclared) {
+            isVariableDeclared = true
+            val defaultExpression =
+              DefaultValueExpression(Literal(null, namedStruct.dataType), "null")
+            val declareVariable = CreateVariable(
+              UnresolvedIdentifier(Seq(identifier.get)),
+              defaultExpression,
+              replace = true
+            )
+            return new SingleStatementExec(declareVariable, Origin(), false)
           }
-          val namedStruct = Project(
-            Seq(Alias(CreateNamedStruct(namedStructArgs), identifier.get)()),
-            OneRowRelation())
 
+          val projectNamedStruct = Project(
+            Seq(Alias(namedStruct, identifier.get)()),
+            OneRowRelation()
+          )
           val setIdentifierToCurrentRow =
-            SetVariable(Seq(UnresolvedAttribute(identifier.get)), namedStruct)
-
+            SetVariable(Seq(UnresolvedAttribute(identifier.get)), projectNamedStruct)
           val setExec = new SingleStatementExec(setIdentifierToCurrentRow, Origin(), false)
 
           state = ForState.Body
-          currRow += 1
           body.reset()
 
           setExec
@@ -711,12 +724,14 @@ class ForStatementExec(
               if (label.contains(iterStatementExec.label)) {
                 iterStatementExec.hasBeenMatched = true
               }
+              currRow += 1
               state = ForState.VariableAssignment
               return retStmt
             case _ =>
           }
 
           if (!body.getTreeIterator.hasNext) {
+            currRow += 1
             state = ForState.VariableAssignment
           }
           retStmt

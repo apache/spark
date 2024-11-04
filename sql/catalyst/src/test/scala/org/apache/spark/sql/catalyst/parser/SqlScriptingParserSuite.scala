@@ -52,7 +52,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val sqlScriptText =
       """
         |BEGIN
-        |  FOR x AS (SELECT 1) DO
+        |  FOR x AS SELECT 1 DO
         |    SELECT 1;
         |    SELECT 2;
         |  END FOR;
