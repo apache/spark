@@ -411,7 +411,7 @@ class PandasGroupedOpsMixin:
         timeMode : str
             The time mode semantics of the stateful processor for timers and TTL.
         initialState : :class:`pyspark.sql.GroupedData`
-            Optional. The grouped dataframe on given grouping key as initial states used for initialization
+            Optional. The grouped dataframe as initial states used for initialization
             of state variables in the first batch.
 
         Examples
@@ -577,12 +577,12 @@ class PandasGroupedOpsMixin:
             """
             UDF for TWS operator with non-empty initial states. Possible input combinations
             of inputRows and initialStates iterator:
-            - Both `inputRows` and `initialStates` are non-empty: for the given key, both input rows
-              and initial states contains the grouping key, both input rows and initial states contains data.
-            - `InitialStates` is non-empty, while `initialStates` is empty. For the given key, only
-              initial states contains the grouping key and data, and it is first batch.
-            - `initialStates` is empty, while `inputRows` is not empty. For the given grouping key, only inputRows
-              contains the grouping key and data, and it is first batch.
+            - Both `inputRows` and `initialStates` are non-empty. Both input rows and initial states
+             contains the grouping key and data.
+            - `InitialStates` is non-empty, while `inputRows` is empty. Only initial states contains
+             the grouping key and data, and it is first batch.
+            - `initialStates` is empty, while `inputRows` is non-empty. Only inputRows contains the
+             grouping key and data, and it is first batch.
             - `initialStates` is None, while `inputRows` is not empty. This is not first batch. `initialStates`
               is initialized to the positional value as None.
             """

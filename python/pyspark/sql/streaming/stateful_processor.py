@@ -429,7 +429,7 @@ class StatefulProcessor(ABC):
 
     def handleInitialState(self, key: Any, initialState: "PandasDataFrameLike") -> None:
         """
-        Optional to implement. Will act as no-op if not defined or no initial state input. Function
-        invoked only once at the first batch. Allow for users to perform initial state processing.
+        Optional to implement. Will act as no-op if not defined or no initial state input.
+         Function that will be invoked only in the first batch for users to process initial states.
         """
         pass

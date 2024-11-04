@@ -62,7 +62,6 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var arrowStreamWriter: BaseStreamingArrowWriter = _
   var batchTimestampMs: Option[Long] = _
   var eventTimeWatermarkForEviction: Option[Long] = _
-  var initialStateSchema: StructType = StructType(Seq())
   var initialStateDataIterator: Iterator[(InternalRow, Iterator[InternalRow])] = _
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()

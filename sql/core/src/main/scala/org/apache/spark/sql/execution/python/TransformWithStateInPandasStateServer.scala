@@ -357,7 +357,7 @@ class TransformWithStateInPandasStateServer(
         if (!hasInitialState) {
           // In physical planning, hasInitialState will always be flipped
           // if it is not first batch
-          sendResponse(1)
+          sendResponse(2)
         } else {
           sendResponse(0)
         }

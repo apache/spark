@@ -788,9 +788,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object TransformWithStateInPandasStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case t@TransformWithStateInPandas(
+      case t @ TransformWithStateInPandas(
       func, _, outputAttrs, outputMode, timeMode, child,
-      hasInitialState, i, _, initialStateSchema) =>
+      hasInitialState, initialState, _, initialStateSchema) =>
         val execPlan = TransformWithStateInPandasExec(
           func, t.leftAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
@@ -799,7 +799,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           eventTimeWatermarkForEviction = None,
           planLater(child),
           hasInitialState,
-          planLater(i),
+          planLater(initialState),
           t.rightAttributes,
           initialStateSchema
         )

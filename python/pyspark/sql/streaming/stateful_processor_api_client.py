@@ -352,13 +352,8 @@ class StatefulProcessorApiClient:
         status = response_message[0]
         if status == 0:
             return True
-        elif status == 1:
-            return False
         else:
-            # TODO(SPARK-49233): Classify user facing errors.
-            raise PySparkRuntimeError(
-                f"Error checking if it is first batch: " f"{response_message[1]}"
-            )
+            return False
 
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message

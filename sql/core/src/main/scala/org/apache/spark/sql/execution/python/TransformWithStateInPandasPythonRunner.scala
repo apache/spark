@@ -59,7 +59,7 @@ class TransformWithStateInPandasPythonRunner(
     funcs, evalType, argOffsets, _schema, processorHandle, _timeZoneId,
     initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction, hasInitialState)
-    with PythonArrowInput[InType] {
+  with PythonArrowInput[InType] {
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
@@ -127,8 +127,7 @@ class TransformWithStateInPandasPythonInitialStateRunner(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
-      inputIterator:
-      Iterator[GroupedInType]): Boolean = {
+      inputIterator: Iterator[GroupedInType]): Boolean = {
     if (pandasWriter == null) {
       pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
     }
@@ -178,9 +177,9 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
     eventTimeWatermarkForEviction: Option[Long],
     hasInitialState: Boolean)
   extends BasePythonRunner[I, ColumnarBatch](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
-    with PythonArrowInput[I]
-    with BasicPythonArrowOutput
-    with Logging {
+  with PythonArrowInput[I]
+  with BasicPythonArrowOutput
+  with Logging {
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
 
