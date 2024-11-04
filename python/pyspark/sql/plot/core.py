@@ -19,11 +19,7 @@ import math
 
 from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
-from pyspark.errors import (
-    PySparkRuntimeError,
-    PySparkTypeError,
-    PySparkValueError,
-)
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -38,14 +34,8 @@ if TYPE_CHECKING:
 
 class PySparkTopNPlotBase:
     def get_top_n(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import SparkSession
-
-        session = SparkSession.getActiveSession()
-        if session is None:
-            raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
-
         max_rows = int(
-            session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
+            sdf._session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
         )
         pdf = sdf.limit(max_rows + 1).toPandas()
 
@@ -59,16 +49,11 @@ class PySparkTopNPlotBase:
 
 class PySparkSampledPlotBase:
     def get_sampled(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import SparkSession, Observation, functions as F
-
-        session = SparkSession.getActiveSession()
-        if session is None:
-            raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
+        from pyspark.sql import Observation, functions as F
 
         max_rows = int(
-            session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
+            sdf._session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
         )
-
         observation = Observation("pyspark plotting")
 
         rand_col_name = "__pyspark_plotting_sampled_plot_base_rand__"
