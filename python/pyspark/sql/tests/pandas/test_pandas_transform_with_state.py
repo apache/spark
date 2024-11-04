@@ -87,6 +87,21 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
+    def _prepare_input_data_with_3_cols(self, input_path, col1, col2, col3):
+        with open(input_path, "w") as fw:
+            for e1, e2, e3 in zip(col1, col2, col3):
+                fw.write(f"{e1},{e2},{e3}\n")
+
+    def build_test_df_with_3_cols(self, input_path):
+        df = self.spark.readStream.format("text").option("maxFilesPerTrigger", 1).load(input_path)
+        df_split = df.withColumn("split_values", split(df["value"], ","))
+        df_final = df_split.select(
+            df_split.split_values.getItem(0).alias("id1").cast("string"),
+            df_split.split_values.getItem(1).alias("temperature").cast("int"),
+            df_split.split_values.getItem(2).alias("id2").cast("string"),
+        )
+        return df_final
+
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -601,6 +616,58 @@ class TransformWithStateInPandasTestsMixin:
             SimpleStatefulProcessorWithInitialState(), check_results
         )
 
+    def _test_transform_with_state_non_contiguous_grouping_cols(self, stateful_processor, check_results):
+
+        input_path = tempfile.mkdtemp()
+        self._prepare_input_data_with_3_cols(input_path + "/text-test1.txt",
+                                             [0, 0, 1, 1], [123, 46, 146, 346], [1, 1, 2, 2])
+
+        df = self.build_test_df_with_3_cols(input_path)
+
+        for q in self.spark.streams.active:
+            q.stop()
+        self.assertTrue(df.isStreaming)
+
+        output_schema = StructType(
+            [
+                StructField("id1", StringType(), True),
+                StructField("id2", StringType(), True),
+                StructField("value", StringType(), True),
+            ]
+        )
+
+        q = (
+            df.groupBy("id1", "id2")
+            .transformWithStateInPandas(
+                statefulProcessor=stateful_processor,
+                outputStructType=output_schema,
+                outputMode="Update",
+                timeMode="None",
+            )
+            .writeStream.queryName("this_query")
+            .foreachBatch(check_results)
+            .outputMode("update")
+            .start()
+        )
+
+        self.assertEqual(q.name, "this_query")
+        self.assertTrue(q.isActive)
+        q.processAllAvailable()
+        q.awaitTermination(10)
+        self.assertTrue(q.exception() is None)
+
+    def test_transform_with_state_non_contiguous_grouping_cols(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.collect()) == {
+                    Row(id1="0", id2="1", value=str(123 + 46)),
+                    Row(id1="1", id2="2", value=str(146 + 346)),
+                }
+
+        self._test_transform_with_state_non_contiguous_grouping_cols(
+            SimpleStatefulProcessorWithInitialState(), check_results
+        )
+
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
@@ -628,7 +695,10 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
 
         self.value_state.update((accumulated_value,))
 
-        yield pd.DataFrame({"id": key, "value": str(accumulated_value)})
+        if len(key) > 1:
+            yield pd.DataFrame({"id1": (key[0],), "id2": (key[1],), "value": str(accumulated_value)})
+        else:
+            yield pd.DataFrame({"id": key, "value": str(accumulated_value)})
 
     def handleInitialState(self, key, initialState) -> None:
         init_val = initialState.at[0, "initVal"]

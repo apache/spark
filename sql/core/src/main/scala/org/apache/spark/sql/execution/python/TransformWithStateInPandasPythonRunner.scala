@@ -30,7 +30,7 @@ import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, Py
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.python.TransformWithStateInPandasPythonRunner._
+import org.apache.spark.sql.execution.python.TransformWithStateInPandasPythonRunner.{GroupedInType, InType}
 import org.apache.spark.sql.execution.streaming.StatefulProcessorHandleImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType

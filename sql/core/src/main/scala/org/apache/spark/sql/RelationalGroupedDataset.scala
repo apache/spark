@@ -487,6 +487,12 @@ class RelationalGroupedDataset protected[sql](
     val outputAttrs = toAttributes(outputStructType)
     val outputMode = InternalOutputModes(outputModeStr)
     val timeMode = TimeModes(timeModeStr)
+    // Place grouping attributes at the front of output so we can
+    // refer to them correctly in the following planning phase;
+    // will perform dedup in the physical operator
+    val leftChild = df.logicalPlan
+    val left = df.sparkSession.sessionState.executePlan(
+      Project(groupingAttrs ++ leftChild.output, leftChild)).analyzed
 
     val plan: LogicalPlan = if (initialState == null) {
       TransformWithStateInPandas(
@@ -495,7 +501,7 @@ class RelationalGroupedDataset protected[sql](
         outputAttrs,
         outputMode,
         timeMode,
-        child = df.logicalPlan,
+        child = left,
         hasInitialState = false,
         /* The followings are dummy variables because hasInitialState is false */
         initialState = LocalRelation(Seq.empty[Attribute]),
@@ -505,14 +511,8 @@ class RelationalGroupedDataset protected[sql](
     } else {
       val initGroupingAttrs = exprToAttr(initialState.groupingExprs)
 
-      val leftChild = df.logicalPlan
       val rightChild = initialState.df.logicalPlan
 
-      // Place grouping attributes at the front of output so we can
-      // refer to them correctly in the following planning phase;
-      // will perform dedup in the physical operator
-      val left = df.sparkSession.sessionState.executePlan(
-        Project(groupingAttrs ++ leftChild.output, leftChild)).analyzed
       val right = initialState.df.sparkSession.sessionState.executePlan(
         Project(initGroupingAttrs ++ rightChild.output, rightChild)).analyzed
 
