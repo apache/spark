@@ -1441,8 +1441,7 @@ class CollationSQLExpressionsSuite
       )
     )
   }
-
-  // TODO: fix
+  
   test("Support XmlToStructs xml expression with collation") {
     case class XmlToStructsTestCase(
      input: String,
@@ -3076,7 +3075,6 @@ class CollationSQLExpressionsSuite
     }
   }
 
-  // TODO: fix
   test("element_at supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
@@ -3204,7 +3202,6 @@ class CollationSQLExpressionsSuite
     }
   }
 
-  // TODO: fix
   test("zip_with supports collation") {
     testAdditionalCollations.foreach { collation =>
       testCollationSqlExpressionCommon(
