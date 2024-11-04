@@ -74,6 +74,12 @@ create temporary view windowTestData as select * from values
 -- SELECT operators: positive tests.
 ---------------------------------------
 
+-- FromClause alone.
+from t;
+
+-- Table alone.
+table t;
+
 -- Selecting from a constant.
 from t
 |> select 1 as x;

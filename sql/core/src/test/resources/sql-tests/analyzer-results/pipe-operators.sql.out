@@ -267,6 +267,20 @@ CreateViewCommand `windowTestData`, select * from values
 
 -- !query
 from t
+-- !query analysis
+SubqueryAlias spark_catalog.default.t
++- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+-- !query analysis
+SubqueryAlias spark_catalog.default.t
++- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+from t
 |> select 1 as x
 -- !query analysis
 Project [pipeselect(1) AS x#x]

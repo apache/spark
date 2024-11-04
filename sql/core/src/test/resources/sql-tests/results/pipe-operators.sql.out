@@ -233,6 +233,24 @@ struct<>
 
 -- !query
 from t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+from t
 |> select 1 as x
 -- !query schema
 struct<x:int>
