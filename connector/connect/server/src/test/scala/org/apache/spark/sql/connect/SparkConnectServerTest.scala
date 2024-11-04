@@ -52,10 +52,6 @@ trait SparkConnectServerTest extends SharedSparkSession {
     withSparkEnvConfs((Connect.CONNECT_GRPC_BINDING_PORT.key, serverPort.toString)) {
       SparkConnectService.start(spark.sparkContext)
     }
-    // register udf directly on the server, we're not testing client UDFs here...
-    val serverSession =
-      SparkConnectService.getOrCreateIsolatedSession(defaultUserId, defaultSessionId).session
-    serverSession.udf.register("sleep", ((ms: Int) => { Thread.sleep(ms); ms }))
   }
 
   override def afterAll(): Unit = {
