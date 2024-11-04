@@ -127,7 +127,18 @@ case class SqlScriptingInterpreter() {
         val queryExec = new SingleStatementExec(query.parsedPlan, query.origin, isInternal = false)
         val bodyExec =
           transformTreeIntoExecutable(body, session).asInstanceOf[CompoundBodyExec]
-        new ForStatementExec(queryExec, identifier, bodyExec, label, session)
+        val dropVariableExec = new SingleStatementExec(
+          DropVariable(UnresolvedIdentifier(Seq(identifier.get)), ifExists = true),
+          Origin(),
+          isInternal = true)
+
+        new ForStatementExec(
+          queryExec,
+          identifier,
+          new CompoundBodyExec(Seq(bodyExec, dropVariableExec)),
+          label,
+          session
+        )
 
       case leaveStatement: LeaveStatement =>
         new LeaveStatementExec(leaveStatement.label)

@@ -86,6 +86,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1)), // select intCol
         Seq(Row("first")), // select stringCol
         Seq(Row(1.0)), // select doubleCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // declare x
         Seq.empty[Row], // set x to row 1
         Seq(Row(2)), // select intCol
         Seq(Row("second")), // select stringCol
