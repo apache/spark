@@ -242,17 +242,19 @@ object CollationTypeCoercion {
         case _: Collate => true
         case _ => false
       }
-      .map(_.dataType.asInstanceOf[StringType].collationId)
+      .map(_.dataType)
+      // Since distinct relies on hashCode which is rewritten in StringType,
+      // we can directly call it here.
       .distinct
 
     explicitTypes.size match {
       // We have 1 explicit collation
-      case 1 => StringType(explicitTypes.head)
+      case 1 => explicitTypes.head.asInstanceOf[StringType]
       // Multiple explicit collations occurred
       case size if size > 1 =>
         throw QueryCompilationErrors
           .explicitCollationMismatchError(
-            explicitTypes.map(t => StringType(t))
+            explicitTypes.map(t => t.asInstanceOf[StringType])
           )
       // Only implicit or default collations present
       case 0 =>
@@ -264,16 +266,18 @@ object CollationTypeCoercion {
           }
           .map(_.dataType)
           .filter(hasStringType)
-          .map(extractStringType(_).collationId)
+          .map(extractStringType)
+          // Since distinct relies on hashCode which is rewritten in StringType,
+          // we can directly call it here.
           .distinct
 
         if (implicitTypes.length > 1) {
           throw QueryCompilationErrors.implicitCollationMismatchError(
-            implicitTypes.map(t => StringType(t))
+            implicitTypes
           )
         }
         else {
-          implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
+          implicitTypes.headOption.getOrElse(SQLConf.get.defaultStringType)
         }
     }
   }
