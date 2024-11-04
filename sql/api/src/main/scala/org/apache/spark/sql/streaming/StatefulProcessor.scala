@@ -121,6 +121,8 @@ private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
 
   /**
    * Function that will be invoked only in the first batch for users to process initial states.
+   * Allow multiple initial state rows mapping to the same grouping key to support integration
+   * with passing state data source reader dataframe as initial state.
    *
    * @param key
    *   \- grouping key

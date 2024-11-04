@@ -108,23 +108,13 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
 class InitialStatefulProcessorWithStateDataSource
   extends StatefulProcessorWithInitialStateTestClass[UnionInitialStateRow] {
   override def handleInitialState(
-    key: String, initialState: UnionInitialStateRow, timerValues: TimerValues): Unit = {
-    val stateVar = {
-      if (initialState.value.isDefined) {
-        "value"
-      } else if (initialState.listValue.isDefined) {
-        "list"
-      } else if (initialState.userMapKey.isDefined) {
-        "map"
-      } else {
-        "invalid"
-      }
-    }
-    stateVar match {
-      case "value" => _valState.update(initialState.value.get.toDouble)
-      case "list" => _listState.appendValue(initialState.listValue.get.toDouble)
-      case "map" =>
-        _mapState.updateValue(
+      key: String, initialState: UnionInitialStateRow, timerValues: TimerValues): Unit = {
+    if (initialState.value.isDefined) {
+      _valState.update(initialState.value.get.toDouble)
+    } else if (initialState.listValue.isDefined) {
+      _listState.appendValue(initialState.listValue.get.toDouble)
+    } else if (initialState.userMapKey.isDefined) {
+      _mapState.updateValue(
         (initialState.userMapKey.get.charAt(0) - 'a').toDouble,
         initialState.userMapValue.get.toInt)
     }
@@ -139,27 +129,17 @@ class InitialStatefulProcessorWithUnflattenStateDataSource
   extends StatefulProcessorWithInitialStateTestClass[UnionUnflattenInitialStateRow] {
   override def handleInitialState(
       key: String, initialState: UnionUnflattenInitialStateRow, timerValues: TimerValues): Unit = {
-    val stateVar = {
-      if (initialState.value.isDefined) {
-        "value"
-      } else if (initialState.listValue.isDefined) {
-        "list"
-      } else if (initialState.mapValue.isDefined) {
-        "map"
-      } else {
-        "invalid"
-      }
-    }
-    stateVar match {
-      case "value" => _valState.update(initialState.value.get.toDouble)
-      case "list" => _listState.appendList(
+    if (initialState.value.isDefined) {
+      _valState.update(initialState.value.get.toDouble)
+    } else if (initialState.listValue.isDefined) {
+      _listState.appendList(
         initialState.listValue.get.map(_.toDouble).toArray)
-      case "map" =>
-        initialState.mapValue.get.keys.foreach { key =>
-          _mapState.updateValue(
-            (key.charAt(0) - 'a').toDouble,
-            initialState.mapValue.get.get(key).get.toInt)
-        }
+    } else if (initialState.mapValue.isDefined) {
+      initialState.mapValue.get.keys.foreach { key =>
+        _mapState.updateValue(
+          (key.charAt(0) - 'a').toDouble,
+          initialState.mapValue.get.get(key).get.toInt)
+      }
     }
   }
 }
@@ -638,10 +618,9 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       (startQuery: (DataFrame, DataFrame, DataFrame,
         MemoryStream[InitInputRow]) => DataFrame): Unit = {
     Seq(("5", "2"), ("5", "8"), ("5", "5")).foreach { partitions =>
-      test("transformWithStateWithInitialState - state data source reader dataframe " +
-        s"as initial state with flatten option set to $flattenOption, the first stream and " +
-        s"the second stream is running on shuffle partition number of ${partitions._1} and " +
-        s"${partitions._2} respectively.") {
+      test("state data source reader dataframe as initial state " +
+        s"(flatten option=$flattenOption, shuffle partition for 1st stream=${partitions._1}, " +
+        s"shuffle partition for 1st stream=${partitions._2})") {
         withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
           classOf[RocksDBStateStoreProvider].getName) {
           withTempDir { checkpointDir =>
@@ -690,9 +669,10 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
 
             testStream(query, OutputMode.Update())(
               // check initial state is updated for state vars
-              AddData(inputData2, InitInputRow("a", "getOption", 0.0)),
-              AddData(inputData2, InitInputRow("a", "getList", 0.0)),
-              AddData(inputData2, InitInputRow("a", "getCount", 0.0)),
+              AddData(inputData2,
+                InitInputRow("a", "getOption", 0.0),
+                InitInputRow("a", "getList", 0.0),
+                InitInputRow("a", "getCount", 0.0)),
               CheckNewAnswer(("a", "getCount", 3.0),
                 ("a", "getList", 1.0), ("a", "getList", 2.0), ("a", "getList", 3.0),
                 ("a", "getOption", 3.0)),
