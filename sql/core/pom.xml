@@ -272,27 +272,24 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
+        <configuration combine.self = "override">
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
-              <include>com.google.protobuf:*</include>
+              <include>org.spark-project.spark:unused</include>
             </includes>
           </artifactSet>
           <relocations>
             <relocation>
-              <pattern>com.google</pattern>
-              <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
-              <excludes>
-                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
-                <exclude>com.google.common.**</exclude>
-              </excludes>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.protobuf</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_core.protobuf</shadedPattern>
             </relocation>
           </relocations>
-          <transformers>
-            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-          </transformers>
         </configuration>
       </plugin>
        <!--
@@ -344,4 +341,69 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>default-protoc</id>
+      <activation>
+        <property>
+          <name>!skipDefaultProtoc</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.os72</groupId>
+            <artifactId>protoc-jar-maven-plugin</artifactId>
+            <version>${protoc-jar-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+                  <protocVersion>${protobuf.version}</protocVersion>
+                  <inputDirectories>
+                    <include>src/main/protobuf</include>
+                  </inputDirectories>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>user-defined-protoc</id>
+      <properties>
+        <spark.protoc.executable.path>${env.SPARK_PROTOC_EXEC_PATH}</spark.protoc.executable.path>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>com.github.os72</groupId>
+            <artifactId>protoc-jar-maven-plugin</artifactId>
+            <version>${protoc-jar-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <protocArtifact>com.google.protobuf:protoc:${protobuf.version}</protocArtifact>
+                  <protocVersion>${protobuf.version}</protocVersion>
+                  <protocCommand>${spark.protoc.executable.path}</protocCommand>
+                  <inputDirectories>
+                    <include>src/main/protobuf</include>
+                  </inputDirectories>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

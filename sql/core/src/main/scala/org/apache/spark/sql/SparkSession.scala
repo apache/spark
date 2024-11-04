@@ -275,6 +275,7 @@ class SparkSession private(
       Map.empty,
       managedJobTags.asScala.toMap)
     result.sessionState // force copy of SessionState
+    result.sessionState.artifactManager // force copy of ArtifactManager and its resources
     result.managedJobTags // force copy of userDefinedToRealTagsMap
     result
   }
@@ -674,6 +675,9 @@ class SparkSession private(
 
   /** @inheritdoc */
   def readStream: DataStreamReader = new DataStreamReader(self)
+
+  /** @inheritdoc */
+  def tvf: TableValuedFunction = new TableValuedFunction(self)
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i

@@ -59,6 +59,18 @@ create temporary view natural_join_test_t2 as select * from values
 create temporary view natural_join_test_t3 as select * from values
   ("one", 4), ("two", 5), ("one", 6) as natural_join_test_t3(k, v3);
 
+create temporary view windowTestData as select * from values
+  (null, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+  (1, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+  (1, 2L, 2.5D, date("2017-08-02"), timestamp_seconds(1502000000), "a"),
+  (2, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "a"),
+  (1, null, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "b"),
+  (2, 3L, 3.3D, date("2017-08-03"), timestamp_seconds(1503000000), "b"),
+  (3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
+  (null, null, null, null, null, null),
+  (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
+  AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
+
 -- SELECT operators: positive tests.
 ---------------------------------------
 
@@ -505,7 +517,7 @@ table join_test_t1 jt
 |> cross join (select * from jt);
 
 -- Set operations: positive tests.
------------------------------------
+----------------------------------
 
 -- Union all.
 table t
@@ -560,7 +572,7 @@ table t
 |> minus table t;
 
 -- Set operations: negative tests.
------------------------------------
+----------------------------------
 
 -- The UNION operator requires the same number of columns in the input relations.
 table t
@@ -570,6 +582,244 @@ table t
 -- The UNION operator requires the column types to be compatible.
 table t
 |> union all table st;
+
+-- Sorting and repartitioning operators: positive tests.
+--------------------------------------------------------
+
+-- Order by.
+table t
+|> order by x;
+
+-- Order by with a table subquery.
+(select * from t)
+|> order by x;
+
+-- Order by with a VALUES list.
+values (0, 'abc') tab(x, y)
+|> order by x;
+
+-- Limit.
+table t
+|> order by x
+|> limit 1;
+
+-- Limit with offset.
+table t
+|> where x = 1
+|> select y
+|> limit 2 offset 1;
+
+-- Offset is allowed without limit.
+table t
+|> where x = 1
+|> select y
+|> offset 1;
+
+-- LIMIT ALL and OFFSET 0 are equivalent to no LIMIT or OFFSET clause, respectively.
+table t
+|> limit all offset 0;
+
+-- Distribute by.
+table t
+|> distribute by x;
+
+-- Cluster by.
+table t
+|> cluster by x;
+
+-- Sort and distribute by.
+table t
+|> sort by x distribute by x;
+
+-- It is possible to apply a final ORDER BY clause on the result of a query containing pipe
+-- operators.
+table t
+|> order by x desc
+order by y;
+
+-- Sorting and repartitioning operators: negative tests.
+--------------------------------------------------------
+
+-- Multiple order by clauses are not supported in the same pipe operator.
+-- We add an extra "ORDER BY y" clause at the end in this test to show that the "ORDER BY x + y"
+-- clause was consumed end the of the final query, not as part of the pipe operator.
+table t
+|> order by x desc order by x + y
+order by y;
+
+-- The ORDER BY clause may only refer to column names from the previous input relation.
+table t
+|> select 1 + 2 as result
+|> order by x;
+
+-- The DISTRIBUTE BY clause may only refer to column names from the previous input relation.
+table t
+|> select 1 + 2 as result
+|> distribute by x;
+
+-- Combinations of multiple ordering and limit clauses are not supported.
+table t
+|> order by x limit 1;
+
+-- ORDER BY and SORT BY are not supported at the same time.
+table t
+|> order by x sort by x;
+
+-- The WINDOW clause is not supported yet.
+table windowTestData
+|> window w as (partition by cte order by val)
+|> select cate, sum(val) over w;
+
+-- WINDOW and LIMIT are not supported at the same time.
+table windowTestData
+|> window w as (partition by cate order by val) limit 5;
+
+-- Aggregation operators: positive tests.
+-----------------------------------------
+
+-- Basic aggregation with a GROUP BY clause. The resulting table contains all the attributes from
+-- the grouping keys followed by all the attributes from the aggregate functions, in order.
+table other
+|> aggregate sum(b) as result group by a;
+
+-- Basic aggregation with a GROUP BY clause, followed by a SELECT of just the aggregate function.
+-- This restricts the output attributes to just the aggregate function.
+table other
+|> aggregate sum(b) as result group by a
+|> select result;
+
+-- Basic aggregation with a GROUP BY clause, followed by a SELECT of just the grouping expression.
+-- This restricts the output attributes to just the grouping expression. Note that we must use an
+-- alias for the grouping expression to refer to it in the SELECT clause.
+table other
+|> aggregate sum(b) group by a + 1 as gkey
+|> select gkey;
+
+-- Basic aggregation on a constant table.
+select 1 as x, 2 as y
+|> aggregate group by x, y;
+
+-- Basic aggregation with group by ordinals.
+select 3 as x, 4 as y
+|> aggregate group by 1, 2;
+
+-- Basic table aggregation.
+table t
+|> aggregate sum(x);
+
+-- Basic table aggregation with an alias.
+table t
+|> aggregate sum(x) + 1 as result_plus_one;
+
+-- Grouping with no aggregate functions.
+table other
+|> aggregate group by a
+|> where a = 1;
+
+-- Group by an expression on columns, all of which are already grouped.
+select 1 as x, 2 as y, 3 as z
+|> aggregate group by x, y, x + y as z;
+
+-- Group by an expression on columns, some of which (y) aren't already grouped.
+select 1 as x, 2 as y, 3 as z
+|> aggregate group by x as z, x + y as z;
+
+-- We get an output column for each item in GROUP BY, even when they are duplicate expressions.
+select 1 as x, 2 as y, named_struct('z', 3) as st
+|> aggregate group by x, y, x, x, st.z, (st).z, 1 + x, 2 + x;
+
+-- Chained aggregates.
+select 1 x, 2 y, 3 z
+|> aggregate sum(z) z group by x, y
+|> aggregate avg(z) z group by x
+|> aggregate count(distinct z) c;
+
+-- Ambiguous name from duplicate GROUP BY item. This is generally allowed.
+select 1 x, 3 z
+|> aggregate count(*) group by x, z, x
+|> select x;
+
+-- Grouping expressions are allowed in the aggregate functions list if they appear separately in the
+-- GROUP BY clause.
+table other
+|> aggregate a group by a;
+
+-- Aggregate expressions may contain a mix of aggregate functions and grouping expressions.
+table other
+|> aggregate a + count(b) group by a;
+
+-- Aggregation operators: negative tests.
+-----------------------------------------
+
+-- GROUP BY ALL is not currently supported.
+select 3 as x, 4 as y
+|> aggregate group by all;
+
+-- GROUP BY ROLLUP is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by rollup(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUP BY CUBE is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by cube(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING SETS is not supported yet.
+table courseSales
+|> aggregate sum(earnings) group by course, `year` grouping sets(course, `year`)
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING/GROUPING_ID is not supported yet.
+table courseSales
+|> aggregate sum(earnings), grouping(course) + 1
+   group by course
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUPING/GROUPING_ID is not supported yet.
+table courseSales
+|> aggregate sum(earnings), grouping_id(course)
+   group by course
+|> where course = 'dotNET' and `year` = '2013';
+
+-- GROUP BY () is not valid syntax.
+select 1 as x, 2 as y
+|> aggregate group by ();
+
+-- Non-aggregate expressions are not allowed in place of aggregate functions.
+table other
+|> aggregate a;
+
+-- Using aggregate functions without the AGGREGATE keyword is not allowed.
+table other
+|> select sum(a) as result;
+
+-- The AGGREGATE keyword requires a GROUP BY clause and/or aggregation function(s).
+table other
+|> aggregate;
+
+-- The AGGREGATE GROUP BY list cannot be empty.
+table other
+|> aggregate group by;
+
+-- The AGGREGATE keyword is required to perform grouping.
+table other
+|> group by a;
+
+-- Window functions are not allowed in the AGGREGATE expression list.
+table other
+|> aggregate sum(a) over () group by b;
+
+-- Ambiguous name from AGGREGATE list vs GROUP BY.
+select 1 x, 2 y, 3 z
+|> aggregate count(*) AS c, sum(x) AS x group by x
+|> where c = 1
+|> where x = 1;
+
+-- Aggregate expressions may not contain references to columns or expressions not otherwise listed
+-- in the GROUP BY clause.
+table other
+|> aggregate b group by a;
 
 -- Cleanup.
 -----------

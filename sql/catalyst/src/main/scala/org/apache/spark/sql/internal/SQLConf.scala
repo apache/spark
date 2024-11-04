@@ -2204,6 +2204,15 @@ object SQLConf {
       .intConf
       .createWithDefault(3)
 
+  // The feature is still in development, so it is still internal.
+  val STATE_STORE_CHECKPOINT_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.stateStore.checkpointFormatVersion")
+      .internal()
+      .doc("The version of the approach of doing state store checkpoint")
+      .version("4.0.0")
+      .intConf
+      .createWithDefault(1)
+
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
       .internal()
@@ -5198,6 +5207,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ORDERING_AWARE_LIMIT_OFFSET = buildConf("spark.sql.orderingAwareLimitOffset")
+    .internal()
+    .doc("When set to true, a local sort will be inserted between GlobalLimitExec and " +
+      "single-partition ShuffleExchangeExec, if the underlying plan produces sorted data. " +
+      "This is because shuffle reader in Spark fetches shuffle blocks in a random order and " +
+      "can not preserve the data ordering, while LIMIT/OFFSET must preserve ordering.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5523,6 +5542,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def streamingMaintenanceInterval: Long = getConf(STREAMING_MAINTENANCE_INTERVAL)
 
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
+
+  def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 

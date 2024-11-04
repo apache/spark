@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.Growable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
@@ -118,8 +118,7 @@ case class CollectList(
 
   override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("collect_list")
+  override def prettyName: String = "collect_list"
 
   override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
     new GenericArrayData(buffer.toArray)
@@ -253,13 +252,16 @@ case class CollectTopK(
 }
 
 private[aggregate] object CollectTopK {
-  def expressionToReverse(e: Expression): Boolean = e match {
-    case BooleanLiteral(reverse) => reverse
+  def expressionToReverse(e: Expression): Boolean = e.eval() match {
+    case b: Boolean => b
     case _ => throw QueryCompilationErrors.invalidReverseParameter(e)
   }
 
-  def expressionToNum(e: Expression): Int = e match {
-    case IntegerLiteral(num) => num
+  def expressionToNum(e: Expression): Int = e.eval() match {
+    case l: Long => l.toInt
+    case i: Int => i
+    case s: Short => s.toInt
+    case b: Byte => b.toInt
     case _ => throw QueryCompilationErrors.invalidNumParameter(e)
   }
 }
