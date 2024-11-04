@@ -238,4 +238,15 @@ private[spark] object SchemaUtils {
   def getSchemaFieldType(schema: StructType, colName: String): DataType = {
     getSchemaField(schema, colName).dataType
   }
+
+  /**
+   * Check whether a certain column name exists in the schema.
+   * @param schema input schema
+   * @param colName column name, nested column name is supported.
+   */
+  def checkSchemaFieldExist(schema: StructType, colName: String): Boolean = {
+    val colSplits = AttributeNameParser.parseAttributeName(colName)
+    val fieldOpt = schema.findNestedField(colSplits, resolver = SQLConf.get.resolver)
+    fieldOpt.isDefined
+  }
 }
