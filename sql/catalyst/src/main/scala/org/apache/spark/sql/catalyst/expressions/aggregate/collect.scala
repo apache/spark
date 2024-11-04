@@ -429,8 +429,8 @@ case class ListAgg(
     if (delimiterValue == null) {
       // default delimiter value
       dataType match {
-        case StringType => UTF8String.fromString("")
-        case BinaryType => ByteArray.EMPTY_BYTE
+        case _: StringType => UTF8String.fromString("")
+        case _: BinaryType => ByteArray.EMPTY_BYTE
       }
     } else {
       delimiterValue

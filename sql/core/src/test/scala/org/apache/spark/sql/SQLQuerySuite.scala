@@ -375,6 +375,53 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("listagg collation test") {
+    checkAnswer(
+      sql("select listagg(c1) within group (order by c1 collate utf8_binary)" +
+        " from values ('a'), ('A'), ('b'), ('B') as t(c1)"),
+      Row("ABab") :: Nil)
+
+    checkAnswer(
+      sql("select listagg(c1) within group (order by c1 collate utf8_lcase)" +
+        " from values ('a'), ('A'), ('b'), ('B') as t(c1)"),
+      Row("aAbB") :: Nil)
+
+    checkAnswer(
+      sql("select listagg(DISTINCT c1 collate utf8_binary)" +
+        " from values ('a'), ('A'), ('b'), ('B') as t(c1)"),
+      Row("aAbB") :: Nil)
+
+    checkAnswer(
+      sql("select listagg(DISTINCT c1 collate utf8_lcase)" +
+        " from values ('a'), ('A'), ('b'), ('B') as t(c1)"),
+      Row("ab") :: Nil)
+
+    checkAnswer(
+      sql("select listagg(DISTINCT c1 collate utf8_lcase)" +
+        " within group (order by c1 collate utf8_lcase)" +
+        " from values ('a'), ('B'), ('b'), ('A') as t(c1)"),
+      Row("aB") :: Nil)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """select listagg(DISTINCT c1 collate utf8_lcase)
+            | within group (order by c1 collate utf8_binary)
+            | from values ('a'), ('b'), ('A'), ('B') as t(c1)""".stripMargin)
+      },
+      condition = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
+      parameters = Map(
+        "functionName" -> "`listagg`",
+        "functionExpr" -> "\"collate(c1, utf8_lcase)\"",
+        "orderExpr" -> "\"collate(c1, utf8_binary)\""),
+      context = ExpectedContext(
+        fragment =
+          """listagg(DISTINCT c1 collate utf8_lcase)
+            | within group (order by c1 collate utf8_binary)""".stripMargin,
+        start = 7,
+        stop = 93))
+  }
+
   test("support table.star") {
     checkAnswer(
       sql(
