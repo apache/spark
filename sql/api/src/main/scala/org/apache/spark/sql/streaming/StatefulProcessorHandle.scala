@@ -54,9 +54,10 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
       ttlConfig: TTLConfig): ValueState[T]
 
   /**
-   * Function to create new or return existing single value state variable of given type with ttl.
-   * State values will not be returned past ttlDuration, and will be eventually removed from the
-   * state store. Any state update resets the ttl to current processing time plus ttlDuration.
+   * (Scala-specific) Function to create new or return existing single value state variable of
+   * given type with ttl. State values will not be returned past ttlDuration, and will be
+   * eventually removed from the state store. Any state update resets the ttl to current
+   * processing time plus ttlDuration.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
@@ -98,10 +99,10 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
       ttlConfig: TTLConfig): ListState[T]
 
   /**
-   * Function to create new or return existing list state variable of given type with ttl. State
-   * values will not be returned past ttlDuration, and will be eventually removed from the state
-   * store. Any values in listState which have expired after ttlDuration will not be returned on
-   * get() and will be eventually removed from the state.
+   * (Scala-specific) Function to create new or return existing list state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in listState which have expired after ttlDuration will not
+   * be returned on get() and will be eventually removed from the state.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
@@ -148,10 +149,10 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
       ttlConfig: TTLConfig): MapState[K, V]
 
   /**
-   * Function to create new or return existing map state variable of given type with ttl. State
-   * values will not be returned past ttlDuration, and will be eventually removed from the state
-   * store. Any values in mapState which have expired after ttlDuration will not returned on get()
-   * and will be eventually removed from the state.
+   * (Scala-specific) Function to create new or return existing map state variable of given
+   * type with ttl. State values will not be returned past ttlDuration, and will be eventually
+   * removed from the state store. Any values in mapState which have expired after ttlDuration
+   * will not returned on get() and will be eventually removed from the state.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.

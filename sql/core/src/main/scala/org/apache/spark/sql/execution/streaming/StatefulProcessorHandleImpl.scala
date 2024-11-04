@@ -227,7 +227,7 @@ class StatefulProcessorHandleImpl(
       validateTTLConfig(ttlConfig, stateName)
       assert(batchTimestampMs.isDefined)
       val valueStateWithTTL = new ValueStateImplWithTTL[T](store, stateName,
-      keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
+        keyEncoder, stateEncoder, ttlConfig, batchTimestampMs.get, metrics)
       ttlStates.add(valueStateWithTTL)
       TWSMetricsUtils.incrementMetric(metrics, "numValueStateWithTTLVars")
       valueStateWithTTL

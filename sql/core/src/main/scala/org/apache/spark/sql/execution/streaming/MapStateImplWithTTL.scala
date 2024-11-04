@@ -232,8 +232,9 @@ class MapStateImplWithTTL[K, V](
     // ttlExpiration
     Option(retRow).flatMap { row =>
       val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(row)
-      ttlExpiration.map(expiration => (
-        stateTypesEncoder.decodeValue(row).asInstanceOf[V], expiration))
+      ttlExpiration.map { expiration =>
+        (stateTypesEncoder.decodeValue(row).asInstanceOf[V], expiration)
+      }
     }
   }
 
