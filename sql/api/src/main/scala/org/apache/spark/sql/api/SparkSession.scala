@@ -72,6 +72,13 @@ abstract class SparkSession extends Serializable with Closeable {
   def version: String
 
   /**
+   * The url of Spark context Web UI.
+   *
+   * @since 4.0.0
+   */
+  def webUrl: Option[String]
+
+  /**
    * Runtime configuration interface for Spark.
    *
    * This is the interface through which the user can get and set all Spark and Hadoop
