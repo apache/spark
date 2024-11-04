@@ -830,7 +830,7 @@ class SparkSession(SparkConversionMixin):
         >>> _ = spark.webUrl
         """
         webUrl = self._jsparkSession.webUrl()
-        if webUrl == self._jvm.scala.Option.apply(None):
+        if webUrl == self._jvm.scala.Option.apply(None):  # type: ignore[union-attr]
             return None
         else:
             return webUrl.get()
