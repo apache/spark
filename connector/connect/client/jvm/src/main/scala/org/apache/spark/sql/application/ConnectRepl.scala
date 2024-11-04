@@ -103,7 +103,7 @@ Spark session available as 'spark'.
     // Please note that we make ammonite generate classes instead of objects.
     // Classes tend to have superior serialization behavior when using UDFs.
     val webUrl = spark.webUrl
-      .map(url => s"\nSpark connect server Context Web UI is available at $url.")
+      .map(url => s"\nSpark Connect server context Web UI is available at $url.")
       .getOrElse("")
     val main = new ammonite.Main(
       welcomeBanner = Option(splash.format(spark_version, spark.version, webUrl)),
