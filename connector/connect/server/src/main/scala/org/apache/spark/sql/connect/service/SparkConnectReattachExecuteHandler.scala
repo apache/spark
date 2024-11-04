@@ -30,8 +30,10 @@ class SparkConnectReattachExecuteHandler(
 
   def handle(v: proto.ReattachExecuteRequest): Unit = {
     // An exception will be raised if the session is not available.
-    val _sessionHolder =
+    val sessionHolder =
       SparkConnectService.getIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
+    assert(sessionHolder != null)
+
     val executeHolder = SparkConnectService.executionManager
       .getExecuteHolder(ExecuteKey(v.getUserContext.getUserId, v.getSessionId, v.getOperationId))
       .getOrElse {
