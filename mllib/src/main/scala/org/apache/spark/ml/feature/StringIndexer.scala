@@ -564,7 +564,7 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     val inputColName = $(inputCol)
-    val inputDataType = schema(inputColName).dataType
+    val inputDataType = SchemaUtils.getSchemaFieldType(schema, inputColName)
     require(inputDataType.isInstanceOf[NumericType],
       s"The input column $inputColName must be a numeric type, " +
         s"but got $inputDataType.")
@@ -579,7 +579,7 @@ class IndexToString @Since("2.2.0") (@Since("1.5.0") override val uid: String)
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val inputColSchema = dataset.schema($(inputCol))
+    val inputColSchema = SchemaUtils.getSchemaField(dataset.schema, $(inputCol))
     // If the labels array is empty use column metadata
     val values = if (!isDefined(labels) || $(labels).isEmpty) {
       Attribute.fromStructField(inputColSchema)
