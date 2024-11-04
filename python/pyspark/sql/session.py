@@ -829,7 +829,11 @@ class SparkSession(SparkConversionMixin):
         --------
         >>> _ = spark.webUrl
         """
-        return self._jsparkSession.webUrl()
+        webUrl = self._jsparkSession.webUrl()
+        if webUrl == self._jvm.scala.Option.apply(None):
+            return None
+        else:
+            return webUrl.get()
 
     @property
     def conf(self) -> RuntimeConfig:
