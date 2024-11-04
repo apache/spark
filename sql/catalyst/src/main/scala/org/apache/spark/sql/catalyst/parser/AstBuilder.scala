@@ -527,6 +527,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
     // If there are multiple SELECT just UNION them together into one query.
     if (selects.length == 0) {
+      // This is a "FROM <tableName>" clause with no other syntax.
       from
     } else if (selects.length == 1) {
       selects.head
