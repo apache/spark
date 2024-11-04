@@ -96,7 +96,7 @@ public class ByteArraySuite {
 
   @Test
   public void testConcatWS() {
-    byte[] separator = new byte[]{(byte) 42}; // Separator byte array
+    byte[] separator = new byte[]{(byte) 42};
 
     byte[] x1 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
     byte[] y1 = new byte[]{(byte) 4, (byte) 5, (byte) 6};

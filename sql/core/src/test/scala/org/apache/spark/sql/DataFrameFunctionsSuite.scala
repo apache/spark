@@ -73,7 +73,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "sum_distinct", // equivalent to sum(distinct foo)
       "typedLit", "typedlit", // Scala only
       "udaf", "udf", // create function statement in sql
-      "call_function" // moot in SQL as you just call the function directly
+      "call_function", // moot in SQL as you just call the function directly
+      "listagg_distinct", // equivalent to listagg(distinct foo)
+      "string_agg_distinct" // equivalent to string_agg(distinct foo)
     )
 
     val excludedSqlFunctions = Set.empty[String]
@@ -83,8 +85,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
       "timestamp_add",
-      "timestamp_diff",
-      "listagg_distinct"
+      "timestamp_diff"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other
