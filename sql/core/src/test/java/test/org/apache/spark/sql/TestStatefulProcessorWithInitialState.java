@@ -42,7 +42,7 @@ public class TestStatefulProcessorWithInitialState
       OutputMode outputMode,
       TimeMode timeMode) {
     testState = this.getHandle().getValueState("testState",
-      Encoders.STRING(), new TTLConfig(Duration.ZERO));
+      Encoders.STRING(), TTLConfig.NONE());
   }
 
   @Override

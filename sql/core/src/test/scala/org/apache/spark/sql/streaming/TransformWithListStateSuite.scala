@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming
 
-import java.time.Duration
-
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -35,7 +33,7 @@ class TestListStateProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig(Duration.ZERO))
+    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -91,9 +89,9 @@ class ToggleSaveAndEmitProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig(Duration.ZERO))
+    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
     _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(

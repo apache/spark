@@ -46,7 +46,7 @@ class MapStateSuite extends StateVariableSuiteBase {
 
       val testState: MapState[String, Double] =
         handle.getMapState[String, Double]("testState", Encoders.STRING, Encoders.scalaDouble,
-          TTLConfig(Duration.ZERO))
+          TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial value
       testState.updateValue("k1", 1.0)
@@ -80,10 +80,10 @@ class MapStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val testState1: MapState[Long, Double] =
-        handle.getMapState[Long, Double]("testState1", TTLConfig(Duration.ZERO))
+        handle.getMapState[Long, Double]("testState1", TTLConfig.NONE)
       val testState2: MapState[Long, Int] =
         handle.getMapState[Long, Int]("testState2",
-          TTLConfig(Duration.ZERO))
+          TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial value
       testState1.updateValue(1L, 1.0)
@@ -120,13 +120,13 @@ class MapStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val mapTestState1: MapState[String, Int] =
-        handle.getMapState[String, Int]("mapTestState1", TTLConfig(Duration.ZERO))
+        handle.getMapState[String, Int]("mapTestState1", TTLConfig.NONE)
       val mapTestState2: MapState[String, Int] =
-        handle.getMapState[String, Int]("mapTestState2", TTLConfig(Duration.ZERO))
+        handle.getMapState[String, Int]("mapTestState2", TTLConfig.NONE)
       val valueTestState: ValueState[String] =
-        handle.getValueState[String]("valueTestState", TTLConfig(Duration.ZERO))
+        handle.getValueState[String]("valueTestState", TTLConfig.NONE)
       val listTestState: ListState[String] =
-        handle.getListState[String]("listTestState", TTLConfig(Duration.ZERO))
+        handle.getListState[String]("listTestState", TTLConfig.NONE)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // put initial values

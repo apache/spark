@@ -43,13 +43,13 @@ public class TestStatefulProcessor extends StatefulProcessor<Integer, String, St
       OutputMode outputMode,
       TimeMode timeMode) {
     countState = this.getHandle().getValueState("countState",
-      Encoders.LONG(), new TTLConfig(Duration.ZERO));
+      Encoders.LONG(), TTLConfig.NONE());
 
     keyCountMap = this.getHandle().getMapState("keyCountMap",
-      Encoders.STRING(), Encoders.LONG(), new TTLConfig(Duration.ZERO));
+      Encoders.STRING(), Encoders.LONG(), TTLConfig.NONE());
 
     keysList = this.getHandle().getListState("keyList",
-      Encoders.STRING(), new TTLConfig(Duration.ZERO));
+      Encoders.STRING(), TTLConfig.NONE());
   }
 
   @Override

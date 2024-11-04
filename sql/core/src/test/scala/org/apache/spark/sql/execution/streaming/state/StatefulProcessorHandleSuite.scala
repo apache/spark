@@ -50,7 +50,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), stringEncoder, getTimeMode(timeMode))
         assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
-        handle.getValueState[Long]("testState", TTLConfig(Duration.ZERO))
+        handle.getValueState[Long]("testState", TTLConfig.NONE)
       }
     }
   }
@@ -76,7 +76,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
   }
 
   private def createValueStateInstance(handle: StatefulProcessorHandleImpl): Unit = {
-    handle.getValueState[Long]("testState", TTLConfig(Duration.ZERO))
+    handle.getValueState[Long]("testState", TTLConfig.NONE)
   }
 
   private def registerTimer(handle: StatefulProcessorHandleImpl): Unit = {
@@ -228,7 +228,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         TTLConfig(Duration.ofHours(1)))
 
       // create another state without TTL, this should not be captured in the handle
-      handle.getValueState[String]("testState", TTLConfig(Duration.ZERO))
+      handle.getValueState[String]("testState", TTLConfig.NONE)
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === valueStateWithTTL)
@@ -246,7 +246,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         Encoders.STRING, TTLConfig(Duration.ofHours(1)))
 
       // create another state without TTL, this should not be captured in the handle
-      handle.getListState("testState", Encoders.STRING, TTLConfig(Duration.ZERO))
+      handle.getListState("testState", Encoders.STRING, TTLConfig.NONE)
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === listStateWithTTL)
@@ -265,7 +265,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
 
       // create another state without TTL, this should not be captured in the handle
       handle.getMapState("testState", Encoders.STRING, Encoders.STRING,
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === mapStateWithTTL)
@@ -278,10 +278,10 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), stringEncoder, TimeMode.None())
 
-      handle.getValueState("testValueState", Encoders.STRING, TTLConfig(Duration.ZERO))
-      handle.getListState("testListState", Encoders.STRING, TTLConfig(Duration.ZERO))
+      handle.getValueState("testValueState", Encoders.STRING, TTLConfig.NONE)
+      handle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
       handle.getMapState("testMapState", Encoders.STRING, Encoders.STRING,
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
 
       assert(handle.ttlStates.isEmpty)
     }

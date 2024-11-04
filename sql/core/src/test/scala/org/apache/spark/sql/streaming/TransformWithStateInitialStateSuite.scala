@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming
 
-import java.time.Duration
-
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{Dataset, Encoders, KeyValueGroupedDataset}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -42,12 +40,12 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
     _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
     _mapState = getHandle.getMapState[Double, Int](
       "testMapInit", Encoders.scalaDouble, Encoders.scalaInt,
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -168,9 +166,9 @@ class StatefulProcessorWithInitialStateProcTimerClass
       outputMode: OutputMode,
       timeMode: TimeMode) : Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   override def handleInitialState(
@@ -216,9 +214,9 @@ class StatefulProcessorWithInitialStateEventTimerClass
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
-      Encoders.scalaLong, TTLConfig(Duration.ZERO))
+      Encoders.scalaLong, TTLConfig.NONE)
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   private def processUnexpiredRows(maxEventTimeSec: Long): Unit = {

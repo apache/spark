@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming
 
-import java.time.Duration
-
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -36,7 +34,7 @@ class TestMapStateProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(

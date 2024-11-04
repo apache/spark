@@ -592,7 +592,7 @@ class TransformWithStateInPandasStateServer(
       case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
         val state = if (ttlDurationMs.isEmpty) {
           statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema),
-            TTLConfig(Duration.ZERO))
+            TTLConfig.NONE)
           } else {
             statefulProcessorHandle.getValueState(
               stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
@@ -607,7 +607,7 @@ class TransformWithStateInPandasStateServer(
       case StateVariableType.ListState => if (!listStates.contains(stateName)) {
         val state = if (ttlDurationMs.isEmpty) {
           statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema),
-            TTLConfig(Duration.ZERO))
+            TTLConfig.NONE)
         } else {
           statefulProcessorHandle.getListState(
             stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
@@ -625,7 +625,7 @@ class TransformWithStateInPandasStateServer(
         val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
         val state = if (ttlDurationMs.isEmpty) {
           statefulProcessorHandle.getMapState[Row, Row](stateName,
-            Encoders.row(schema), Encoders.row(valueSchema), TTLConfig(Duration.ZERO))
+            Encoders.row(schema), Encoders.row(valueSchema), TTLConfig.NONE)
         } else {
           statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
             Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))

@@ -28,3 +28,13 @@ import java.time.Duration
  *   time to live duration for state stored in the state variable.
  */
 case class TTLConfig(ttlDuration: Duration)
+
+object TTLConfig {
+
+  /**
+   * Helper method to create a TTLConfig with expiry duration as Zero
+   * @return - TTLConfig with expiry duration as Zero
+   */
+  def NONE: TTLConfig = TTLConfig(Duration.ZERO)
+
+}

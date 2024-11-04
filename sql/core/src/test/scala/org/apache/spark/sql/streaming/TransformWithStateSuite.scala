@@ -51,7 +51,7 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState",
-      Encoders.scalaLong, TTLConfig(Duration.ZERO))
+      Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -107,7 +107,7 @@ class RunningCountListStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getListState[Long](
-      "countState", Encoders.scalaLong, TTLConfig(Duration.ZERO))
+      "countState", Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -126,7 +126,7 @@ class RunningCountStatefulProcessorInt
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -186,7 +186,7 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
       timeMode: TimeMode) : Unit = {
     super.init(outputMode, timeMode)
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   protected def processUnexpiredRows(
@@ -270,9 +270,9 @@ class MaxEventTimeStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
-      Encoders.scalaLong, TTLConfig(Duration.ZERO))
+      Encoders.scalaLong, TTLConfig.NONE)
     _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   protected def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
@@ -318,9 +318,9 @@ class RunningCountMostRecentStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
     _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -350,7 +350,7 @@ class MostRecentStatefulProcessorWithDeletion
       timeMode: TimeMode): Unit = {
     getHandle.deleteIfExists("countState")
     _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -378,7 +378,7 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
       timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
     _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
     Iterator.empty
   }
 }
@@ -392,12 +392,12 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
     _listState = getHandle.getListState[TestClass](
-      "listState", Encoders.product[TestClass], TTLConfig(Duration.ZERO))
+      "listState", Encoders.product[TestClass], TTLConfig.NONE)
     _mapState = getHandle.getMapState[POJOTestClass, String](
       "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING,
-      TTLConfig(Duration.ZERO))
+      TTLConfig.NONE)
   }
 }
 
@@ -442,7 +442,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
         _myValueState = getHandle.getValueState[Long](
           "myValueState",
-          TTLConfig(Duration.ZERO)
+          TTLConfig.NONE
         )
       }
 

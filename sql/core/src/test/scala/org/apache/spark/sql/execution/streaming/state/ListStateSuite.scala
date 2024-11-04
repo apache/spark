@@ -43,7 +43,7 @@ class ListStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val listState: ListState[Long] = handle.getListState[Long]("listState",
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       val e = intercept[SparkIllegalArgumentException] {
@@ -77,7 +77,7 @@ class ListStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val testState: ListState[Long] = handle.getListState[Long]("testState",
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
       // simple put and get test
@@ -106,9 +106,9 @@ class ListStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val testState1: ListState[Long] = handle.getListState[Long]("testState1",
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
       val testState2: ListState[Long] = handle.getListState[Long]("testState2",
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
 
@@ -146,11 +146,11 @@ class ListStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val listState1: ListState[Long] = handle.getListState[Long]("listState1",
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
       val listState2: ListState[Long] = handle.getListState[Long]("listState2",
-        TTLConfig(Duration.ZERO))
+        TTLConfig.NONE)
       val valueState: ValueState[Long] = handle.getValueState[Long](
-        "valueState", TTLConfig(Duration.ZERO))
+        "valueState", TTLConfig.NONE)
 
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       // simple put and get test
