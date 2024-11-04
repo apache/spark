@@ -84,6 +84,18 @@ table t;
 from t
 |> select 1 as x;
 
+-- Selecting from multiple relations.
+from t, other
+|> select t.x + other.a as z;
+
+-- Selecting from multiple relations with join.
+from t join other on (t.x = other.a)
+|> select t.x + other.a as z;
+
+-- Selecting from lateral view.
+from t lateral view explode(array(100, 101)) as ly
+|> select t.x + ly as z;
+
 -- Selecting a constant.
 table t
 |> select 1 as x;

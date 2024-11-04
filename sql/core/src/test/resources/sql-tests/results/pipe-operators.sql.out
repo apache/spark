@@ -260,6 +260,42 @@ struct<x:int>
 
 
 -- !query
+from t, other
+|> select t.x + other.a as z
+-- !query schema
+struct<z:int>
+-- !query output
+1
+1
+2
+2
+2
+3
+
+
+-- !query
+from t join other on (t.x = other.a)
+|> select t.x + other.a as z
+-- !query schema
+struct<z:int>
+-- !query output
+2
+2
+
+
+-- !query
+from t lateral view explode(array(100, 101)) as ly
+|> select t.x + ly as z
+-- !query schema
+struct<z:int>
+-- !query output
+100
+101
+101
+102
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query schema

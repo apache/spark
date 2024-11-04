@@ -289,6 +289,40 @@ Project [pipeselect(1) AS x#x]
 
 
 -- !query
+from t, other
+|> select t.x + other.a as z
+-- !query analysis 
+Project [pipeselect((x#x + a#x)) AS z#x]
++- Join Inner
+   :- SubqueryAlias spark_catalog.default.t
+   :  +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- SubqueryAlias spark_catalog.default.other
+      +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+from t join other on (t.x = other.a)
+|> select t.x + other.a as z
+-- !query analysis
+Project [pipeselect((x#x + a#x)) AS z#x]
++- Join Inner, (x#x = a#x)
+   :- SubqueryAlias spark_catalog.default.t
+   :  +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- SubqueryAlias spark_catalog.default.other
+      +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+from t lateral view explode(array(100, 101)) as ly
+|> select t.x + ly as z
+-- !query analysis
+Project [pipeselect((x#x + ly#x)) AS z#x]
++- Generate explode(array(100, 101)), false, as, [ly#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query analysis
