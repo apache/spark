@@ -40,8 +40,8 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
         case s: UTF8String if s != null =>
           val dataType = DataType.parseTypeWithFallback(
             s.toString,
-            DataType.fromDDL,
-            DataType.fromJson)
+            DataType.fromJson,
+            DataType.fromDDL)
           CharVarcharUtils.failIfHasCharVarchar(dataType)
         case _ => throw QueryCompilationErrors.unexpectedSchemaTypeError(exp)
 
