@@ -84,7 +84,7 @@ class FunctionsTestsMixin:
 
         # Functions that we expect to be missing in python until they are added to pyspark
         expected_missing_in_py = {
-            # TODO: listagg functions will soon be added and removed from this list
+            # TODO(SPARK-50220): listagg functions will soon be added and removed from this list
             "listagg_distinct",
             "listagg",
             "string_agg",
