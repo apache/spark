@@ -98,26 +98,17 @@ class StateResponseWithLongTypeVal(_message.Message):
     ) -> None: ...
 
 class StatefulProcessorCall(_message.Message):
-    __slots__ = (
-        "setHandleState",
-        "getValueState",
-        "getListState",
-        "getMapState",
-        "timerStateCall",
-        "utilsCall",
-    )
+    __slots__ = ("setHandleState", "getValueState", "getListState", "getMapState", "timerStateCall")
     SETHANDLESTATE_FIELD_NUMBER: _ClassVar[int]
     GETVALUESTATE_FIELD_NUMBER: _ClassVar[int]
     GETLISTSTATE_FIELD_NUMBER: _ClassVar[int]
     GETMAPSTATE_FIELD_NUMBER: _ClassVar[int]
     TIMERSTATECALL_FIELD_NUMBER: _ClassVar[int]
-    UTILSCALL_FIELD_NUMBER: _ClassVar[int]
     setHandleState: SetHandleState
     getValueState: StateCallCommand
     getListState: StateCallCommand
     getMapState: StateCallCommand
     timerStateCall: TimerStateCallCommand
-    utilsCall: UtilsCallCommand
     def __init__(
         self,
         setHandleState: _Optional[_Union[SetHandleState, _Mapping]] = ...,
@@ -125,7 +116,6 @@ class StatefulProcessorCall(_message.Message):
         getListState: _Optional[_Union[StateCallCommand, _Mapping]] = ...,
         getMapState: _Optional[_Union[StateCallCommand, _Mapping]] = ...,
         timerStateCall: _Optional[_Union[TimerStateCallCommand, _Mapping]] = ...,
-        utilsCall: _Optional[_Union[UtilsCallCommand, _Mapping]] = ...,
     ) -> None: ...
 
 class StateVariableRequest(_message.Message):
@@ -450,13 +440,3 @@ class TTLConfig(_message.Message):
     DURATIONMS_FIELD_NUMBER: _ClassVar[int]
     durationMs: int
     def __init__(self, durationMs: _Optional[int] = ...) -> None: ...
-
-class UtilsCallCommand(_message.Message):
-    __slots__ = ("isFirstBatch",)
-    ISFIRSTBATCH_FIELD_NUMBER: _ClassVar[int]
-    isFirstBatch: IsFirstBatch
-    def __init__(self, isFirstBatch: _Optional[_Union[IsFirstBatch, _Mapping]] = ...) -> None: ...
-
-class IsFirstBatch(_message.Message):
-    __slots__ = ()
-    def __init__(self) -> None: ...

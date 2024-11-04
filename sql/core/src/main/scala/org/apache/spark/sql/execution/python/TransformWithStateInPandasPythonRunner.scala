@@ -53,12 +53,11 @@ class TransformWithStateInPandasPythonRunner(
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
     batchTimestampMs: Option[Long],
-    eventTimeWatermarkForEviction: Option[Long],
-    hasInitialState: Boolean)
+    eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPandasPythonBaseRunner[InType](
     funcs, evalType, argOffsets, _schema, processorHandle, _timeZoneId,
     initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
-    batchTimestampMs, eventTimeWatermarkForEviction, hasInitialState)
+    batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[InType] {
 
   private var pandasWriter: BaseStreamingArrowWriter = _
@@ -109,12 +108,11 @@ class TransformWithStateInPandasPythonInitialStateRunner(
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
     batchTimestampMs: Option[Long],
-    eventTimeWatermarkForEviction: Option[Long],
-    hasInitialState: Boolean)
+    eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPandasPythonBaseRunner[GroupedInType](
     funcs, evalType, argOffsets, dataSchema, processorHandle, _timeZoneId,
     initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
-    batchTimestampMs, eventTimeWatermarkForEviction, hasInitialState)
+    batchTimestampMs, eventTimeWatermarkForEviction)
     with PythonArrowInput[GroupedInType] {
 
   override protected lazy val schema: StructType = new StructType()
@@ -174,8 +172,7 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
     batchTimestampMs: Option[Long],
-    eventTimeWatermarkForEviction: Option[Long],
-    hasInitialState: Boolean)
+    eventTimeWatermarkForEviction: Option[Long])
   extends BasePythonRunner[I, ColumnarBatch](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
   with PythonArrowInput[I]
   with BasicPythonArrowOutput
@@ -229,7 +226,7 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
       new TransformWithStateInPandasStateServer(stateServerSocket, processorHandle,
         groupingKeySchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes,
         sqlConf.arrowTransformWithStateInPandasMaxRecordsPerBatch,
-        batchTimestampMs, eventTimeWatermarkForEviction, hasInitialState))
+        batchTimestampMs, eventTimeWatermarkForEviction))
 
     context.addTaskCompletionListener[Unit] { _ =>
       logInfo(log"completion listener called")

@@ -594,9 +594,8 @@ class PandasGroupedOpsMixin:
                     StatefulProcessorHandleState.INITIALIZED
                 )
 
-            # only process initial state if first batch
-            is_first_batch = statefulProcessorApiClient.is_first_batch()
-            if is_first_batch and initialStates is not None:
+            # only process initial state if first batch and initial state is not None
+            if initialStates is not None:
                 for cur_initial_state in initialStates:
                     statefulProcessorApiClient.set_implicit_key(key)
                     # TODO(SPARK-50194) integration with new timer API & initial state timer register

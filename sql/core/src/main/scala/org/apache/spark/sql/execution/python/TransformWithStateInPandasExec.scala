@@ -210,8 +210,7 @@ case class TransformWithStateInPandasExec(
         jobArtifactUUID,
         groupingKeySchema,
         batchTimestampMs,
-        eventTimeWatermarkForEviction,
-        hasInitialState
+        eventTimeWatermarkForEviction
       )
       executePython(data, output, runner)
     } else {
@@ -238,8 +237,7 @@ case class TransformWithStateInPandasExec(
         jobArtifactUUID,
         groupingKeySchema,
         batchTimestampMs,
-        eventTimeWatermarkForEviction,
-        hasInitialState
+        eventTimeWatermarkForEviction
       )
       executePython(groupedData, output, runner)
     }

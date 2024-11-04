@@ -167,8 +167,14 @@ case class FlatMapGroupsInPandasWithState(
  * output/return 0 or more rows. For a streaming dataframe, we will repeatedly invoke the interface
  * methods for new rows in each trigger and the user's state/state variables will be stored
  * persistently across invocations.
+ *
+ * Note that before invoking the function, please project the grouping attributes of input dataframe
+ * and initial state dataframe to the front of the output attributes. The attributes are not fully
+ * resolved when this function is invoked. Will return left and right attributes by taking the first
+ * `groupingAttributesLen` and `initGroupingAttrsLen` after attributes are resolved.
+ * The dedup of grouping attributes will happen in the physical operator.
  * @param functionExpr function called on each group
- * @param groupingAttributesLen length of the seq of grouping attributes for input dataframe
+ * @param groupingAttributesLen length of the seq of grouping attributes for input dataframe.
  * @param outputAttrs used to define the output rows
  * @param outputMode defines the output mode for the statefulProcessor
  * @param timeMode the time mode semantics of the stateful processor for timers and TTL.
