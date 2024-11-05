@@ -26,8 +26,7 @@ import org.apache.spark.sql.types._
 class CollationSQLFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-50214: from_json and from_xml work correctly with session collation") {
-    val spark = this.spark
-    import spark.implicits._
+    import testImplicits._
 
     def checkSchema(
         dataset: Dataset[String],
