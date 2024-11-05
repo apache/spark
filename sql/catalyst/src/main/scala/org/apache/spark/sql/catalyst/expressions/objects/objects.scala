@@ -413,25 +413,25 @@ case class StaticInvoke(
 }
 
 object StaticInvoke {
-    def withNullIntolerant(
-        staticObject: Class[_],
-        dataType: DataType,
-        functionName: String,
-        arguments: Seq[Expression] = Nil,
-        inputTypes: Seq[AbstractDataType] = Nil,
-        propagateNull: Boolean = true,
-        returnNullable: Boolean = true,
-        isDeterministic: Boolean = true,
-        scalarFunction: Option[ScalarFunction[_]] = None): StaticInvoke =
-      new StaticInvoke(
-        staticObject,
-        dataType,
-        functionName,
-        arguments,
-        inputTypes,
-        propagateNull,
-        returnNullable,
-        isDeterministic, scalarFunction) with NullIntolerant
+  def withNullIntolerant(
+      staticObject: Class[_],
+      dataType: DataType,
+      functionName: String,
+      arguments: Seq[Expression] = Nil,
+      inputTypes: Seq[AbstractDataType] = Nil,
+      propagateNull: Boolean = true,
+      returnNullable: Boolean = true,
+      isDeterministic: Boolean = true,
+      scalarFunction: Option[ScalarFunction[_]] = None): StaticInvoke =
+    new StaticInvoke(
+      staticObject,
+      dataType,
+      functionName,
+      arguments,
+      inputTypes,
+      propagateNull,
+      returnNullable,
+      isDeterministic, scalarFunction) with NullIntolerant
 }
 
 /**
