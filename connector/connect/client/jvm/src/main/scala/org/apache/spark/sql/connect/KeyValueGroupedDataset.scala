@@ -107,7 +107,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     flatMapGroupsWithStateHelper(
       None,
       timeoutConf,
-      Some(initialState),
+      Some(castToImpl(initialState)),
       isMapGroupWithState = true)(UDFAdaptors.mapGroupsWithStateToFlatMapWithState(func))
   }
 
@@ -132,7 +132,7 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
     flatMapGroupsWithStateHelper(
       Some(outputMode),
       timeoutConf,
-      Some(initialState),
+      Some(castToImpl(initialState)),
       isMapGroupWithState = false)(func)
   }
 
