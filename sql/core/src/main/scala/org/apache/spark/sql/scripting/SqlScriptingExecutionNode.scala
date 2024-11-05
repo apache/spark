@@ -665,8 +665,7 @@ class ForStatementExec(
   }
   private var state = ForState.VariableDeclaration
   private var currRow = 0
-
-  private var isVariableDeclared = false
+  private var currNamedStruct: CreateNamedStruct = null
 
   /**
    * Loop can be interrupted by LeaveStatementExec
@@ -676,11 +675,7 @@ class ForStatementExec(
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean =
-        !interrupted &&
-        queryResult.length > 0 &&
-        // not currRow < queryResult.length because when
-        // currRow == queryResult.length we drop the local variable
-        currRow < queryResult.length
+        !interrupted && queryResult.length > 0 && currRow < queryResult.length
 
       override def next(): CompoundStatementExec = state match {
         case ForState.VariableDeclaration =>
@@ -688,39 +683,15 @@ class ForStatementExec(
             queryDataframe.schema.names.toSeq.flatMap { colName =>
               Seq(Literal(colName), Literal(queryResult(currRow).getAs(colName)))
             }
-          val namedStruct = CreateNamedStruct(namedStructArgs)
-
-          val defaultExpression =
-            DefaultValueExpression(Literal(null, namedStruct.dataType), "null")
-          val declareVariable = CreateVariable(
-            UnresolvedIdentifier(Seq(identifier.get)),
-            defaultExpression,
-            replace = true
-          )
-          val declareExec = new SingleStatementExec(declareVariable, Origin(), false)
+          currNamedStruct = CreateNamedStruct(namedStructArgs)
 
           state = ForState.VariableAssignment
+          createDeclareVarExec(currNamedStruct)
 
-          declareExec
         case ForState.VariableAssignment =>
-          val namedStructArgs: Seq[Expression] =
-            queryDataframe.schema.names.toSeq.flatMap { colName =>
-              Seq(Literal(colName), Literal(queryResult(currRow).getAs(colName)))
-            }
-          val namedStruct = CreateNamedStruct(namedStructArgs)
-
-          val projectNamedStruct = Project(
-            Seq(Alias(namedStruct, identifier.get)()),
-            OneRowRelation()
-          )
-          val setIdentifierToCurrentRow =
-            SetVariable(Seq(UnresolvedAttribute(identifier.get)), projectNamedStruct)
-          val setExec = new SingleStatementExec(setIdentifierToCurrentRow, Origin(), false)
-
           state = ForState.Body
           body.reset()
-
-          setExec
+          createSetVarExec(currNamedStruct)
 
         case ForState.Body =>
           val retStmt = body.getTreeIterator.next()
@@ -751,12 +722,34 @@ class ForStatementExec(
       }
     }
 
+  private def createDeclareVarExec(namedStruct: CreateNamedStruct): SingleStatementExec = {
+    val defaultExpression = DefaultValueExpression(Literal(null, namedStruct.dataType), "null")
+    val declareVariable = CreateVariable(
+      UnresolvedIdentifier(Seq(identifier.get)),
+      defaultExpression,
+      replace = true
+    )
+    val declareExec = new SingleStatementExec(declareVariable, Origin(), false)
+    declareExec
+  }
+
+  private def createSetVarExec(namedStruct: CreateNamedStruct): SingleStatementExec = {
+    val projectNamedStruct = Project(
+      Seq(Alias(namedStruct, identifier.get)()),
+      OneRowRelation()
+    )
+    val setIdentifierToCurrentRow =
+      SetVariable(Seq(UnresolvedAttribute(identifier.get)), projectNamedStruct)
+    val setExec = new SingleStatementExec(setIdentifierToCurrentRow, Origin(), false)
+    setExec
+  }
+
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
   override def reset(): Unit = {
+    // TODO: run query again
     state = ForState.VariableDeclaration
     currRow = 0
-    isVariableDeclared = false
     body.reset()
   }
 }
