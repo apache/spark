@@ -118,7 +118,6 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE", ctx)
   }
 
-
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
   }
