@@ -98,6 +98,94 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("for test iterate") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (intCol INT, stringCol STRING) using parquet;
+          | INSERT INTO t VALUES (1, 'first');
+          | INSERT INTO t VALUES (2, 'second');
+          | INSERT INTO t VALUES (3, 'third');
+          | INSERT INTO t VALUES (4, 'fourth');
+          |
+          | lbl: FOR x AS SELECT * FROM t ORDER BY intCol DO
+          |   IF x.intCol = 2 THEN
+          |     ITERATE lbl;
+          |   END IF;
+          |   SELECT x.stringCol;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 0
+        Seq(Row("first")), // select stringCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 1
+//        Seq.empty[Row], // drop x - TODO: uncomment when iterate can handle dropping vars
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 2
+        Seq(Row("third")), // select stringCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 3
+        Seq(Row("fourth")), // select stringCol
+        Seq.empty[Row], // drop x
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("for test leave") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (intCol INT, stringCol STRING) using parquet;
+          | INSERT INTO t VALUES (1, 'first');
+          | INSERT INTO t VALUES (2, 'second');
+          | INSERT INTO t VALUES (3, 'third');
+          | INSERT INTO t VALUES (4, 'fourth');
+          |
+          | lbl: FOR x AS SELECT * FROM t ORDER BY intCol DO
+          |   IF x.intCol = 3 THEN
+          |     LEAVE lbl;
+          |   END IF;
+          |   SELECT x.stringCol;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 0
+        Seq(Row("first")), // select stringCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 1
+        Seq(Row("second")), // select stringCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 2
+//        Seq.empty[Row], // drop x
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
   test("for test no variable") {
     withTable("t") {
       val sqlScript =
