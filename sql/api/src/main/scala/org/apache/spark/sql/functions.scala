@@ -1157,7 +1157,7 @@ object functions {
 
   /**
    * Aggregate function: returns the concatenation of non-null input values, separated by the
-   * delimiter string.
+   * delimiter.
    *
    * @group agg_funcs
    * @since 4.0.0
@@ -1174,7 +1174,7 @@ object functions {
 
   /**
    * Aggregate function: returns the concatenation of distinct non-null input values, separated by
-   * the delimiter string.
+   * the delimiter.
    *
    * @group agg_funcs
    * @since 4.0.0
@@ -1192,7 +1192,7 @@ object functions {
 
   /**
    * Aggregate function: returns the concatenation of non-null input values, separated by the
-   * delimiter string. Alias for `listagg`.
+   * delimiter. Alias for `listagg`.
    *
    * @group agg_funcs
    * @since 4.0.0
@@ -1210,7 +1210,7 @@ object functions {
 
   /**
    * Aggregate function: returns the concatenation of distinct non-null input values, separated by
-   * the delimiter string. Alias for `listagg`.
+   * the delimiter. Alias for `listagg`.
    *
    * @group agg_funcs
    * @since 4.0.0

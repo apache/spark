@@ -273,8 +273,8 @@ private[aggregate] object CollectTopK {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the concatenated input non-null values," +
-    " separated by the delimiter string.",
+  usage = "_FUNC_(expr) - Returns the concatenation of non-null input values," +
+    " separated by the delimiter.",
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);
@@ -295,38 +295,46 @@ private[aggregate] object CollectTopK {
     the order of the rows may be non-deterministic after a shuffle.
   """,
   group = "agg_funcs",
-  since = "4.0.0")
+  since = "4.0.0"
+)
 case class ListAgg(
     child: Expression,
     delimiter: Expression = Literal(null),
     orderExpressions: Seq[SortOrder] = Nil,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends Collect[mutable.ArrayBuffer[Any]]
+    inputAggBufferOffset: Int = 0)
+  extends Collect[mutable.ArrayBuffer[Any]]
   with SupportsOrderingWithinGroup
   with ImplicitCastInputTypes {
 
+  override protected lazy val bufferElementType: DataType = {
+    if (noNeedSaveOrderValue) {
+      child.dataType
+    } else {
+      StructType(
+        StructField("value", child.dataType)
+        +: orderValuesField
+      )
+    }
+  }
+  /** Indicates that the result of [[child]] is enough for evaluation  */
+  private lazy val noNeedSaveOrderValue: Boolean = isOrderCompatible(orderExpressions)
+
   def this(child: Expression) =
     this(child, Literal(null), Nil, 0, 0)
+
   def this(child: Expression, delimiter: Expression) =
     this(child, delimiter, Nil, 0, 0)
-
-  override def dataType: DataType = child.dataType
 
   override def nullable: Boolean = true
 
   override def createAggregationBuffer(): mutable.ArrayBuffer[Any] = mutable.ArrayBuffer.empty
 
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  /** Indicates that the result of [[child]] is enough for evaluation  */
-  private lazy val noNeedSaveOrderValue: Boolean = isOrderCompatible(orderExpressions)
-
-  override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
   override def defaultResult: Option[Literal] = Option(Literal.create(null, dataType))
 
@@ -340,37 +348,6 @@ case class ListAgg(
     s"$prettyName($distinct${child.sql}, ${delimiter.sql})$withinGroup"
   }
 
-  private[this] def orderValuesField: Seq[StructField] = {
-    orderExpressions.zipWithIndex.map {
-      case (order, i) => StructField(s"sortOrderValue[$i]", order.dataType)
-    }
-  }
-
-  private[this] def evalOrderValues(internalRow: InternalRow): Seq[Any] = {
-    orderExpressions.map(order => convertToBufferElement(order.child.eval(internalRow)))
-  }
-
-  private[this] def bufferOrdering: Ordering[InternalRow] = {
-    val bufferSortOrder = orderExpressions.zipWithIndex.map {
-      case (originalOrder, i) =>
-        originalOrder.copy(
-          // first value is the evaluated child so add +1 for order's values
-          child = BoundReference(i + 1, originalOrder.dataType, originalOrder.child.nullable)
-        )
-    }
-    new InterpretedOrdering(bufferSortOrder)
-  }
-
-  override protected lazy val bufferElementType: DataType = {
-    if (noNeedSaveOrderValue) {
-      child.dataType
-    } else {
-      StructType(
-        StructField("value", child.dataType)
-        +: orderValuesField)
-    }
-  }
-
   override def inputTypes: Seq[AbstractDataType] =
     TypeCollection(
       StringTypeWithCollation(supportsTrimCollation = true),
@@ -381,8 +358,7 @@ case class ListAgg(
       BinaryType,
       NullType
     ) +:
-      orderExpressions.map(_ => AnyDataType)
-
+    orderExpressions.map(_ => AnyDataType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val matchInputTypes = super.checkInputDataTypes()
@@ -407,22 +383,60 @@ case class ListAgg(
     }
   }
 
+  override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
+    if (buffer.nonEmpty) {
+      val sortedBufferWithoutNulls = sortBuffer(buffer)
+      concatSkippingNulls(sortedBufferWithoutNulls)
+    } else {
+      null
+    }
+  }
+
   private[this] def sortBuffer(buffer: mutable.ArrayBuffer[Any]): mutable.ArrayBuffer[Any] = {
     if (!orderingFilled) {
       return buffer
     }
     if (noNeedSaveOrderValue) {
       val ascendingOrdering = PhysicalDataType.ordering(orderExpressions.head.dataType)
-      val ordering = if (orderExpressions.head.direction == Ascending) ascendingOrdering
+      val ordering =
+        if (orderExpressions.head.direction == Ascending) ascendingOrdering
         else ascendingOrdering.reverse
       buffer.sorted(ordering)
     } else {
-      buffer.asInstanceOf[mutable.ArrayBuffer[InternalRow]]
+      buffer
+        .asInstanceOf[mutable.ArrayBuffer[InternalRow]]
         .sorted(bufferOrdering)
         // drop order values after sort
         .map(_.get(0, child.dataType))
     }
   }
+
+  private[this] def bufferOrdering: Ordering[InternalRow] = {
+    val bufferSortOrder = orderExpressions.zipWithIndex.map {
+      case (originalOrder, i) =>
+        originalOrder.copy(
+          // first value is the evaluated child so add +1 for order's values
+          child = BoundReference(i + 1, originalOrder.dataType, originalOrder.child.nullable)
+        )
+    }
+    new InterpretedOrdering(bufferSortOrder)
+  }
+
+  override def orderingFilled: Boolean = orderExpressions.nonEmpty
+
+  private[this] def concatSkippingNulls(buffer: mutable.ArrayBuffer[Any]): Any = {
+    val delimiterValue = getDelimiterValue
+    dataType match {
+      case BinaryType =>
+        val inputs = buffer.filter(_ != null).map(_.asInstanceOf[Array[Byte]])
+        ByteArray.concatWS(delimiterValue.asInstanceOf[Array[Byte]], inputs.toSeq: _*)
+      case _: StringType =>
+        val inputs = buffer.filter(_ != null).map(_.asInstanceOf[UTF8String])
+        UTF8String.fromString(inputs.mkString(delimiterValue.toString))
+    }
+  }
+
+  override def dataType: DataType = child.dataType
 
   private[this] def getDelimiterValue: Any = {
     val delimiterValue = delimiter.eval()
@@ -434,27 +448,6 @@ case class ListAgg(
       }
     } else {
       delimiterValue
-    }
-  }
-
-  private[this] def concatSkippingNulls(buffer: mutable.ArrayBuffer[Any]): Any = {
-    val delimiterValue = getDelimiterValue
-    dataType match {
-     case BinaryType =>
-      val inputs = buffer.filter(_ != null).map(_.asInstanceOf[Array[Byte]])
-      ByteArray.concatWS(delimiterValue.asInstanceOf[Array[Byte]], inputs.toSeq: _*)
-    case _: StringType =>
-      val inputs = buffer.filter(_ != null).map(_.asInstanceOf[UTF8String])
-      UTF8String.fromString(inputs.mkString(delimiterValue.toString))
-    }
-  }
-
-  override def eval(buffer: mutable.ArrayBuffer[Any]): Any = {
-    if (buffer.nonEmpty) {
-      val sortedBufferWithoutNulls = sortBuffer(buffer)
-      concatSkippingNulls(sortedBufferWithoutNulls)
-    } else {
-      null
     }
   }
 
@@ -471,19 +464,16 @@ case class ListAgg(
     buffer
   }
 
-  override def orderingFilled: Boolean = orderExpressions.nonEmpty
+  private[this] def evalOrderValues(internalRow: InternalRow): Seq[Any] = {
+    orderExpressions.map(order => convertToBufferElement(order.child.eval(internalRow)))
+  }
+
+  override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
+
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction =
     copy(orderExpressions = orderingWithinGroup)
 
   override def children: Seq[Expression] = child +: delimiter +: orderExpressions.map(_.child)
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
-    copy(
-      child = newChildren.head,
-      delimiter = newChildren(1),
-        orderExpressions = newChildren.drop(2).zip(orderExpressions)
-          .map { case (newExpr, oldSortOrder) => oldSortOrder.copy(child = newExpr) }
-    )
 
   /**
    * Utility func to check if given order is defined and different from [[child]].
@@ -499,5 +489,21 @@ case class ListAgg(
       return true
     }
     false
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(
+      child = newChildren.head,
+      delimiter = newChildren(1),
+      orderExpressions = newChildren
+        .drop(2)
+        .zip(orderExpressions)
+        .map { case (newExpr, oldSortOrder) => oldSortOrder.copy(child = newExpr) }
+    )
+
+  private[this] def orderValuesField: Seq[StructField] = {
+    orderExpressions.zipWithIndex.map {
+      case (order, i) => StructField(s"sortOrderValue[$i]", order.dataType)
+    }
   }
 }
