@@ -33,6 +33,8 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * Function to create new or return existing single value state variable of given type with ttl.
    * State values will not be returned past ttlDuration, and will be eventually removed from the
    * state store. Any state update resets the ttl to current processing time plus ttlDuration.
+   * Users can use the helper method `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for
+   * the TTLConfig parameter to disable TTL for the state variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
@@ -57,7 +59,9 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * (Scala-specific) Function to create new or return existing single value state variable of
    * given type with ttl. State values will not be returned past ttlDuration, and will be
    * eventually removed from the state store. Any state update resets the ttl to current
-   * processing time plus ttlDuration.
+   * processing time plus ttlDuration. Users can use the helper method `TTLConfig.NONE` in Scala
+   * or `TTLConfig.NONE()` in Java for the TTLConfig parameter to disable TTL for the state
+   * variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
@@ -77,7 +81,9 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * Function to create new or return existing list state variable of given type with ttl. State
    * values will not be returned past ttlDuration, and will be eventually removed from the state
    * store. Any values in listState which have expired after ttlDuration will not be returned on
-   * get() and will be eventually removed from the state.
+   * get() and will be eventually removed from the state. Users can use the helper method
+   * `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for the TTLConfig parameter to
+   * disable TTL for the state variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
@@ -102,7 +108,9 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * (Scala-specific) Function to create new or return existing list state variable of given type
    * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
    * from the state store. Any values in listState which have expired after ttlDuration will not
-   * be returned on get() and will be eventually removed from the state.
+   * be returned on get() and will be eventually removed from the state. Users can use the helper
+   * method `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for the TTLConfig parameter to
+   * disable TTL for the state variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
@@ -122,7 +130,9 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * Function to create new or return existing map state variable of given type with ttl. State
    * values will not be returned past ttlDuration, and will be eventually removed from the state
    * store. Any values in mapState which have expired after ttlDuration will not returned on get()
-   * and will be eventually removed from the state.
+   * and will be eventually removed from the state. Users can use the helper method
+   * `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for the TTLConfig parameter to
+   * disable TTL for the state variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
@@ -152,7 +162,9 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * (Scala-specific) Function to create new or return existing map state variable of given type
    * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
    * from the state store. Any values in mapState which have expired after ttlDuration will not be
-   * returned on get() and will be eventually removed from the state.
+   * returned on get() and will be eventually removed from the state. Users can use the helper
+   * method `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for the TTLConfig parameter to
+   * disable TTL for the state variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
