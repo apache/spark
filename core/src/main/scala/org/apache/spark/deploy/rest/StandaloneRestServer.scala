@@ -21,7 +21,7 @@ import java.io.File
 import javax.servlet.http.HttpServletResponse
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
-import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
+import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription, SparkSubmit}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.SparkLauncher
@@ -168,9 +168,16 @@ private[rest] class StandaloneSubmitRequestServlet(
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
     val sparkJavaOpts = Utils.sparkJavaOpts(conf)
     val javaOpts = sparkJavaOpts ++ defaultJavaOpts ++ extraJavaOpts
+    val sparkSubmitOpts = if (mainClass.equals(classOf[SparkSubmit].getName)) {
+      sparkProperties.get("spark.app.name")
+        .map { v => Seq("-c", s"spark.app.name=$v") }
+        .getOrElse(Seq.empty[String])
+    } else {
+      Seq.empty[String]
+    }
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",
-      Seq("{{WORKER_URL}}", "{{USER_JAR}}", mainClass) ++ appArgs, // args to the DriverWrapper
+      Seq("{{WORKER_URL}}", "{{USER_JAR}}", mainClass) ++ sparkSubmitOpts ++ appArgs,
       environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
     val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)

@@ -104,8 +104,13 @@ private[spark] class SparkSubmit extends Logging {
    */
   private def kill(args: SparkSubmitArguments): Unit = {
     if (RestSubmissionClient.supportsRestClient(args.master)) {
-      new RestSubmissionClient(args.master)
+      val response = new RestSubmissionClient(args.master)
         .killSubmission(args.submissionToKill)
+      if (response.success) {
+        logInfo(s"${args.submissionToKill} is killed successfully.")
+      } else {
+        logError(response.message)
+      }
     } else {
       val sparkConf = args.toSparkConf()
       sparkConf.set("spark.master", args.master)
