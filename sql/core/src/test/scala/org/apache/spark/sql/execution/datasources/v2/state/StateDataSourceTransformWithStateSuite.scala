@@ -16,15 +16,20 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
+import java.io.File
 import java.time.Duration
 
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{Encoders, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider, TestClass}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBFileManager, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.{col, explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.util.Utils
 
 /** Stateful processor of single value state var with non-primitive type */
 class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor {
@@ -1044,15 +1049,15 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
             OutputMode.Append())
         testStream(query)(
           StartStream(checkpointLocation = tmpDir.getCanonicalPath),
-          AddData(inputData, (1, 1L), (2, 2L), (3, 3L)),
+          AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L)),
           ProcessAllAvailable(),
-          AddData(inputData, (2, 2L), (3, 3L), (4, 4L)),
+          AddData(inputData, (5, 1L), (6, 2L), (7, 3L), (8, 4L)),
           ProcessAllAvailable(),
-          AddData(inputData, (3, 3L), (4, 4L), (5, 5L)),
+          AddData(inputData, (9, 1L), (10, 2L), (11, 3L), (12, 4L)),
           ProcessAllAvailable(),
-          AddData(inputData, (4, 4L), (5, 5L), (6, 6L)),
+          AddData(inputData, (13, 1L), (14, 2L), (15, 3L), (16, 4L)),
           ProcessAllAvailable(),
-          AddData(inputData, (5, 5L), (6, 6L), (7, 7L)),
+          AddData(inputData, (17, 1L), (18, 2L), (19, 3L), (20, 4L)),
           ProcessAllAvailable(),
           // Ensure that we get a chance to upload created snapshots
           Execute { _ => Thread.sleep(5000) },
@@ -1060,22 +1065,58 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         )
       }
 
-      val stateSnapshotDf = spark
-        .read
-        .format("statestore")
-        .option("snapshotPartitionId", 0)
-        .option("snapshotStartBatchId", 1)
-        .option("stateVarName", "countState")
-        .load(tmpDir.getCanonicalPath)
+      // Create a file manager for the state store with opId=0 and partition=4
+      val dfsRootDir = new File(tmpDir.getAbsolutePath + "/state/0/4")
+      val fileManager = new RocksDBFileManager(
+        dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration,
+        CompressionCodec.LZ4)
 
-      val stateDf = spark
-        .read
-        .format("statestore")
-        .option("stateVarName", "countState")
-        .load(tmpDir.getCanonicalPath)
-        .filter(col("partition_id") === 0)
+      // Read the changelog for one of the partitions
+      val changelogReader = fileManager.getChangelogReader(3, true)
+      val entries = changelogReader.toSeq
+      assert(entries.size == 2)
+      val retainEntry = entries.head
 
-      checkAnswer(stateSnapshotDf, stateDf)
+      // Retain one of the entries and delete the changelog file
+      val changelogFilePath = dfsRootDir.getAbsolutePath + "/3.changelog"
+      Utils.deleteRecursively(new File(changelogFilePath))
+
+      // Write the retained entry back to the changelog
+      val changelogWriter = fileManager.getChangeLogWriter(3, true)
+      changelogWriter.put(retainEntry._2, retainEntry._3)
+      changelogWriter.commit()
+
+      // Ensure that we have only one entry in the changelog
+      val changelogReader1 = fileManager.getChangelogReader(3, true)
+      val entries1 = changelogReader1.toSeq
+      assert(entries1.size == 1)
+
+      // Ensure that the state matches for partition is not modified and does not match for
+      // the other partition
+      Seq(1, 4).foreach { partition =>
+        val stateSnapshotDf = spark
+          .read
+          .format("statestore")
+          .option("snapshotPartitionId", partition)
+          .option("snapshotStartBatchId", 1)
+          .option("stateVarName", "countState")
+          .load(tmpDir.getCanonicalPath)
+
+        val stateDf = spark
+          .read
+          .format("statestore")
+          .option("stateVarName", "countState")
+          .load(tmpDir.getCanonicalPath)
+          .filter(col("partition_id") === partition)
+
+        if (partition == 1) {
+          checkAnswer(stateSnapshotDf, stateDf)
+        } else {
+          intercept[Exception] {
+            checkAnswer(stateSnapshotDf, stateDf)
+          }
+        }
+      }
     }
   }
 }
