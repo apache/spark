@@ -17,23 +17,23 @@
 # limitations under the License.
 #
 
+# Usage: Run SQL statements
 #
-# This script follows the base format for testing pull requests against
-# another branch and returning results to be published. More details can be
-# found at dev/run-tests-jenkins.
-#
-# Arg1: The GitHub Pull Request Actual Commit
-# known as `ghprbActualCommit` in `run-tests-jenkins`
-# Arg2: The SHA1 hash
-# known as `sha1` in `run-tests-jenkins`
+#    submit-sql.sh <spark_master_hostname>
 #
 
-ghprbActualCommit="$1"
-sha1="$2"
+SPARK_MASTER=${1:-localhost}
 
-# check PR merge-ability
-if [ "${sha1}" == "${ghprbActualCommit}" ]; then
-  echo " * This patch **does not merge cleanly**."
-else
-  echo " * This patch merges cleanly."
-fi
+curl -XPOST http://$SPARK_MASTER:6066/v1/submissions/create \
+--data '{
+  "appResource": "",
+  "sparkProperties": {
+    "spark.master": "local[2]",
+    "spark.driver.cores": "2",
+    "spark.driver.memory": "2g"
+  },
+  "clientSparkVersion": "",
+  "mainClass": "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
+  "action": "CreateSubmissionRequest",
+  "appArgs": [ "-e", "SHOW DATABASES; SELECT * FROM RANGE(10)" ]
+}'
