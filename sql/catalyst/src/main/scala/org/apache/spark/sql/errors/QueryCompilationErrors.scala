@@ -1051,14 +1051,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def functionAndOrderExpressionMismatchError(
       functionName: String,
-      functionExpr: Expression,
+      functionArgs: Expression,
       orderExpr: Seq[SortOrder]): Throwable = {
     new AnalysisException(
       errorClass = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
       messageParameters = Map(
         "functionName" -> toSQLId(functionName),
-        "functionExpr" -> toSQLExpr(functionExpr),
-        "orderExpr" -> orderExpr.map(order => toSQLExpr(order.child)).mkString(",")))
+        "functionArgs" -> toSQLExpr(functionArgs),
+        "orderExpr" -> orderExpr.map(order => toSQLExpr(order.child)).mkString(", ")))
   }
 
   def wrongCommandForObjectTypeError(

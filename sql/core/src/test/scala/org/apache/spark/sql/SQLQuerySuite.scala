@@ -346,7 +346,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         condition = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
         parameters = Map(
           "functionName" -> "`listagg`",
-          "functionExpr" -> "\"a\"",
+          "functionArgs" -> "\"a\"",
           "orderExpr" -> "\"b\""),
         context = ExpectedContext(
           fragment = "listagg(distinct a) within group (order by b)",
@@ -360,8 +360,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         condition = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
         parameters = Map(
           "functionName" -> "`listagg`",
-          "functionExpr" -> "\"a\"",
-          "orderExpr" -> "\"a\",\"b\""),
+          "functionArgs" -> "\"a\"",
+          "orderExpr" -> "\"a\", \"b\""),
         context = ExpectedContext(
           fragment = "listagg(distinct a) within group (order by a, b)",
           start = 7,
@@ -412,7 +412,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       condition = "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
       parameters = Map(
         "functionName" -> "`listagg`",
-        "functionExpr" -> "\"collate(c1, utf8_lcase)\"",
+        "functionArgs" -> "\"collate(c1, utf8_lcase)\"",
         "orderExpr" -> "\"collate(c1, utf8_binary)\""),
       context = ExpectedContext(
         fragment =

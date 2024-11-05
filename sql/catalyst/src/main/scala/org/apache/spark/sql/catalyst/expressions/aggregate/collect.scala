@@ -272,13 +272,27 @@ private[aggregate] object CollectTopK {
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the concatenation of non-null input values," +
-    " separated by the delimiter.",
+  usage = """
+    _FUNC_(expr[, delimiter])[ WITHIN GROUP (ORDER BY key [ASC | DESC] [,...])] - Returns
+    the concatenation of non-null input values, separated by the delimiter ordered by key.
+    If all values are null, null is returned.
+    """,
+  arguments = """
+    Arguments:
+      * expr - a string or binary expression to be concatenated.
+      * delimiter - an optional string or binary foldable expression used to separate the input values.
+        If null, the concatenation will be performed without a delimiter. Default is null.
+      * key - an optional expression for ordering the input values. Multiple keys can be specified.
+        If none are specified, the order of the rows in the result is non-deterministic.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES ('a'), ('b'), ('c') AS tab(col);
        abc
+      > SELECT _FUNC_(col) WITHIN GROUP (ORDER BY col DESC) FROM VALUES ('a'), ('b'), ('c') AS tab(col);
+       cba
       > SELECT _FUNC_(col) FROM VALUES ('a'), (NULL), ('b') AS tab(col);
        ab
       > SELECT _FUNC_(col) FROM VALUES ('a'), ('a') AS tab(col);
@@ -288,15 +302,17 @@ private[aggregate] object CollectTopK {
       > SELECT _FUNC_(col, ', ') FROM VALUES ('a'), ('b'), ('c') AS tab(col);
        a, b, c
       > SELECT _FUNC_(col) FROM VALUES (NULL), (NULL) AS tab(col);
-      NULL
+       NULL
   """,
   note = """
-    If order is not specified the function is non-deterministic because
+    * If the order is not specified, the function is non-deterministic because
     the order of the rows may be non-deterministic after a shuffle.
+    * If DISTINCT is specified, then expr and key must be the same expression.
   """,
   group = "agg_funcs",
   since = "4.0.0"
 )
+// scalastyle:on line.size.limit
 case class ListAgg(
     child: Expression,
     delimiter: Expression = Literal(null),

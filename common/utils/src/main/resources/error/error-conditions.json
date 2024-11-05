@@ -1565,7 +1565,7 @@
   },
   "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH" : {
     "message" : [
-      "The function <functionName> arguments <functionExpr> should match the order by expression <orderExpr> when use DISTINCT."
+      "The arguments <functionArgs> of the function <functionName> do not match to ordering within group <orderExpr> when use DISTINCT."
     ],
     "sqlState" : "42822"
   },
