@@ -258,7 +258,9 @@ class StatefulProcessorWithInitialStateProcTimerClass
 }
 
 /**
- * Class that updates all state variables.
+ * Class that updates all state variables with input rows. Act as a counter -
+ * keep the count in value state; keep all the occurrences in list state; and
+ * keep a map of key -> occurrence count in the map state.
  */
 class StatefulProcessorWithAllStateVars extends RunningCountStatefulProcessor {
   @transient private var _listState: ListState[Long] = _
@@ -574,49 +576,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testInitialStateWithStateDataSource(true) { (valDf, listDf, mapDf, inputData) =>
-    val valueDf = valDf.selectExpr("key.value AS groupingKey", "value.value AS value")
-    val flattenListDf = listDf
-      .selectExpr("key.value AS groupingKey", "list_element.value AS listValue")
-    val flattenMapDf = mapDf
-      .selectExpr(
-        "key.value AS groupingKey",
-        "user_map_key.value AS userMapKey",
-        "user_map_value.value AS userMapValue")
-    val df_joined =
-      valueDf.unionByName(flattenListDf, true)
-        .unionByName(flattenMapDf, true)
-    val kvDataSet = inputData.toDS().groupByKey(x => x.key)
-    val initDf = df_joined.as[UnionInitialStateRow].groupByKey(x => x.groupingKey)
-    kvDataSet.transformWithState(
-      new InitialStatefulProcessorWithStateDataSource(),
-      TimeMode.None(), OutputMode.Append(), initDf).toDF()
-  }
-
-  testInitialStateWithStateDataSource(false) { (valDf, listDf, mapDf, inputData) =>
-    val valueDf = valDf.selectExpr("key.value AS groupingKey", "value.value AS value")
-    val unflattenListDf = listDf
-      .selectExpr("key.value AS groupingKey",
-        "list_value.value as listValue")
-    val unflattenMapDf = mapDf
-      .selectExpr(
-        "key.value AS groupingKey",
-        "map_from_entries(transform(map_entries(map_value), x -> " +
-          "struct(x.key.value, x.value.value))) as mapValue")
-    val df_joined =
-      valueDf.unionByName(unflattenListDf, true)
-        .unionByName(unflattenMapDf, true)
-    val kvDataSet = inputData.toDS().groupByKey(x => x.key)
-    val initDf = df_joined.as[UnionUnflattenInitialStateRow].groupByKey(x => x.groupingKey)
-    kvDataSet.transformWithState(
-      new InitialStatefulProcessorWithUnflattenStateDataSource(),
-      TimeMode.None(), OutputMode.Append(), initDf).toDF()
-  }
-
-  private def testInitialStateWithStateDataSource(
-      flattenOption: Boolean)
-      (startQuery: (DataFrame, DataFrame, DataFrame,
-        MemoryStream[InitInputRow]) => DataFrame): Unit = {
+  Seq(true, false).foreach { flattenOption =>
     Seq(("5", "2"), ("5", "8"), ("5", "5")).foreach { partitions =>
       test("state data source reader dataframe as initial state " +
         s"(flatten option=$flattenOption, shuffle partition for 1st stream=${partitions._1}, " +
@@ -640,7 +600,13 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
               CheckNewAnswer(("a", "3"), ("b", "2"))
             )
 
-            // state data source reader for state vars
+            // We are trying to mimic a use case where users load all state data rows
+            // from a previous tws query as initial state and start a new tws query.
+            // In this use case, users will need to create a single dataframe with
+            // all the state rows from different state variables with different schema.
+            // We can only read from one state variable from one state data source reader
+            // query, and they are of different schema. We will get one dataframe from each
+            // state variable, and we union them together into a single dataframe.
             val valueDf = spark.read
               .format("statestore")
               .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
@@ -662,10 +628,11 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
               .load()
 
             // create a df where each row contains all value, list, map state rows
-            // fill the missing column with null
+            // fill the missing column with null.
             SQLConf.get.setConfString(SQLConf.SHUFFLE_PARTITIONS.key, partitions._2)
             val inputData2 = MemoryStream[InitInputRow]
-            val query = startQuery(valueDf, listDf, mapDf, inputData2)
+            val query = startQueryWithDataSourceDataframeAsInitState(
+              flattenOption, valueDf, listDf, mapDf, inputData2)
 
             testStream(query, OutputMode.Update())(
               // check initial state is updated for state vars
@@ -688,6 +655,54 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
           }
         }
       }
+    }
+  }
+
+  private def startQueryWithDataSourceDataframeAsInitState(
+      flattenOption: Boolean,
+      valDf: DataFrame,
+      listDf: DataFrame,
+      mapDf: DataFrame,
+      inputData: MemoryStream[InitInputRow]): DataFrame = {
+    if (flattenOption) {
+      // when we read the state rows with flattened option set to true, values of a composite
+      // state variable will be flattened into multiple rows where each row is a key-value pair
+      val valueDf = valDf.selectExpr("key.value AS groupingKey", "value.value AS value")
+      val flattenListDf = listDf
+        .selectExpr("key.value AS groupingKey", "list_element.value AS listValue")
+      val flattenMapDf = mapDf
+        .selectExpr(
+          "key.value AS groupingKey",
+          "user_map_key.value AS userMapKey",
+          "user_map_value.value AS userMapValue")
+      val df_joined =
+        valueDf.unionByName(flattenListDf, true)
+          .unionByName(flattenMapDf, true)
+      val kvDataSet = inputData.toDS().groupByKey(x => x.key)
+      val initDf = df_joined.as[UnionInitialStateRow].groupByKey(x => x.groupingKey)
+      kvDataSet.transformWithState(
+        new InitialStatefulProcessorWithStateDataSource(),
+        TimeMode.None(), OutputMode.Append(), initDf).toDF()
+    } else {
+      // when we read the state rows with flattened option set to false, values of a composite
+      // state variable will be composed into a single row of list/map type
+      val valueDf = valDf.selectExpr("key.value AS groupingKey", "value.value AS value")
+      val unflattenListDf = listDf
+        .selectExpr("key.value AS groupingKey",
+          "list_value.value as listValue")
+      val unflattenMapDf = mapDf
+        .selectExpr(
+          "key.value AS groupingKey",
+          "map_from_entries(transform(map_entries(map_value), x -> " +
+            "struct(x.key.value, x.value.value))) as mapValue")
+      val df_joined =
+        valueDf.unionByName(unflattenListDf, true)
+          .unionByName(unflattenMapDf, true)
+      val kvDataSet = inputData.toDS().groupByKey(x => x.key)
+      val initDf = df_joined.as[UnionUnflattenInitialStateRow].groupByKey(x => x.groupingKey)
+      kvDataSet.transformWithState(
+        new InitialStatefulProcessorWithUnflattenStateDataSource(),
+        TimeMode.None(), OutputMode.Append(), initDf).toDF()
     }
   }
 }
