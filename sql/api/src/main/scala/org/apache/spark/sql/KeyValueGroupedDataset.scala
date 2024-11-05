@@ -30,7 +30,6 @@ import org.apache.spark.sql.streaming._
  * @since 2.0.0
  */
 abstract class KeyValueGroupedDataset[K, V] extends Serializable {
-  type KVDS[KL, VL] <: KeyValueGroupedDataset[KL, VL]
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
@@ -300,7 +299,8 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](
       timeoutConf: GroupStateTimeout,
-      initialState: KVDS[K, S])(func: (K, Iterator[V], GroupState[S]) => U): Dataset[U]
+      initialState: KeyValueGroupedDataset[K, S])(
+      func: (K, Iterator[V], GroupState[S]) => U): Dataset[U]
 
   /**
    * (Java-specific) Applies the given function to each group of data, while maintaining a
@@ -399,7 +399,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout,
-      initialState: KVDS[K, S]): Dataset[U] = {
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
     val f = ToScalaUDF(func)
     mapGroupsWithState[S, U](timeoutConf, initialState)(f)(stateEncoder, outputEncoder)
   }
@@ -462,7 +462,8 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout,
-      initialState: KVDS[K, S])(func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U]
+      initialState: KeyValueGroupedDataset[K, S])(
+      func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U]
 
   /**
    * (Java-specific) Applies the given function to each group of data, while maintaining a
@@ -540,7 +541,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout,
-      initialState: KVDS[K, S]): Dataset[U] = {
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
     flatMapGroupsWithState[S, U](outputMode, timeoutConf, initialState)(ToScalaUDF(func))(
       stateEncoder,
       outputEncoder)
@@ -689,7 +690,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      initialState: KVDS[K, S]): Dataset[U]
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U]
 
   /**
    * (Scala-specific) Invokes methods defined in the stateful processor used in arbitrary state
@@ -722,7 +723,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      initialState: KVDS[K, S]): Dataset[U]
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U]
 
   /**
    * (Java-specific) Invokes methods defined in the stateful processor used in arbitrary state API
@@ -754,7 +755,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      initialState: KVDS[K, S],
+      initialState: KeyValueGroupedDataset[K, S],
       outputEncoder: Encoder[U],
       initialStateEncoder: Encoder[S]): Dataset[U] = {
     transformWithState(statefulProcessor, timeMode, outputMode, initialState)(
@@ -795,7 +796,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
   private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       outputMode: OutputMode,
-      initialState: KVDS[K, S],
+      initialState: KeyValueGroupedDataset[K, S],
       eventTimeColumnName: String,
       outputEncoder: Encoder[U],
       initialStateEncoder: Encoder[S]): Dataset[U] = {
@@ -955,7 +956,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    *
    * @since 1.6.0
    */
-  def cogroup[U, R: Encoder](other: KVDS[K, U])(
+  def cogroup[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
     cogroupSorted(other)(Nil: _*)(Nil: _*)(f)
   }
@@ -969,7 +970,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * @since 1.6.0
    */
   def cogroup[U, R](
-      other: KVDS[K, U],
+      other: KeyValueGroupedDataset[K, U],
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
     cogroup(other)(ToScalaUDF(f))(encoder)
@@ -990,7 +991,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    *   `org.apache.spark.sql.api.KeyValueGroupedDataset#cogroup`
    * @since 3.4.0
    */
-  def cogroupSorted[U, R: Encoder](other: KVDS[K, U])(thisSortExprs: Column*)(
+  def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(thisSortExprs: Column*)(
       otherSortExprs: Column*)(f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R]
 
   /**
@@ -1009,7 +1010,7 @@ abstract class KeyValueGroupedDataset[K, V] extends Serializable {
    * @since 3.4.0
    */
   def cogroupSorted[U, R](
-      other: KVDS[K, U],
+      other: KeyValueGroupedDataset[K, U],
       thisSortExprs: Array[Column],
       otherSortExprs: Array[Column],
       f: CoGroupFunction[K, V, U, R],

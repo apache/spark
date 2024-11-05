@@ -216,7 +216,6 @@ class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends sql.Dataset[T] {
-  type DS[U] = Dataset[U]
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
@@ -597,12 +596,12 @@ class Dataset[T] private[sql](
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
   /** @inheritdoc */
-  def join(right: Dataset[_]): DataFrame = withPlan {
+  def join(right: sql.Dataset[_]): DataFrame = withPlan {
     Join(logicalPlan, right.logicalPlan, joinType = Inner, None, JoinHint.NONE)
   }
 
   /** @inheritdoc */
-  def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame = {
+  def join(right: sql.Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
     val joined = sparkSession.sessionState.executePlan(
@@ -661,19 +660,19 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
+  def join(right: sql.Dataset[_], joinExprs: Column, joinType: String): DataFrame = {
     withPlan {
       resolveSelfJoinCondition(right, Some(joinExprs), joinType)
     }
   }
 
   /** @inheritdoc */
-  def crossJoin(right: Dataset[_]): DataFrame = withPlan {
+  def crossJoin(right: sql.Dataset[_]): DataFrame = withPlan {
     Join(logicalPlan, right.logicalPlan, joinType = Cross, None, JoinHint.NONE)
   }
 
   /** @inheritdoc */
-  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+  def joinWith[U](other: sql.Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
     // etc.
     val joined = sparkSession.sessionState.executePlan(
@@ -1051,12 +1050,12 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def union(other: Dataset[T]): Dataset[T] = withSetOperator {
+  def union(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
     combineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
   /** @inheritdoc */
-  def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T] = {
+  def unionByName(other: sql.Dataset[T], allowMissingColumns: Boolean): Dataset[T] = {
     withSetOperator {
       // We need to resolve the by-name Union first, as the underlying Unions are already resolved
       // and we can only combine adjacent Unions if they are all resolved.
@@ -1067,22 +1066,22 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def intersect(other: Dataset[T]): Dataset[T] = withSetOperator {
+  def intersect(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
     Intersect(logicalPlan, other.logicalPlan, isAll = false)
   }
 
   /** @inheritdoc */
-  def intersectAll(other: Dataset[T]): Dataset[T] = withSetOperator {
+  def intersectAll(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
     Intersect(logicalPlan, other.logicalPlan, isAll = true)
   }
 
   /** @inheritdoc */
-  def except(other: Dataset[T]): Dataset[T] = withSetOperator {
+  def except(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
     Except(logicalPlan, other.logicalPlan, isAll = false)
   }
 
   /** @inheritdoc */
-  def exceptAll(other: Dataset[T]): Dataset[T] = withSetOperator {
+  def exceptAll(other: sql.Dataset[T]): Dataset[T] = withSetOperator {
     Except(logicalPlan, other.logicalPlan, isAll = true)
   }
 
@@ -1664,7 +1663,7 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   @DeveloperApi
-  def sameSemantics(other: Dataset[T]): Boolean = {
+  def sameSemantics(other: sql.Dataset[T]): Boolean = {
     queryExecution.analyzed.sameResult(other.queryExecution.analyzed)
   }
 
@@ -1694,30 +1693,30 @@ class Dataset[T] private[sql](
   override def drop(col: Column): DataFrame = super.drop(col)
 
   /** @inheritdoc */
-  override def join(right: Dataset[_], usingColumn: String): DataFrame =
+  override def join(right: sql.Dataset[_], usingColumn: String): DataFrame =
     super.join(right, usingColumn)
 
   /** @inheritdoc */
-  override def join(right: Dataset[_], usingColumns: Array[String]): DataFrame =
+  override def join(right: sql.Dataset[_], usingColumns: Array[String]): DataFrame =
     super.join(right, usingColumns)
 
   /** @inheritdoc */
-  override def join(right: Dataset[_], usingColumns: Seq[String]): DataFrame =
+  override def join(right: sql.Dataset[_], usingColumns: Seq[String]): DataFrame =
     super.join(right, usingColumns)
 
   /** @inheritdoc */
-  override def join(right: Dataset[_], usingColumn: String, joinType: String): DataFrame =
+  override def join(right: sql.Dataset[_], usingColumn: String, joinType: String): DataFrame =
     super.join(right, usingColumn, joinType)
 
   /** @inheritdoc */
   override def join(
-      right: Dataset[_],
+      right: sql.Dataset[_],
       usingColumns: Array[String],
       joinType: String): DataFrame =
     super.join(right, usingColumns, joinType)
 
   /** @inheritdoc */
-  override def join(right: Dataset[_], joinExprs: Column): DataFrame =
+  override def join(right: sql.Dataset[_], joinExprs: Column): DataFrame =
     super.join(right, joinExprs)
 
   /** @inheritdoc */
@@ -1804,7 +1803,7 @@ class Dataset[T] private[sql](
     super.localCheckpoint(eager, storageLevel)
 
   /** @inheritdoc */
-  override def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] =
+  override def joinWith[U](other: sql.Dataset[U], condition: Column): Dataset[(T, U)] =
     super.joinWith(other, condition)
 
   /** @inheritdoc */
@@ -1858,10 +1857,10 @@ class Dataset[T] private[sql](
   override def where(conditionExpr: String): Dataset[T] = super.where(conditionExpr)
 
   /** @inheritdoc */
-  override def unionAll(other: Dataset[T]): Dataset[T] = super.unionAll(other)
+  override def unionAll(other: sql.Dataset[T]): Dataset[T] = super.unionAll(other)
 
   /** @inheritdoc */
-  override def unionByName(other: Dataset[T]): Dataset[T] = super.unionByName(other)
+  override def unionByName(other: sql.Dataset[T]): Dataset[T] = super.unionByName(other)
 
   /** @inheritdoc */
   override def sample(fraction: Double, seed: Long): Dataset[T] = super.sample(fraction, seed)

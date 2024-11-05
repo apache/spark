@@ -34,7 +34,6 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
  * @since 1.6.0
  */
 abstract class SQLImplicits extends LowPrioritySQLImplicits with Serializable {
-  type DS[U] <: Dataset[U]
 
   protected def session: SparkSession
 
@@ -273,17 +272,14 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits with Serializable {
    * Creates a [[Dataset]] from a local Seq.
    * @since 1.6.0
    */
-  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T, DS] = {
-    new DatasetHolder(session.createDataset(s).asInstanceOf[DS[T]])
-  }
+  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T]
 
   /**
    * Creates a [[Dataset]] from an RDD.
    *
    * @since 1.6.0
    */
-  implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T, DS] =
-    new DatasetHolder(session.createDataset(rdd).asInstanceOf[DS[T]])
+  implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T]
 
   /**
    * An implicit conversion that turns a Scala `Symbol` into a [[org.apache.spark.sql.Column]].

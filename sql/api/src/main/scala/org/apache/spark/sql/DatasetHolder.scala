@@ -31,15 +31,15 @@ import org.apache.spark.annotation.Stable
  * @since 1.6.0
  */
 @Stable
-class DatasetHolder[T, DS[U] <: Dataset[U]](ds: DS[T]) {
+abstract class DatasetHolder[T] {
 
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDS("1")` as invoking this toDS and then apply on the returned Dataset.
-  def toDS(): DS[T] = ds
+  def toDS(): Dataset[T]
 
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DS[Row] = ds.toDF().asInstanceOf[DS[Row]]
+  def toDF(): DataFrame
 
-  def toDF(colNames: String*): DS[Row] = ds.toDF(colNames: _*).asInstanceOf[DS[Row]]
+  def toDF(colNames: String*): DataFrame
 }

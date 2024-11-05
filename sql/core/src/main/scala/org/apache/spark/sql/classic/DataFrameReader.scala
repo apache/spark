@@ -58,7 +58,6 @@ import org.apache.spark.unsafe.types.UTF8String
 @Stable
 class DataFrameReader private[sql](sparkSession: SparkSession)
   extends sql.DataFrameReader {
-  override type DS[U] = Dataset[U]
 
   format(sparkSession.sessionState.conf.defaultDataSourceName)
 
@@ -190,7 +189,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   }
 
   /** @inheritdoc */
-  def json(jsonDataset: Dataset[String]): DataFrame = {
+  def json(jsonDataset: sql.Dataset[String]): DataFrame = {
     val parsedOptions = new JSONOptions(
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
@@ -226,7 +225,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   override def csv(path: String): DataFrame = super.csv(path)
 
   /** @inheritdoc */
-  def csv(csvDataset: Dataset[String]): DataFrame = {
+  def csv(csvDataset: sql.Dataset[String]): DataFrame = {
     val parsedOptions: CSVOptions = new CSVOptions(
       extraOptions.toMap,
       sparkSession.sessionState.conf.csvColumnPruning,
@@ -296,7 +295,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   override def xml(paths: String*): DataFrame = super.xml(paths: _*)
 
   /** @inheritdoc */
-  def xml(xmlDataset: Dataset[String]): DataFrame = {
+  def xml(xmlDataset: sql.Dataset[String]): DataFrame = {
     val parsedOptions: XmlOptions = new XmlOptions(
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,

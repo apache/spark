@@ -30,8 +30,8 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{ForeachWriter, Row}
-import org.apache.spark.sql.connect.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, ForeachWriter, Row}
+import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener, Trigger}

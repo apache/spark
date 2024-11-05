@@ -123,7 +123,6 @@ import org.apache.spark.util.SparkClassUtils
  */
 @Stable
 abstract class Dataset[T] extends Serializable {
-  type DS[U] <: Dataset[U]
 
   def sparkSession: SparkSession
 
@@ -611,7 +610,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_]): DataFrame
+  def join(right: Dataset[_]): DataFrame
 
   /**
    * Inner equi-join with another `DataFrame` using the given column.
@@ -637,7 +636,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], usingColumn: String): DataFrame = {
+  def join(right: Dataset[_], usingColumn: String): DataFrame = {
     join(right, Seq(usingColumn))
   }
 
@@ -653,7 +652,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: DS[_], usingColumns: Array[String]): DataFrame = {
+  def join(right: Dataset[_], usingColumns: Array[String]): DataFrame = {
     join(right, usingColumns.toImmutableArraySeq)
   }
 
@@ -681,7 +680,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], usingColumns: Seq[String]): DataFrame = {
+  def join(right: Dataset[_], usingColumns: Seq[String]): DataFrame = {
     join(right, usingColumns, "inner")
   }
 
@@ -711,7 +710,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: DS[_], usingColumn: String, joinType: String): DataFrame = {
+  def join(right: Dataset[_], usingColumn: String, joinType: String): DataFrame = {
     join(right, Seq(usingColumn), joinType)
   }
 
@@ -732,7 +731,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def join(right: DS[_], usingColumns: Array[String], joinType: String): DataFrame = {
+  def join(right: Dataset[_], usingColumns: Array[String], joinType: String): DataFrame = {
     join(right, usingColumns.toImmutableArraySeq, joinType)
   }
 
@@ -762,7 +761,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], usingColumns: Seq[String], joinType: String): DataFrame
+  def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame
 
   /**
    * Inner join with another `DataFrame`, using the given join expression.
@@ -776,7 +775,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], joinExprs: Column): DataFrame =
+  def join(right: Dataset[_], joinExprs: Column): DataFrame =
     join(right, joinExprs, "inner")
 
   /**
@@ -806,7 +805,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.0.0
    */
-  def join(right: DS[_], joinExprs: Column, joinType: String): DataFrame
+  def join(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame
 
   /**
    * Explicit cartesian join with another `DataFrame`.
@@ -818,7 +817,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 2.1.0
    */
-  def crossJoin(right: DS[_]): DataFrame
+  def crossJoin(right: Dataset[_]): DataFrame
 
   /**
    * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to true.
@@ -842,7 +841,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def joinWith[U](other: DS[U], condition: Column, joinType: String): Dataset[(T, U)]
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)]
 
   /**
    * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair where
@@ -855,7 +854,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def joinWith[U](other: DS[U], condition: Column): Dataset[(T, U)] = {
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
     joinWith(other, condition, "inner")
   }
 
@@ -1791,7 +1790,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def union(other: DS[T]): Dataset[T]
+  def union(other: Dataset[T]): Dataset[T]
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset. This is
@@ -1805,7 +1804,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def unionAll(other: DS[T]): Dataset[T] = union(other)
+  def unionAll(other: Dataset[T]): Dataset[T] = union(other)
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
@@ -1836,7 +1835,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.3.0
    */
-  def unionByName(other: DS[T]): Dataset[T] = unionByName(other, allowMissingColumns = false)
+  def unionByName(other: Dataset[T]): Dataset[T] = unionByName(other, allowMissingColumns = false)
 
   /**
    * Returns a new Dataset containing union of rows in this Dataset and another Dataset.
@@ -1880,7 +1879,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 3.1.0
    */
-  def unionByName(other: DS[T], allowMissingColumns: Boolean): Dataset[T]
+  def unionByName(other: Dataset[T], allowMissingColumns: Boolean): Dataset[T]
 
   /**
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset. This is
@@ -1892,7 +1891,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 1.6.0
    */
-  def intersect(other: DS[T]): Dataset[T]
+  def intersect(other: Dataset[T]): Dataset[T]
 
   /**
    * Returns a new Dataset containing rows only in both this Dataset and another Dataset while
@@ -1905,7 +1904,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.4.0
    */
-  def intersectAll(other: DS[T]): Dataset[T]
+  def intersectAll(other: Dataset[T]): Dataset[T]
 
   /**
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset. This is
@@ -1917,7 +1916,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def except(other: DS[T]): Dataset[T]
+  def except(other: Dataset[T]): Dataset[T]
 
   /**
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset while
@@ -1930,7 +1929,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.4.0
    */
-  def exceptAll(other: DS[T]): Dataset[T]
+  def exceptAll(other: Dataset[T]): Dataset[T]
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of rows (without replacement), using a
@@ -3113,7 +3112,7 @@ abstract class Dataset[T] extends Serializable {
    * @since 3.1.0
    */
   @DeveloperApi
-  def sameSemantics(other: DS[T]): Boolean
+  def sameSemantics(other: Dataset[T]): Boolean
 
   /**
    * Returns a `hashCode` of the logical query plan against this [[Dataset]].

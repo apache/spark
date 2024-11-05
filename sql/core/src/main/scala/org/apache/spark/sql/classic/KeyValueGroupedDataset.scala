@@ -45,14 +45,13 @@ class KeyValueGroupedDataset[K, V] private[sql](
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute])
   extends sql.KeyValueGroupedDataset[K, V] {
-  type KVDS[KY, VL] = KeyValueGroupedDataset[KY, VL]
 
   private implicit def kEncoderImpl: Encoder[K] = kEncoder
   private implicit def vEncoderImpl: Encoder[V] = vEncoder
 
   private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
-  import queryExecution.sparkSession._
+  import queryExecution.sparkSession.RichColumn
 
   /** @inheritdoc */
   def keyAs[L : Encoder]: KeyValueGroupedDataset[L, V] =
@@ -137,9 +136,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
   /** @inheritdoc */
   def mapGroupsWithState[S: Encoder, U: Encoder](
       timeoutConf: GroupStateTimeout,
-      initialState: KeyValueGroupedDataset[K, S])(
+      initialState: sql.KeyValueGroupedDataset[K, S])(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
     val flatMapFunc = (key: K, it: Iterator[V], s: GroupState[S]) => Iterator(func(key, it, s))
+    val initialStateImpl = castToImpl(initialState)
 
     Dataset[U](
       sparkSession,
@@ -151,9 +151,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
         isMapGroupsWithState = true,
         timeoutConf,
         child = logicalPlan,
-        initialState.groupingAttributes,
-        initialState.dataAttributes,
-        initialState.queryExecution.analyzed
+        initialStateImpl.groupingAttributes,
+        initialStateImpl.dataAttributes,
+        initialStateImpl.queryExecution.analyzed
       ))
   }
 
@@ -181,11 +181,12 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout,
-      initialState: KeyValueGroupedDataset[K, S])(
+      initialState: sql.KeyValueGroupedDataset[K, S])(
       func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
     if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
       throw new IllegalArgumentException("The output mode of function should be append or update")
     }
+    val initialStateImpl = castToImpl(initialState)
     Dataset[U](
       sparkSession,
       FlatMapGroupsWithState[K, V, S, U](
@@ -196,9 +197,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
         isMapGroupsWithState = false,
         timeoutConf,
         child = logicalPlan,
-        initialState.groupingAttributes,
-        initialState.dataAttributes,
-        initialState.queryExecution.analyzed
+        initialStateImpl.groupingAttributes,
+        initialStateImpl.dataAttributes,
+        initialStateImpl.queryExecution.analyzed
       ))
   }
 
@@ -241,7 +242,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
+      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] = {
+    val initialStateImpl = castToImpl(initialState)
     Dataset[U](
       sparkSession,
       TransformWithState[K, V, U, S](
@@ -251,9 +253,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
         timeMode,
         outputMode,
         child = logicalPlan,
-        initialState.groupingAttributes,
-        initialState.dataAttributes,
-        initialState.queryExecution.analyzed
+        initialStateImpl.groupingAttributes,
+        initialStateImpl.dataAttributes,
+        initialStateImpl.queryExecution.analyzed
       )
     )
   }
@@ -263,7 +265,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       eventTimeColumnName: String,
       outputMode: OutputMode,
-      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
+      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] = {
+    val initialStateImpl = castToImpl(initialState)
     val transformWithState = TransformWithState[K, V, U, S](
       groupingAttributes,
       dataAttributes,
@@ -271,9 +274,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
       TimeMode.EventTime(),
       outputMode,
       child = logicalPlan,
-      initialState.groupingAttributes,
-      initialState.dataAttributes,
-      initialState.queryExecution.analyzed
+      initialStateImpl.groupingAttributes,
+      initialStateImpl.dataAttributes,
+      initialStateImpl.queryExecution.analyzed
     )
 
     updateEventTimeColumnAfterTransformWithState(transformWithState, eventTimeColumnName)
@@ -319,23 +322,24 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   /** @inheritdoc */
   def cogroupSorted[U, R : Encoder](
-      other: KeyValueGroupedDataset[K, U])(
+      other: sql.KeyValueGroupedDataset[K, U])(
       thisSortExprs: Column*)(
       otherSortExprs: Column*)(
       f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] = {
-    implicit val uEncoder = other.vEncoderImpl
+    val otherImpl = castToImpl(other)
+    implicit val uEncoder: Encoder[U] = otherImpl.vEncoderImpl
     Dataset[R](
       sparkSession,
       CoGroup(
         f,
         this.groupingAttributes,
-        other.groupingAttributes,
+        otherImpl.groupingAttributes,
         this.dataAttributes,
-        other.dataAttributes,
+        otherImpl.dataAttributes,
         MapGroups.sortOrder(thisSortExprs.map(_.expr)),
         MapGroups.sortOrder(otherSortExprs.map(_.expr)),
         this.logicalPlan,
-        other.logicalPlan))
+        otherImpl.logicalPlan))
   }
 
   override def toString: String = {
@@ -411,7 +415,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout,
-      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] =
+      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
     super.mapGroupsWithState(func, stateEncoder, outputEncoder, timeoutConf, initialState)
 
   /** @inheritdoc */
@@ -430,7 +434,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout,
-      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] =
+      initialState: sql.KeyValueGroupedDataset[K, S]): Dataset[U] =
     super.flatMapGroupsWithState(
       func,
       outputMode,
@@ -460,7 +464,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       timeMode: TimeMode,
       outputMode: OutputMode,
-      initialState: KeyValueGroupedDataset[K, S],
+      initialState: sql.KeyValueGroupedDataset[K, S],
       outputEncoder: Encoder[U],
       initialStateEncoder: Encoder[S]) = super.transformWithState(
     statefulProcessor,
@@ -474,7 +478,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   override private[sql] def transformWithState[U: Encoder, S: Encoder](
       statefulProcessor: StatefulProcessorWithInitialState[K, V, U, S],
       outputMode: OutputMode,
-      initialState: KeyValueGroupedDataset[K, S],
+      initialState: sql.KeyValueGroupedDataset[K, S],
       eventTimeColumnName: String,
       outputEncoder: Encoder[U],
       initialStateEncoder: Encoder[S]) = super.transformWithState(
@@ -556,20 +560,20 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   /** @inheritdoc */
   override def cogroup[U, R: Encoder](
-      other: KeyValueGroupedDataset[K, U])(
+      other: sql.KeyValueGroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] =
     super.cogroup(other)(f)
 
   /** @inheritdoc */
   override def cogroup[U, R](
-      other: KeyValueGroupedDataset[K, U],
+      other: sql.KeyValueGroupedDataset[K, U],
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] =
     super.cogroup(other, f, encoder)
 
   /** @inheritdoc */
   override def cogroupSorted[U, R](
-      other: KeyValueGroupedDataset[K, U],
+      other: sql.KeyValueGroupedDataset[K, U],
       thisSortExprs: Array[Column],
       otherSortExprs: Array[Column],
       f: CoGroupFunction[K, V, U, R],

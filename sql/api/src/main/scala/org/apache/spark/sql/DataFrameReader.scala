@@ -36,7 +36,6 @@ import org.apache.spark.sql.types.StructType
  */
 @Stable
 abstract class DataFrameReader {
-  type DS[U] <: Dataset[U]
 
   /**
    * Specifies the input data source format.
@@ -308,7 +307,7 @@ abstract class DataFrameReader {
    *   input Dataset with one JSON object per record
    * @since 2.2.0
    */
-  def json(jsonDataset: DS[String]): DataFrame
+  def json(jsonDataset: Dataset[String]): DataFrame
 
   /**
    * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
@@ -324,7 +323,7 @@ abstract class DataFrameReader {
    * @since 1.4.0
    */
   @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
-  def json(jsonRDD: JavaRDD[String]): DS[Row]
+  def json(jsonRDD: JavaRDD[String]): DataFrame
 
   /**
    * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines text
@@ -340,7 +339,7 @@ abstract class DataFrameReader {
    * @since 1.4.0
    */
   @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
-  def json(jsonRDD: RDD[String]): DS[Row]
+  def json(jsonRDD: RDD[String]): DataFrame
 
   /**
    * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the other
@@ -374,7 +373,7 @@ abstract class DataFrameReader {
    *   input Dataset with one CSV row per record
    * @since 2.2.0
    */
-  def csv(csvDataset: DS[String]): DataFrame
+  def csv(csvDataset: Dataset[String]): DataFrame
 
   /**
    * Loads CSV files and returns the result as a `DataFrame`.
@@ -432,7 +431,7 @@ abstract class DataFrameReader {
    *   input Dataset with one XML object per record
    * @since 4.0.0
    */
-  def xml(xmlDataset: DS[String]): DataFrame
+  def xml(xmlDataset: Dataset[String]): DataFrame
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation on the

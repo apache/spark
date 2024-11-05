@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import scala.collection.immutable
+import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -256,6 +257,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    */
   object implicits extends SQLImplicits {
     override protected def session: SparkSession = sparkSession
+
+    override implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T] =
+      sparkSession.implicits.localSeqToDatasetHolder(s)
+
+    override implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T] =
+      sparkSession.implicits.rddToDatasetHolder(rdd)
   }
   // scalastyle:on
 

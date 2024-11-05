@@ -38,7 +38,6 @@ import org.apache.spark.sql.types.StructType
  */
 @Stable
 class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.DataFrameReader {
-  type DS[U] = Dataset[U]
 
   /** @inheritdoc */
   override def format(source: String): this.type = super.format(source)
@@ -140,7 +139,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
   override def json(paths: String*): DataFrame = super.json(paths: _*)
 
   /** @inheritdoc */
-  def json(jsonDataset: Dataset[String]): DataFrame =
+  def json(jsonDataset: sql.Dataset[String]): DataFrame =
     parse(jsonDataset, ParseFormat.PARSE_FORMAT_JSON)
 
   /** @inheritdoc */
@@ -159,7 +158,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
   override def csv(paths: String*): DataFrame = super.csv(paths: _*)
 
   /** @inheritdoc */
-  def csv(csvDataset: Dataset[String]): DataFrame =
+  def csv(csvDataset: sql.Dataset[String]): DataFrame =
     parse(csvDataset, ParseFormat.PARSE_FORMAT_CSV)
 
   /** @inheritdoc */
@@ -170,7 +169,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
   override def xml(paths: String*): DataFrame = super.xml(paths: _*)
 
   /** @inheritdoc */
-  def xml(xmlDataset: Dataset[String]): DataFrame =
+  def xml(xmlDataset: sql.Dataset[String]): DataFrame =
     parse(xmlDataset, ParseFormat.PARSE_FORMAT_UNSPECIFIED)
 
   /** @inheritdoc */

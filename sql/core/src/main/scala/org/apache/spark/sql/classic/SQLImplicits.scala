@@ -17,11 +17,26 @@
 
 package org.apache.spark.sql.classic
 
+import scala.language.implicitConversions
+
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
+import org.apache.spark.sql.Encoder
 
 /** @inheritdoc */
 abstract class SQLImplicits extends sql.SQLImplicits {
-  type DS[U] = Dataset[U]
 
   protected def session: SparkSession
+
+  override implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T] =
+    new DatasetHolder[T](session.createDataset(s))
+
+  override implicit def rddToDatasetHolder[T: Encoder](rdd: RDD[T]): DatasetHolder[T] =
+    new DatasetHolder[T](session.createDataset(rdd))
+}
+
+class DatasetHolder[U](ds: Dataset[U]) extends sql.DatasetHolder[U] {
+  override def toDS(): Dataset[U] = ds
+  override def toDF(): DataFrame = ds.toDF()
+  override def toDF(colNames: String*): DataFrame = ds.toDF(colNames: _*)
 }
