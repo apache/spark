@@ -1116,9 +1116,33 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         if (partition == 1) {
           checkAnswer(stateSnapshotDf, stateDf)
         } else {
-          intercept[Exception] {
-            checkAnswer(stateSnapshotDf, stateDf)
-          }
+          // Ensure that key 12 is not present in the final state loaded from given snapshot
+          val resultDfForSnapshot = stateSnapshotDf.selectExpr(
+            "key.value AS groupingKey",
+            "value.value AS count",
+            "partition_id")
+          checkAnswer(resultDfForSnapshot,
+            Seq(Row(16, 4L, 4),
+              Row(17, 1L, 4),
+              Row(19, 3L, 4),
+              Row(2, 2L, 4),
+              Row(6, 2L, 4),
+              Row(9, 1L, 4)))
+
+          // Ensure that key 12 is present in the final state loaded from the latest snapshot
+          val resultDf = stateDf.selectExpr(
+            "key.value AS groupingKey",
+            "value.value AS count",
+            "partition_id")
+
+          checkAnswer(resultDf,
+            Seq(Row(16, 4L, 4),
+              Row(17, 1L, 4),
+              Row(19, 3L, 4),
+              Row(2, 2L, 4),
+              Row(6, 2L, 4),
+              Row(9, 1L, 4),
+              Row(12, 4L, 4)))
         }
       }
     }
