@@ -187,8 +187,8 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def cannotHaveCircularReferencesInClassError(t: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2139",
-      messageParameters = Map("t" -> t))
+      errorClass = "CIRCULAR_CLASS_REFERENCE",
+      messageParameters = Map("t" -> toSQLValue(t)))
   }
 
   def cannotUseInvalidJavaIdentifierAsFieldNameError(
