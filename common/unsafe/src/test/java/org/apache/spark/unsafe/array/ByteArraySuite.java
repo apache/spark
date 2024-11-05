@@ -101,7 +101,8 @@ public class ByteArraySuite {
     byte[] x1 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
     byte[] y1 = new byte[]{(byte) 4, (byte) 5, (byte) 6};
     byte[] result1 = ByteArray.concatWS(separator, x1, y1);
-    byte[] expected1 = new byte[]{(byte) 1, (byte) 2, (byte) 3, (byte) 42, (byte) 4, (byte) 5, (byte) 6};
+    byte[] expected1 = new byte[]{(byte) 1, (byte) 2, (byte) 3, (byte) 42,
+            (byte) 4, (byte) 5, (byte) 6};
     Assertions.assertArrayEquals(expected1, result1);
 
     byte[] x2 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
