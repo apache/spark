@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -45,8 +44,8 @@ class MapStateImplWithTTL[K, V](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    userKeyEnc: Encoder[K],
-    valEncoder: Encoder[V],
+    userKeyEnc: ExpressionEncoder[Any],
+    valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
     metrics: Map[String, SQLMetric] = Map.empty)
@@ -83,7 +82,7 @@ class MapStateImplWithTTL[K, V](
 
     if (retRow != null) {
       if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        stateTypesEncoder.decodeValue(retRow)
+        stateTypesEncoder.decodeValue(retRow).asInstanceOf[V]
       } else {
         null.asInstanceOf[V]
       }
@@ -126,7 +125,9 @@ class MapStateImplWithTTL[K, V](
         if (iter.hasNext) {
           val currentRowPair = iter.next()
           val key = stateTypesEncoder.decodeCompositeKey(currentRowPair.key)
+            .asInstanceOf[K]
           val value = stateTypesEncoder.decodeValue(currentRowPair.value)
+            .asInstanceOf[V]
           (key, value)
         } else {
           finished = true
@@ -213,7 +214,7 @@ class MapStateImplWithTTL[K, V](
     val retRow = store.get(encodedCompositeKey, stateName)
 
     if (retRow != null) {
-      val resState = stateTypesEncoder.decodeValue(retRow)
+      val resState = stateTypesEncoder.decodeValue(retRow).asInstanceOf[V]
       Some(resState)
     } else {
       None
@@ -231,7 +232,9 @@ class MapStateImplWithTTL[K, V](
     // ttlExpiration
     Option(retRow).flatMap { row =>
       val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(row)
-      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(row), expiration))
+      ttlExpiration.map { expiration =>
+        (stateTypesEncoder.decodeValue(row).asInstanceOf[V], expiration)
+      }
     }
   }
 
@@ -253,7 +256,7 @@ class MapStateImplWithTTL[K, V](
             0, keyExprEnc.schema.length)) {
             val userKey = stateTypesEncoder.decodeUserKey(
               nextTtlValue.userKey)
-            nextValue = Some(userKey, nextTtlValue.expirationMs)
+            nextValue = Some(userKey.asInstanceOf[K], nextTtlValue.expirationMs)
           }
         }
         nextValue.isDefined

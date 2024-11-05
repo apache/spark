@@ -29,10 +29,10 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, CompoundBody, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.{PlanTest, SQLHelper}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesExecBase, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
@@ -53,7 +54,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test cases for the [[SparkSessionExtensions]].
  */
-class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with AdaptiveSparkPlanHelper {
+class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with AdaptiveSparkPlanHelper
+  with PlanTest {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
@@ -159,7 +161,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("inject custom hint rule") {
-    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+    withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
         "plan is expected to be a local relation"
@@ -541,6 +543,20 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
           case _: SortExec => true
         }.isDefined)
       }
+    }
+  }
+
+  test("custom aggregate hint") {
+    // The custom hint allows us to replace the aggregate (without grouping keys) with just
+    // Literal.
+    withSession(Seq(_.injectHintResolutionRule(CustomerAggregateHintResolutionRule),
+      _.injectOptimizerRule(CustomAggregateRule))) { session =>
+      val res = session.range(10).agg(max("id")).as("max_id")
+        .hint("MAX_VALUE", "id", 10)
+        .queryExecution.optimizedPlan
+      assert(res.isInstanceOf[Aggregate])
+      val expectedAlias = Alias(Literal(10L), "max(id)")()
+      compareExpressions(expectedAlias, res.asInstanceOf[Aggregate].aggregateExpressions.head)
     }
   }
 }
@@ -1228,6 +1244,61 @@ object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
         ShuffleExchangeExec(SinglePartition, h)
       case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Final) =>
         SortExec(h.groupingExpressions.map(k => SortOrder.apply(k, Ascending)), false, h)
+    }
+  }
+}
+
+
+// Example of an Aggregate hint that tells that 'attribute' values are no larger than 'max'.
+// We will use them to rewrite MAX(attribute) with 'max' constant.
+case class CustomAggHint(attribute: AttributeReference, max: Int) extends AggregateHint
+
+// Attaches the CustomAggHint to the aggregate node without grouping keys if the aggregate
+// function is MAX over the specified column.
+case class CustomerAggregateHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  val MY_HINT_NAME = Set("MAX_VALUE")
+
+  def isMax(expr: NamedExpression, attribute: String): Option[AttributeReference] = {
+    expr match {
+      case Alias(AggregateExpression(Max(a @ AttributeReference(name, _, _, _)), _, _, _, _), _)
+        if name.equalsIgnoreCase(attribute) =>
+        Some(a)
+      case _ => None
+    }
+  }
+
+  private def applyMaxValueHint(
+      plan: LogicalPlan,
+      attribute: String,
+      max: Int): LogicalPlan = {
+    val newPlan = plan match {
+      case a @ Aggregate(keys, aggs, _, None) if keys.isEmpty && aggs.size == 1 =>
+        isMax(aggs.head, attribute) match {
+          case Some(attr) => a.copy(hint = Some(CustomAggHint(attr, max)))
+          case None => a
+        }
+      case _ => plan
+    }
+    newPlan.mapChildren { child =>
+      applyMaxValueHint(child, attribute, max)
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      applyMaxValueHint(h.child, "id", 10)
+  }
+}
+
+// Logical rule that replaces the MAX aggregation function (in Aggregates with CustomAggHint)
+// with just the constant from the hint.
+case class CustomAggregateRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformDown {
+      case a @ Aggregate(groupingKeys, aggregates, _, Some(CustomAggHint(_, max)))
+        if groupingKeys.isEmpty && aggregates.size == 1 =>
+        a.copy(aggregateExpressions = Seq(Alias(Cast(Literal(max), aggregates.head.dataType),
+          aggregates.head.name)()), hint = None)
     }
   }
 }

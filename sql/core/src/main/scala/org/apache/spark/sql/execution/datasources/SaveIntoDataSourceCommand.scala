@@ -68,7 +68,8 @@ case class SaveIntoDataSourceCommand(
     }
 
     try {
-      val logicalRelation = LogicalRelation(relation, toAttributes(relation.schema), None, false)
+      val logicalRelation = LogicalRelation(relation, toAttributes(relation.schema), None,
+        false, None)
       sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, logicalRelation)
     } catch {
       case NonFatal(_) =>

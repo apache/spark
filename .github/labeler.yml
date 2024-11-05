@@ -26,16 +26,14 @@ INFRA:
      '.asf.yaml',
      '.gitattributes',
      '.gitignore',
-     'dev/merge_spark_pr.py',
-     'dev/run-tests-jenkins*'
+     'dev/merge_spark_pr.py'
     ]
 
 BUILD:
   - changed-files:
     - all-globs-to-any-file: [
      'dev/**/*',
-     '!dev/merge_spark_pr.py',
-     '!dev/run-tests-jenkins*'
+     '!dev/merge_spark_pr.py'
     ]
     - any-glob-to-any-file: [
      'build/**/*',

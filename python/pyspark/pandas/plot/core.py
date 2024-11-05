@@ -24,7 +24,7 @@ from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
-from pyspark.pandas.spark import functions as SF
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
