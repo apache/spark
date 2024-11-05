@@ -77,25 +77,25 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
 
   final def getSmoothing: Double = $(smoothing)
 
-  private[feature] lazy val inputFeatures = if (isSet(inputCol)) {
-                                            Array($(inputCol))
-                                          } else if (isSet(inputCols)) {
-                                            $(inputCols)
-                                          } else {
-                                            Array.empty[String]
-                                          }
+  private[feature] lazy val inputFeatures =
+    if (isSet(inputCol)) {
+      Array($(inputCol))
+    } else if (isSet(inputCols)) {
+      $(inputCols)
+    } else {
+      Array.empty[String]
+    }
 
-  private[feature] lazy val outputFeatures = if (isSet(outputCol)) {
-                                            Array($(outputCol))
-                                          } else if (isSet(outputCols)) {
-                                            $(outputCols)
-                                          } else {
-                                            inputFeatures.map{field: String => s"${field}_indexed"}
-                                          }
+  private[feature] lazy val outputFeatures =
+    if (isSet(outputCol)) {
+      Array($(outputCol))
+    } else if (isSet(outputCols)) {
+      $(outputCols)
+    } else {
+      inputFeatures.map{field: String => s"${field}_indexed"}
+    }
 
-  private[feature] def validateSchema(
-                                       schema: StructType,
-                                       fitting: Boolean): StructType = {
+  private[feature] def validateSchema(schema: StructType, fitting: Boolean): StructType = {
 
     require(inputFeatures.length > 0,
       s"At least one input column must be specified.")

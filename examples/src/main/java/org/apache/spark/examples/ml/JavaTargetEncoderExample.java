@@ -74,10 +74,10 @@ public class JavaTargetEncoderExample {
 
     // continuous target
     TargetEncoder cont_encoder = new TargetEncoder()
-            .setInputCols(new String[] {"categoryIndex1", "categoryIndex2"})
-            .setOutputCols(new String[] {"categoryIndex1Target", "categoryIndex2Target"})
-            .setLabelCol("continuousLabel")
-            .setTargetType("continuous");
+      .setInputCols(new String[] {"categoryIndex1", "categoryIndex2"})
+      .setOutputCols(new String[] {"categoryIndex1Target", "categoryIndex2Target"})
+      .setLabelCol("continuousLabel")
+      .setTargetType("continuous");
 
     TargetEncoderModel cont_model = cont_encoder.fit(df);
     Dataset<Row> cont_encoded = cont_model.transform(df);
