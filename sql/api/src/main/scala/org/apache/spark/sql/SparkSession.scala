@@ -820,6 +820,7 @@ object SparkSession extends SparkSessionCompanion {
 
   class Builder extends SparkSessionBuilder {
     private val extensionModifications = mutable.Buffer.empty[SparkSessionExtensions => Unit]
+    private var sc: Option[SparkContext] = None
 
     /** @inheritdoc */
     override def appName(name: String): this.type = super.appName(name)
@@ -860,6 +861,12 @@ object SparkSession extends SparkSessionCompanion {
       this
     }
 
+    /** @inheritdoc */
+    override private[spark] def sparkContext(sparkContext: SparkContext): this.type = synchronized {
+      sc = Option(sparkContext)
+      this
+    }
+
     /**
      * Make the builder create a Classic SparkSession.
      */
@@ -897,6 +904,7 @@ object SparkSession extends SparkSessionCompanion {
       }
 
       val builder = companion.builder()
+      sc.foreach(builder.sparkContext)
       options.foreach {
         case (k, v) if k != API_MODE_KEY => builder.config(k, v)
         case _ =>
@@ -1174,6 +1182,14 @@ abstract class SparkSessionBuilder {
    * @since 2.2.0
    */
   def withExtensions(f: SparkSessionExtensions => Unit): this.type
+
+  /**
+   * Set the [[SparkContext]] to use for the [[SparkSession]].
+   *
+   * @note
+   * *   this method is not supported in Spark Connect.
+   */
+  private[spark] def sparkContext(sparkContext: SparkContext): this.type
 
   /**
    * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new one based on

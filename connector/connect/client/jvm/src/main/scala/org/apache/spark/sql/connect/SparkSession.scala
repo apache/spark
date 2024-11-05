@@ -653,6 +653,10 @@ object SparkSession extends SparkSessionCompanion with Logging {
     private var client: SparkConnectClient = _
 
     /** @inheritdoc */
+    override private[spark] def sparkContext(sparkContext: SparkContext) =
+      throw ConnectClientUnsupportedErrors.sparkContext()
+
+    /** @inheritdoc */
     override def remote(connectionString: String): this.type = {
       builder.connectionString(connectionString) // TODO this is borked
       this

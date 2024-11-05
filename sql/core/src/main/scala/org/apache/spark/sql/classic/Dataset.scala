@@ -1208,24 +1208,6 @@ class Dataset[T] private[sql](
     select(replacedAndExistingColumns ++ newColumns : _*)
   }
 
-  /** @inheritdoc */
-  private[spark] def withColumns(
-      colNames: Seq[String],
-      cols: Seq[Column],
-      metadata: Seq[Metadata]): DataFrame = {
-    require(colNames.size == metadata.size,
-      s"The size of column names: ${colNames.size} isn't equal to " +
-        s"the size of metadata elements: ${metadata.size}")
-    val newCols = colNames.zip(cols).zip(metadata).map { case ((colName, col), metadata) =>
-      col.as(colName, metadata)
-    }
-    withColumns(colNames, newCols)
-  }
-
-  /** @inheritdoc */
-  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame =
-    withColumns(Seq(colName), Seq(col), Seq(metadata))
-
   protected[spark] def withColumnsRenamed(
       colNames: Seq[String],
       newColNames: Seq[String]): DataFrame = {
@@ -1961,6 +1943,20 @@ class Dataset[T] private[sql](
       func: MapFunction[T, K],
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
+
+  /** @inheritdoc */
+  override private[spark] def withColumns(
+      colNames: Seq[String],
+      cols: Seq[Column],
+      metadata: Seq[Metadata]): DataFrame =
+    super.withColumns(colNames, cols, metadata)
+
+  /** @inheritdoc */
+  override private[spark] def withColumn(
+      colName: String,
+      col: Column,
+      metadata: Metadata): DataFrame =
+    super.withColumn(colName, col, metadata)
 
   ////////////////////////////////////////////////////////////////////////////
   // For Python API

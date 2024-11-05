@@ -124,7 +124,7 @@ import org.apache.spark.util.SparkClassUtils
 @Stable
 abstract class Dataset[T] extends Serializable {
 
-  def sparkSession: SparkSession
+  val sparkSession: SparkSession
 
   val encoder: Encoder[T]
 
@@ -2137,7 +2137,32 @@ abstract class Dataset[T] extends Serializable {
    * Returns a new Dataset by adding columns or replacing the existing columns that has the same
    * names.
    */
-  protected def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame
+
+  /**
+   * Returns a new Dataset by adding columns with metadata.
+   */
+  private[spark] def withColumns(
+      colNames: Seq[String],
+      cols: Seq[Column],
+      metadata: Seq[Metadata]): DataFrame = {
+    require(colNames.size == cols.size,
+      s"The size of column names: ${colNames.size} isn't equal to " +
+        s"the size of columns: ${cols.size}")
+    require(colNames.size == metadata.size,
+      s"The size of column names: ${colNames.size} isn't equal to " +
+        s"the size of metadata elements: ${metadata.size}")
+    val colsWithMetadata = colNames.zip(cols).zip(metadata).map {
+      case ((colName, col), meta) => col.as(colName, meta)
+    }
+    withColumns(colNames, colsWithMetadata)
+  }
+
+  /**
+   * Returns a new Dataset by adding a column with metadata.
+   */
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame =
+    withColumn(colName, col.as(colName, metadata))
 
   /**
    * Returns a new Dataset with a column renamed. This is a no-op if schema doesn't contain

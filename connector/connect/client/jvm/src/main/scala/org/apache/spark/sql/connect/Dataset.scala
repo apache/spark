@@ -720,7 +720,7 @@ class Dataset[T] private[sql] (
     randomSplit(weights, SparkClassUtils.random.nextLong())
 
   /** @inheritdoc */
-  protected def withColumns(names: Seq[String], values: Seq[Column]): DataFrame = {
+  private[spark] def withColumns(names: Seq[String], values: Seq[Column]): DataFrame = {
     require(
       names.size == values.size,
       s"The size of column names: ${names.size} isn't equal to " +
@@ -1479,6 +1479,21 @@ class Dataset[T] private[sql] (
       func: MapFunction[T, K],
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
+
+
+  /** @inheritdoc */
+  override private[spark] def withColumns(
+      colNames: Seq[String],
+      cols: Seq[Column],
+      metadata: Seq[Metadata]): DataFrame =
+    super.withColumns(colNames, cols, metadata)
+
+  /** @inheritdoc */
+  override private[spark] def withColumn(
+      colName: String,
+      col: Column,
+      metadata: Metadata): DataFrame =
+    super.withColumn(colName, col, metadata)
 
   /** @inheritdoc */
   override def rdd: RDD[T] = throw ConnectClientUnsupportedErrors.rdd()
