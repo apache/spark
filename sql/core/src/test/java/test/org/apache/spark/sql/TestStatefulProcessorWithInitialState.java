@@ -18,7 +18,6 @@
 package test.org.apache.spark.sql;
 
 import java.util.*;
-import java.time.Duration;
 
 import scala.jdk.javaapi.CollectionConverters;
 
