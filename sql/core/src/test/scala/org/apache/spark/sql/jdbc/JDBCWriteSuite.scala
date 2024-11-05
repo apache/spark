@@ -191,9 +191,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         exception = intercept[AnalysisException] {
           df2.write.mode(SaveMode.Append).jdbc(url, "TEST.APPENDTEST", new Properties())
         },
-        condition = "_LEGACY_ERROR_TEMP_1156",
+        condition = "COLUMN_NOT_FOUND_IN_SCHEMA",
         parameters = Map(
-          "colName" -> "NAME",
+          "colName" -> "`NAME`",
           "tableSchema" ->
             "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
     }
@@ -224,9 +224,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           df3.write.mode(SaveMode.Overwrite).option("truncate", true)
             .jdbc(url1, "TEST.TRUNCATETEST", properties)
         },
-        condition = "_LEGACY_ERROR_TEMP_1156",
+        condition = "COLUMN_NOT_FOUND_IN_SCHEMA",
         parameters = Map(
-          "colName" -> "seq",
+          "colName" -> "`seq`",
           "tableSchema" ->
             "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
     } finally {
@@ -256,9 +256,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
       exception = intercept[AnalysisException] {
         df2.write.mode(SaveMode.Append).jdbc(url, "TEST.INCOMPATIBLETEST", new Properties())
       },
-      condition = "_LEGACY_ERROR_TEMP_1156",
+      condition = "COLUMN_NOT_FOUND_IN_SCHEMA",
       parameters = Map(
-        "colName" -> "seq",
+        "colName" -> "`seq`",
         "tableSchema" ->
           "Some(StructType(StructField(name,StringType,true),StructField(id,IntegerType,true)))"))
   }

@@ -1834,9 +1834,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def columnNotFoundInSchemaError(
       col: StructField, tableSchema: Option[StructType]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1156",
+      errorClass = "COLUMN_NOT_FOUND_IN_SCHEMA",
       messageParameters = Map(
-        "colName" -> col.name,
+        "colName" -> toSQLId(col.name),
         "tableSchema" -> tableSchema.toString))
   }
 
