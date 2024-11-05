@@ -1071,7 +1071,8 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
         dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration,
         CompressionCodec.LZ4)
 
-      // Read the changelog for one of the partitions
+      // Read the changelog for one of the partitions at version 3 and
+      // ensure that we have two entries
       val changelogReader = fileManager.getChangelogReader(3, true)
       val entries = changelogReader.toSeq
       assert(entries.size == 2)
@@ -1086,12 +1087,12 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       changelogWriter.put(retainEntry._2, retainEntry._3)
       changelogWriter.commit()
 
-      // Ensure that we have only one entry in the changelog
+      // Ensure that we have only one entry in the changelog for version 3
       val changelogReader1 = fileManager.getChangelogReader(3, true)
       val entries1 = changelogReader1.toSeq
       assert(entries1.size == 1)
 
-      // Ensure that the state matches for partition is not modified and does not match for
+      // Ensure that the state matches for the partition that is not modified and does not match for
       // the other partition
       Seq(1, 4).foreach { partition =>
         val stateSnapshotDf = spark
