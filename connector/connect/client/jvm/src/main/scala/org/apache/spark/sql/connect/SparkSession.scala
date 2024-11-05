@@ -53,7 +53,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.ArrayImplicits._
 
-
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
  *

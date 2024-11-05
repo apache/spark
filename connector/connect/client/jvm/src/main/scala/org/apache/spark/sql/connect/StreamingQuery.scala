@@ -26,7 +26,6 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.sql.streaming
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryProgress, StreamingQueryStatus}
 
-
 /** @inheritdoc */
 trait StreamingQuery extends streaming.StreamingQuery {
 

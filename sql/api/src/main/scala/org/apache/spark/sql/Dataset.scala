@@ -1562,10 +1562,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def unpivot(
-      ids: Array[Column],
-      variableColumnName: String,
-      valueColumnName: String): DataFrame
+  def unpivot(ids: Array[Column], variableColumnName: String, valueColumnName: String): DataFrame
 
   /**
    * Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns
@@ -1611,10 +1608,7 @@ abstract class Dataset[T] extends Serializable {
    * @group untypedrel
    * @since 3.4.0
    */
-  def melt(
-      ids: Array[Column],
-      variableColumnName: String,
-      valueColumnName: String): DataFrame =
+  def melt(ids: Array[Column], variableColumnName: String, valueColumnName: String): DataFrame =
     unpivot(ids, variableColumnName, valueColumnName)
 
   /**

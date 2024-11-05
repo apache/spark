@@ -72,8 +72,7 @@ trait StreamingQuery {
   def isActive: Boolean
 
   /**
-   * Returns the [[StreamingQueryException]] if the query was
-   * terminated by an exception.
+   * Returns the [[StreamingQueryException]] if the query was terminated by an exception.
    *
    * @since 2.0.0
    */
@@ -87,17 +86,16 @@ trait StreamingQuery {
   def status: StreamingQueryStatus
 
   /**
-   * Returns an array of the most recent [[StreamingQueryProgress]]
-   * updates for this query. The number of progress updates retained for each stream is configured
-   * by Spark session configuration `spark.sql.streaming.numRecentProgressUpdates`.
+   * Returns an array of the most recent [[StreamingQueryProgress]] updates for this query. The
+   * number of progress updates retained for each stream is configured by Spark session
+   * configuration `spark.sql.streaming.numRecentProgressUpdates`.
    *
    * @since 2.1.0
    */
   def recentProgress: Array[StreamingQueryProgress]
 
   /**
-   * Returns the most recent [[StreamingQueryProgress]] update of
-   * this streaming query.
+   * Returns the most recent [[StreamingQueryProgress]] update of this streaming query.
    *
    * @since 2.1.0
    */

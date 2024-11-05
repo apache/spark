@@ -75,8 +75,9 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends sql.KeyValueGroupedDa
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = unsupported()
 
   /** @inheritdoc */
-  def cogroupSorted[U, R: Encoder](other: sql.KeyValueGroupedDataset[K, U])(thisSortExprs: Column*)(
-      otherSortExprs: Column*)(f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] =
+  def cogroupSorted[U, R: Encoder](other: sql.KeyValueGroupedDataset[K, U])(
+      thisSortExprs: Column*)(otherSortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U]) => IterableOnce[R]): Dataset[R] =
     unsupported()
 
   protected[sql] def flatMapGroupsWithStateHelper[S: Encoder, U: Encoder](

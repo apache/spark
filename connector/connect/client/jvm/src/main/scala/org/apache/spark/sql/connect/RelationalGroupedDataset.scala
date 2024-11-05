@@ -25,7 +25,6 @@ import org.apache.spark.sql.{functions, Column, Encoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
 import org.apache.spark.sql.connect.ConnectConversions._
 
-
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
  * [[Dataset#cube cube]] or [[Dataset#rollup rollup]] (and also `pivot`).

@@ -82,9 +82,9 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
   def trigger(trigger: Trigger): this.type
 
   /**
-   * Specifies the name of the [[org.apache.spark.sql.streaming.StreamingQuery]] that can be started
-   * with `start()`. This name must be unique among all the currently active queries in the
-   * associated SparkSession.
+   * Specifies the name of the [[org.apache.spark.sql.streaming.StreamingQuery]] that can be
+   * started with `start()`. This name must be unique among all the currently active queries in
+   * the associated SparkSession.
    *
    * @since 2.0.0
    */
@@ -102,15 +102,12 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
    * partition a dataset by year and then month, the directory layout would look like:
    *
-   * <ul>
-   * <li> year=2016/month=01/</li>
-   * <li> year=2016/month=02/</li>
-   * </ul>
+   * <ul> <li> year=2016/month=01/</li> <li> year=2016/month=02/</li> </ul>
    *
-   * Partitioning is one of the most widely used techniques to optimize physical data layout.
-   * It provides a coarse-grained index for skipping unnecessary data reads when queries have
-   * predicates on the partitioned columns. In order for partitioning to work well, the number
-   * of distinct values in each column should typically be less than tens of thousands.
+   * Partitioning is one of the most widely used techniques to optimize physical data layout. It
+   * provides a coarse-grained index for skipping unnecessary data reads when queries have
+   * predicates on the partitioned columns. In order for partitioning to work well, the number of
+   * distinct values in each column should typically be less than tens of thousands.
    *
    * @since 2.0.0
    */
@@ -175,8 +172,9 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the
-   * given path as new data arrives. The returned [[org.apache.spark.sql.streaming.StreamingQuery]]
-   * object can be used to interact with the stream.
+   * given path as new data arrives. The returned
+   * [[org.apache.spark.sql.streaming.StreamingQuery]] object can be used to interact with the
+   * stream.
    *
    * @since 2.0.0
    */
@@ -184,9 +182,9 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the
-   * given path as new data arrives. The returned [[org.apache.spark.sql.streaming.StreamingQuery]]
-   * object can be used to interact with the stream. Throws a `TimeoutException` if the following
-   * conditions are met:
+   * given path as new data arrives. The returned
+   * [[org.apache.spark.sql.streaming.StreamingQuery]] object can be used to interact with the
+   * stream. Throws a `TimeoutException` if the following conditions are met:
    *   - Another run of the same streaming query, that is a streaming query sharing the same
    *     checkpoint location, is already active on the same Spark Driver
    *   - The SQL configuration `spark.sql.streaming.stopActiveRunOnRestart` is enabled
@@ -200,8 +198,9 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the
-   * given table as new data arrives. The returned [[org.apache.spark.sql.streaming.StreamingQuery]]
-   * object can be used to interact with the stream.
+   * given table as new data arrives. The returned
+   * [[org.apache.spark.sql.streaming.StreamingQuery]] object can be used to interact with the
+   * stream.
    *
    * For v1 table, partitioning columns provided by `partitionBy` will be respected no matter the
    * table exists or not. A new table will be created if the table not exists.

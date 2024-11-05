@@ -66,16 +66,21 @@ abstract class UDFRegistration {
   /**
    * Registers a user-defined aggregate function (UDAF).
    *
-   * @param name the name of the UDAF.
-   * @param udaf the UDAF needs to be registered.
-   * @return the registered UDAF.
+   * @param name
+   *   the name of the UDAF.
+   * @param udaf
+   *   the UDAF needs to be registered.
+   * @return
+   *   the registered UDAF.
    * @since 1.5.0
-   * @deprecated this method and the use of UserDefinedAggregateFunction are deprecated.
-   *             Aggregator[IN, BUF, OUT] should now be registered as a UDF via the
-   *             functions.udaf(agg) method.
+   * @deprecated
+   *   this method and the use of UserDefinedAggregateFunction are deprecated. Aggregator[IN, BUF,
+   *   OUT] should now be registered as a UDF via the functions.udaf(agg) method.
    */
-  @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
-    " via the functions.udaf(agg) method.", "3.0.0")
+  @deprecated(
+    "Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
+      " via the functions.udaf(agg) method.",
+    "3.0.0")
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction
 
   private def registerScalaUDF(

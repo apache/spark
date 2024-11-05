@@ -45,7 +45,7 @@ import org.apache.spark.util.SparkSerDeUtils
  */
 @Evolving
 final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
-  extends streaming.DataStreamWriter[T] {
+    extends streaming.DataStreamWriter[T] {
 
   /** @inheritdoc */
   def outputMode(outputMode: OutputMode): this.type = {

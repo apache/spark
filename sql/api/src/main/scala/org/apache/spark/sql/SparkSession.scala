@@ -111,8 +111,7 @@ abstract class SparkSession extends Serializable with Closeable {
   def sessionState: SessionState
 
   /**
-   * A wrapped version of this session in the form of a `SQLContext`, for backward
-   * compatibility.
+   * A wrapped version of this session in the form of a `SQLContext`, for backward compatibility.
    *
    * @note
    *   this method is not supported in Spark Connect.
@@ -787,11 +786,15 @@ object SparkSession extends SparkSessionCompanion {
   val API_MODE_CONNECT: String = "connect"
 
   // Implementation specific companions
-  private lazy val CLASSIC_COMPANION = lookupCompanion("org.apache.spark.sql.classic.SparkSession")
-  private lazy val CONNECT_COMPANION = lookupCompanion("org.apache.spark.sql.connect.SparkSession")
-  private def DEFAULT_COMPANION = Try(CLASSIC_COMPANION).orElse(Try(CONNECT_COMPANION)).getOrElse {
-    throw new IllegalStateException("Cannot find an SparkSession implementation on the Classpath.")
-  }
+  private lazy val CLASSIC_COMPANION = lookupCompanion(
+    "org.apache.spark.sql.classic.SparkSession")
+  private lazy val CONNECT_COMPANION = lookupCompanion(
+    "org.apache.spark.sql.connect.SparkSession")
+  private def DEFAULT_COMPANION =
+    Try(CLASSIC_COMPANION).orElse(Try(CONNECT_COMPANION)).getOrElse {
+      throw new IllegalStateException(
+        "Cannot find an SparkSession implementation on the Classpath.")
+    }
 
   private[this] def lookupCompanion(name: String): SparkSessionCompanion = {
     val cls = SparkClassUtils.classForName(name)
@@ -1078,7 +1081,8 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Connect.
    * @since 3.5.0
    */
-  def remote(connectionString: String): this.type = config("spark.connect.remote", connectionString)
+  def remote(connectionString: String): this.type =
+    config("spark.connect.remote", connectionString)
 
   /**
    * Sets a config option. Options set using this method are automatically propagated to both

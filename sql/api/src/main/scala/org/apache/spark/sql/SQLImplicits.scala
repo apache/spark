@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 
-
 /**
  * A collection of implicit methods for converting common Scala objects into
  * [[org.apache.spark.sql.Dataset]]s.

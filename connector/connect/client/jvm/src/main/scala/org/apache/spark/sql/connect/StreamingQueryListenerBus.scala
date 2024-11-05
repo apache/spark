@@ -27,7 +27,6 @@ import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 
-
 class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
   private val listeners = new CopyOnWriteArrayList[StreamingQueryListener]()
   private var executionThread: Option[Thread] = Option.empty
