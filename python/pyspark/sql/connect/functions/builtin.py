@@ -2482,7 +2482,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 format_string.__doc__ = pysparkfuncs.format_string.__doc__
 
 
-def instr(str: "ColumnOrName", substr: str) -> Column:
+def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
     return _invoke_function("instr", _to_col(str), lit(substr))
 
 
