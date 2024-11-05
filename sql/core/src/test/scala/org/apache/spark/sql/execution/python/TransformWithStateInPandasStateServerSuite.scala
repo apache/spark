@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.{StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.execution.streaming.state.StateMessage
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, Exists, Get, GetValue, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, MapStateCall, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, UpdateValue, Values, ValueStateCall, ValueStateUpdate}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{AppendList, AppendValue, Clear, ContainsKey, DeleteTimer, Exists, ExpiryTimerRequest, Get, GetProcessingTime, GetValue, GetWatermark, HandleState, Keys, ListStateCall, ListStateGet, ListStatePut, ListTimers, MapStateCall, RegisterTimer, RemoveKey, SetHandleState, StateCallCommand, StatefulProcessorCall, TimerRequest, TimerStateCallCommand, TimerValueRequest, UpdateValue, Values, ValueStateCall, ValueStateUpdate}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -59,9 +59,13 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
   var stateSerializer: ExpressionEncoder.Serializer[Row] = _
   var transformWithStateInPandasDeserializer: TransformWithStateInPandasDeserializer = _
   var arrowStreamWriter: BaseStreamingArrowWriter = _
+  var batchTimestampMs: Option[Long] = _
+  var eventTimeWatermarkForEviction: Option[Long] = _
   var valueStateMap: mutable.HashMap[String, ValueStateInfo] = mutable.HashMap()
   var listStateMap: mutable.HashMap[String, ListStateInfo] = mutable.HashMap()
   var mapStateMap: mutable.HashMap[String, MapStateInfo] = mutable.HashMap()
+  var expiryTimerIter: Iterator[(Any, Long)] = _
+  var listTimerMap: mutable.HashMap[String, Iterator[Long]] = mutable.HashMap()
 
   override def beforeEach(): Unit = {
     statefulProcessorHandle = mock(classOf[StatefulProcessorHandleImpl])
@@ -83,15 +87,20 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     // reset the iterator map to empty so be careful to call it if you want to access the iterator
     // map later.
     val testRow = getIntegerRow(1)
+    expiryTimerIter = Iterator.single(testRow, 1L /* a random long type value */)
     val iteratorMap = mutable.HashMap[String, Iterator[Row]](iteratorId -> Iterator(testRow))
     val keyValueIteratorMap = mutable.HashMap[String, Iterator[(Row, Row)]](iteratorId ->
       Iterator((testRow, testRow)))
+    listTimerMap = mutable.HashMap[String, Iterator[Long]](iteratorId -> Iterator(1L))
     transformWithStateInPandasDeserializer = mock(classOf[TransformWithStateInPandasDeserializer])
     arrowStreamWriter = mock(classOf[BaseStreamingArrowWriter])
+    batchTimestampMs = mock(classOf[Option[Long]])
+    eventTimeWatermarkForEviction = mock(classOf[Option[Long]])
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false, 2,
+      batchTimestampMs, eventTimeWatermarkForEviction,
       outputStream, valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
-      listStateMap, iteratorMap, mapStateMap, keyValueIteratorMap)
+      listStateMap, iteratorMap, mapStateMap, keyValueIteratorMap, expiryTimerIter, listTimerMap)
     when(transformWithStateInPandasDeserializer.readArrowBatches(any))
       .thenReturn(Seq(getIntegerRow(1)))
   }
@@ -121,7 +130,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle)
           .getValueState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
       } else {
-        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]])
+        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]],
+          any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
@@ -144,7 +154,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle)
           .getListState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
       } else {
-        verify(statefulProcessorHandle).getListState[Row](any[String], any[Encoder[Row]])
+        verify(statefulProcessorHandle).getListState[Row](any[String], any[Encoder[Row]],
+          any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
@@ -169,7 +180,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
           .getMapState[Row, Row](any[String], any[Encoder[Row]], any[Encoder[Row]], any[TTLConfig])
       } else {
         verify(statefulProcessorHandle).getMapState[Row, Row](any[String], any[Encoder[Row]],
-          any[Encoder[Row]])
+          any[Encoder[Row]], any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
@@ -251,8 +262,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3), getIntegerRow(4)))
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap,
-      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, iteratorMap)
+      maxRecordsPerBatch, batchTimestampMs, eventTimeWatermarkForEviction, outputStream,
+      valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
+      listStateMap, iteratorMap)
     // First call should send 2 records.
     stateServer.handleListStateRequest(message)
     verify(listState, times(0)).get()
@@ -274,8 +286,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap,
-      transformWithStateInPandasDeserializer, arrowStreamWriter, listStateMap, iteratorMap)
+      maxRecordsPerBatch, batchTimestampMs, eventTimeWatermarkForEviction, outputStream,
+      valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
+      listStateMap, iteratorMap)
     when(listState.get()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3)))
     stateServer.handleListStateRequest(message)
     verify(listState).get()
@@ -362,8 +375,9 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         (getIntegerRow(3), getIntegerRow(3)), (getIntegerRow(4), getIntegerRow(4))))
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
-      arrowStreamWriter, listStateMap, null, mapStateMap, keyValueIteratorMap)
+      maxRecordsPerBatch, batchTimestampMs, eventTimeWatermarkForEviction, outputStream,
+      valueStateMap, transformWithStateInPandasDeserializer, arrowStreamWriter,
+      listStateMap, null, mapStateMap, keyValueIteratorMap)
     // First call should send 2 records.
     stateServer.handleMapStateRequest(message)
     verify(mapState, times(0)).iterator()
@@ -385,7 +399,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val keyValueIteratorMap: mutable.HashMap[String, Iterator[(Row, Row)]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
+      maxRecordsPerBatch, batchTimestampMs, eventTimeWatermarkForEviction,
+      outputStream, valueStateMap, transformWithStateInPandasDeserializer,
       arrowStreamWriter, listStateMap, null, mapStateMap, keyValueIteratorMap)
     when(mapState.iterator()).thenReturn(Iterator((getIntegerRow(1), getIntegerRow(1)),
       (getIntegerRow(2), getIntegerRow(2)), (getIntegerRow(3), getIntegerRow(3))))
@@ -413,7 +428,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
+      maxRecordsPerBatch, batchTimestampMs, eventTimeWatermarkForEviction,
+      outputStream, valueStateMap, transformWithStateInPandasDeserializer,
       arrowStreamWriter, listStateMap, iteratorMap, mapStateMap)
     when(mapState.keys()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2), getIntegerRow(3)))
     stateServer.handleMapStateRequest(message)
@@ -440,7 +456,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
     val iteratorMap: mutable.HashMap[String, Iterator[Row]] = mutable.HashMap()
     stateServer = new TransformWithStateInPandasStateServer(serverSocket,
       statefulProcessorHandle, groupingKeySchema, "", false, false,
-      maxRecordsPerBatch, outputStream, valueStateMap, transformWithStateInPandasDeserializer,
+      maxRecordsPerBatch, batchTimestampMs, eventTimeWatermarkForEviction, outputStream,
+      valueStateMap, transformWithStateInPandasDeserializer,
       arrowStreamWriter, listStateMap, iteratorMap, mapStateMap)
     when(mapState.values()).thenReturn(Iterator(getIntegerRow(1), getIntegerRow(2),
       getIntegerRow(3)))
@@ -458,6 +475,92 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
       .setRemoveKey(RemoveKey.newBuilder().setUserKey(byteString).build()).build()
     stateServer.handleMapStateRequest(message)
     verify(mapState).removeKey(any[Row])
+  }
+
+  test("timer value get processing time") {
+    val message = TimerRequest.newBuilder().setTimerValueRequest(
+      TimerValueRequest.newBuilder().setGetProcessingTimer(
+        GetProcessingTime.newBuilder().build()
+      ).build()
+    ).build()
+    stateServer.handleTimerRequest(message)
+    verify(batchTimestampMs).isDefined
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+  }
+
+  test("timer value get watermark") {
+    val message = TimerRequest.newBuilder().setTimerValueRequest(
+      TimerValueRequest.newBuilder().setGetWatermark(
+        GetWatermark.newBuilder().build()
+      ).build()
+    ).build()
+    stateServer.handleTimerRequest(message)
+    verify(eventTimeWatermarkForEviction).isDefined
+    verify(outputStream).writeInt(argThat((x: Int) => x > 0))
+  }
+
+  test("get expiry timers") {
+    val message = TimerRequest.newBuilder().setExpiryTimerRequest(
+      ExpiryTimerRequest.newBuilder().setExpiryTimestampMs(
+        10L
+      ).build()
+    ).build()
+    stateServer.handleTimerRequest(message)
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("stateful processor register timer") {
+    val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
+      TimerStateCallCommand.newBuilder()
+        .setRegister(RegisterTimer.newBuilder().setExpiryTimestampMs(10L).build())
+        .build()
+    ).build()
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle).registerTimer(any[Long])
+    verify(outputStream).writeInt(0)
+  }
+
+  test("stateful processor delete timer") {
+    val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
+      TimerStateCallCommand.newBuilder()
+        .setDelete(DeleteTimer.newBuilder().setExpiryTimestampMs(10L).build())
+        .build()
+    ).build()
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle).deleteTimer(any[Long])
+    verify(outputStream).writeInt(0)
+  }
+
+  test("stateful processor list timer - iterator in map") {
+    val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
+      TimerStateCallCommand.newBuilder()
+        .setList(ListTimers.newBuilder().setIteratorId(iteratorId).build())
+        .build()
+    ).build()
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle, times(0)).listTimers()
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
+  }
+
+  test("stateful processor list timer - iterator not in map") {
+    val message = StatefulProcessorCall.newBuilder().setTimerStateCall(
+      TimerStateCallCommand.newBuilder()
+        .setList(ListTimers.newBuilder().setIteratorId("non-exist").build())
+        .build()
+    ).build()
+    stateServer = new TransformWithStateInPandasStateServer(serverSocket,
+      statefulProcessorHandle, groupingKeySchema, "", false, false,
+      2, batchTimestampMs, eventTimeWatermarkForEviction, outputStream,
+      valueStateMap, transformWithStateInPandasDeserializer,
+      arrowStreamWriter, listStateMap, null, mapStateMap, null,
+      null, listTimerMap)
+    when(statefulProcessorHandle.listTimers()).thenReturn(Iterator(1))
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle, times(1)).listTimers()
+    verify(arrowStreamWriter).writeRow(any)
+    verify(arrowStreamWriter).finalizeCurrentArrowBatch()
   }
 
   private def getIntegerRow(value: Int): Row = {

@@ -2984,6 +2984,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_RESET_COMMAND_FORMAT" : {
+    "message" : [
+      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_SAVE_MODE" : {
     "message" : [
       "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
@@ -5798,11 +5804,6 @@
   "_LEGACY_ERROR_TEMP_0037" : {
     "message" : [
       "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0043" : {
-    "message" : [
-      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0045" : {

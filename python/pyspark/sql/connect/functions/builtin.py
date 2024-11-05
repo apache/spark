@@ -43,6 +43,7 @@ import sys
 import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors.utils import _with_origin
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql import Column
 from pyspark.sql.connect.expressions import (
@@ -238,6 +239,7 @@ def _options_to_col(options: Mapping[str, Any]) -> Column:
 # Normal Functions
 
 
+@_with_origin
 def col(col: str) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
 

@@ -211,6 +211,25 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
       method
     }
   }
+
+  final def getFuncResult(
+      needTryCatch: Boolean,
+      resultVal: String,
+      funcCall: String,
+      returnType: Option[String] = None): String = {
+    val castFuncCall = if (returnType.isEmpty) funcCall else s"(${returnType.get}) $funcCall"
+    if (needTryCatch) {
+      s"""
+        try {
+          $resultVal = $castFuncCall;
+        } catch (Exception e) {
+          org.apache.spark.unsafe.Platform.throwException(e);
+        }
+      """
+    } else {
+      s"$resultVal = $castFuncCall;"
+    }
+  }
 }
 
 /**
@@ -328,6 +347,8 @@ case class StaticInvoke(
 
     val (argCode, argString, resultIsNull) = prepareArguments(ctx)
 
+    val needTryCatch = method.getExceptionTypes.nonEmpty
+
     val callFunc = s"$objectName.$functionName($argString)"
 
     val prepareIsNull = if (nullable) {
@@ -340,14 +361,15 @@ case class StaticInvoke(
     val evaluate = if (returnNullable && !method.getReturnType.isPrimitive) {
       if (CodeGenerator.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = ($javaType) $callFunc;
+          ${getFuncResult(needTryCatch, ev.value, callFunc, Some(javaType))}
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
         val boxedJavaType = CodeGenerator.boxedType(dataType)
         s"""
-          $boxedJavaType $boxedResult = ($boxedJavaType) $callFunc;
+          $boxedJavaType $boxedResult = null;
+          ${getFuncResult(needTryCatch, boxedResult, callFunc, Some(boxedJavaType))}
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -355,7 +377,7 @@ case class StaticInvoke(
         """
       }
     } else {
-      s"${ev.value} = ($javaType) $callFunc;"
+      getFuncResult(needTryCatch, ev.value, callFunc, Some(javaType))
     }
 
     val code = code"""
@@ -388,6 +410,28 @@ case class StaticInvoke(
         objectName
       }
     }.$functionName(${arguments.mkString(", ")}))"
+}
+
+object StaticInvoke {
+  def withNullIntolerant(
+      staticObject: Class[_],
+      dataType: DataType,
+      functionName: String,
+      arguments: Seq[Expression] = Nil,
+      inputTypes: Seq[AbstractDataType] = Nil,
+      propagateNull: Boolean = true,
+      returnNullable: Boolean = true,
+      isDeterministic: Boolean = true,
+      scalarFunction: Option[ScalarFunction[_]] = None): StaticInvoke =
+    new StaticInvoke(
+      staticObject,
+      dataType,
+      functionName,
+      arguments,
+      inputTypes,
+      propagateNull,
+      returnNullable,
+      isDeterministic, scalarFunction) with NullIntolerant
 }
 
 /**
@@ -474,38 +518,27 @@ case class Invoke(
     val returnPrimitive = method.isDefined && method.get.getReturnType.isPrimitive
     val needTryCatch = method.isDefined && method.get.getExceptionTypes.nonEmpty
 
-    def getFuncResult(resultVal: String, funcCall: String): String = if (needTryCatch) {
-      s"""
-        try {
-          $resultVal = $funcCall;
-        } catch (Exception e) {
-          org.apache.spark.unsafe.Platform.throwException(e);
-        }
-      """
-    } else {
-      s"$resultVal = $funcCall;"
-    }
-
     val evaluate = if (returnPrimitive) {
-      getFuncResult(ev.value, s"${obj.value}.$encodedFunctionName($argString)")
+      getFuncResult(needTryCatch, ev.value, s"${obj.value}.$encodedFunctionName($argString)")
     } else {
       val funcResult = ctx.freshName("funcResult")
       // If the function can return null, we do an extra check to make sure our null bit is still
       // set correctly.
       val assignResult = if (!returnNullable) {
-        s"${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;"
+        s"${ev.value} = $funcResult;"
       } else {
         s"""
           if ($funcResult != null) {
-            ${ev.value} = (${CodeGenerator.boxedType(javaType)}) $funcResult;
+            ${ev.value} = $funcResult;
           } else {
             ${ev.isNull} = true;
           }
         """
       }
       s"""
-        Object $funcResult = null;
-        ${getFuncResult(funcResult, s"${obj.value}.$encodedFunctionName($argString)")}
+        ${CodeGenerator.boxedType(javaType)} $funcResult = null;
+        ${getFuncResult(needTryCatch, funcResult, s"${obj.value}.$encodedFunctionName($argString)",
+          Some(CodeGenerator.boxedType(javaType)))}
         $assignResult
       """
     }
@@ -542,6 +575,27 @@ case class Invoke(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Invoke =
     copy(targetObject = newChildren.head, arguments = newChildren.tail)
+}
+
+object Invoke {
+  def withNullIntolerant(
+      targetObject: Expression,
+      functionName: String,
+      dataType: DataType,
+      arguments: Seq[Expression] = Nil,
+      methodInputTypes: Seq[AbstractDataType] = Nil,
+      propagateNull: Boolean = true,
+      returnNullable: Boolean = true,
+      isDeterministic: Boolean = true): Invoke =
+    new Invoke(
+      targetObject,
+      functionName,
+      dataType,
+      arguments,
+      methodInputTypes,
+      propagateNull,
+      returnNullable,
+      isDeterministic) with NullIntolerant
 }
 
 object NewInstance {

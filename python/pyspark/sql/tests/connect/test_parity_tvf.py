@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,22 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
-# Wrapper script that runs the Spark tests then reports QA results
-# to github via its API.
-# Environment variables are populated by the code here:
-# https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
+from pyspark.sql.tests.test_tvf import TVFTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
-FWDIR="$( cd "$( dirname "$0" )/.." && pwd )"
-cd "$FWDIR"
 
-export PATH=/home/anaconda/envs/py36/bin:$PATH
-export LANG="en_US.UTF-8"
+class TVFParityTestsMixin(TVFTestsMixin, ReusedConnectTestCase):
+    pass
 
-PYTHON_VERSION_CHECK=$(python3 -c 'import sys; print(sys.version_info < (3, 8, 0))')
-if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
-  echo "Python versions prior to 3.8 are not supported."
-  exit -1
-fi
 
-exec python3 -u ./dev/run-tests-jenkins.py "$@"
+if __name__ == "__main__":
+    from pyspark.sql.tests.connect.test_parity_tvf import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(testRunner=testRunner, verbosity=2)
