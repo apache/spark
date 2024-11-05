@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
@@ -652,20 +652,34 @@ class ForStatementExec(
   body: CompoundBodyExec,
   label: Option[String],
   session: SparkSession) extends NonLeafStatementExec {
-  // fali reset, extract methods, case when identifier is None
-
-  private lazy val queryDataframe = {
-    query.isExecuted = true
-    Dataset.ofRows(session, query.parsedPlan)
-  }
-  private lazy val queryResult = queryDataframe.collect()
-
+  // fali reset, case when identifier is None
   private object ForState extends Enumeration {
     val VariableDeclaration, VariableAssignment, Body = Value
   }
   private var state = ForState.VariableDeclaration
   private var currRow = 0
-  private var currNamedStruct: CreateNamedStruct = null
+  private var currVariable: CreateNamedStruct = null
+
+  private var queryDataframe: DataFrame = null
+  private var isDataframeCacheValid = false
+  private def cachedQueryDataframe(): DataFrame = {
+    if (!isDataframeCacheValid) {
+      query.isExecuted = true
+      queryDataframe = Dataset.ofRows(session, query.parsedPlan)
+      isDataframeCacheValid = true
+    }
+    queryDataframe
+  }
+
+  private var queryResult: Array[Row] = null
+  private var isResultCacheValid = false
+  private def cachedQueryResult(): Array[Row] = {
+    if (!isResultCacheValid) {
+      queryResult = cachedQueryDataframe().collect()
+      isResultCacheValid = true
+    }
+    queryResult
+  }
 
   /**
    * Loop can be interrupted by LeaveStatementExec
@@ -675,23 +689,29 @@ class ForStatementExec(
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean =
-        !interrupted && queryResult.length > 0 && currRow < queryResult.length
+        !interrupted && cachedQueryResult().length > 0 && currRow < cachedQueryResult().length
 
       override def next(): CompoundStatementExec = state match {
         case ForState.VariableDeclaration =>
+          if (identifier.isEmpty) {
+            state = ForState.Body
+            body.reset()
+            return next()
+          }
+
           val namedStructArgs: Seq[Expression] =
-            queryDataframe.schema.names.toSeq.flatMap { colName =>
-              Seq(Literal(colName), Literal(queryResult(currRow).getAs(colName)))
+            cachedQueryDataframe().schema.names.toSeq.flatMap { colName =>
+              Seq(Literal(colName), Literal(cachedQueryResult()(currRow).getAs(colName)))
             }
-          currNamedStruct = CreateNamedStruct(namedStructArgs)
+          currVariable = CreateNamedStruct(namedStructArgs)
 
           state = ForState.VariableAssignment
-          createDeclareVarExec(currNamedStruct)
+          createDeclareVarExec(currVariable)
 
         case ForState.VariableAssignment =>
           state = ForState.Body
           body.reset()
-          createSetVarExec(currNamedStruct)
+          createSetVarExec(currVariable)
 
         case ForState.Body =>
           val retStmt = body.getTreeIterator.next()
@@ -722,34 +742,34 @@ class ForStatementExec(
       }
     }
 
-  private def createDeclareVarExec(namedStruct: CreateNamedStruct): SingleStatementExec = {
-    val defaultExpression = DefaultValueExpression(Literal(null, namedStruct.dataType), "null")
+  private def createDeclareVarExec(variable: Expression): SingleStatementExec = {
+    val defaultExpression = DefaultValueExpression(Literal(null, variable.dataType), "null")
     val declareVariable = CreateVariable(
       UnresolvedIdentifier(Seq(identifier.get)),
       defaultExpression,
       replace = true
     )
-    val declareExec = new SingleStatementExec(declareVariable, Origin(), false)
-    declareExec
+    new SingleStatementExec(declareVariable, Origin(), false)
   }
 
-  private def createSetVarExec(namedStruct: CreateNamedStruct): SingleStatementExec = {
+  private def createSetVarExec(variable: Expression): SingleStatementExec = {
     val projectNamedStruct = Project(
-      Seq(Alias(namedStruct, identifier.get)()),
+      Seq(Alias(variable, identifier.get)()),
       OneRowRelation()
     )
     val setIdentifierToCurrentRow =
       SetVariable(Seq(UnresolvedAttribute(identifier.get)), projectNamedStruct)
-    val setExec = new SingleStatementExec(setIdentifierToCurrentRow, Origin(), false)
-    setExec
+    new SingleStatementExec(setIdentifierToCurrentRow, Origin(), false)
   }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
   override def reset(): Unit = {
-    // TODO: run query again
     state = ForState.VariableDeclaration
+    isDataframeCacheValid = false
+    isResultCacheValid = false
     currRow = 0
+    currVariable = null
     body.reset()
   }
 }

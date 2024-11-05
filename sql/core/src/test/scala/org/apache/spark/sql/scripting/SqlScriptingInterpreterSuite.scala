@@ -98,6 +98,31 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("for test no variable") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (intCol INT, stringCol STRING, doubleCol DOUBLE) using parquet;
+          | INSERT INTO t VALUES (1, 'first', 1.0);
+          | INSERT INTO t VALUES (2, 'second', 2.0);
+          | FOR SELECT * FROM t ORDER BY intCol DO
+          |   SELECT 1;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq(Row(1)), // select 1
+        Seq(Row(1)), // select 1
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {
