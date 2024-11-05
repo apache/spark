@@ -589,7 +589,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
         person2.summary("foo")
       },
       condition = "UNRECOGNIZED_STATISTIC",
-      parameters = Map("stats" -> "`foo`")
+      parameters = Map("stats" -> "'foo'")
     )
 
     checkError(
@@ -597,7 +597,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
         person2.summary("foo%")
       },
       condition = "UNRECOGNIZED_STATISTIC",
-      parameters = Map("stats" -> "`foo%`")
+      parameters = Map("stats" -> "'foo%'")
     )
   }
 
