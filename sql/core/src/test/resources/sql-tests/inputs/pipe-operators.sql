@@ -748,12 +748,12 @@ table other
 table other
 |> aggregate a + count(b) group by a;
 
--- Aggregation operators: negative tests.
------------------------------------------
-
--- GROUP BY ALL is not currently supported.
+-- GROUP BY ALL is supported.
 select 3 as x, 4 as y
 |> aggregate group by all;
+
+-- Aggregation operators: negative tests.
+-----------------------------------------
 
 -- GROUP BY ROLLUP is not supported yet.
 table courseSales

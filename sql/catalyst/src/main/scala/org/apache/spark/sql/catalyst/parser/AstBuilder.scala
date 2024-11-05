@@ -5941,16 +5941,12 @@ class AstBuilder extends DataTypeAstBuilder
     Option(ctx.aggregationClause()).map { c: AggregationClauseContext =>
       withAggregationClause(c, aggregateExpressions, left, allowNamedGroupingExpressions = true)
       match {
+        case a @ Aggregate(Seq(key: UnresolvedAttribute), _, _, _) if key.equalsIgnoreCase("ALL") =>
+          a.copy(groupingExpressions = Seq(PipeGroupByAll()))
         case a: Aggregate =>
-          // GROUP BY ALL, GROUP BY CUBE, GROUPING_ID, GROUPING SETS, and GROUP BY ROLLUP are not
-          // supported yet.
+          // GROUP BY CUBE, GROUPING_ID, GROUPING SETS, and GROUP BY ROLLUP are not supported yet.
           def error(s: String): Unit =
             throw QueryParsingErrors.pipeOperatorAggregateUnsupportedCaseError(s, c)
-          a.groupingExpressions match {
-            case Seq(key: UnresolvedAttribute) if key.equalsIgnoreCase("ALL") =>
-              error("GROUP BY ALL")
-            case _ =>
-          }
           def visit(e: Expression): Unit = {
             e match {
               case _: Cube => error("GROUP BY CUBE")
@@ -5969,12 +5965,7 @@ class AstBuilder extends DataTypeAstBuilder
           a.aggregateExpressions.foreach(visit)
           // Prepend grouping keys to the list of aggregate functions, since operator pipe AGGREGATE
           // clause returns the GROUP BY expressions followed by the list of aggregate functions.
-          val namedGroupingExpressions: Seq[NamedExpression] =
-            a.groupingExpressions.map {
-              case n: NamedExpression => n
-              case e: Expression => UnresolvedAlias(e, None)
-            }
-          a.copy(aggregateExpressions = namedGroupingExpressions ++ a.aggregateExpressions)
+          PipeOperators.prependGroupingExpressions(a)
       }
     }.getOrElse {
       // This is a table aggregation with no grouping expressions.

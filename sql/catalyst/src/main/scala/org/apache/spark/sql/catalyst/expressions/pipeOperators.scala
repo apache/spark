@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PIPE_OPERATOR_SELECT, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
  * Represents a SELECT clause when used with the |> SQL pipe operator.
@@ -46,6 +49,16 @@ case class PipeSelect(child: Expression)
   }
 }
 
+/**
+ * Represents a GROUP BY ALL clause when used with the |> AGGREGATE SQL pipe operator.
+ * We use this as a marker to expand the grouping expressions correctly, making sure the aggregation
+ * operator returns all the grouping expressions first followed by the aggregate functions (if any).
+ */
+case class PipeGroupByAll() extends LeafExpression with Unevaluable {
+  override def dataType: DataType = StringType
+  override def nullable: Boolean = true
+}
+
 object PipeOperators {
   // These are definitions of query result clauses that can be used with the pipe operator.
   val clusterByClause = "CLUSTER BY"
@@ -56,4 +69,17 @@ object PipeOperators {
   val sortByClause = "SORT BY"
   val sortByDistributeByClause = "SORT BY ... DISTRIBUTE BY ..."
   val windowClause = "WINDOW"
+
+  /**
+   * Prepends grouping keys to the list of aggregate functions for a pipe AGGREGATE clause, since
+   * this returns the GROUP BY expressions followed by the list of aggregate functions.
+   */
+  def prependGroupingExpressions(a: Aggregate): Aggregate = {
+    val namedGroupingExpressions: Seq[NamedExpression] =
+      a.groupingExpressions.map {
+        case n: NamedExpression => n
+        case e: Expression => UnresolvedAlias(e, None)
+      }
+    a.copy(aggregateExpressions = namedGroupingExpressions ++ a.aggregateExpressions)
+  }
 }

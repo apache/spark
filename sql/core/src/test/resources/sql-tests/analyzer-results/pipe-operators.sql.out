@@ -2469,21 +2469,9 @@ Aggregate [a#x], [a#x, (cast(a#x as bigint) + count(b#x)) AS (a + count(b))#xL]
 select 3 as x, 4 as y
 |> aggregate group by all
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "case" : "GROUP BY ALL"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 47,
-    "fragment" : "select 3 as x, 4 as y\n|> aggregate group by all"
-  } ]
-}
+Aggregate
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
 
 
 -- !query

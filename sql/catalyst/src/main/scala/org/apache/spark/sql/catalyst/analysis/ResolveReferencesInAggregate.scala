@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, IntegerLiteral, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, Attribute, Expression, IntegerLiteral, Literal, NamedExpression, PipeGroupByAll, PipeOperators}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AppendColumns, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
@@ -91,7 +91,7 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
       // aggregate expressions first.
       resolvedGroupExprsBasic
     }
-    a.copy(
+    var result = a.copy(
       // The aliases in grouping expressions are useless and will be removed at the end of analysis
       // by the rule `CleanupAliases`. However, some rules need to find the grouping expressions
       // from aggregate expressions during analysis. If we don't remove alias here, then these rules
@@ -106,6 +106,13 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
         if (e.resolved) trimAliases(e) else e
       },
       aggregateExpressions = resolvedAggExprsFinal)
+    // If this was a GROUP BY ALL clause belonging to a SQL pipe syntax |> AGGREGATE operator,
+    // prepend grouping keys to the list of aggregate functions to make the operator return both the
+    // expanded grouping expressions and the list of aggregate functions.
+    if (resolvedGroupExprs == Seq(PipeGroupByAll()))  {
+      result = PipeOperators.prependGroupingExpressions(result)
+    }
+    result
   }
 
   private def resolveGroupByAlias(
@@ -181,6 +188,7 @@ class ResolveReferencesInAggregate(val catalogManager: CatalogManager) extends S
     if (exprs.length != 1) return false
     exprs.head match {
       case a: UnresolvedAttribute => a.equalsIgnoreCase("ALL")
+      case _: PipeGroupByAll => true
       case _ => false
     }
   }
