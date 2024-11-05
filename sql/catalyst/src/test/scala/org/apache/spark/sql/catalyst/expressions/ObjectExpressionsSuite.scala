@@ -780,6 +780,30 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           inputRow)
     }
   }
+
+  test("Invoke call the method that throw Exception") {
+    val targetObject = new TestThrowExceptionMethod
+    val funcClass = classOf[TestThrowExceptionMethod]
+    val funcObj = Literal.create(targetObject, ObjectType(funcClass))
+
+    val inputInt = Seq(BoundReference(0, IntegerType, nullable = true))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "invoke", IntegerType, inputInt),
+      2,
+      InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+  }
+
+  test("StaticInvoke call the method that throw Exception") {
+    val funcClass = classOf[TestThrowExceptionMethod]
+
+    val inputInt = Seq(BoundReference(0, IntegerType, nullable = true))
+
+    checkObjectExprEvaluation(
+      StaticInvoke(funcClass, IntegerType, "staticInvoke", inputInt),
+      2,
+      InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+  }
 }
 
 class TestBean extends Serializable {

@@ -39,10 +39,13 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble)
-    _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble)
+    _valState = getHandle.getValueState[Double]("testValueInit", Encoders.scalaDouble,
+      TTLConfig.NONE)
+    _listState = getHandle.getListState[Double]("testListInit", Encoders.scalaDouble,
+      TTLConfig.NONE)
     _mapState = getHandle.getMapState[Double, Int](
-      "testMapInit", Encoders.scalaDouble, Encoders.scalaInt)
+      "testMapInit", Encoders.scalaDouble, Encoders.scalaInt,
+        TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -162,8 +165,10 @@ class StatefulProcessorWithInitialStateProcTimerClass
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode) : Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig.NONE)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   override def handleInitialState(
@@ -209,8 +214,9 @@ class StatefulProcessorWithInitialStateEventTimerClass
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
-      Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+      Encoders.scalaLong, TTLConfig.NONE)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   private def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
