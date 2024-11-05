@@ -101,44 +101,85 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
   }
 }
 
-/**
- * Stateful processor that will take a union dataframe output from state data source reader,
- * with flattened state data source rows.
- */
+/** Stateful processor that takes input rows, put the count into value state, update the key
+ * into list state, and keep a map of key -> count into map state. */
+abstract class InitialStateWithStateDataSourceBase[V]
+  extends StatefulProcessorWithInitialState[
+    String, (String, String, Long), (String, String, String), V] {
+  @transient var _valState: ValueState[String] = _
+  @transient var _listState: ListState[Long] = _
+  @transient var _mapState: MapState[String, Long] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _valState = getHandle.getValueState[String]("testValueInit", Encoders.STRING)
+    _listState = getHandle.getListState[Long]("testListInit", Encoders.scalaLong)
+    _mapState = getHandle.getMapState[String, Long](
+      "testMapInit", Encoders.STRING, Encoders.scalaLong)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, String, Long)],
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
+    var output = List[(String, String, String)]()
+    for (row <- inputRows) {
+      if (row._2 == "getValue") {
+        output = (key, row._2, _valState.getOption().getOrElse(-1).toString) :: output
+      } else if (row._2 == "updateValue") {
+        _valState.update(row._3.toString)
+      } else if (row._2 == "getList") {
+        _listState.get().foreach { element =>
+          output = (key, row._2, element.toString) :: output
+        }
+      } else if (row._2 == "clearList") {
+        _listState.clear()
+      } else if (row._2 == "getMapVal") {
+        val count =
+          if (!_mapState.containsKey(row._1)) 0
+          else _mapState.getValue(row._1)
+        output = (key, row._2, count.toString) :: output
+      } else if (row._2 == "incMapVal") {
+        val count =
+          if (!_mapState.containsKey(row._1)) 0
+          else _mapState.getValue(row._1)
+        _mapState.updateValue(row._1, count + 1)
+      }
+    }
+    output.iterator
+  }
+
+  override def close(): Unit = super.close()
+}
+
 class InitialStatefulProcessorWithStateDataSource
-  extends StatefulProcessorWithInitialStateTestClass[UnionInitialStateRow] {
+  extends InitialStateWithStateDataSourceBase[UnionInitialStateRow] {
   override def handleInitialState(
       key: String, initialState: UnionInitialStateRow, timerValues: TimerValues): Unit = {
     if (initialState.value.isDefined) {
-      _valState.update(initialState.value.get.toDouble)
+      _valState.update(initialState.value.get.toString)
     } else if (initialState.listValue.isDefined) {
-      _listState.appendValue(initialState.listValue.get.toDouble)
+      _listState.appendValue(initialState.listValue.get)
     } else if (initialState.userMapKey.isDefined) {
       _mapState.updateValue(
-        (initialState.userMapKey.get.charAt(0) - 'a').toDouble,
-        initialState.userMapValue.get.toInt)
+        initialState.userMapKey.get, initialState.userMapValue.get)
     }
   }
 }
 
-/**
- * Stateful processor that will take a union dataframe output from state data source reader,
- * with composite type state data source rows.
- */
 class InitialStatefulProcessorWithUnflattenStateDataSource
-  extends StatefulProcessorWithInitialStateTestClass[UnionUnflattenInitialStateRow] {
+  extends InitialStateWithStateDataSourceBase[UnionUnflattenInitialStateRow] {
   override def handleInitialState(
       key: String, initialState: UnionUnflattenInitialStateRow, timerValues: TimerValues): Unit = {
     if (initialState.value.isDefined) {
-      _valState.update(initialState.value.get.toDouble)
+      _valState.update(initialState.value.get.toString)
     } else if (initialState.listValue.isDefined) {
       _listState.appendList(
-        initialState.listValue.get.map(_.toDouble).toArray)
+        initialState.listValue.get.toArray)
     } else if (initialState.mapValue.isDefined) {
       initialState.mapValue.get.keys.foreach { key =>
-        _mapState.updateValue(
-          (key.charAt(0) - 'a').toDouble,
-          initialState.mapValue.get.get(key).get.toInt)
+        _mapState.updateValue(key, initialState.mapValue.get.get(key).get)
       }
     }
   }
@@ -630,27 +671,24 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
             // create a df where each row contains all value, list, map state rows
             // fill the missing column with null.
             SQLConf.get.setConfString(SQLConf.SHUFFLE_PARTITIONS.key, partitions._2)
-            val inputData2 = MemoryStream[InitInputRow]
+            val inputData2 = MemoryStream[(String, String, Long)]
             val query = startQueryWithDataSourceDataframeAsInitState(
               flattenOption, valueDf, listDf, mapDf, inputData2)
 
             testStream(query, OutputMode.Update())(
               // check initial state is updated for state vars
               AddData(inputData2,
-                InitInputRow("a", "getOption", 0.0),
-                InitInputRow("a", "getList", 0.0),
-                InitInputRow("a", "getCount", 0.0)),
-              CheckNewAnswer(("a", "getCount", 3.0),
-                ("a", "getList", 1.0), ("a", "getList", 2.0), ("a", "getList", 3.0),
-                ("a", "getOption", 3.0)),
+                ("a", "getValue", 0L),
+                ("a", "getList", 0L),
+                ("a", "getMapVal", 0L)),
+              CheckNewAnswer(("a", "getMapVal", "3"),
+                ("a", "getList", "1"), ("a", "getList", "2"), ("a", "getList", "3"),
+                ("a", "getValue", "3")),
               // check we can make updates on state vars after first batch
-              AddData(inputData2, InitInputRow("b", "update", 37.0)),
-              AddData(inputData2, InitInputRow("b", "clearList", 0.0)),
-              AddData(inputData2, InitInputRow("b", "incCount", 1.0)),
-              AddData(inputData2, InitInputRow("b", "getOption", 0.0)),
-              AddData(inputData2, InitInputRow("b", "getList", 0.0)),
-              AddData(inputData2, InitInputRow("b", "getCount", 1.0)),
-              CheckNewAnswer(("b", "getCount", 3.0), ("b", "getOption", 37.0))
+              AddData(inputData2,
+                ("b", "updateValue", 37L), ("b", "clearList", 0L), ("b", "incMapVal", 1L),
+                ("b", "getValue", 0L), ("b", "getList", 0L), ("b", "getMapVal", 0L)),
+              CheckNewAnswer(("b", "getValue", "37"), ("b", "getMapVal", "3"))
             )
           }
         }
@@ -663,7 +701,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       valDf: DataFrame,
       listDf: DataFrame,
       mapDf: DataFrame,
-      inputData: MemoryStream[InitInputRow]): DataFrame = {
+      inputData: MemoryStream[(String, String, Long)]): DataFrame = {
     if (flattenOption) {
       // when we read the state rows with flattened option set to true, values of a composite
       // state variable will be flattened into multiple rows where each row is a
@@ -679,7 +717,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val df_joined =
         valueDf.unionByName(flattenListDf, true)
           .unionByName(flattenMapDf, true)
-      val kvDataSet = inputData.toDS().groupByKey(x => x.key)
+      val kvDataSet = inputData.toDS().groupByKey(x => x._1)
       val initDf = df_joined.as[UnionInitialStateRow].groupByKey(x => x.groupingKey)
       kvDataSet.transformWithState(
         new InitialStatefulProcessorWithStateDataSource(),
@@ -699,7 +737,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val df_joined =
         valueDf.unionByName(unflattenListDf, true)
           .unionByName(unflattenMapDf, true)
-      val kvDataSet = inputData.toDS().groupByKey(x => x.key)
+      val kvDataSet = inputData.toDS().groupByKey(x => x._1)
       val initDf = df_joined.as[UnionUnflattenInitialStateRow].groupByKey(x => x.groupingKey)
       kvDataSet.transformWithState(
         new InitialStatefulProcessorWithUnflattenStateDataSource(),
