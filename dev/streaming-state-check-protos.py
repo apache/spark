@@ -18,7 +18,7 @@
 #
 
 # Utility for checking whether generated codes in PySpark are out of sync.
-#   usage: ./dev/connect-check-protos.py
+#   usage: ./dev/streaming-state-gen-protos-check.py
 
 import os
 import sys
@@ -74,7 +74,7 @@ def check_streaming_protos():
             print("Finish checking the generated codes in pyspark-streaming: SUCCESS")
         else:
             fail(
-                "Generated files for pyspark-connect are out of sync! "
+                "Generated files for pyspark-streaming are out of sync! "
                 "If you have touched files under sql/core/src/main/protobuf/, "
                 "please run ./dev/streaming-state-gen-protos.sh. "
                 "If you haven't touched any file above, please rebase your PR against main branch."
