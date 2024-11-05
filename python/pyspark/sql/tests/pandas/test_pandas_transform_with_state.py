@@ -617,7 +617,7 @@ class TransformWithStateInPandasTestsMixin:
         )
 
     def _test_transform_with_state_non_contiguous_grouping_cols(
-        self, stateful_processor, check_results
+        self, stateful_processor, check_results, initial_state=None
     ):
         input_path = tempfile.mkdtemp()
         self._prepare_input_data_with_3_cols(
@@ -645,6 +645,7 @@ class TransformWithStateInPandasTestsMixin:
                 outputStructType=output_schema,
                 outputMode="Update",
                 timeMode="None",
+                initialState=initial_state,
             )
             .writeStream.queryName("this_query")
             .foreachBatch(check_results)
@@ -668,6 +669,24 @@ class TransformWithStateInPandasTestsMixin:
 
         self._test_transform_with_state_non_contiguous_grouping_cols(
             SimpleStatefulProcessorWithInitialState(), check_results
+        )
+
+    def test_transform_with_state_non_contiguous_grouping_cols_with_init_state(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                # initial state for key (0, 1) is processed
+                assert set(batch_df.collect()) == {
+                    Row(id1="0", id2="1", value=str(789 + 123 + 46)),
+                    Row(id1="1", id2="2", value=str(146 + 346)),
+                }
+
+        # grouping key of initial state is also not starting from the beginning of attributes
+        data = [(789, "0", "1"), (987, "3", "2")]
+        initial_state = self.spark.createDataFrame(
+            data, "initVal int, id1 string, id2 string").groupBy("id1", "id2")
+
+        self._test_transform_with_state_non_contiguous_grouping_cols(
+            SimpleStatefulProcessorWithInitialState(), check_results, initial_state
         )
 
 
@@ -707,7 +726,8 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     def handleInitialState(self, key, initialState) -> None:
         init_val = initialState.at[0, "initVal"]
         self.value_state.update((init_val,))
-        assert self.dict[key] == init_val
+        if len(key) == 1:
+            assert self.dict[key] == init_val
 
     def close(self) -> None:
         pass

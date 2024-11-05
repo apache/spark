@@ -1215,9 +1215,10 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
             Deserialize ArrowRecordBatches and return a generator of pandas.Series list.
             The deserialization logic assumes that Arrow RecordBatches contain the data with the
             ordering that data chunks for same grouping key will appear sequentially.
-            See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent from JVM.
-            This function flatten the columns of input rows and initial state rows and feed them into
-            the data generator.
+            See `TransformWithStateInPandasPythonInitialStateRunner` for arrow batch schema sent
+             from JVM.
+            This function flatten the columns of input rows and initial state rows and feed them
+             into the data generator.
             """
 
             def flatten_columns(cur_batch, col_name):

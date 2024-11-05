@@ -598,7 +598,7 @@ class PandasGroupedOpsMixin:
             if initialStates is not None:
                 for cur_initial_state in initialStates:
                     statefulProcessorApiClient.set_implicit_key(key)
-                    # TODO(SPARK-50194) integration with new timer API & initial state timer register
+                    # TODO(SPARK-50194) integration with new timer API with initial state
                     statefulProcessor.handleInitialState(key, cur_initial_state)
 
             # if we don't have input rows for the given key but only have initial state
