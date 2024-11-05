@@ -27,7 +27,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
@@ -350,7 +350,14 @@ object DataType {
   }
 
   private def stringTypeWithCollation(collationName: String): StringType = {
-    StringType(CollationFactory.collationNameToId(collationName))
+    try {
+      StringType(CollationFactory.collationNameToId(collationName))
+    }
+    catch {
+      case e: SparkException if e.getCondition == "COLLATION_INVALID_NAME" &&
+        SqlApiConf.get.unknownCollationNameEnabled =>
+        StringType(CollationFactory.UTF8_BINARY_COLLATION_ID)
+    }
   }
 
   protected[types] def buildFormattedString(

@@ -33,6 +33,7 @@ private[sql] object SqlApiConfHelper {
   val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
   val DEFAULT_COLLATION: String = "spark.sql.session.collation.default"
+  val UNKNOWN_COLLATION_NAME_ENABLED: String = "spark.sql.collation.unknown.enabled"
 
   val confGetter: AtomicReference[() => SqlApiConf] = {
     new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)
