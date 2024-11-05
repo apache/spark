@@ -37,7 +37,8 @@ object CollationTypeCoercion {
 
     case ifExpr: If =>
       ifExpr.withNewChildren(
-        ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue)))
+        ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue))
+      )
 
     case caseWhenExpr: CaseWhen if !haveSameType(caseWhenExpr.inputTypesForMerging) =>
       val outputStringType = findLeastCommonStringType(
@@ -56,20 +57,24 @@ object CollationTypeCoercion {
       }
 
     case stringLocate: StringLocate =>
-      stringLocate.withNewChildren(collateToSingleType(
-        Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third)
+      stringLocate.withNewChildren(
+        collateToSingleType(Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third
+      )
 
     case substringIndex: SubstringIndex =>
       substringIndex.withNewChildren(
-        collateToSingleType(
-          Seq(substringIndex.first, substringIndex.second)) :+ substringIndex.third)
+        collateToSingleType(Seq(substringIndex.first, substringIndex.second)) :+
+          substringIndex.third
+      )
 
     case eltExpr: Elt =>
       eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
 
     case overlayExpr: Overlay =>
-      overlayExpr.withNewChildren(collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
-        ++ Seq(overlayExpr.pos, overlayExpr.len))
+      overlayExpr.withNewChildren(
+        collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
+          ++ Seq(overlayExpr.pos, overlayExpr.len)
+      )
 
     case regExpReplace: RegExpReplace =>
       val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
@@ -93,7 +98,7 @@ object CollationTypeCoercion {
       val Seq(newInput, newDefault) = collateToSingleType(Seq(input, default))
       framelessOffsetWindow.withNewChildren(Seq(newInput, offset, newDefault))
 
-    case mapCreate : CreateMap if mapCreate.children.size % 2 == 0 =>
+    case mapCreate: CreateMap if mapCreate.children.size % 2 == 0 =>
       // We only take in mapCreate if it has even number of children, as otherwise it should fail
       // with wrong number of arguments
       val newKeys = collateToSingleType(mapCreate.keys)
@@ -123,14 +128,14 @@ object CollationTypeCoercion {
           getMap
       }
 
-    case otherExpr @ (
-      _: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat | _: Greatest | _: Least |
-      _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs | _: Mask | _: StringReplace |
-      _: StringTranslate | _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: ArrayAppend |
-      _: ArrayIntersect | _: ArrayPosition | _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap |
-      _: Contains | _: EndsWith | _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan |
-      _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr |
-      _: ToNumber | _: TryToNumber | _: StringToMap) =>
+    case otherExpr @ (_: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat |
+        _: Greatest | _: Least | _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs |
+        _: Mask | _: StringReplace | _: StringTranslate | _: StringTrim | _: StringTrimLeft |
+        _: StringTrimRight | _: ArrayAppend | _: ArrayIntersect | _: ArrayPosition |
+        _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap | _: Contains | _: EndsWith |
+        _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan | _: GreaterThanOrEqual |
+        _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr | _: ToNumber |
+        _: TryToNumber | _: StringToMap) =>
       val newChildren = collateToSingleType(otherExpr.children)
       otherExpr.withNewChildren(newChildren)
 
