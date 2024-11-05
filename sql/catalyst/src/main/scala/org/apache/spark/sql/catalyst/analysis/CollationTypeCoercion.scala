@@ -22,6 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayAppend, ArrayContains, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayPosition, ArrayRemove, ArraysOverlap, ArrayUnion, AttributeReference, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, Contains, CreateArray, CreateMap, Elt, EndsWith, EqualNullSafe, EqualTo, Expression, ExtractValue, FindInSet, GetMapValue, GreaterThan, GreaterThanOrEqual, Greatest, If, In, InSubquery, Lag, Lead, Least, LessThan, LessThanOrEqual, Levenshtein, Literal, Mask, Overlay, RaiseError, RegExpReplace, SplitPart, StartsWith, StringInstr, StringLocate, StringLPad, StringReplace, StringRPad, StringSplitSQL, StringToMap, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, SubqueryExpression, SubstringIndex, ToNumber, TryToNumber, VariableReference}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
@@ -31,6 +32,13 @@ import org.apache.spark.sql.util.SchemaUtils
  * Type coercion helper that matches against expressions in order to apply collation type coercion.
  */
 object CollationTypeCoercion {
+
+  private val COLLATION_CONTEXT_TAG = new TreeNodeTag[CollationContext]("collationContext")
+
+  private def hasCollationContextTag(expr: Expression): Boolean = {
+    expr.getTagValue(COLLATION_CONTEXT_TAG).isDefined
+  }
+
   def apply(expression: Expression): Expression = expression match {
     case cast: Cast if shouldRemoveCast(cast) =>
       cast.child
@@ -206,46 +214,56 @@ object CollationTypeCoercion {
       return None
     }
 
-    expressions.foldLeft(findCollationStrength(expressions.head)) {
-      case (Some(left), expr) =>
-        findCollationStrength(expr).flatMap { right =>
-          collationPrecedenceWinner(left, right)
+    val collationContextWinner = expressions.foldLeft(findCollationContext(expressions.head)) {
+      case (Some(left), right) =>
+        findCollationContext(right).flatMap { ctx =>
+          collationPrecedenceWinner(left, ctx)
         }
       case (None, _) => return None
-    }.flatMap {
-      case CollationContext(dt, _) => extractStringType(dt)
+    }
+
+    collationContextWinner.flatMap { cc =>
+      extractStringType(cc.dataType)
     }
   }
 
-  private def findCollationStrength(expr: Expression): Option[CollationContext] = expr match {
-    case _ if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
-      None
+  private def findCollationContext(expr: Expression): Option[CollationContext] = {
+    val contextOpt = expr match {
+      case _ if hasCollationContextTag(expr) =>
+        Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
 
-    case collate: Collate =>
-      Some(CollationContext(collate.dataType, Explicit))
+      case _ if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
+        None
 
-    case _: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference =>
-      Some(CollationContext(expr.dataType, Implicit))
+      case collate: Collate =>
+        Some(CollationContext(collate.dataType, Explicit))
 
-    case _: Literal =>
-      Some(CollationContext(expr.dataType, Default))
+      case _: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference =>
+        Some(CollationContext(expr.dataType, Implicit))
 
-    case extract: ExtractValue =>
-      findCollationStrength(extract.child)
-        .map(cc => CollationContext(extract.dataType, cc.strength))
+      case _: Literal =>
+        Some(CollationContext(expr.dataType, Default))
 
-    case _ if expr.children.isEmpty =>
-      Some(CollationContext(expr.dataType, Default))
+      case extract: ExtractValue =>
+        findCollationContext(extract.child)
+          .map(cc => CollationContext(extract.dataType, cc.strength))
 
-    case _ =>
-      expr.children
-        .flatMap(findCollationStrength)
-        .foldLeft(Option.empty[CollationContext]) {
-          case (Some(left), right) =>
-            collationPrecedenceWinner(left, right)
-          case (None, right) =>
-            Some(right)
-        }
+      case _ if expr.children.isEmpty =>
+        Some(CollationContext(expr.dataType, Default))
+
+      case _ =>
+        expr.children
+          .flatMap(findCollationContext)
+          .foldLeft(Option.empty[CollationContext]) {
+            case (Some(left), right) =>
+              collationPrecedenceWinner(left, right)
+            case (None, right) =>
+              Some(right)
+          }
+    }
+
+    contextOpt.foreach(expr.setTagValue(COLLATION_CONTEXT_TAG, _))
+    contextOpt
   }
 
   private def collationPrecedenceWinner(
@@ -293,7 +311,7 @@ object CollationTypeCoercion {
  */
 private sealed trait CollationStrength {}
 
-private object CollationStrength {
+  private object CollationStrength {
   case object Explicit extends CollationStrength {}
   case object Implicit extends CollationStrength {}
   case object Default extends CollationStrength {}
