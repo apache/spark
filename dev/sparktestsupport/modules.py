@@ -134,7 +134,7 @@ kvstore = Module(
 
 network_common = Module(
     name="network-common",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/network-common/",
     ],
@@ -156,7 +156,7 @@ network_shuffle = Module(
 
 unsafe = Module(
     name="unsafe",
-    dependencies=[tags],
+    dependencies=[tags, utils],
     source_file_regexes=[
         "common/unsafe",
     ],
@@ -187,7 +187,7 @@ sketch = Module(
 
 core = Module(
     name="core",
-    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher],
+    dependencies=[kvstore, network_common, network_shuffle, unsafe, launcher, utils],
     source_file_regexes=[
         "core/",
     ],
@@ -206,7 +206,7 @@ api = Module(
 
 catalyst = Module(
     name="catalyst",
-    dependencies=[tags, sketch, core],
+    dependencies=[tags, sketch, core, api],
     source_file_regexes=[
         "sql/catalyst/",
     ],
