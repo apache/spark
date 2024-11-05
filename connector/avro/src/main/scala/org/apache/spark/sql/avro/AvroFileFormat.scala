@@ -32,8 +32,8 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
