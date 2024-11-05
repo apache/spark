@@ -18,9 +18,9 @@
 #
 set -ex
 
-if [[ $# -gt 0 ]]; then
+if [[ $# -gt 1 ]]; then
   echo "Illegal number of parameters."
-  echo "Usage: ./dev/stream-state-gen-protos.sh"
+  echo "Usage: ./dev/stream-state-gen-protos.sh [path]"
   exit -1
 fi
 
