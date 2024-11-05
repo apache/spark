@@ -28,8 +28,8 @@ import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, Plan, UserContext}
 import org.apache.spark.scheduler.LiveListenerBus
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.planner.SparkConnectPlanTest
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.util.{JsonProtocol, ManualClock}

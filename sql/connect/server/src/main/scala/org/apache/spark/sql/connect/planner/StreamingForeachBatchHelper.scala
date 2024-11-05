@@ -29,6 +29,7 @@ import org.apache.spark.api.python.{PythonException, PythonWorkerUtils, SimplePy
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, QUERY_ID, RUN_ID, SESSION_ID}
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.streaming.StreamingQuery
