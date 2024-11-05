@@ -666,7 +666,8 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       inputData: MemoryStream[InitInputRow]): DataFrame = {
     if (flattenOption) {
       // when we read the state rows with flattened option set to true, values of a composite
-      // state variable will be flattened into multiple rows where each row is a key-value pair
+      // state variable will be flattened into multiple rows where each row is a
+      // key -> single value pair
       val valueDf = valDf.selectExpr("key.value AS groupingKey", "value.value AS value")
       val flattenListDf = listDf
         .selectExpr("key.value AS groupingKey", "list_element.value AS listValue")
