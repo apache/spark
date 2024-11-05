@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
@@ -377,19 +378,21 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
-    val shuffleBlockUpdates = new ArrayBuffer[BlockId]()
-    var isDecommissionedExecutorRemoved = false
+    val shuffleBlockUpdates = new ConcurrentLinkedQueue[BlockId]()
     val execToDecommission = sc.getExecutorIds().head
+    val decommissionedExecutorLocalDir = sc.parallelize(1 to 100, 10).flatMap {  _ =>
+      if (SparkEnv.get.executorId == execToDecommission) {
+        SparkEnv.get.blockManager.getLocalDiskDirs
+      } else {
+        Array.empty[String]
+      }
+    }.collect().toSet
+    assert(decommissionedExecutorLocalDir.size == 1)
     sc.addSparkListener(new SparkListener {
       override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
         if (blockUpdated.blockUpdatedInfo.blockId.isShuffle) {
-          shuffleBlockUpdates += blockUpdated.blockUpdatedInfo.blockId
+          shuffleBlockUpdates.add(blockUpdated.blockUpdatedInfo.blockId)
         }
-      }
-
-      override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-        assert(execToDecommission === executorRemoved.executorId)
-        isDecommissionedExecutorRemoved = true
       }
     })
 
@@ -409,12 +412,13 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       )
 
     eventually(timeout(1.minute), interval(10.milliseconds)) {
-      assert(isDecommissionedExecutorRemoved)
+      assert(Files.notExists(Paths.get(decommissionedExecutorLocalDir.head)))
       // Ensure there are shuffle data have been migrated
       assert(shuffleBlockUpdates.size >= 2)
     }
 
     val shuffleId = shuffleBlockUpdates
+      .asScala
       .find(_.isInstanceOf[ShuffleIndexBlockId])
       .map(_.asInstanceOf[ShuffleIndexBlockId].shuffleId)
       .get

@@ -130,6 +130,7 @@ def plot_box(data: "DataFrame", **kwargs: Any) -> "Figure":
 
 
 def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
+    from pyspark.sql.utils import has_numpy
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
 
     require_minimum_pandas_version()
@@ -143,6 +144,12 @@ def plot_kde(data: "DataFrame", **kwargs: Any) -> "Figure":
     bw_method = kwargs.pop("bw_method", None)
     colnames = process_column_param(kwargs.pop("column", None), data)
     ind = PySparkKdePlotBase.get_ind(data.select(*colnames), kwargs.pop("ind", None))
+
+    if has_numpy:
+        import numpy as np
+
+        if isinstance(ind, np.ndarray):
+            ind = [float(i) for i in ind]
 
     kde_cols = [
         PySparkKdePlotBase.compute_kde_col(
@@ -187,7 +194,7 @@ def plot_histogram(data: "DataFrame", **kwargs: Any) -> "Figure":
         prev = norm_b
     text_bins[-1] = text_bins[-1][:-1] + "]"  # replace ) to ] for the last bucket.
 
-    bins = 0.5 * (bins[:-1] + bins[1:])
+    bins = [(bins[i] + bins[i + 1]) / 2 for i in range(0, len(bins) - 1)]
     output_series = list(output_series)
     bars = []
     for series in output_series:
