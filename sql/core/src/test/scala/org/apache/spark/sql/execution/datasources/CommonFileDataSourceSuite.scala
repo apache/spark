@@ -22,8 +22,9 @@ import java.util.zip.GZIPOutputStream
 
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
+import org.apache.spark.sql.{Encoders, FakeFileSystemRequiringDSOption}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.classic .{Dataset, SparkSession}
 
 /**
  * The trait contains tests for all file-based data sources.

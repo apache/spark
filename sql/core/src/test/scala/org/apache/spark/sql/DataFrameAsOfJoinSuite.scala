@@ -31,7 +31,7 @@ class DataFrameAsOfJoinSuite extends QueryTest
   with SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
-  def prepareForAsOfJoin(): (DataFrame, DataFrame) = {
+  def prepareForAsOfJoin(): (classic.DataFrame, classic.DataFrame) = {
     val schema1 = StructType(
       StructField("a", IntegerType, false) ::
         StructField("b", StringType, false) ::

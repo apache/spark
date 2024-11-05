@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark._
 import org.apache.spark.sql.{LocalSparkSession, SparkSession}
+import org.apache.spark.sql.classic
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -53,7 +55,7 @@ class ExecutionListenerManagerSuite extends SparkFunSuite with LocalSparkSession
       .set(QUERY_EXECUTION_LISTENERS, Seq(classOf[SQLConfQueryExecutionListener].getName()))
       .set("spark.aaa", "aaa")
     val sc = new SparkContext(conf)
-    spark = SparkSession.builder()
+    spark = classic.SparkSession.builder()
       .sparkContext(sc)
       .config("spark.bbb", "bbb")
       .getOrCreate()

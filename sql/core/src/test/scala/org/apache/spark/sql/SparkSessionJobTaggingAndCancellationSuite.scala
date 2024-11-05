@@ -44,10 +44,10 @@ class SparkSessionJobTaggingAndCancellationSuite
   override def afterEach(): Unit = {
     try {
       // This suite should not interfere with the other test suites.
-      SparkSession.getActiveSession.foreach(_.stop())
-      SparkSession.clearActiveSession()
-      SparkSession.getDefaultSession.foreach(_.stop())
-      SparkSession.clearDefaultSession()
+      classic.SparkSession.getActiveSession.foreach(_.stop())
+      classic.SparkSession.clearActiveSession()
+      classic.SparkSession.getDefaultSession.foreach(_.stop())
+      classic.SparkSession.clearDefaultSession()
       resetSparkContext()
     } finally {
       super.afterEach()
@@ -55,7 +55,7 @@ class SparkSessionJobTaggingAndCancellationSuite
   }
 
   test("Tags are not inherited by new sessions") {
-    val session = SparkSession.builder().master("local").getOrCreate()
+    val session = classic.SparkSession.builder().master("local").getOrCreate()
 
     assert(session.getTags() == Set())
     session.addTag("one")
@@ -66,7 +66,7 @@ class SparkSessionJobTaggingAndCancellationSuite
   }
 
   test("Tags are inherited by cloned sessions") {
-    val session = SparkSession.builder().master("local").getOrCreate()
+    val session = classic.SparkSession.builder().master("local").getOrCreate()
 
     assert(session.getTags() == Set())
     session.addTag("one")
@@ -83,7 +83,7 @@ class SparkSessionJobTaggingAndCancellationSuite
 
   test("Tags set from session are prefixed with session UUID") {
     sc = new SparkContext("local[2]", "test")
-    val session = SparkSession.builder().sparkContext(sc).getOrCreate()
+    val session = classic.SparkSession.builder().sparkContext(sc).getOrCreate()
     import session.implicits._
 
     val sem = new Semaphore(0)
@@ -114,9 +114,10 @@ class SparkSessionJobTaggingAndCancellationSuite
 
   test("Cancellation APIs in SparkSession are isolated") {
     sc = new SparkContext("local[2]", "test")
-    val globalSession = SparkSession.builder().sparkContext(sc).getOrCreate()
-    var (sessionA, sessionB, sessionC): (SparkSession, SparkSession, SparkSession) =
-      (null, null, null)
+    val globalSession = classic.SparkSession.builder().sparkContext(sc).getOrCreate()
+    var sessionA: classic.SparkSession = null
+    var sessionB: classic.SparkSession = null
+    var sessionC: classic.SparkSession = null
 
     // global ExecutionContext has only 2 threads in Apache Spark CI
     // create own thread pool for four Futures used in this test

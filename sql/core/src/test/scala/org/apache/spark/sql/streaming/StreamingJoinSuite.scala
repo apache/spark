@@ -564,7 +564,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L, 5, None)
 
       implicit val sqlContext = spark.sqlContext
-      val coordinatorRef = sqlContext.streams.stateStoreCoordinator
+      val coordinatorRef = spark.streams.stateStoreCoordinator
       val numPartitions = 5
       val storeNames = Seq("name1", "name2")
 

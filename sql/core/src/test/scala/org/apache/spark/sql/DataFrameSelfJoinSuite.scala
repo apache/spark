@@ -20,9 +20,10 @@ package org.apache.spark.sql
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, AttributeReference, PythonUDF, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate, ScriptInputOutputSchema, ScriptTransformation, Window => WindowPlan}
+import org.apache.spark.sql.classic.{Dataset => DatasetImpl}
+import org.apache.spark.sql.classic.ClassicConversions.ColumnConstructorExt
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, count, explode, sum, year}
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
@@ -248,9 +249,9 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       TestData(2, "personnel"),
       TestData(3, "develop"),
       TestData(4, "IT")).toDF()
-    val ds_id1 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    val ds_id1 = df.logicalPlan.getTagValue(DatasetImpl.DATASET_ID_TAG)
     df.show(0)
-    val ds_id2 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    val ds_id2 = df.logicalPlan.getTagValue(DatasetImpl.DATASET_ID_TAG)
     assert(ds_id1 === ds_id2)
   }
 
@@ -269,27 +270,27 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       TestData(2, "personnel"),
       TestData(3, "develop"),
       TestData(4, "IT")).toDS()
-    var dsIdSetOpt = ds.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    var dsIdSetOpt = ds.logicalPlan.getTagValue(DatasetImpl.DATASET_ID_TAG)
     assert(dsIdSetOpt.get.size === 1)
     var col1DsId = -1L
     val col1 = ds.col("key")
     col1.expr.foreach {
       case a: AttributeReference =>
-        col1DsId = a.metadata.getLong(Dataset.DATASET_ID_KEY)
+        col1DsId = a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)
         assert(dsIdSetOpt.get.contains(col1DsId))
-        assert(a.metadata.getLong(Dataset.COL_POS_KEY) === 0)
+        assert(a.metadata.getLong(DatasetImpl.COL_POS_KEY) === 0)
     }
 
     val df = ds.toDF()
-    dsIdSetOpt = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    dsIdSetOpt = df.logicalPlan.getTagValue(DatasetImpl.DATASET_ID_TAG)
     assert(dsIdSetOpt.get.size === 2)
     var col2DsId = -1L
     val col2 = df.col("key")
     col2.expr.foreach {
       case a: AttributeReference =>
-        col2DsId = a.metadata.getLong(Dataset.DATASET_ID_KEY)
-        assert(dsIdSetOpt.get.contains(a.metadata.getLong(Dataset.DATASET_ID_KEY)))
-        assert(a.metadata.getLong(Dataset.COL_POS_KEY) === 0)
+        col2DsId = a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)
+        assert(dsIdSetOpt.get.contains(a.metadata.getLong(DatasetImpl.DATASET_ID_KEY)))
+        assert(a.metadata.getLong(DatasetImpl.COL_POS_KEY) === 0)
     }
     assert(col1DsId !== col2DsId)
   }
@@ -375,7 +376,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Seq.empty,
       PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
       true)
-    val df7 = df1.mapInPandas(mapInPandasUDF)
+    val df7 = df1.mapInPandas(Column(mapInPandasUDF))
     val df8 = df7.filter($"x" > 0)
     assertAmbiguousSelfJoin(df7.join(df8, df7("x") === df8("y")))
     assertAmbiguousSelfJoin(df8.join(df7, df7("x") === df8("y")))
@@ -386,7 +387,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       Seq.empty,
       PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
       true)
-    val df9 = df1.groupBy($"key1").flatMapGroupsInPandas(flatMapGroupsInPandasUDF)
+    val df9 = df1.groupBy($"key1").flatMapGroupsInPandas(Column(flatMapGroupsInPandasUDF))
     val df10 = df9.filter($"x" > 0)
     assertAmbiguousSelfJoin(df9.join(df10, df9("x") === df10("y")))
     assertAmbiguousSelfJoin(df10.join(df9, df9("x") === df10("y")))
@@ -398,7 +399,7 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       true)
     val df11 = df1.groupBy($"key1").flatMapCoGroupsInPandas(
-      df1.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+      df1.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     val df12 = df11.filter($"x" > 0)
     assertAmbiguousSelfJoin(df11.join(df12, df11("x") === df12("y")))
     assertAmbiguousSelfJoin(df12.join(df11, df11("x") === df12("y")))

@@ -919,7 +919,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       size = Some(expectedSize))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-      val df = Dataset.ofRows(spark, statsPlan)
+      val df = classic.Dataset.ofRows(spark, statsPlan)
         // add some map-like operations which optimizer will optimize away, and make a divergence
         // for output between logical plan and optimized plan
         // logical plan

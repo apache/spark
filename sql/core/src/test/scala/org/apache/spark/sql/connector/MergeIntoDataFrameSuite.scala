@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.classic.MergeIntoWriterImpl
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.MergeIntoWriterImpl
 
 class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 

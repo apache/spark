@@ -92,7 +92,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     maybeBlock.nonEmpty && isExpectLevel
   }
 
-  private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
+  private def getNumInMemoryRelations(ds: classic.Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
     var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
     plan.transformAllExpressions {
@@ -515,7 +515,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   /**
    * Verifies that the plan for `df` contains `expected` number of Exchange operators.
    */
-  private def verifyNumExchanges(df: DataFrame, expected: Int): Unit = {
+  private def verifyNumExchanges(df: classic.DataFrame, expected: Int): Unit = {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       df.collect()
     }
@@ -1052,7 +1052,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("Cache should respect the hint") {
-    def testHint(df: Dataset[_], expectedHint: JoinStrategyHint): Unit = {
+    def testHint(df: classic.Dataset[_], expectedHint: JoinStrategyHint): Unit = {
       val df2 = spark.range(2000).cache()
       df2.count()
 
@@ -1097,7 +1097,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   }
 
   test("analyzes column statistics in cached query") {
-    def query(): DataFrame = {
+    def query(): classic.DataFrame = {
       spark.range(100)
         .selectExpr("id % 3 AS c0", "id % 5 AS c1", "2 AS c2")
         .groupBy("c0")

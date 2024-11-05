@@ -14,8 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
+import org.apache.spark.sql
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -23,4 +24,4 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SparkSessionBuilderImplementationBindingSuite
   extends SharedSparkSession
-  with api.SparkSessionBuilderImplementationBindingSuite
+  with sql.SparkSessionBuilderImplementationBindingSuite

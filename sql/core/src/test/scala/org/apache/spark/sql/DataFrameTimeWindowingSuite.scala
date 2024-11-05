@@ -596,7 +596,9 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       df <- Seq(df1, df2)
       nullable <- Seq(true, false)
     } {
-      val dfWithDesiredNullability = new DataFrame(df.queryExecution, ExpressionEncoder(
+      val dfWithDesiredNullability = new classic.DataFrame(
+        df.queryExecution,
+        ExpressionEncoder(
         StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // tumbling windows
       val windowedProject = dfWithDesiredNullability

@@ -20,7 +20,8 @@ package org.apache.spark.sql.streaming.sources
 import java.util
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.Transform

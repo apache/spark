@@ -23,8 +23,8 @@ import java.nio.file.{Files, Path, Paths}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.api.java.UDF2
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DataTypes

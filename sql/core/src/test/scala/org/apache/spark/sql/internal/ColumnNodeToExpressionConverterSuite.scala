@@ -17,7 +17,6 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.{analysis, expressions, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -25,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.classic.{ColumnNodeToExpressionConverter, Dataset, ExpressionColumnNode}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator}

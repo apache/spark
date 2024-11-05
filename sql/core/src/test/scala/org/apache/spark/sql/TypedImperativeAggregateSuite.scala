@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, GenericInternalRow, ImplicitCastInputTypes, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.classic.ClassicConversions.ColumnConstructorExt
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.{column => toColumn, expression}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -89,7 +89,7 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
 
   test("dataframe aggregate with object aggregate buffer, should not use HashAggregate") {
     val df = data.toDF("a", "b")
-    val max = TypedMax($"a")
+    val max = Column(TypedMax($"a".expr))
 
     // Always uses SortAggregateExec
     val sparkPlan = df.select(max).queryExecution.sparkPlan
@@ -212,9 +212,10 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
     checkAnswer(query, expected)
   }
 
-  private def typedMax(column: Column): Column = TypedMax(column)
+  private def typedMax(column: Column): Column = Column(TypedMax(column.expr))
 
-  private def nullableTypedMax(column: Column): Column = TypedMax(column, nullable = true)
+  private def nullableTypedMax(column: Column): Column =
+    Column(TypedMax(column.expr, nullable = true))
 }
 
 object TypedImperativeAggregateSuite {
