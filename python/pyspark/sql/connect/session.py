@@ -963,13 +963,11 @@ class SparkSession:
 
     @functools.cached_property
     def webUrl(self) -> Optional[str]:
-        spark_web_url = self._client._analyze(
-            method="spark_web_url"
-        ).spark_web_url  # type: ignore[attr-defined]
-        if spark_web_url is not None and spark_web_url.HasField(
+        spark_web_url = self._client._analyze(method="spark_web_url").spark_web_url
+        if spark_web_url is not None and spark_web_url.HasField(  # type: ignore[attr-defined]
             "web_url"
-        ):  # type: ignore[attr-defined]
-            return spark_web_url.web_url
+        ):
+            return spark_web_url.web_url  # type: ignore[attr-defined]
         return None
 
     webUrl.__doc__ = PySparkSession.webUrl.__doc__
