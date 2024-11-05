@@ -617,7 +617,11 @@ jobs:
         python3.11 -m pip install 'black==23.9.1' 'protobuf==5.28.3' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
     - name: Python CodeGen check
-      run: ./dev/connect-check-protos.py
+      run: |
+        ./dev/connect-check-protos.py
+        if [ -f ./dev/streaming-state-check-protos.py ]; then
+          ./dev/streaming-state-check-protos.py
+        fi
 
   # Static analysis
   lint:
