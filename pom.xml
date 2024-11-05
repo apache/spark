@@ -212,12 +212,12 @@
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.9.0</commons-cli.version>
-    <bouncycastle.version>1.78</bouncycastle.version>
+    <bouncycastle.version>1.79</bouncycastle.version>
     <tink.version>1.15.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
     <netty.version>4.1.110.Final</netty.version>
     <netty-tcnative.version>2.0.66.Final</netty-tcnative.version>
-    <icu4j.version>75.1</icu4j.version>
+    <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.0</junit-jupiter.version>
     <junit-platform.version>1.11.0</junit-platform.version>
     <sbt-jupiter-interface.version>0.13.0</sbt-jupiter-interface.version>
@@ -3222,7 +3222,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.17.0</version>
+            <version>10.20.0</version>
           </dependency>
         </dependencies>
         <executions>
