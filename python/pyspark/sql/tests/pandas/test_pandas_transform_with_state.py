@@ -683,7 +683,8 @@ class TransformWithStateInPandasTestsMixin:
         # grouping key of initial state is also not starting from the beginning of attributes
         data = [(789, "0", "1"), (987, "3", "2")]
         initial_state = self.spark.createDataFrame(
-            data, "initVal int, id1 string, id2 string").groupBy("id1", "id2")
+            data, "initVal int, id1 string, id2 string"
+        ).groupBy("id1", "id2")
 
         self._test_transform_with_state_non_contiguous_grouping_cols(
             SimpleStatefulProcessorWithInitialState(), check_results, initial_state
