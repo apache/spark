@@ -1015,7 +1015,8 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       @transient protected var _countState: ValueState[Long] = _
 
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-        _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+        _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+          TTLConfig.NONE)
       }
 
       override def handleInputRows(
