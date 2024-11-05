@@ -34,9 +34,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState, StateVariableType}
-import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateVariableRequest, ValueStateCall}
+import org.apache.spark.sql.execution.streaming.state.StateMessage.{HandleState, ImplicitGroupingKeyRequest, ListStateCall, MapStateCall, StatefulProcessorCall, StateRequest, StateResponse, StateResponseWithLongTypeVal, StateVariableRequest, TimerRequest, TimerStateCallCommand, TimerValueRequest, ValueStateCall}
 import org.apache.spark.sql.streaming.{ListState, MapState, TTLConfig, ValueState}
-import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
@@ -58,6 +58,8 @@ class TransformWithStateInPandasStateServer(
     errorOnDuplicatedFieldNames: Boolean,
     largeVarTypes: Boolean,
     arrowTransformWithStateInPandasMaxRecordsPerBatch: Int,
+    batchTimestampMs: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None,
     outputStreamForTest: DataOutputStream = null,
     valueStateMapForTest: mutable.HashMap[String, ValueStateInfo] = null,
     deserializerForTest: TransformWithStateInPandasDeserializer = null,
@@ -65,12 +67,19 @@ class TransformWithStateInPandasStateServer(
     listStatesMapForTest : mutable.HashMap[String, ListStateInfo] = null,
     iteratorMapForTest: mutable.HashMap[String, Iterator[Row]] = null,
     mapStatesMapForTest : mutable.HashMap[String, MapStateInfo] = null,
-    keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null)
+    keyValueIteratorMapForTest: mutable.HashMap[String, Iterator[(Row, Row)]] = null,
+    expiryTimerIterForTest: Iterator[(Any, Long)] = null,
+    listTimerMapForTest: mutable.HashMap[String, Iterator[Long]] = null)
   extends Runnable with Logging {
+
+  import PythonResponseWriterUtils._
+
   private val keyRowDeserializer: ExpressionEncoder.Deserializer[Row] =
     ExpressionEncoder(groupingKeySchema).resolveAndBind().createDeserializer()
   private var inputStream: DataInputStream = _
   private var outputStream: DataOutputStream = outputStreamForTest
+
+  /** State variable related class variables */
   // A map to store the value state name -> (value state, schema, value row deserializer) mapping.
   private val valueStates = if (valueStateMapForTest != null) {
     valueStateMapForTest
@@ -109,6 +118,20 @@ class TransformWithStateInPandasStateServer(
   } else {
     new mutable.HashMap[String, Iterator[(Row, Row)]]()
   }
+
+  /** Timer related class variables */
+  private var expiryTimestampIter: Option[Iterator[(Any, Long)]] =
+    if (expiryTimerIterForTest != null) {
+      Option(expiryTimerIterForTest)
+    } else None
+
+  // A map to store the iterator id -> Iterator[Long] mapping. This is to keep track of the
+  // current iterator position for each iterator id in the same partition for a grouping key in case
+  // user tries to fetch multiple iterators before the current iterator is exhausted. This is
+  // used for list timer function call
+  private var listTimerIters = if (listTimerMapForTest != null) {
+    listTimerMapForTest
+  } else new mutable.HashMap[String, Iterator[Long]]()
 
   def run(): Unit = {
     val listeningSocket = stateServerSocket.accept()
@@ -159,8 +182,59 @@ class TransformWithStateInPandasStateServer(
         handleStatefulProcessorCall(message.getStatefulProcessorCall)
       case StateRequest.MethodCase.STATEVARIABLEREQUEST =>
         handleStateVariableRequest(message.getStateVariableRequest)
+      case StateRequest.MethodCase.TIMERREQUEST =>
+        handleTimerRequest(message.getTimerRequest)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
+    }
+  }
+
+  private[sql] def handleTimerRequest(message: TimerRequest): Unit = {
+    message.getMethodCase match {
+      case TimerRequest.MethodCase.TIMERVALUEREQUEST =>
+        val timerRequest = message.getTimerValueRequest()
+        timerRequest.getMethodCase match {
+          case TimerValueRequest.MethodCase.GETPROCESSINGTIMER =>
+            val procTimestamp: Long =
+              if (batchTimestampMs.isDefined) batchTimestampMs.get else -1L
+            sendResponseWithLongVal(0, null, procTimestamp)
+          case TimerValueRequest.MethodCase.GETWATERMARK =>
+            val eventTimestamp: Long =
+              if (eventTimeWatermarkForEviction.isDefined) eventTimeWatermarkForEviction.get
+              else -1L
+            sendResponseWithLongVal(0, null, eventTimestamp)
+          case _ =>
+            throw new IllegalArgumentException("Invalid timer value method call")
+        }
+
+      case TimerRequest.MethodCase.EXPIRYTIMERREQUEST =>
+        // Note that for `getExpiryTimers` python call, as this is not a public
+        // API and it will only be used by `group_ops` once per partition, we won't
+        // need to worry about different function calls will interleaved and hence
+        // this implementation is safe
+        val expiryRequest = message.getExpiryTimerRequest()
+        val expiryTimestamp = expiryRequest.getExpiryTimestampMs
+        if (!expiryTimestampIter.isDefined) {
+          expiryTimestampIter =
+            Option(statefulProcessorHandle.getExpiredTimers(expiryTimestamp))
+        }
+        // expiryTimestampIter could be None in the TWSPandasServerSuite
+        if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
+          // iterator is exhausted, signal the end of iterator on python client
+          sendResponse(1)
+        } else {
+          sendResponse(0)
+          val outputSchema = new StructType()
+            .add("key", BinaryType)
+            .add(StructField("timestamp", LongType))
+          sendIteratorAsArrowBatches(expiryTimestampIter.get, outputSchema,
+            arrowStreamWriterForTest) { data =>
+            InternalRow(PythonSQLUtils.toPyRow(data._1.asInstanceOf[Row]), data._2)
+          }
+        }
+
+      case _ =>
+        throw new IllegalArgumentException("Invalid timer request method call")
     }
   }
 
@@ -173,11 +247,13 @@ class TransformWithStateInPandasStateServer(
         ImplicitGroupingKeyTracker.setImplicitKey(keyRow)
         // Reset the list/map state iterators for a new grouping key.
         iterators = new mutable.HashMap[String, Iterator[Row]]()
+        listTimerIters = new mutable.HashMap[String, Iterator[Long]]()
         sendResponse(0)
       case ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY =>
         ImplicitGroupingKeyTracker.removeImplicitKey()
         // Reset the list/map state iterators for a new grouping key.
         iterators = new mutable.HashMap[String, Iterator[Row]]()
+        listTimerIters = new mutable.HashMap[String, Iterator[Long]]()
         sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
@@ -195,6 +271,12 @@ class TransformWithStateInPandasStateServer(
           case HandleState.INITIALIZED =>
             logInfo(log"set handle state to Initialized")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
+          case HandleState.DATA_PROCESSED =>
+            logInfo(log"set handle state to Data Processed")
+            statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.DATA_PROCESSED)
+          case HandleState.TIMER_PROCESSED =>
+            logInfo(log"set handle state to Timer Processed")
+            statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.TIMER_PROCESSED)
           case HandleState.CLOSED =>
             logInfo(log"set handle state to Closed")
             statefulProcessorHandle.setHandleState(StatefulProcessorHandleState.CLOSED)
@@ -226,6 +308,41 @@ class TransformWithStateInPandasStateServer(
         } else None
         initializeStateVariable(stateName, userKeySchema, StateVariableType.MapState, ttlDurationMs,
           valueSchema)
+      case StatefulProcessorCall.MethodCase.TIMERSTATECALL =>
+        message.getTimerStateCall.getMethodCase match {
+          case TimerStateCallCommand.MethodCase.REGISTER =>
+            val expiryTimestamp =
+              message.getTimerStateCall.getRegister.getExpiryTimestampMs
+            statefulProcessorHandle.registerTimer(expiryTimestamp)
+            sendResponse(0)
+          case TimerStateCallCommand.MethodCase.DELETE =>
+            val expiryTimestamp =
+              message.getTimerStateCall.getDelete.getExpiryTimestampMs
+            statefulProcessorHandle.deleteTimer(expiryTimestamp)
+            sendResponse(0)
+          case TimerStateCallCommand.MethodCase.LIST =>
+            val iteratorId = message.getTimerStateCall.getList.getIteratorId
+            var iteratorOption = listTimerIters.get(iteratorId)
+            if (iteratorOption.isEmpty) {
+              iteratorOption = Option(statefulProcessorHandle.listTimers())
+              listTimerIters.put(iteratorId, iteratorOption.get)
+            }
+            if (!iteratorOption.get.hasNext) {
+              sendResponse(2, s"List timer iterator doesn't contain any value.")
+              return
+            } else {
+              sendResponse(0)
+            }
+            val outputSchema = new StructType()
+              .add(StructField("timestamp", LongType))
+            sendIteratorAsArrowBatches(iteratorOption.get, outputSchema,
+              arrowStreamWriterForTest) { data =>
+              InternalRow(data)
+            }
+
+          case _ =>
+            throw new IllegalArgumentException("Invalid timer state method call")
+        }
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }
@@ -463,24 +580,6 @@ class TransformWithStateInPandasStateServer(
     }
   }
 
-  private def sendResponse(
-      status: Int,
-      errorMessage: String = null,
-      byteString: ByteString = null): Unit = {
-    val responseMessageBuilder = StateResponse.newBuilder().setStatusCode(status)
-    if (status != 0 && errorMessage != null) {
-      responseMessageBuilder.setErrorMessage(errorMessage)
-    }
-    if (byteString != null) {
-      responseMessageBuilder.setValue(byteString)
-    }
-    val responseMessage = responseMessageBuilder.build()
-    val responseMessageBytes = responseMessage.toByteArray
-    val byteLength = responseMessageBytes.length
-    outputStream.writeInt(byteLength)
-    outputStream.write(responseMessageBytes)
-  }
-
   private def initializeStateVariable(
       stateName: String,
       schemaString: String,
@@ -490,9 +589,10 @@ class TransformWithStateInPandasStateServer(
     val schema = StructType.fromString(schemaString)
     val expressionEncoder = ExpressionEncoder(schema).resolveAndBind()
     stateType match {
-        case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema))
+      case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema),
+            TTLConfig.NONE)
           } else {
             statefulProcessorHandle.getValueState(
               stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
@@ -503,77 +603,118 @@ class TransformWithStateInPandasStateServer(
         } else {
           sendResponse(1, s"Value state $stateName already exists")
         }
-        case StateVariableType.ListState => if (!listStates.contains(stateName)) {
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema))
-          } else {
-            statefulProcessorHandle.getListState(
-              stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
-          }
-          listStates.put(stateName,
-            ListStateInfo(state, schema, expressionEncoder.createDeserializer(),
-              expressionEncoder.createSerializer()))
-          sendResponse(0)
+
+      case StateVariableType.ListState => if (!listStates.contains(stateName)) {
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema),
+            TTLConfig.NONE)
         } else {
-          sendResponse(1, s"List state $stateName already exists")
+          statefulProcessorHandle.getListState(
+            stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
         }
-        case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
-          val valueSchema = StructType.fromString(mapStateValueSchemaString)
-          val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
-          val state = if (ttlDurationMs.isEmpty) {
-            statefulProcessorHandle.getMapState[Row, Row](stateName,
-              Encoders.row(schema), Encoders.row(valueSchema))
-          } else {
-            statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
-              Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
-          }
-          mapStates.put(stateName,
-            MapStateInfo(state, schema, valueSchema, expressionEncoder.createDeserializer(),
-              expressionEncoder.createSerializer(), valueExpressionEncoder.createDeserializer(),
-              valueExpressionEncoder.createSerializer()))
-          sendResponse(0)
+        listStates.put(stateName,
+          ListStateInfo(state, schema, expressionEncoder.createDeserializer(),
+            expressionEncoder.createSerializer()))
+        sendResponse(0)
+      } else {
+        sendResponse(1, s"List state $stateName already exists")
+      }
+
+      case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
+        val valueSchema = StructType.fromString(mapStateValueSchemaString)
+        val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
+        val state = if (ttlDurationMs.isEmpty) {
+          statefulProcessorHandle.getMapState[Row, Row](stateName,
+            Encoders.row(schema), Encoders.row(valueSchema), TTLConfig.NONE)
         } else {
-          sendResponse(1, s"Map state $stateName already exists")
+          statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
+            Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
         }
+        mapStates.put(stateName,
+          MapStateInfo(state, schema, valueSchema, expressionEncoder.createDeserializer(),
+            expressionEncoder.createSerializer(), valueExpressionEncoder.createDeserializer(),
+            valueExpressionEncoder.createSerializer()))
+        sendResponse(0)
+      } else {
+        sendResponse(1, s"Map state $stateName already exists")
+      }
     }
   }
 
-  private def sendIteratorAsArrowBatches[T](
-      iter: Iterator[T],
-      outputSchema: StructType,
-      arrowStreamWriterForTest: BaseStreamingArrowWriter = null)(func: T => InternalRow): Unit = {
-    outputStream.flush()
-    val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
+  /** Utils object for sending response to Python client. */
+  private object PythonResponseWriterUtils {
+    def sendResponse(
+        status: Int,
+        errorMessage: String = null,
+        byteString: ByteString = null): Unit = {
+      val responseMessageBuilder = StateResponse.newBuilder().setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+      if (byteString != null) {
+        responseMessageBuilder.setValue(byteString)
+      }
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendResponseWithLongVal(
+        status: Int,
+        errorMessage: String = null,
+        longVal: Long): Unit = {
+      val responseMessageBuilder = StateResponseWithLongTypeVal.newBuilder().setStatusCode(status)
+      if (status != 0 && errorMessage != null) {
+        responseMessageBuilder.setErrorMessage(errorMessage)
+      }
+      responseMessageBuilder.setValue(longVal)
+      val responseMessage = responseMessageBuilder.build()
+      val responseMessageBytes = responseMessage.toByteArray
+      val byteLength = responseMessageBytes.length
+      outputStream.writeInt(byteLength)
+      outputStream.write(responseMessageBytes)
+    }
+
+    def sendIteratorAsArrowBatches[T](
+        iter: Iterator[T],
+        outputSchema: StructType,
+        arrowStreamWriterForTest: BaseStreamingArrowWriter = null)(func: T => InternalRow): Unit = {
+      outputStream.flush()
+      val arrowSchema = ArrowUtils.toArrowSchema(outputSchema, timeZoneId,
         errorOnDuplicatedFieldNames, largeVarTypes)
-    val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-      s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
-    val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    val writer = new ArrowStreamWriter(root, null, outputStream)
-    val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
-      arrowStreamWriterForTest
-    } else {
-      new BaseStreamingArrowWriter(root, writer, arrowTransformWithStateInPandasMaxRecordsPerBatch)
-    }
-    // Only write a single batch in each GET request. Stops writing row if rowCount reaches
-    // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
-    // when there are multiple state variables, user tries to access a different state variable
-    // while the current state variable is not exhausted yet.
-    var rowCount = 0
-    while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
-      val data = iter.next()
-      val internalRow = func(data)
-      arrowStreamWriter.writeRow(internalRow)
-      rowCount += 1
-    }
-    arrowStreamWriter.finalizeCurrentArrowBatch()
-    Utils.tryWithSafeFinally {
-      // end writes footer to the output stream and doesn't clean any resources.
-      // It could throw exception if the output stream is closed, so it should be
-      // in the try block.
-      writer.end()
-    } {
-      root.close()
-      allocator.close()
+      val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+        s"stdout writer for transformWithStateInPandas state socket", 0, Long.MaxValue)
+      val root = VectorSchemaRoot.create(arrowSchema, allocator)
+      val writer = new ArrowStreamWriter(root, null, outputStream)
+      val arrowStreamWriter = if (arrowStreamWriterForTest != null) {
+        arrowStreamWriterForTest
+      } else {
+        new BaseStreamingArrowWriter(root, writer,
+          arrowTransformWithStateInPandasMaxRecordsPerBatch)
+      }
+      // Only write a single batch in each GET request. Stops writing row if rowCount reaches
+      // the arrowTransformWithStateInPandasMaxRecordsPerBatch limit. This is to handle a case
+      // when there are multiple state variables, user tries to access a different state variable
+      // while the current state variable is not exhausted yet.
+      var rowCount = 0
+      while (iter.hasNext && rowCount < arrowTransformWithStateInPandasMaxRecordsPerBatch) {
+        val data = iter.next()
+        val internalRow = func(data)
+        arrowStreamWriter.writeRow(internalRow)
+        rowCount += 1
+      }
+      arrowStreamWriter.finalizeCurrentArrowBatch()
+      Utils.tryWithSafeFinally {
+        // end writes footer to the output stream and doesn't clean any resources.
+        // It could throw exception if the output stream is closed, so it should be
+        // in the try block.
+        writer.end()
+      } {
+        root.close()
+        allocator.close()
+      }
     }
   }
 }
