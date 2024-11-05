@@ -889,6 +889,9 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
 
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
+          // Override appName with the submitted appName
+          sparkConf.getOption("spark.submit.appName")
+            .map(sparkConf.setAppName)
           // set a random app name if not given.
           if (!sparkConf.contains("spark.app.name")) {
             sparkConf.setAppName(java.util.UUID.randomUUID().toString)
