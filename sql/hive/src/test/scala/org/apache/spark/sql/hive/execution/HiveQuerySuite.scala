@@ -27,10 +27,11 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkFiles, TestUtils}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive.HiveUtils.{builtinHiveVersion => hiveVersion}
 import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}

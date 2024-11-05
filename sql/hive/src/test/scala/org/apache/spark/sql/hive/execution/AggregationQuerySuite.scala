@@ -22,8 +22,10 @@ import scala.util.Random
 import test.org.apache.spark.sql.MyDoubleAvg
 import test.org.apache.spark.sql.MyDoubleSum
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton

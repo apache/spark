@@ -34,8 +34,8 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.SPECULATION_ENABLED
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
