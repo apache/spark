@@ -296,7 +296,7 @@ case class TryMakeInterval(
     this(years, months, weeks, Literal(0))
   def this(years: Expression, months: Expression) = this(years, months, Literal(0))
   def this(years: Expression) = this(years, Literal(0))
-  def this() = this(Literal(0))
+  // We do not support this() in try version of the function, as it will never return overflow
 
   override protected def withNewChildInternal(newChild: Expression): Expression = {
     copy(replacement = newChild)

@@ -7996,7 +7996,7 @@ object functions {
    * This is a special version of `make_interval` that performs the same operation, but returns a
    * NULL value instead of raising an error if interval cannot be created.
    *
-   * @group url_funcs
+   * @group datetime_funcs
    * @since 4.0.0
    */
   def try_make_interval(
@@ -8029,7 +8029,7 @@ object functions {
    * This is a special version of `make_interval` that performs the same operation, but returns a
    * NULL value instead of raising an error if interval cannot be created.
    *
-   * @group url_funcs
+   * @group datetime_funcs
    * @since 4.0.0
    */
   def try_make_interval(
@@ -8060,7 +8060,7 @@ object functions {
    * This is a special version of `make_interval` that performs the same operation, but returns a
    * NULL value instead of raising an error if interval cannot be created.
    *
-   * @group url_funcs
+   * @group datetime_funcs
    * @since 4.0.0
    */
   def try_make_interval(
@@ -8089,7 +8089,7 @@ object functions {
    * This is a special version of `make_interval` that performs the same operation, but returns a
    * NULL value instead of raising an error if interval cannot be created.
    *
-   * @group url_funcs
+   * @group datetime_funcs
    * @since 4.0.0
    */
   def try_make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
@@ -8108,7 +8108,7 @@ object functions {
    * This is a special version of `make_interval` that performs the same operation, but returns a
    * NULL value instead of raising an error if interval cannot be created.
    *
-   * @group url_funcs
+   * @group datetime_funcs
    * @since 4.0.0
    */
   def try_make_interval(years: Column, months: Column, weeks: Column): Column =
@@ -8127,7 +8127,7 @@ object functions {
    * This is a special version of `make_interval` that performs the same operation, but returns a
    * NULL value instead of raising an error if interval cannot be created.
    *
-   * @group url_funcs
+   * @group datetime_funcs
    * @since 4.0.0
    */
   def try_make_interval(years: Column, months: Column): Column =
@@ -8146,7 +8146,7 @@ object functions {
    * This is a special version of `make_interval` that performs the same operation, but returns a
    * NULL value instead of raising an error if interval cannot be created.
    *
-   * @group url_funcs
+   * @group datetime_funcs
    * @since 4.0.0
    */
   def try_make_interval(years: Column): Column =
@@ -8160,16 +8160,6 @@ object functions {
    */
   def make_interval(years: Column): Column =
     Column.fn("make_interval", years)
-
-  /**
-   * This is a special version of `make_interval` that performs the same operation, but returns a
-   * NULL value instead of raising an error if interval cannot be created.
-   *
-   * @group url_funcs
-   * @since 4.0.0
-   */
-  def try_make_interval(): Column =
-    Column.fn("try_make_interval")
 
   /**
    * Make interval.

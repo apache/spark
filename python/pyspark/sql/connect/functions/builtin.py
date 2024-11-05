@@ -3713,13 +3713,13 @@ make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
 
 
 def try_make_interval(
-        years: Optional["ColumnOrName"] = None,
-        months: Optional["ColumnOrName"] = None,
-        weeks: Optional["ColumnOrName"] = None,
-        days: Optional["ColumnOrName"] = None,
-        hours: Optional["ColumnOrName"] = None,
-        mins: Optional["ColumnOrName"] = None,
-        secs: Optional["ColumnOrName"] = None,
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
 ) -> Column:
     _years = lit(0) if years is None else _to_col(years)
     _months = lit(0) if months is None else _to_col(months)

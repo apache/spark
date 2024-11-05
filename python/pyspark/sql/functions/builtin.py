@@ -21154,13 +21154,13 @@ def make_dt_interval(
 
 @_try_remote_functions
 def try_make_interval(
-        years: Optional["ColumnOrName"] = None,
-        months: Optional["ColumnOrName"] = None,
-        weeks: Optional["ColumnOrName"] = None,
-        days: Optional["ColumnOrName"] = None,
-        hours: Optional["ColumnOrName"] = None,
-        mins: Optional["ColumnOrName"] = None,
-        secs: Optional["ColumnOrName"] = None,
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
     This is a special version of `make_interval` that performs the same operation, but returns a
@@ -21283,17 +21283,17 @@ def try_make_interval(
     |100 years                                |
     +-----------------------------------------+
 
-    Example 8: Try make interval.
+    Example 8: Try make interval from years with overflow.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
+    >>> df = spark.createDataFrame([[2147483647, 11, 1, 1, 12, 30, 01.001001]],
     ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_interval()).show(truncate=False)
-    +--------------------------------------+
-    |try_make_interval(0, 0, 0, 0, 0, 0, 0)|
-    +--------------------------------------+
-    |0 seconds                             |
-    +--------------------------------------+
+    >>> df.select(sf.try_make_interval(df.year)).show(truncate=False)
+    +-----------------------------------------+
+    |try_make_interval(year, 0, 0, 0, 0, 0, 0)|
+    +-----------------------------------------+
+    |NULL                                     |
+    +-----------------------------------------+
 
     """
     _years = lit(0) if years is None else years

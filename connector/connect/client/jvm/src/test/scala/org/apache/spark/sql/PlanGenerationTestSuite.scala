@@ -1966,10 +1966,6 @@ class PlanGenerationTestSuite
     fn.try_make_interval(fn.col("a"))
   }
 
-  functionTest("try_make_interval") {
-    fn.try_make_interval()
-  }
-
   functionTest("make_timestamp with timezone") {
     fn.make_timestamp(
       fn.col("a"),

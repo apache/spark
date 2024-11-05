@@ -398,9 +398,7 @@ class FunctionsTestsMixin:
         self.assertEqual([Row("UNICODE")], actual)
 
     def test_try_make_interval(self):
-        df = self.spark.createDataFrame(
-            [(2147483647,)], ["num"]
-        )
+        df = self.spark.createDataFrame([(2147483647,)], ["num"])
         actual = df.select(F.try_make_interval(df.num).alias("res")).collect()
         self.assertEqual([Row(res=None)], actual)
 
