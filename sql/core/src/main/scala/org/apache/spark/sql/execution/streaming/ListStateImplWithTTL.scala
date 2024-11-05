@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -43,7 +42,7 @@ class ListStateImplWithTTL[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S],
+    valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
     metrics: Map[String, SQLMetric] = Map.empty)
@@ -91,7 +90,7 @@ class ListStateImplWithTTL[S](
 
         if (iter.hasNext) {
           val currentRow = iter.next()
-          stateTypesEncoder.decodeValue(currentRow)
+          stateTypesEncoder.decodeValue(currentRow).asInstanceOf[S]
         } else {
           finished = true
           null.asInstanceOf[S]
@@ -223,7 +222,7 @@ class ListStateImplWithTTL[S](
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     val unsafeRowValuesIterator = store.valuesIterator(encodedGroupingKey, stateName)
     unsafeRowValuesIterator.map { valueUnsafeRow =>
-      stateTypesEncoder.decodeValue(valueUnsafeRow)
+      stateTypesEncoder.decodeValue(valueUnsafeRow).asInstanceOf[S]
     }
   }
 
@@ -234,7 +233,7 @@ class ListStateImplWithTTL[S](
     val encodedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     val unsafeRowValuesIterator = store.valuesIterator(encodedGroupingKey, stateName)
     unsafeRowValuesIterator.map { valueUnsafeRow =>
-      (stateTypesEncoder.decodeValue(valueUnsafeRow),
+      (stateTypesEncoder.decodeValue(valueUnsafeRow).asInstanceOf[S],
         stateTypesEncoder.decodeTtlExpirationMs(valueUnsafeRow).get)
     }
   }

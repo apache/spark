@@ -272,27 +272,24 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
+        <configuration combine.self = "override">
           <shadedArtifactAttached>false</shadedArtifactAttached>
           <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
-              <include>com.google.protobuf:*</include>
+              <include>org.spark-project.spark:unused</include>
             </includes>
           </artifactSet>
           <relocations>
             <relocation>
-              <pattern>com.google</pattern>
-              <shadedPattern>${spark.shade.packageName}.com.google</shadedPattern>
-              <excludes>
-                <!-- Guava is relocated to ${spark.shade.packageName}.connect.guava -->
-                <exclude>com.google.common.**</exclude>
-              </excludes>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
+            </relocation>
+            <relocation>
+              <pattern>com.google.protobuf</pattern>
+              <shadedPattern>${spark.shade.packageName}.spark_core.protobuf</shadedPattern>
             </relocation>
           </relocations>
-          <transformers>
-            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-          </transformers>
         </configuration>
       </plugin>
        <!--

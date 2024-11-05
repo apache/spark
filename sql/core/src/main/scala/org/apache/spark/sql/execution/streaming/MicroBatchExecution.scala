@@ -24,7 +24,7 @@ import org.apache.spark.internal.{LogKeys, MDC}
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -769,21 +769,25 @@ class MicroBatchExecution(
               }
               newRelation
           }
+          val finalDataPlanWithStream = finalDataPlan transformUp {
+            case l: StreamSourceAwareLogicalPlan => l.withStream(source)
+          }
           // SPARK-40460: overwrite the entry with the new logicalPlan
           // because it might contain the _metadata column. It is a necessary change,
           // in the ProgressReporter, we use the following mapping to get correct streaming metrics:
           // streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
-          mutableNewData.put(source, finalDataPlan)
+          mutableNewData.put(source, finalDataPlanWithStream)
           val maxFields = SQLConf.get.maxToStringFields
-          assert(output.size == finalDataPlan.output.size,
+          assert(output.size == finalDataPlanWithStream.output.size,
             s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
-              s"${truncatedString(finalDataPlan.output, ",", maxFields)}")
+              s"${truncatedString(finalDataPlanWithStream.output, ",", maxFields)}")
 
-          val aliases = output.zip(finalDataPlan.output).map { case (to, from) =>
+          val aliases = output.zip(finalDataPlanWithStream.output).map { case (to, from) =>
             Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
           }
-          Project(aliases, finalDataPlan)
+          Project(aliases, finalDataPlanWithStream)
         }.getOrElse {
+          // Don't track the source node which is known to produce zero rows.
           LocalRelation(output, isStreaming = true)
         }
 
@@ -793,6 +797,7 @@ class MicroBatchExecution(
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
         }.getOrElse {
+          // Don't track the source node which is known to produce zero rows.
           LocalRelation(r.output, isStreaming = true)
         }
     }

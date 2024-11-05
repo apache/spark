@@ -34,7 +34,7 @@ class StatefulProcessorWithSingleValueVar extends RunningCountStatefulProcessor 
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _valueState = getHandle.getValueState[TestClass](
-      "valueState", Encoders.product[TestClass])
+      "valueState", Encoders.product[TestClass], TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -81,7 +81,7 @@ class SessionGroupsStatefulProcessor extends
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _groupsList = getHandle.getListState("groupsList", Encoders.STRING)
+    _groupsList = getHandle.getListState("groupsList", Encoders.STRING, TTLConfig.NONE)
   }
 
   override def handleInputRows(
