@@ -565,24 +565,23 @@ class PySparkHistogramPlotBase:
         assert isinstance(bins, list)
 
         # 1. Make the bucket output flat to:
-        #     +----------+-------+
-        #     |__group_id|buckets|
-        #     +----------+-------+
-        #     |0         |0.0    |
-        #     |0         |0.0    |
-        #     |0         |1.0    |
-        #     |0         |2.0    |
-        #     |0         |3.0    |
-        #     |0         |3.0    |
-        #     |1         |0.0    |
-        #     |1         |1.0    |
-        #     |1         |1.0    |
-        #     |1         |2.0    |
-        #     |1         |1.0    |
-        #     |1         |0.0    |
-        #     +----------+-------+
+        #     +----------+--------+
+        #     |__group_id|__bucket|
+        #     +----------+--------+
+        #     |0         |0       |
+        #     |0         |0       |
+        #     |0         |1       |
+        #     |0         |2       |
+        #     |0         |3       |
+        #     |0         |3       |
+        #     |1         |0       |
+        #     |1         |1       |
+        #     |1         |1       |
+        #     |1         |2       |
+        #     |1         |1       |
+        #     |1         |0       |
+        #     +----------+--------+
         colnames = sdf.columns
-        bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
         # determines which bucket a given value falls into, based on predefined bin intervals
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
@@ -605,22 +604,22 @@ class PySparkHistogramPlotBase:
             .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN())
             .select(
                 F.col("__group_id"),
-                binary_search_for_buckets(F.col("__value")).cast("double").alias("__bucket"),
+                binary_search_for_buckets(F.col("__value")).alias("__bucket"),
             )
         )
 
         # 2. Calculate the count based on each group and bucket.
-        #     +----------+-------+------+
-        #     |__group_id|buckets| count|
-        #     +----------+-------+------+
-        #     |0         |0.0    |2     |
-        #     |0         |1.0    |1     |
-        #     |0         |2.0    |1     |
-        #     |0         |3.0    |2     |
-        #     |1         |0.0    |2     |
-        #     |1         |1.0    |3     |
-        #     |1         |2.0    |1     |
-        #     +----------+-------+------+
+        #     +----------+--------+------+
+        #     |__group_id|__bucket| count|
+        #     +----------+--------+------+
+        #     |0         |0       |2     |
+        #     |0         |1       |1     |
+        #     |0         |2       |1     |
+        #     |0         |3       |2     |
+        #     |1         |0       |2     |
+        #     |1         |1       |3     |
+        #     |1         |2       |1     |
+        #     +----------+--------+------+
         result = (
             output_df.groupby("__group_id", "__bucket")
             .agg(F.count("*").alias("count"))
@@ -632,17 +631,17 @@ class PySparkHistogramPlotBase:
         #     +----------+--------+------+
         #     |__group_id|__bucket| count|
         #     +----------+--------+------+
-        #     |0         |0.0     |2     |
-        #     |0         |1.0     |1     |
-        #     |0         |2.0     |1     |
-        #     |0         |3.0     |2     |
+        #     |0         |0       |2     |
+        #     |0         |1       |1     |
+        #     |0         |2       |1     |
+        #     |0         |3       |2     |
         #     +----------+--------+------+
         #     +----------+--------+------+
         #     |__group_id|__bucket| count|
         #     +----------+--------+------+
-        #     |1         |0.0     |2     |
-        #     |1         |1.0     |3     |
-        #     |1         |2.0     |1     |
+        #     |1         |0       |2     |
+        #     |1         |1       |3     |
+        #     |1         |2       |1     |
         #     +----------+--------+------+
         #
         # to:
@@ -665,7 +664,7 @@ class PySparkHistogramPlotBase:
         #     |0                |
         #     +-----------------+
         output_series = []
-        for i, (input_column_name, bucket_name) in enumerate(zip(colnames, bucket_names)):
+        for i, input_column_name in enumerate(colnames):
             current_bucket_result = result[result["__group_id"] == i]
             # generates a pandas DF with one row for each bin
             # we need this as some of the bins may be empty
