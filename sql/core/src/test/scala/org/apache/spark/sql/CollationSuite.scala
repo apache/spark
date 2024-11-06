@@ -1834,7 +1834,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     })
   }
 
-  test("rewrite with collationkey should be an excludable rule") {
+  test("rewrite with collationkey should be a non-excludable rule") {
     val t1 = "T_1"
     val t2 = "T_2"
     val collation = "UTF8_LCASE"
@@ -1856,12 +1856,12 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         assert(
           collectFirst(queryPlan) {
             case _: HashJoin => ()
-          }.isEmpty
+          }.nonEmpty
         )
         assert(
           collectFirst(queryPlan) {
             case _: SortMergeJoinExec => ()
-          }.nonEmpty
+          }.isEmpty
         )
       }
     }
