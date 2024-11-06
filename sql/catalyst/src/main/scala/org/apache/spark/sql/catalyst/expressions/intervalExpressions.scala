@@ -478,17 +478,26 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def dataType: DataType = YearMonthIntervalType()
 
   override def nullSafeEval(year: Any, month: Any): Any = {
-    Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
-      Math.multiplyExact(year.asInstanceOf[Number].longValue(), MONTHS_PER_YEAR)))
+    try {
+      Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
+        Math.multiplyExact(year.asInstanceOf[Number].longValue(), MONTHS_PER_YEAR)))
+    } catch {
+      case e: ArithmeticException =>
+        throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (years, months) => {
+    nullSafeCodeGen(ctx, ev, (years, months) => {
       val math = classOf[Math].getName.stripSuffix("$")
       s"""
-         |$math.toIntExact(java.lang.Math.addExact($months,
-         |  $math.multiplyExact($years, $MONTHS_PER_YEAR)))
-         |""".stripMargin
+         |try {
+         |  ${ev.value} = $math.toIntExact(
+         |    $math.addExact($months, $math.multiplyExact($years, $MONTHS_PER_YEAR)));
+         |} catch (java.lang.ArithmeticException e) {
+         |  throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", null);
+         |}
+      """.stripMargin
     })
   }
 

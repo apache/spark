@@ -785,10 +785,15 @@ object IntervalUtils extends SparkIntervalUtils {
       secs: Decimal): Long = {
     assert(secs.scale == 6, "Seconds fractional must have 6 digits for microseconds")
     var micros = secs.toUnscaledLong
-    micros = Math.addExact(micros, Math.multiplyExact(days, MICROS_PER_DAY))
-    micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
-    micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
-    micros
+    try {
+      micros = Math.addExact(micros, Math.multiplyExact(days, MICROS_PER_DAY))
+      micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
+      micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
+      micros
+    } catch {
+      case e: ArithmeticException =>
+        throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage)
+    }
   }
 
   def intToYearMonthInterval(v: Int, startField: Byte, endField: Byte): Int = {
