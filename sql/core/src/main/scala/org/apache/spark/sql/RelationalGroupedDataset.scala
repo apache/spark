@@ -22,13 +22,13 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
-import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.ExpressionUtils.{column, generateAlias}
@@ -53,8 +53,8 @@ class RelationalGroupedDataset protected[sql](
     protected[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType)
-  extends api.RelationalGroupedDataset[Dataset] {
-  type RGD = RelationalGroupedDataset
+  extends api.RelationalGroupedDataset {
+
   import RelationalGroupedDataset._
   import df.sparkSession._
 
@@ -119,15 +119,12 @@ class RelationalGroupedDataset protected[sql](
 
   /** @inheritdoc */
   def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
-    val keyEncoder = encoderFor[K]
-    val valueEncoder = encoderFor[T]
-
     val (qe, groupingAttributes) =
       handleGroupingExpression(df.logicalPlan, df.sparkSession, groupingExprs)
 
     new KeyValueGroupedDataset(
-      keyEncoder,
-      valueEncoder,
+      implicitly[Encoder[K]],
+      implicitly[Encoder[T]],
       qe,
       df.logicalPlan.output,
       groupingAttributes)
@@ -477,24 +474,61 @@ class RelationalGroupedDataset protected[sql](
       func: Column,
       outputStructType: StructType,
       outputModeStr: String,
-      timeModeStr: String): DataFrame = {
-    val groupingNamedExpressions = groupingExprs.map {
-      case ne: NamedExpression => ne
-      case other => Alias(other, other.toString)()
+      timeModeStr: String,
+      initialState: RelationalGroupedDataset): DataFrame = {
+    def exprToAttr(expr: Seq[Expression]): Seq[Attribute] = {
+      expr.map {
+        case ne: NamedExpression => ne
+        case other => Alias(other, other.toString)()
+      }.map(_.toAttribute)
     }
-    val groupingAttrs = groupingNamedExpressions.map(_.toAttribute)
+
+    val groupingAttrs = exprToAttr(groupingExprs)
     val outputAttrs = toAttributes(outputStructType)
     val outputMode = InternalOutputModes(outputModeStr)
     val timeMode = TimeModes(timeModeStr)
+    // Place grouping attributes at the front of output so we can
+    // refer to them correctly in the following planning phase;
+    // will perform dedup in the physical operator
+    val leftChild = df.logicalPlan
+    val left = df.sparkSession.sessionState.executePlan(
+      Project(groupingAttrs ++ leftChild.output, leftChild)).analyzed
 
-    val plan = TransformWithStateInPandas(
-      func.expr,
-      groupingAttrs,
-      outputAttrs,
-      outputMode,
-      timeMode,
-      child = df.logicalPlan
-    )
+    val plan: LogicalPlan = if (initialState == null) {
+      TransformWithStateInPandas(
+        func.expr,
+        groupingAttrs.length,
+        outputAttrs,
+        outputMode,
+        timeMode,
+        child = left,
+        hasInitialState = false,
+        /* The followings are dummy variables because hasInitialState is false */
+        initialState = LocalRelation(Seq.empty[Attribute]),
+        initGroupingAttrsLen = 0,
+        initialStateSchema = new StructType()
+      )
+    } else {
+      val initGroupingAttrs = exprToAttr(initialState.groupingExprs)
+
+      val rightChild = initialState.df.logicalPlan
+
+      val right = initialState.df.sparkSession.sessionState.executePlan(
+        Project(initGroupingAttrs ++ rightChild.output, rightChild)).analyzed
+
+      TransformWithStateInPandas(
+        func.expr,
+        groupingAttributesLen = groupingAttrs.length,
+        outputAttrs,
+        outputMode,
+        timeMode,
+        child = left,
+        hasInitialState = true,
+        initialState = right,
+        initGroupingAttrsLen = initGroupingAttrs.length,
+        initialStateSchema = initialState.df.schema
+      )
+    }
     Dataset.ofRows(df.sparkSession, plan)
   }
 

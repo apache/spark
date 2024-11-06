@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -453,7 +453,7 @@ case class Conv(
   override def second: Expression = fromBaseExpr
   override def third: Expression = toBaseExpr
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, IntegerType, IntegerType)
+    Seq(StringTypeWithCollation, IntegerType, IntegerType)
   override def dataType: DataType = first.dataType
   override def nullable: Boolean = true
 
@@ -1114,7 +1114,7 @@ case class Hex(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, BinaryType, StringTypeAnyCollation))
+    Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation))
 
   override def dataType: DataType = child.dataType match {
     case st: StringType => st
@@ -1158,7 +1158,7 @@ case class Unhex(child: Expression, failOnError: Boolean = false)
 
   def this(expr: Expression) = this(expr, false)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
@@ -1293,7 +1293,7 @@ sealed trait BitShiftOperation
  * @param right number of bits to left shift.
  */
 @ExpressionDescription(
-  usage = "base << exp - Bitwise left shift.",
+  usage = "base _FUNC_ exp - Bitwise left shift.",
   examples = """
     Examples:
       > SELECT shiftleft(2, 1);
@@ -1322,7 +1322,7 @@ case class ShiftLeft(left: Expression, right: Expression) extends BitShiftOperat
  * @param right number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "base >> expr - Bitwise (signed) right shift.",
+  usage = "base _FUNC_ expr - Bitwise (signed) right shift.",
   examples = """
     Examples:
       > SELECT shiftright(4, 1);
@@ -1350,7 +1350,7 @@ case class ShiftRight(left: Expression, right: Expression) extends BitShiftOpera
  * @param right the number of bits to right shift.
  */
 @ExpressionDescription(
-  usage = "base >>> expr - Bitwise unsigned right shift.",
+  usage = "base _FUNC_ expr - Bitwise unsigned right shift.",
   examples = """
     Examples:
       > SELECT shiftrightunsigned(4, 1);

@@ -43,7 +43,7 @@ class AlterTableDropPartitionSuite
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
         parameters = Map("name" -> tableName),
         context = ExpectedContext(
           fragment = t,
@@ -61,7 +61,7 @@ class AlterTableDropPartitionSuite
           exception = intercept[SparkUnsupportedOperationException] {
             sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
           },
-          errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+          condition = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
           parameters = Map.empty
         )
       } finally {

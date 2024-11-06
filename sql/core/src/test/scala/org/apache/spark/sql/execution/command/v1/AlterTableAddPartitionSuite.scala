@@ -43,7 +43,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([p1=]) contains an empty partition column value"
         )
@@ -155,7 +155,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
           " PARTITION (id=2) LOCATION 'loc1'")
       }
       checkError(e,
-        errorClass = "PARTITIONS_ALREADY_EXIST",
+        condition = "PARTITIONS_ALREADY_EXIST",
         parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
           "tableName" -> "`ns`.`tbl`"))
 

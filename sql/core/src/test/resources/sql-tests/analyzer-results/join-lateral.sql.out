@@ -3018,6 +3018,53 @@ Project [c1#x, c2#x, t#x]
 
 
 -- !query
+select 1
+from t1 as t_outer
+left join
+ lateral(
+     select b1,b2
+     from
+     (
+         select
+             t2.c1 as b1,
+             1 as b2
+         from t2
+         union
+         select t_outer.c1 as b1,
+                null as b2
+     ) as t_inner
+     where (t_inner.b1 < t_outer.c2  or t_inner.b1 is null)
+      and  t_inner.b1 = t_outer.c1
+     order by t_inner.b1,t_inner.b2 desc limit 1
+ ) as lateral_table
+-- !query analysis
+Project [1 AS 1#x]
++- LateralJoin lateral-subquery#x [c2#x && c1#x && c1#x], LeftOuter
+   :  +- SubqueryAlias lateral_table
+   :     +- GlobalLimit 1
+   :        +- LocalLimit 1
+   :           +- Sort [b1#x ASC NULLS FIRST, b2#x DESC NULLS LAST], true
+   :              +- Project [b1#x, b2#x]
+   :                 +- Filter (((b1#x < outer(c2#x)) OR isnull(b1#x)) AND (b1#x = outer(c1#x)))
+   :                    +- SubqueryAlias t_inner
+   :                       +- Distinct
+   :                          +- Union false, false
+   :                             :- Project [c1#x AS b1#x, 1 AS b2#x]
+   :                             :  +- SubqueryAlias spark_catalog.default.t2
+   :                             :     +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])
+   :                             :        +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+   :                             :           +- LocalRelation [col1#x, col2#x]
+   :                             +- Project [b1#x, cast(b2#x as int) AS b2#x]
+   :                                +- Project [outer(c1#x) AS b1#x, null AS b2#x]
+   :                                   +- OneRowRelation
+   +- SubqueryAlias t_outer
+      +- SubqueryAlias spark_catalog.default.t1
+         +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])
+            +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+               +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 DROP VIEW t1
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`t1`, false, true, false

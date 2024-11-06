@@ -194,25 +194,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select sort_array(array('b', 'd'), cast(NULL as boolean))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
-    "inputType" : "\"BOOLEAN\"",
-    "paramIndex" : "second",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"sort_array(array(b, d), CAST(NULL AS BOOLEAN))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 57,
-    "fragment" : "sort_array(array('b', 'd'), cast(NULL as boolean))"
-  } ]
-}
+Project [sort_array(array(b, d), cast(null as boolean)) AS sort_array(array(b, d), CAST(NULL AS BOOLEAN))#x]
++- OneRowRelation
 
 
 -- !query

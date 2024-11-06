@@ -72,7 +72,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
               newProject.copyTagsFrom(p)
               (newExprs, newProject)
 
-            case a @ Aggregate(groupExprs, aggExprs, child) =>
+            case a @ Aggregate(groupExprs, aggExprs, child, _) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
                 // All the missing attributes are grouping expressions, valid case.
                 (newExprs,
@@ -146,7 +146,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
         case GetColumnByOrdinal(ordinal, _) =>
           val attrCandidates = getAttrCandidates()
-          assert(ordinal >= 0 && ordinal < attrCandidates.length)
+          if (ordinal < 0 || ordinal >= attrCandidates.length) {
+            throw QueryCompilationErrors.ordinalOutOfBoundsError(
+              ordinal,
+              attrCandidates
+            )
+          }
           attrCandidates(ordinal)
 
         case GetViewColumnByNameAndOrdinal(

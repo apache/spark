@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.catalyst.xml.{StaxXmlParser, XmlOptions}
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -54,7 +55,9 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @Stable
 class DataFrameReader private[sql](sparkSession: SparkSession)
-  extends api.DataFrameReader[Dataset] {
+  extends api.DataFrameReader {
+  override type DS[U] = Dataset[U]
+
   format(sparkSession.sessionState.conf.defaultDataSourceName)
 
   /** @inheritdoc */
@@ -174,30 +177,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   @scala.annotation.varargs
   override def json(paths: String*): DataFrame = super.json(paths: _*)
 
-  /**
-   * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
-   * Lines text format or newline-delimited JSON</a>) and returns the result as
-   * a `DataFrame`.
-   *
-   * Unless the schema is specified using `schema` function, this function goes through the
-   * input once to determine the input schema.
-   *
-   * @param jsonRDD input RDD with one JSON object per record
-   * @since 1.4.0
-   */
+  /** @inheritdoc */
   @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: JavaRDD[String]): DataFrame = json(jsonRDD.rdd)
 
-  /**
-   * Loads an `RDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
-   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
-   *
-   * Unless the schema is specified using `schema` function, this function goes through the
-   * input once to determine the input schema.
-   *
-   * @param jsonRDD input RDD with one JSON object per record
-   * @since 1.4.0
-   */
+  /** @inheritdoc */
   @deprecated("Use json(Dataset[String]) instead.", "2.2.0")
   def json(jsonRDD: RDD[String]): DataFrame = {
     json(sparkSession.createDataset(jsonRDD)(Encoders.STRING))

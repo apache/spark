@@ -114,8 +114,8 @@ private[connect] object ErrorUtils extends Logging {
         case sparkThrowable: SparkThrowable =>
           val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
             .newBuilder()
-          if (sparkThrowable.getErrorClass != null) {
-            sparkThrowableBuilder.setErrorClass(sparkThrowable.getErrorClass)
+          if (sparkThrowable.getCondition != null) {
+            sparkThrowableBuilder.setErrorClass(sparkThrowable.getCondition)
           }
           for (queryCtx <- sparkThrowable.getQueryContext) {
             val builder = FetchErrorDetailsResponse.QueryContext
@@ -193,7 +193,7 @@ private[connect] object ErrorUtils extends Logging {
         if (state != null && state.nonEmpty) {
           errorInfo.putMetadata("sqlState", state)
         }
-        val errorClass = e.getErrorClass
+        val errorClass = e.getCondition
         if (errorClass != null && errorClass.nonEmpty) {
           val messageParameters = JsonMethods.compact(
             JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
@@ -205,7 +205,9 @@ private[connect] object ErrorUtils extends Logging {
       case _ =>
     }
 
-    if (sessionHolderOpt.exists(_.session.conf.get(Connect.CONNECT_ENRICH_ERROR_ENABLED))) {
+    val enrichErrorEnabled = sessionHolderOpt.exists(
+      _.session.sessionState.conf.getConf(Connect.CONNECT_ENRICH_ERROR_ENABLED))
+    if (enrichErrorEnabled) {
       // Generate a new unique key for this exception.
       val errorId = UUID.randomUUID().toString
 
@@ -216,9 +218,10 @@ private[connect] object ErrorUtils extends Logging {
     }
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
+    val stackTraceEnabled = sessionHolderOpt.exists(
+      _.session.sessionState.conf.getConf(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED))
     val withStackTrace =
-      if (sessionHolderOpt.exists(
-          _.session.conf.get(SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED) && stackTrace.nonEmpty)) {
+      if (stackTraceEnabled && stackTrace.nonEmpty) {
         val maxSize = Math.min(
           SparkEnv.get.conf.get(Connect.CONNECT_JVM_STACK_TRACE_MAX_SIZE),
           maxMetadataSize)

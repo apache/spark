@@ -26,7 +26,6 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.util.ArrayImplicits._
 
-
 /**
  * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
  * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
@@ -35,13 +34,14 @@ import org.apache.spark.util.ArrayImplicits._
  * The default constructor is private. User should use either [[MetadataBuilder]] or
  * `Metadata.fromJson()` to create Metadata instances.
  *
- * @param map an immutable map that stores the data
+ * @param map
+ *   an immutable map that stores the data
  *
  * @since 1.3.0
  */
 @Stable
 sealed class Metadata private[types] (private[types] val map: Map[String, Any])
-  extends Serializable {
+    extends Serializable {
 
   /** No-arg constructor for kryo. */
   protected def this() = this(null)
@@ -173,7 +173,8 @@ object Metadata {
               builder.putStringArray(key, value.asInstanceOf[List[JString]].map(_.s).toArray)
             case _: JObject =>
               builder.putMetadataArray(
-                key, value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
+                key,
+                value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
             case other =>
               throw DataTypeErrors.unsupportedArrayTypeError(other.getClass)
           }

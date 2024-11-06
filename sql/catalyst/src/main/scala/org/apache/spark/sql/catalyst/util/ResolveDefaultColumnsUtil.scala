@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
@@ -412,8 +412,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
             case _: ExprLiteral | _: Cast => expr
           }
         } catch {
-          case _: AnalysisException | _: MatchError =>
-            throw QueryCompilationErrors.failedToParseExistenceDefaultAsLiteral(field.name, text)
+          // AnalysisException thrown from analyze is already formatted, throw it directly.
+          case ae: AnalysisException => throw ae
+          case _: MatchError =>
+            throw SparkException.internalError(s"parse existence default as literal err," +
+            s" field name: ${field.name}, value: $text")
         }
         // The expression should be a literal value by this point, possibly wrapped in a cast
         // function. This is enforced by the execution of commands that assign default values.

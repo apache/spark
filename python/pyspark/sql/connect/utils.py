@@ -22,7 +22,7 @@ from pyspark.errors import PySparkImportError
 
 
 def check_dependencies(mod_name: str) -> None:
-    if mod_name == "__main__":
+    if mod_name == "__main__" or mod_name == "pyspark.sql.connect.utils":
         from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
         if not should_test_connect:

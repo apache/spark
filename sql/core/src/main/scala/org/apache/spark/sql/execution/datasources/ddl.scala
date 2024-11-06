@@ -115,7 +115,7 @@ case class CreateTempViewUsing(
       }.logicalPlan
 
     if (global) {
-      val db = sparkSession.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(tableIdent.table, Option(db))
       val viewDefinition = createTemporaryViewRelation(
         viewIdent,

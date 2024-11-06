@@ -266,7 +266,7 @@ class OpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
   /**
    * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
    */
-  private def hashcode(h: Int): Int = Hashing.murmur3_32().hashInt(h).asInt()
+  private def hashcode(h: Int): Int = Hashing.murmur3_32_fixed().hashInt(h).asInt()
 
   private def nextPowerOf2(n: Int): Int = {
     if (n == 0) {

@@ -186,7 +186,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       assert(false, "dropDatabase should throw HiveException")
     }
     checkError(ex,
-      errorClass = "SCHEMA_NOT_EMPTY",
+      condition = "SCHEMA_NOT_EMPTY",
       parameters = Map("schemaName" -> "`temporary`"))
 
     client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
@@ -485,7 +485,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
         client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
       }
       checkError(e,
-        errorClass = "PARTITIONS_ALREADY_EXIST",
+        condition = "PARTITIONS_ALREADY_EXIST",
         parameters = Map("partitionList" -> "PARTITION (`key1` = 101, `key2` = 102)",
           "tableName" -> "`default`.`src_part`"))
     } finally {
@@ -577,7 +577,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
         exception = intercept[AnalysisException] {
           versionSpark.table("mv1").collect()
         },
-        errorClass = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
+        condition = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
         parameters = Map(
           "tableName" -> "`mv1`",
           "tableType" -> "materialized view"

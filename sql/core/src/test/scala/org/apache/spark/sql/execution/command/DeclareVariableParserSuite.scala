@@ -179,7 +179,7 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
       exception = intercept[ParseException] {
         parsePlan("DECLARE VARIABLE IF NOT EXISTS var1 INT")
       },
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'EXISTS'", "hint" -> "")
     )
 
@@ -189,7 +189,7 @@ class DeclareVariableParserSuite extends AnalysisTest with SharedSparkSession {
       exception = intercept[ParseException] {
         parsePlan(sqlText)
       },
-      errorClass = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
+      condition = "INVALID_SQL_SYNTAX.VARIABLE_TYPE_OR_DEFAULT_REQUIRED",
       parameters = Map.empty,
       context = ExpectedContext(fragment = sqlText, start = 0, stop = 20)
     )

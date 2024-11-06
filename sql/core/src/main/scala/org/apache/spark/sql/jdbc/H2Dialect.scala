@@ -27,8 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -74,7 +73,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
-    case StringType => Option(JdbcType("CLOB", Types.CLOB))
+    case _: StringType => Option(JdbcType("CLOB", Types.CLOB))
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
     case t: DecimalType => Some(
@@ -200,7 +199,8 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
       e: Throwable,
       errorClass: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case exception: SQLException =>
         // Error codes are from https://www.h2database.com/javadoc/org/h2/api/ErrorCode.html
@@ -244,7 +244,7 @@ private[sql] case class H2Dialect() extends JdbcDialect with NoLegacyJDBCError {
         }
       case _ => // do nothing
     }
-    super.classifyException(e, errorClass, messageParameters, description)
+    super.classifyException(e, errorClass, messageParameters, description, isRuntime)
   }
 
   override def compileExpression(expr: Expression): Option[String] = {

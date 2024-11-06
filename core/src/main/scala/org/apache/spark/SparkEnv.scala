@@ -73,7 +73,7 @@ class SparkEnv (
 
   // We initialize the ShuffleManager later in SparkContext and Executor to allow
   // user jars to define custom ShuffleManagers.
-  private var _shuffleManager: ShuffleManager = _
+  @volatile private var _shuffleManager: ShuffleManager = _
 
   def shuffleManager: ShuffleManager = _shuffleManager
 

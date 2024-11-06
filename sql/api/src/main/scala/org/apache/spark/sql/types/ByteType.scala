@@ -25,7 +25,8 @@ import org.apache.spark.annotation.Stable
  * @since 1.3.0
  */
 @Stable
-class ByteType private() extends IntegralType {
+class ByteType private () extends IntegralType {
+
   /**
    * The default size of a value of the ByteType is 1 byte.
    */
@@ -35,7 +36,6 @@ class ByteType private() extends IntegralType {
 
   private[spark] override def asNullable: ByteType = this
 }
-
 
 /**
  * @since 1.3.0

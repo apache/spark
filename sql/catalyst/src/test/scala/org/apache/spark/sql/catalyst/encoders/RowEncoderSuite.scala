@@ -279,7 +279,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     // Check the error class only since the parameters may change depending on how we are running
     // this test case.
     val exception = intercept[SparkRuntimeException](toRow(encoder, null))
-    assert(exception.getErrorClass == "NOT_NULL_ASSERT_VIOLATION")
+    assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("RowEncoder should validate external type") {

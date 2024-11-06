@@ -61,6 +61,7 @@ if typing.TYPE_CHECKING:
         ArrowGroupedMapUDFType,
         ArrowCogroupedMapUDFType,
         PandasGroupedMapUDFTransformWithStateType,
+        PandasGroupedMapUDFTransformWithStateInitStateType,
     )
     from pyspark.sql._typing import (
         SQLArrowBatchedUDFType,
@@ -116,22 +117,6 @@ class VersionUtils:
                 + " version string, but it could not find the major and minor"
                 + " version numbers."
             )
-
-
-class LogUtils:
-    """
-    Utils for querying structured Spark logs with Spark SQL.
-    """
-
-    LOG_SCHEMA = (
-        "ts TIMESTAMP, "
-        "level STRING, "
-        "msg STRING, "
-        "context map<STRING, STRING>, "
-        "exception STRUCT<class STRING, msg STRING, "
-        "stacktrace ARRAY<STRUCT<class STRING, method STRING, file STRING,line STRING>>>,"
-        "logger STRING"
-    )
 
 
 def fail_on_stopiteration(f: Callable) -> Callable:
@@ -261,10 +246,6 @@ def try_simplify_traceback(tb: TracebackType) -> Optional[TracebackType]:
     """
     if "pypy" in platform.python_implementation().lower():
         # Traceback modification is not supported with PyPy in PySpark.
-        return None
-    if sys.version_info[:2] < (3, 7):
-        # Traceback creation is not supported Python < 3.7.
-        # See https://bugs.python.org/issue30579.
         return None
 
     import pyspark
@@ -587,7 +568,9 @@ class PythonEvalType:
     SQL_GROUPED_MAP_ARROW_UDF: "ArrowGroupedMapUDFType" = 209
     SQL_COGROUPED_MAP_ARROW_UDF: "ArrowCogroupedMapUDFType" = 210
     SQL_TRANSFORM_WITH_STATE_PANDAS_UDF: "PandasGroupedMapUDFTransformWithStateType" = 211
-
+    SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF: "PandasGroupedMapUDFTransformWithStateInitStateType" = (  # noqa: E501
+        212
+    )
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
 
@@ -791,7 +774,7 @@ def is_remote_only() -> bool:
 
 
 if __name__ == "__main__":
-    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 7):
+    if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 9):
         import doctest
         import pyspark.util
         from pyspark.core.context import SparkContext

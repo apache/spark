@@ -176,7 +176,7 @@ class KafkaTestUtils(
     }
 
     kdc.getKrb5conf.delete()
-    Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    Files.asCharSink(kdc.getKrb5conf, StandardCharsets.UTF_8).write(krb5confStr)
     logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
@@ -240,7 +240,7 @@ class KafkaTestUtils(
       |  principal="$kafkaServerUser@$realm";
       |};
       """.stripMargin.trim
-    Files.write(content, file, StandardCharsets.UTF_8)
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(content)
     logDebug(s"Created JAAS file: ${file.getPath}")
     logDebug(s"JAAS file content: $content")
     file.getAbsolutePath()

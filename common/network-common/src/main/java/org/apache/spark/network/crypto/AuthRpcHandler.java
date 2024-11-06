@@ -132,7 +132,8 @@ class AuthRpcHandler extends AbstractAuthRpcHandler {
         try {
           engine.close();
         } catch (Exception e) {
-          throw Throwables.propagate(e);
+          Throwables.throwIfUnchecked(e);
+          throw new RuntimeException(e);
         }
       }
     }

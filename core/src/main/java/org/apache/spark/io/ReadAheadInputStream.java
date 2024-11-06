@@ -120,7 +120,8 @@ public class ReadAheadInputStream extends InputStream {
 
   private void checkReadException() throws IOException {
     if (readAborted) {
-      Throwables.propagateIfPossible(readException, IOException.class);
+      Throwables.throwIfInstanceOf(readException, IOException.class);
+      Throwables.throwIfUnchecked(readException);
       throw new IOException(readException);
     }
   }

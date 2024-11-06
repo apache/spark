@@ -32,7 +32,7 @@ class ValidateExternalTypeSuite extends QueryTest with SharedSparkSession {
           )
         )), new StructType().add("f3", StringType)).show()
       }.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "INVALID_EXTERNAL_TYPE",
+      condition = "INVALID_EXTERNAL_TYPE",
       parameters = Map(
         ("externalType", "[B"),
         ("type", "\"STRING\""),

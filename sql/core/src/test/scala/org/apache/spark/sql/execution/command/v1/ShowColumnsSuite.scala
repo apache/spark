@@ -38,7 +38,7 @@ trait ShowColumnsSuiteBase extends command.ShowColumnsSuiteBase {
         exception = intercept[AnalysisException] {
           sql("SHOW COLUMNS IN tbl FROM a.b.c")
         },
-        errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+        condition = "REQUIRES_SINGLE_PART_NAMESPACE",
         parameters = Map(
           "sessionCatalog" -> catalog,
           "namespace" -> "`a`.`b`.`c`"

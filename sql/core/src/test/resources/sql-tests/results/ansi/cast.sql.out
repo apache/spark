@@ -9,7 +9,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.23'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -34,7 +33,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.23'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -59,7 +57,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'-4.56'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -84,7 +81,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'-4.56'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -109,7 +105,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -134,7 +129,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -159,7 +153,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"FLOAT\""
@@ -184,7 +177,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DOUBLE\""
@@ -209,7 +201,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1234567890123'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -234,7 +225,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'12345678901234567890123'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -259,7 +249,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -284,7 +273,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -309,7 +297,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"FLOAT\""
@@ -334,7 +321,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DOUBLE\""
@@ -375,7 +361,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -400,7 +385,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -425,7 +409,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"FLOAT\""
@@ -450,7 +433,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DOUBLE\""
@@ -483,7 +465,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'-2147483649'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -516,7 +497,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'2147483648'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -549,7 +529,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'-9223372036854775809'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -582,7 +561,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'9223372036854775808'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -973,7 +951,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1中文'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"TINYINT\""
@@ -998,7 +975,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1中文'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"SMALLINT\""
@@ -1023,7 +999,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1中文'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -1048,7 +1023,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'中文1'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -1073,7 +1047,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1中文'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -1116,7 +1089,6 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'\t\n xyz \t\r'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BOOLEAN\""
@@ -1174,7 +1146,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'xyz'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DECIMAL(4,2)\""
@@ -1207,7 +1178,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"DATE\""
@@ -1240,7 +1210,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"TIMESTAMP\""
@@ -1273,7 +1242,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"TIMESTAMP_NTZ\""
@@ -1298,7 +1266,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "Infinity",
     "sourceType" : "\"DOUBLE\"",
     "targetType" : "\"TIMESTAMP\""
@@ -1323,7 +1290,6 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "Infinity",
     "sourceType" : "\"DOUBLE\"",
     "targetType" : "\"TIMESTAMP\""
@@ -1380,7 +1346,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL HOUR TO SECOND\"",
     "targetType" : "\"SMALLINT\"",
     "value" : "INTERVAL '23:59:59' HOUR TO SECOND"
@@ -1414,7 +1379,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL MONTH\"",
     "targetType" : "\"TINYINT\"",
     "value" : "INTERVAL '-1000' MONTH"
@@ -1432,7 +1396,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INTERVAL SECOND\"",
     "targetType" : "\"SMALLINT\"",
     "value" : "INTERVAL '1000000' SECOND"
@@ -1522,7 +1485,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"INT\"",
     "targetType" : "\"INTERVAL YEAR\"",
     "value" : "2147483647"
@@ -1540,7 +1502,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INTERVAL DAY\"",
     "value" : "-9223372036854775808L"
@@ -1671,7 +1632,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.23'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -1696,7 +1656,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'abc'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -1721,7 +1680,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'12345678901234567890123'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
@@ -1746,7 +1704,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "''",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -1779,7 +1736,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'123.a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -1927,7 +1883,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'1.23'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -1952,7 +1907,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INT\"",
     "value" : "2147483648L"
@@ -1970,7 +1924,6 @@ org.apache.spark.SparkArithmeticException
   "errorClass" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "sourceType" : "\"BIGINT\"",
     "targetType" : "\"INT\"",
     "value" : "2147483648L"

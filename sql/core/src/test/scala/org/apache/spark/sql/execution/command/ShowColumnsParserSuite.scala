@@ -47,7 +47,7 @@ class ShowColumnsParserSuite extends AnalysisTest {
   test("illegal characters in unquoted identifier") {
     checkError(
       exception = parseException(parsePlan)("SHOW COLUMNS IN t FROM test-db"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       sqlState = "42602",
       parameters = Map("ident" -> "test-db")
     )

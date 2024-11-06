@@ -82,7 +82,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       exception = intercept[SparkException] {
         Invoke(inputObject, "zeroArgNotExistMethod", IntegerType).eval(inputRow)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         ("Couldn't find method zeroArgNotExistMethod with arguments " +
           "() on class java.lang.Object.")
@@ -98,7 +98,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Seq(Literal.fromObject(UTF8String.fromString("dummyInputString"))),
           Seq(StringType)).eval(inputRow)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" ->
         ("Couldn't find method oneArgNotExistMethod with arguments " +
           "(class org.apache.spark.unsafe.types.UTF8String) on class java.lang.Object.")
@@ -417,7 +417,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         exception = intercept[SparkRuntimeException] {
           testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
         },
-        errorClass = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
+        condition = "CLASS_UNSUPPORTED_BY_MAP_OBJECTS",
         parameters = Map("cls" -> "scala.collection.Map"))
     }
   }
@@ -588,7 +588,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         DoubleType,
         DoubleType),
       inputRow = InternalRow.fromSeq(Seq(Row(1))),
-      errorClass = "INVALID_EXTERNAL_TYPE",
+      condition = "INVALID_EXTERNAL_TYPE",
       parameters = Map[String, String](
         "externalType" -> "java.lang.Integer",
         "type" -> "\"DOUBLE\"",
@@ -755,6 +755,55 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val genCode = StaticInvoke(TestFun.getClass, IntegerType, "foo", arguments).genCode(ctx)
     assert(!genCode.code.toString.contains("boxedResult"))
   }
+
+  test("StaticInvoke call return `any` method") {
+    val cls = TestStaticInvokeReturnAny.getClass
+    Seq((0, IntegerType, true), (1, IntegerType, true), (2, IntegerType, false)).foreach {
+      case (arg, argDataType, returnNullable) =>
+        val dataType = arg match {
+          case 0 => ObjectType(classOf[java.lang.Integer])
+          case 1 => ShortType
+          case 2 => ObjectType(classOf[java.lang.Long])
+        }
+        val arguments = Seq(Literal(arg, argDataType))
+        val inputTypes = Seq(IntegerType)
+        val expected = arg match {
+          case 0 => java.lang.Integer.valueOf(1)
+          case 1 => 0.toShort
+          case 2 => java.lang.Long.valueOf(2)
+        }
+        val inputRow = InternalRow.fromSeq(Seq(arg))
+        checkObjectExprEvaluation(
+          StaticInvoke(cls, dataType, "func", arguments, inputTypes,
+            returnNullable = returnNullable),
+          expected,
+          inputRow)
+    }
+  }
+
+  test("Invoke call the method that throw Exception") {
+    val targetObject = new TestThrowExceptionMethod
+    val funcClass = classOf[TestThrowExceptionMethod]
+    val funcObj = Literal.create(targetObject, ObjectType(funcClass))
+
+    val inputInt = Seq(BoundReference(0, IntegerType, nullable = true))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "invoke", IntegerType, inputInt),
+      2,
+      InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+  }
+
+  test("StaticInvoke call the method that throw Exception") {
+    val funcClass = classOf[TestThrowExceptionMethod]
+
+    val inputInt = Seq(BoundReference(0, IntegerType, nullable = true))
+
+    checkObjectExprEvaluation(
+      StaticInvoke(funcClass, IntegerType, "staticInvoke", inputInt),
+      2,
+      InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+  }
 }
 
 class TestBean extends Serializable {
@@ -790,3 +839,10 @@ case object TestFun {
   def foo(left: Int, right: Int): Int = left + right
 }
 
+object TestStaticInvokeReturnAny {
+  def func(input: Int): Any = input match {
+    case 0 => java.lang.Integer.valueOf(1)
+    case 1 => 0.toShort
+    case 2 => java.lang.Long.valueOf(2)
+  }
+}

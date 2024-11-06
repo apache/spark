@@ -31,7 +31,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, SparkConnectServiceGrpc}
 import org.apache.spark.connect.proto.SparkConnectServiceGrpc.AsyncService
@@ -345,7 +345,7 @@ object SparkConnectService extends Logging {
     val kvStore = sc.statusStore.store.asInstanceOf[ElementTrackingStore]
     listener = new SparkConnectServerListener(kvStore, sc.conf)
     sc.listenerBus.addToStatusQueue(listener)
-    uiTab = if (sc.getConf.get(UI_ENABLED)) {
+    uiTab = if (sc.conf.get(UI_ENABLED)) {
       Some(
         new SparkConnectServerTab(
           new SparkConnectServerAppStatusStore(kvStore),
@@ -420,7 +420,7 @@ object SparkConnectService extends Logging {
 
     started = true
     stopped = false
-    postSparkConnectServiceStarted(sc)
+    postSparkConnectServiceStarted()
   }
 
   def stop(timeout: Option[Long] = None, unit: Option[TimeUnit] = None): Unit = synchronized {
@@ -456,13 +456,9 @@ object SparkConnectService extends Logging {
    * Post the event that the Spark Connect service has started. This is expected to be called only
    * once after the service is ready.
    */
-  private def postSparkConnectServiceStarted(sc: SparkContext): Unit = {
+  private def postSparkConnectServiceStarted(): Unit = {
     postServiceEvent(isa =>
-      SparkListenerConnectServiceStarted(
-        hostAddress,
-        isa.getPort,
-        sc.conf,
-        System.currentTimeMillis()))
+      SparkListenerConnectServiceStarted(hostAddress, isa.getPort, System.currentTimeMillis()))
   }
 
   /**
@@ -521,15 +517,12 @@ object SparkConnectService extends Logging {
  *   The host address of the started Spark Connect service.
  * @param bindingPort:
  *   The binding port of the started Spark Connect service.
- * @param sparkConf:
- *   The SparkConf of the active SparkContext that associated with the service.
  * @param eventTime:
  *   The time in ms when the event was generated.
  */
 case class SparkListenerConnectServiceStarted(
     hostAddress: String,
     bindingPort: Int,
-    sparkConf: SparkConf,
     eventTime: Long)
     extends SparkListenerEvent
 

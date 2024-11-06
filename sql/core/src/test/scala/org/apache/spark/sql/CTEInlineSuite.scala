@@ -511,7 +511,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df1, Row(2, 2) :: Nil)
       df1.queryExecution.analyzed match {
-        case Aggregate(_, _, WithCTE(_, cteDefs)) => assert(cteDefs.length == 2)
+        case Aggregate(_, _, WithCTE(_, cteDefs), _) => assert(cteDefs.length == 2)
         case other => fail(s"Expect pattern Aggregate(WithCTE(_)) but got $other")
       }
 
@@ -530,7 +530,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df2, Row(2, 2) :: Nil)
       df2.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_, cteDefs)), _, _, _)) =>
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_, cteDefs)), _, _, _), _) =>
           assert(cteDefs.length == 1)
         case other => fail(s"Expect pattern Aggregate(Join(_, WithCTE(_))) but got $other")
       }
@@ -560,7 +560,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df3, Row(4, 4) :: Nil)
       df3.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_: Union, cteDefs)), _, _, _)) =>
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, WithCTE(_: Union, cteDefs)), _, _, _), _) =>
           assert(cteDefs.length == 2)
         case other => fail(
           s"Expect pattern Aggregate(Join(_, (WithCTE(Union(_, _))))) but got $other")
@@ -585,7 +585,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df4, Row(4, 4) :: Nil)
       df4.queryExecution.analyzed match {
-        case Aggregate(_, _, Join(_, SubqueryAlias(_, Union(children, _, _)), _, _, _))
+        case Aggregate(_, _, Join(_, SubqueryAlias(_, Union(children, _, _)), _, _, _), _)
           if children.head.find(_.isInstanceOf[WithCTE]).isDefined =>
           assert(
             children.head.collect {
@@ -618,7 +618,7 @@ abstract class CTEInlineSuiteBase
          """.stripMargin)
       checkAnswer(df5, Row(4, 4) :: Nil)
       df5.queryExecution.analyzed match {
-        case Aggregate(_, _, WithCTE(_, cteDefs)) => assert(cteDefs.length == 2)
+        case Aggregate(_, _, WithCTE(_, cteDefs), _) => assert(cteDefs.length == 2)
         case other => fail(s"Expect pattern Aggregate(WithCTE(_)) but got $other")
       }
 
@@ -713,6 +713,27 @@ abstract class CTEInlineSuiteBase
         |SELECT l.col FROM v2 l JOIN v2 r ON l.col = r.col
         |""".stripMargin)
     checkAnswer(df, Row(1))
+  }
+
+  test("SPARK-49816: should only update out-going-ref-count for referenced outer CTE relation") {
+    withView("v") {
+      sql(
+        """
+          |WITH
+          |t1 AS (SELECT 1 col),
+          |t2 AS (SELECT * FROM t1)
+          |SELECT * FROM t2
+          |""".stripMargin).createTempView("v")
+      // r1 is un-referenced, but it should not decrease the ref count of t2 inside view v.
+      val df = sql(
+        """
+          |WITH
+          |r1 AS (SELECT * FROM v),
+          |r2 AS (SELECT * FROM v)
+          |SELECT * FROM r2
+          |""".stripMargin)
+      checkAnswer(df, Row(1))
+    }
   }
 }
 

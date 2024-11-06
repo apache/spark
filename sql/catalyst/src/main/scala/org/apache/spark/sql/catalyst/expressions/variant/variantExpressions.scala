@@ -23,8 +23,7 @@ import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, GeneratorBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
@@ -32,16 +31,17 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.json.JsonInferSchema
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, VARIANT_GET}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, QuotingUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
-import org.apache.spark.types.variant.VariantUtil.{IntervalFields, Type}
+import org.apache.spark.types.variant.VariantUtil.Type
 import org.apache.spark.unsafe.types._
 
 
@@ -66,7 +66,7 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     inputTypes :+ BooleanType :+ BooleanType,
     returnNullable = !failOnError)
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeAnyCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
 
   override def dataType: DataType = VariantType
 
@@ -115,6 +115,73 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
 
   override protected def withNewChildInternal(newChild: Expression): IsVariantNull =
     copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Convert a nested input (array/map/struct) into a variant where maps and structs are converted to variant objects which are unordered unlike SQL structs. Input maps can only have string keys.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
+       {"a":1,"b":2}
+      > SELECT _FUNC_(array(1, 2, 3));
+       [1,2,3]
+      > SELECT _FUNC_(array(named_struct('a', 1)));
+       [{"a":1}]
+      > SELECT _FUNC_(array(map("a", 2)));
+       [{"a":2}]
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit
+case class ToVariantObject(child: Expression)
+    extends UnaryExpression
+    with NullIntolerant
+    with QueryErrorsBase {
+
+  override val dataType: DataType = VariantType
+
+  // Only accept nested types at the root but any types can be nested inside.
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val checkResult: Boolean = child.dataType match {
+      case _: StructType | _: ArrayType | _: MapType =>
+        VariantGet.checkDataType(child.dataType, allowStructsAndMaps = true)
+      case _ => false
+    }
+    if (!checkResult) {
+      DataTypeMismatch(
+        errorSubClass = "CAST_WITHOUT_SUGGESTION",
+        messageParameters =
+          Map("srcType" -> toSQLType(child.dataType), "targetType" -> toSQLType(VariantType)))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def prettyName: String = "to_variant_object"
+
+  override protected def withNewChildInternal(newChild: Expression): ToVariantObject =
+    copy(child = newChild)
+
+  protected override def nullSafeEval(input: Any): Any =
+    VariantExpressionEvalUtils.castToVariant(input, child.dataType)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childCode = child.genCode(ctx)
+    val cls = variant.VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    val fromArg = ctx.addReferenceObj("from", child.dataType)
+    val javaType = JavaCode.javaType(VariantType)
+    val code =
+      code"""
+        ${childCode.code}
+        boolean ${ev.isNull} = ${childCode.isNull};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
+        if (!${childCode.isNull}) {
+          ${ev.value} = $cls.castToVariant(${childCode.value}, $fromArg);
+        }
+      """
+    ev.copy(code = code)
+  }
 }
 
 object VariantPathParser extends RegexParsers {
@@ -204,7 +271,8 @@ case class VariantGet(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(VARIANT_GET)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType, StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(VariantType, StringTypeWithCollation)
 
   override def prettyName: String = if (failOnError) "variant_get" else "try_variant_get"
 
@@ -260,13 +328,16 @@ case object VariantGet {
    * Returns whether a data type can be cast into/from variant. For scalar types, we allow a subset
    * of them. For nested types, we reject map types with a non-string key type.
    */
-  def checkDataType(dataType: DataType): Boolean = dataType match {
+  def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
+    dataType match {
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
-        VariantType | _: DayTimeIntervalType | _: YearMonthIntervalType =>
+        VariantType =>
       true
-    case ArrayType(elementType, _) => checkDataType(elementType)
-    case MapType(_: StringType, valueType, _) => checkDataType(valueType)
-    case StructType(fields) => fields.forall(f => checkDataType(f.dataType))
+    case ArrayType(elementType, _) => checkDataType(elementType, allowStructsAndMaps)
+    case MapType(_: StringType, valueType, _) if allowStructsAndMaps =>
+        checkDataType(valueType, allowStructsAndMaps)
+    case StructType(fields) if allowStructsAndMaps =>
+        fields.forall(f => checkDataType(f.dataType, allowStructsAndMaps))
     case _ => false
   }
 
@@ -356,12 +427,6 @@ case object VariantGet {
           case Type.TIMESTAMP_NTZ => Literal(v.getLong, TimestampNTZType)
           case Type.FLOAT => Literal(v.getFloat, FloatType)
           case Type.BINARY => Literal(v.getBinary, BinaryType)
-          case Type.YEAR_MONTH_INTERVAL =>
-            val fields: IntervalFields = v.getYearMonthIntervalFields
-            Literal(v.getLong.toInt, YearMonthIntervalType(fields.startField, fields.endField))
-          case Type.DAY_TIME_INTERVAL =>
-            val fields: IntervalFields = v.getDayTimeIntervalFields
-            Literal(v.getLong, DayTimeIntervalType(fields.startField, fields.endField))
           // We have handled other cases and should never reach here. This case is only intended
           // to by pass the compiler exhaustiveness check.
           case _ => throw new SparkRuntimeException(
@@ -546,21 +611,6 @@ object VariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(true)
 // scalastyle:on line.size.limit
 object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(false)
 
-// scalastyle:off line.size.limit line.contains.tab
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It ignores any input that is not a variant array/object, including SQL NULL, variant null, and any other variant values.",
-  examples = """
-    Examples:
-      > SELECT * from _FUNC_(parse_json('["hello", "world"]'));
-       0	NULL	"hello"
-       1	NULL	"world"
-      > SELECT * from _FUNC_(parse_json('{"a": true, "b": 3.14}'));
-       0	a	true
-       1	b	3.14
-  """,
-  since = "4.0.0",
-  group = "variant_funcs")
-// scalastyle:on line.size.limit line.contains.tab
 case class VariantExplode(child: Expression) extends UnaryExpression with Generator
   with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
@@ -592,6 +642,53 @@ case class VariantExplode(child: Expression) extends UnaryExpression with Genera
       .add("key", SQLConf.get.defaultStringType, nullable = true)
       .add("value", VariantType, nullable = false)
   }
+}
+
+trait VariantExplodeGeneratorBuilderBase extends GeneratorBuilder {
+  override def functionSignature: Option[FunctionSignature] =
+    Some(FunctionSignature(Seq(InputParameter("input"))))
+  override def buildGenerator(funcName: String, expressions: Seq[Expression]): Generator = {
+    assert(expressions.size == 1)
+    VariantExplode(expressions(0))
+  }
+}
+
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It ignores any input that is not a variant array/object, including SQL NULL, variant null, and any other variant values.",
+  examples = """
+    Examples:
+      > SELECT * from _FUNC_(parse_json('["hello", "world"]'));
+       0	NULL	"hello"
+       1	NULL	"world"
+      > SELECT * from _FUNC_(input => parse_json('{"a": true, "b": 3.14}'));
+       0	a	true
+       1	b	3.14
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit line.contains.tab
+object VariantExplodeGeneratorBuilder extends VariantExplodeGeneratorBuilderBase {
+  override def isOuter: Boolean = false
+}
+
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - It separates a variant object/array into multiple rows containing its fields/elements. Its result schema is `struct<pos int, key string, value variant>`. `pos` is the position of the field/element in its parent object/array, and `value` is the field/element value. `key` is the field name when exploding a variant object, or is NULL when exploding a variant array. It ignores any input that is not a variant array/object, including SQL NULL, variant null, and any other variant values.",
+  examples = """
+    Examples:
+      > SELECT * from _FUNC_(parse_json('["hello", "world"]'));
+       0	NULL	"hello"
+       1	NULL	"world"
+      > SELECT * from _FUNC_(input => parse_json('{"a": true, "b": 3.14}'));
+       0	a	true
+       1	b	3.14
+  """,
+  since = "4.0.0",
+  group = "variant_funcs")
+// scalastyle:on line.size.limit line.contains.tab
+object VariantExplodeOuterGeneratorBuilder extends VariantExplodeGeneratorBuilderBase {
+  override def isOuter: Boolean = true
 }
 
 object VariantExplode {
@@ -635,7 +732,7 @@ object VariantExplode {
       > SELECT _FUNC_(parse_json('null'));
        VOID
       > SELECT _FUNC_(parse_json('[{"b":true,"a":0}]'));
-       ARRAY<STRUCT<a: BIGINT, b: BOOLEAN>>
+       ARRAY<OBJECT<a: BIGINT, b: BOOLEAN>>
   """,
   since = "4.0.0",
   group = "variant_funcs"
@@ -666,7 +763,24 @@ object SchemaOfVariant {
   /** The actual implementation of the `SchemaOfVariant` expression. */
   def schemaOfVariant(input: VariantVal): UTF8String = {
     val v = new Variant(input.getValue, input.getMetadata)
-    UTF8String.fromString(schemaOf(v).sql)
+    UTF8String.fromString(printSchema(schemaOf(v)))
+  }
+
+  /**
+   * Similar to `dataType.sql`. The only difference is that `StructType` is shown as
+   * `OBJECT<...>` rather than `STRUCT<...>`.
+   * SchemaOfVariant expressions use the Struct DataType to denote the Object type in the variant
+   * spec. However, the Object type is not equivalent to the struct type as an Object represents an
+   * unordered bag of key-value pairs while the Struct type is ordered.
+   */
+  def printSchema(dataType: DataType): String = dataType match {
+    case StructType(fields) =>
+      def printField(f: StructField): String =
+        s"${QuotingUtils.quoteIfNeeded(f.name)}: ${printSchema(f.dataType)}"
+
+      s"OBJECT<${fields.map(printField).mkString(", ")}>"
+    case ArrayType(elementType, _) => s"ARRAY<${printSchema(elementType)}>"
+    case _ => dataType.sql
   }
 
   /**
@@ -707,12 +821,6 @@ object SchemaOfVariant {
     case Type.TIMESTAMP_NTZ => TimestampNTZType
     case Type.FLOAT => FloatType
     case Type.BINARY => BinaryType
-    case Type.YEAR_MONTH_INTERVAL =>
-      val fields: IntervalFields = v.getYearMonthIntervalFields
-      YearMonthIntervalType(fields.startField, fields.endField)
-    case Type.DAY_TIME_INTERVAL =>
-      val fields: IntervalFields = v.getDayTimeIntervalFields
-      DayTimeIntervalType(fields.startField, fields.endField)
   }
 
   /**
@@ -731,7 +839,7 @@ object SchemaOfVariant {
       > SELECT _FUNC_(parse_json(j)) FROM VALUES ('1'), ('2'), ('3') AS tab(j);
        BIGINT
       > SELECT _FUNC_(parse_json(j)) FROM VALUES ('{"a": 1}'), ('{"b": true}'), ('{"c": 1.23}') AS tab(j);
-       STRUCT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>
+       OBJECT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>
   """,
   since = "4.0.0",
   group = "variant_funcs")
@@ -767,7 +875,8 @@ case class SchemaOfVariantAgg(
   override def merge(buffer: DataType, input: DataType): DataType =
     SchemaOfVariant.mergeSchema(buffer, input)
 
-  override def eval(buffer: DataType): Any = UTF8String.fromString(buffer.sql)
+  override def eval(buffer: DataType): Any =
+    UTF8String.fromString(SchemaOfVariant.printSchema(buffer))
 
   override def serialize(buffer: DataType): Array[Byte] = buffer.json.getBytes("UTF-8")
 

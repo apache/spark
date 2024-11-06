@@ -594,7 +594,7 @@ abstract class OrcQueryTest extends OrcTest {
         exception = intercept[AnalysisException] {
           testAllCorruptFiles()
         },
-        errorClass = "UNABLE_TO_INFER_SCHEMA",
+        condition = "UNABLE_TO_INFER_SCHEMA",
         parameters = Map("format" -> "ORC")
       )
       testAllCorruptFilesWithoutSchemaInfer()
@@ -604,14 +604,14 @@ abstract class OrcQueryTest extends OrcTest {
       val e1 = intercept[SparkException] {
         testIgnoreCorruptFiles()
       }
-      assert(e1.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e1.getCondition.startsWith("FAILED_READ_FILE"))
       assert(e1.getCause.getMessage.contains("Malformed ORC file") ||
         // Hive ORC table scan uses a different code path and has one more error stack
         e1.getCause.getCause.getMessage.contains("Malformed ORC file"))
       val e2 = intercept[SparkException] {
         testIgnoreCorruptFilesWithoutSchemaInfer()
       }
-      assert(e2.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e2.getCondition.startsWith("FAILED_READ_FILE"))
       assert(e2.getCause.getMessage.contains("Malformed ORC file") ||
         // Hive ORC table scan uses a different code path and has one more error stack
         e2.getCause.getCause.getMessage.contains("Malformed ORC file"))
@@ -619,13 +619,13 @@ abstract class OrcQueryTest extends OrcTest {
         exception = intercept[SparkException] {
           testAllCorruptFiles()
         },
-        errorClass = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
+        condition = "FAILED_READ_FILE.CANNOT_READ_FILE_FOOTER",
         parameters = Map("path" -> "file:.*")
       )
       val e4 = intercept[SparkException] {
         testAllCorruptFilesWithoutSchemaInfer()
       }
-      assert(e4.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(e4.getCondition.startsWith("FAILED_READ_FILE"))
       assert(e4.getCause.getMessage.contains("Malformed ORC file") ||
         // Hive ORC table scan uses a different code path and has one more error stack
         e4.getCause.getCause.getMessage.contains("Malformed ORC file"))

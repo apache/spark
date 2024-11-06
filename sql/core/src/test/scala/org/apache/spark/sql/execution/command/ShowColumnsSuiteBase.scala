@@ -57,7 +57,7 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"SHOW COLUMNS IN tbl IN ns1")
         },
-        errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
         parameters = Map("relationName" -> "`ns1`.`tbl`"),
         context = ExpectedContext(fragment = "tbl", start = 16, stop = 18)
       )
@@ -75,7 +75,7 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
         exception = intercept[AnalysisException] {
           sql(sqlText1)
         },
-        errorClass = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+        condition = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
         parameters = Map(
           "namespaceA" -> s"`ns1`",
           "namespaceB" -> s"`ns`"
@@ -88,7 +88,7 @@ trait ShowColumnsSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[AnalysisException] {
             sql(sqlText2)
           },
-          errorClass = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
+          condition = "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE",
           parameters = Map(
             "namespaceA" -> s"`${"ns".toUpperCase(Locale.ROOT)}`",
             "namespaceB" -> "`ns`"

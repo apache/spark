@@ -22,13 +22,14 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 
 /**
- * Interface used to write a [[org.apache.spark.sql.api.Dataset]] to external storage
- * using the v2 API.
+ * Interface used to write a [[org.apache.spark.sql.api.Dataset]] to external storage using the v2
+ * API.
  *
  * @since 3.0.0
  */
 @Experimental
 abstract class DataFrameWriterV2[T] extends CreateTableWriter[T] {
+
   /** @inheritdoc */
   override def using(provider: String): this.type
 
@@ -68,20 +69,22 @@ abstract class DataFrameWriterV2[T] extends CreateTableWriter[T] {
    * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
    * validated to ensure it is compatible with the existing table.
    *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
   @throws(classOf[NoSuchTableException])
   def append(): Unit
 
   /**
-   * Overwrite rows matching the given filter condition with the contents of the data frame in
-   * the output table.
+   * Overwrite rows matching the given filter condition with the contents of the data frame in the
+   * output table.
    *
    * If the output table does not exist, this operation will fail with
-   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]].
-   * The data frame will be validated to ensure it is compatible with the existing table.
+   * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
+   * validated to ensure it is compatible with the existing table.
    *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
   @throws(classOf[NoSuchTableException])
   def overwrite(condition: Column): Unit
@@ -97,7 +100,8 @@ abstract class DataFrameWriterV2[T] extends CreateTableWriter[T] {
    * [[org.apache.spark.sql.catalyst.analysis.NoSuchTableException]]. The data frame will be
    * validated to ensure it is compatible with the existing table.
    *
-   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException If the table does not exist
+   * @throws org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+   *   If the table does not exist
    */
   @throws(classOf[NoSuchTableException])
   def overwritePartitions(): Unit
@@ -105,10 +109,12 @@ abstract class DataFrameWriterV2[T] extends CreateTableWriter[T] {
 
 /**
  * Configuration methods common to create/replace operations and insert/overwrite operations.
- * @tparam R builder type to return
+ * @tparam R
+ *   builder type to return
  * @since 3.0.0
  */
 trait WriteConfigMethods[R] {
+
   /**
    * Add a write option.
    *
@@ -158,17 +164,18 @@ trait WriteConfigMethods[R] {
  * @since 3.0.0
  */
 trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
+
   /**
    * Create a new table from the contents of the data frame.
    *
-   * The new table's schema, partition layout, properties, and other configuration will be
-   * based on the configuration set on this writer.
+   * The new table's schema, partition layout, properties, and other configuration will be based
+   * on the configuration set on this writer.
    *
    * If the output table exists, this operation will fail with
    * [[org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException]].
    *
    * @throws org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-   *         If the table already exists
+   *   If the table already exists
    */
   @throws(classOf[TableAlreadyExistsException])
   def create(): Unit
@@ -183,7 +190,7 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
    * [[org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException]].
    *
    * @throws org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
-   *         If the table does not exist
+   *   If the table does not exist
    */
   @throws(classOf[CannotReplaceMissingTableException])
   def replace(): Unit
@@ -191,28 +198,25 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
   /**
    * Create a new table or replace an existing table with the contents of the data frame.
    *
-   * The output table's schema, partition layout, properties, and other configuration will be based
-   * on the contents of the data frame and the configuration set on this writer. If the table
-   * exists, its configuration and data will be replaced.
+   * The output table's schema, partition layout, properties, and other configuration will be
+   * based on the contents of the data frame and the configuration set on this writer. If the
+   * table exists, its configuration and data will be replaced.
    */
   def createOrReplace(): Unit
 
   /**
-   * Partition the output table created by `create`, `createOrReplace`, or `replace` using
-   * the given columns or transforms.
+   * Partition the output table created by `create`, `createOrReplace`, or `replace` using the
+   * given columns or transforms.
    *
    * When specified, the table data will be stored by these values for efficient reads.
    *
    * For example, when a table is partitioned by day, it may be stored in a directory layout like:
-   * <ul>
-   * <li>`table/day=2019-06-01/`</li>
-   * <li>`table/day=2019-06-02/`</li>
-   * </ul>
+   * <ul> <li>`table/day=2019-06-01/`</li> <li>`table/day=2019-06-02/`</li> </ul>
    *
-   * Partitioning is one of the most widely used techniques to optimize physical data layout.
-   * It provides a coarse-grained index for skipping unnecessary data reads when queries have
-   * predicates on the partitioned columns. In order for partitioning to work well, the number
-   * of distinct values in each column should typically be less than tens of thousands.
+   * Partitioning is one of the most widely used techniques to optimize physical data layout. It
+   * provides a coarse-grained index for skipping unnecessary data reads when queries have
+   * predicates on the partitioned columns. In order for partitioning to work well, the number of
+   * distinct values in each column should typically be less than tens of thousands.
    *
    * @since 3.0.0
    */
@@ -220,8 +224,8 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
   def partitionedBy(column: Column, columns: Column*): CreateTableWriter[T]
 
   /**
-   * Clusters the output by the given columns on the storage. The rows with matching values in
-   * the specified clustering columns will be consolidated within the same group.
+   * Clusters the output by the given columns on the storage. The rows with matching values in the
+   * specified clustering columns will be consolidated within the same group.
    *
    * For instance, if you cluster a dataset by date, the data sharing the same date will be stored
    * together in a file. This arrangement improves query efficiency when you apply selective

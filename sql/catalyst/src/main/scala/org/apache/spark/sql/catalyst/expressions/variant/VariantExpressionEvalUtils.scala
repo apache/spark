@@ -109,10 +109,6 @@ object VariantExpressionEvalUtils {
       case DateType => builder.appendDate(input.asInstanceOf[Int])
       case TimestampType => builder.appendTimestamp(input.asInstanceOf[Long])
       case TimestampNTZType => builder.appendTimestampNtz(input.asInstanceOf[Long])
-      case ymi: YearMonthIntervalType =>
-        builder.appendYearMonthInterval(input.asInstanceOf[Int], ymi.startField, ymi.endField)
-      case dti: DayTimeIntervalType =>
-        builder.appendDayTimeInterval(input.asInstanceOf[Long], dti.startField, dti.endField)
       case VariantType =>
         val v = input.asInstanceOf[VariantVal]
         builder.appendVariant(new Variant(v.getValue, v.getMetadata))
@@ -126,7 +122,7 @@ object VariantExpressionEvalUtils {
           buildVariant(builder, element, elementType)
         }
         builder.finishWritingArray(start, offsets)
-      case MapType(StringType, valueType, _) =>
+      case MapType(_: StringType, valueType, _) =>
         val data = input.asInstanceOf[MapData]
         val keys = data.keyArray()
         val values = data.valueArray()
