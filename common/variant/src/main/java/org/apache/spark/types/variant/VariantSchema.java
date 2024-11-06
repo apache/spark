@@ -17,6 +17,7 @@
 
 package org.apache.spark.types.variant;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -32,21 +33,18 @@ public class VariantSchema {
 
   // Represents one field of an object in the shredding schema.
   public static final class ObjectField {
-    // The index of the field in the write schema. E.g. in Spark, it is the position within the
-    // corresponding InternalRow. Indices for an object schema must be zero-indexed and dense; i.e.
-    // they must cover the range [0, numFields - 1] with no gaps.
-    public final int idx;
+    public final String fieldName;
     public final VariantSchema schema;
 
-    public ObjectField(int idx, VariantSchema schema) {
-      this.idx = idx;
+    public ObjectField(String fieldName, VariantSchema schema) {
+      this.fieldName = fieldName;
       this.schema = schema;
     }
 
     @Override
     public String toString() {
       return "ObjectField{" +
-          "idx=" + idx +
+          "fieldName=" + fieldName +
           ", schema=" + schema +
           '}';
     }
@@ -107,11 +105,13 @@ public class VariantSchema {
   public final int numFields;
 
   public final ScalarType scalarSchema;
-  public final Map<String, ObjectField> objectSchema;
+  public final ObjectField[] objectSchema;
+  // Map for fast lookup of object fields by name.
+  public final Map<String, Integer> objectSchemaMap;
   public final VariantSchema arraySchema;
 
   public VariantSchema(int typedIdx, int variantIdx, int topLevelMetadataIdx, int numFields,
-                       ScalarType scalarSchema, Map<String, ObjectField> objectSchema,
+                       ScalarType scalarSchema, ObjectField[] objectSchema,
                        VariantSchema arraySchema) {
     this.typedIdx = typedIdx;
     this.numFields = numFields;
@@ -119,6 +119,15 @@ public class VariantSchema {
     this.topLevelMetadataIdx = topLevelMetadataIdx;
     this.scalarSchema = scalarSchema;
     this.objectSchema = objectSchema;
+    if (objectSchema != null) {
+      objectSchemaMap = new HashMap<>();
+      for (int i = 0; i < objectSchema.length; i++) {
+        objectSchemaMap.put(objectSchema[i].fieldName, i);
+      }
+    } else {
+      objectSchemaMap = null;
+    }
+
     this.arraySchema = arraySchema;
   }
 

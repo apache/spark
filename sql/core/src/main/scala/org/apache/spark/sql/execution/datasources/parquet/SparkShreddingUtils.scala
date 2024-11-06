@@ -94,7 +94,7 @@ case object SparkShreddingUtils {
     var variantIdx = -1
     var topLevelMetadataIdx = -1
     var scalarSchema: VariantSchema.ScalarType = null
-    var objectSchema: java.util.HashMap[String, VariantSchema.ObjectField] = null
+    var objectSchema: Array[VariantSchema.ObjectField] = null
     var arraySchema: VariantSchema = null
 
     schema.fields.zipWithIndex.foreach { case (f, i) =>
@@ -106,13 +106,13 @@ case object SparkShreddingUtils {
           typedIdx = i
           f.dataType match {
             case StructType(fields) =>
-              objectSchema = new java.util.HashMap[String, VariantSchema.ObjectField]
+              objectSchema =
+                  new Array[VariantSchema.ObjectField](fields.length)
               fields.zipWithIndex.foreach { case (field, fieldIdx) =>
                 field.dataType match {
                   case s: StructType =>
                     val fieldSchema = buildVariantSchema(s, topLevel = false)
-                    objectSchema.put(field.name,
-                      new VariantSchema.ObjectField(fieldIdx, fieldSchema))
+                    objectSchema(fieldIdx) = new VariantSchema.ObjectField(field.name, fieldSchema)
                   case _ => throw QueryCompilationErrors.invalidVariantSchema(schema)
                 }
               }
@@ -172,8 +172,7 @@ case object SparkShreddingUtils {
 
     override def addObject(schema: VariantSchema,
                            values: Array[VariantShreddingWriter.ShreddedResult]): Unit = {
-      val objectSchema = schema.objectSchema;
-      val innerRow = new GenericInternalRow(objectSchema.size())
+      val innerRow = new GenericInternalRow(schema.objectSchema.size)
       for (i <- 0 until values.length) {
         innerRow.update(i, values(i).asInstanceOf[SparkShreddedResult].row)
       }

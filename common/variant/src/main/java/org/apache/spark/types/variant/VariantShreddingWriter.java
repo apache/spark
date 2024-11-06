@@ -82,23 +82,23 @@ public class VariantShreddingWriter {
       }
       result.addArray(schema, array);
     } else if (schema.objectSchema != null && variantType == VariantUtil.Type.OBJECT) {
-      Map<String, VariantSchema.ObjectField> objectSchema = schema.objectSchema;
-      ShreddedResult[] shreddedValues = new ShreddedResult[objectSchema.size()];
+      VariantSchema.ObjectField[] objectSchema = schema.objectSchema;
+      ShreddedResult[] shreddedValues = new ShreddedResult[objectSchema.length];
 
       // Create a variantBuilder for any mismatched fields.
       VariantBuilder variantBuilder = new VariantBuilder(false);
       ArrayList<VariantBuilder.FieldEntry> fieldEntries = new ArrayList<>();
       // Keep track of which schema fields we actually found in the Variant value.
-      Set<String> presentKeys = new HashSet<String>();
+      int numFieldsMatched = 0;
       int start = variantBuilder.getWritePos();
       for (int i = 0; i < v.objectSize(); ++i) {
         Variant.ObjectField field = v.getFieldAtIndex(i);
-        VariantSchema.ObjectField keySchema = objectSchema.get(field.key);
-        if (keySchema != null) {
+        Integer fieldIdx = schema.objectSchemaMap.get(field.key);
+        if (fieldIdx != null) {
           // The field exists in the shredding schema. Recursively shred, and write the result.
-          ShreddedResult shreddedField = castShredded(field.value, keySchema.schema, builder);
-          shreddedValues[keySchema.idx] = shreddedField;
-          presentKeys.add(field.key);
+          ShreddedResult shreddedField = castShredded(field.value, objectSchema[fieldIdx].schema, builder);
+          shreddedValues[fieldIdx] = shreddedField;
+          numFieldsMatched++;
         } else {
           // The field is not shredded. Put it in the untyped_value column.
           int id = v.getDictionaryIdAtIndex(i);
@@ -106,16 +106,21 @@ public class VariantShreddingWriter {
           variantBuilder.appendVariant(field.value);
         }
       }
-      if (presentKeys.size() != objectSchema.size()) {
+      if (numFieldsMatched < objectSchema.length) {
         // Set missing fields to non-null with all fields set to null.
-        // Iterate over objectSchema key-value pairs and add them to the result.
-        for (Map.Entry<String, VariantSchema.ObjectField> entry : objectSchema.entrySet()) {
-          String key = entry.getKey();
-          if (!presentKeys.contains(key)) {
-            ShreddedResult emptyChild = builder.createEmpty(entry.getValue().schema);
-            shreddedValues[entry.getValue().idx] = emptyChild;
+        for (int i = 0; i < objectSchema.length; ++i) {
+          if (shreddedValues[i] == null) {
+            VariantSchema.ObjectField fieldSchema = objectSchema[i];
+            ShreddedResult emptyChild = builder.createEmpty(fieldSchema.schema);
+            shreddedValues[i] = emptyChild;
+            numFieldsMatched += 1;
           }
         }
+      }
+      if (numFieldsMatched != objectSchema.length) {
+        // Since we just filled in all the null entries, this can only happen if we tried to write
+        // to the same field twice; i.e. the Variant contained duplicate fields, which is invalid.
+        throw VariantUtil.malformedVariant();
       }
       result.addObject(schema, shreddedValues);
       if (variantBuilder.getWritePos() != start) {
