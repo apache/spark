@@ -107,6 +107,13 @@ public class VariantBuilder {
     return new Variant(Arrays.copyOfRange(writeBuffer, 0, writePos), metadata);
   }
 
+  // Return the variant value only, without metadata.
+  // Used in shredding to produce a final value, where all shredded values refer to a common
+  // metadata.
+  public byte[] valueWithoutMetadata() {
+    return Arrays.copyOfRange(writeBuffer, 0, writePos);
+  }
+
   public void appendString(String str) {
     byte[] text = str.getBytes(StandardCharsets.UTF_8);
     boolean longStr = text.length > MAX_SHORT_STR_SIZE;
@@ -411,6 +418,17 @@ public class VariantBuilder {
         writePos += size;
         break;
     }
+  }
+
+  // Append the variant value without rewriting or creating any metadata. This is used when
+  // building an object during shredding, where there is a fixed pre-existing metadata that
+  // all shredded values will refer to.
+  public void shallowAppendVariant(Variant v) {
+    int size = valueSize(v.value, v.pos);
+    checkIndex(v.pos + size - 1, v.value.length);
+    checkCapacity(size);
+    System.arraycopy(v.value, v.pos, writeBuffer, writePos, size);
+    writePos += size;
   }
 
   private void checkCapacity(int additional) {
