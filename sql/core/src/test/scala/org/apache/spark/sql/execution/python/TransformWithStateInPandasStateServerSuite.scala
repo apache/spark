@@ -130,7 +130,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle)
           .getValueState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
       } else {
-        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]])
+        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]],
+          any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
@@ -153,7 +154,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle)
           .getListState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
       } else {
-        verify(statefulProcessorHandle).getListState[Row](any[String], any[Encoder[Row]])
+        verify(statefulProcessorHandle).getListState[Row](any[String], any[Encoder[Row]],
+          any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
@@ -178,7 +180,7 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
           .getMapState[Row, Row](any[String], any[Encoder[Row]], any[Encoder[Row]], any[TTLConfig])
       } else {
         verify(statefulProcessorHandle).getMapState[Row, Row](any[String], any[Encoder[Row]],
-          any[Encoder[Row]])
+          any[Encoder[Row]], any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
