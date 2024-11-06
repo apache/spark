@@ -193,12 +193,12 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
   override def fit(dataset: Dataset[_]): TargetEncoderModel = {
     validateSchema(dataset.schema, fitting = true)
 
-    // stats: Array[Map[Some(category), (counter,stat)]]
+    // stats: Array[Map[category, (counter,stat)]]
     val stats = dataset
       .select((inputFeatures :+ $(labelCol)).map(col(_).cast(DoubleType)).toIndexedSeq: _*)
       .rdd.treeAggregate(
         Array.fill(inputFeatures.length) {
-          Map.empty[Option[Double], (Double, Double)]
+          Map.empty[Double, (Double, Double)]
         })(
 
         (agg, row: Row) => if (!row.isNullAt(inputFeatures.length)) {
@@ -206,14 +206,14 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
           if (!label.equals(Double.NaN)) {
             inputFeatures.indices.map {
               feature => {
-                val category: Option[Double] = {
-                  if (row.isNullAt(feature)) None // null category
+                val category: Double = {
+                  if (row.isNullAt(feature)) TargetEncoder.NULL_CATEGORY // null category
                   else {
                     val value = row.getDouble(feature)
                     if (value < 0.0 || value != value.toInt) throw new SparkException(
                       s"Values from column ${inputFeatures(feature)} must be indices, " +
                         s"but got $value.")
-                    else Some(value) // non-null category
+                    else value // non-null category
                   }
                 }
                 val (class_count, class_stat) = agg(feature).getOrElse(category, (0.0, 0.0))
@@ -285,7 +285,8 @@ object TargetEncoder extends DefaultParamsReadable[TargetEncoder] {
   private[feature] val TARGET_CONTINUOUS: String = "continuous"
   private[feature] val supportedTargetTypes: Array[String] = Array(TARGET_BINARY, TARGET_CONTINUOUS)
 
-  private[feature] val UNSEEN_CATEGORY: Option[Double] = Some(-1)
+  private[feature] val UNSEEN_CATEGORY: Double = Int.MaxValue
+  private[feature] val NULL_CATEGORY: Double = -1
 
   @Since("4.0.0")
   override def load(path: String): TargetEncoder = super.load(path)
@@ -293,12 +294,12 @@ object TargetEncoder extends DefaultParamsReadable[TargetEncoder] {
 
 /**
  * @param stats  Array of statistics for each input feature.
- *               Array( Map( Some(category), (counter, stat) ) )
+ *               Array( Map( category, (counter, stat) ) )
  */
 @Since("4.0.0")
 class TargetEncoderModel private[ml] (
                      @Since("4.0.0") override val uid: String,
-                     @Since("4.0.0") val stats: Array[Map[Option[Double], (Double, Double)]])
+                     @Since("4.0.0") val stats: Array[Map[Double, (Double, Double)]])
   extends Model[TargetEncoderModel] with TargetEncoderBase with MLWritable {
 
   /** @group setParam */
@@ -342,8 +343,8 @@ class TargetEncoderModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema)
 
-    // encodings: Array[Map[Some(category), encoding]]
-    val encodings: Array[Map[Option[Double], Double]] =
+    // encodings: Array[Map[category, encoding]]
+    val encodings: Array[Map[Double, Double]] =
       stats.map {
         stat =>
           val (global_count, global_stat) = stat.get(TargetEncoder.UNSEEN_CATEGORY).get
@@ -363,11 +364,11 @@ class TargetEncoderModel private[ml] (
       }
 
     // builds a column-to-column function from a map of encodings
-    val apply_encodings: Map[Option[Double], Double] => (Column => Column) =
-      (mappings: Map[Option[Double], Double]) => {
+    val apply_encodings: Map[Double, Double] => (Column => Column) =
+      (mappings: Map[Double, Double]) => {
         (col: Column) => {
           val nullWhen = when(col.isNull,
-            mappings.get(None) match {
+            mappings.get(TargetEncoder.NULL_CATEGORY) match {
               case Some(code) => lit(code)
               case None => if ($(handleInvalid) == TargetEncoder.KEEP_INVALID) {
                 lit(mappings.get(TargetEncoder.UNSEEN_CATEGORY).get)
@@ -375,15 +376,16 @@ class TargetEncoderModel private[ml] (
                 s"Unseen null value in feature ${col.toString}. To handle unseen values, " +
                   s"set Param handleInvalid to ${TargetEncoder.KEEP_INVALID}."))
             })
-          val ordered_mappings = (mappings - None).toList.sortWith {
-            (a, b) => (b._1 == TargetEncoder.UNSEEN_CATEGORY) ||
-              ((a._1 != TargetEncoder.UNSEEN_CATEGORY) && (a._1.get < b._1.get))
+          val ordered_mappings = (mappings - TargetEncoder.NULL_CATEGORY).toList.sortWith {
+            (a, b) =>
+              (b._1 == TargetEncoder.UNSEEN_CATEGORY) ||
+                ((a._1 != TargetEncoder.UNSEEN_CATEGORY) && (a._1 < b._1))
           }
           ordered_mappings
             .foldLeft(nullWhen)(
               (new_col: Column, mapping) => {
-                val (Some(original), encoded) = mapping
-                if (original != TargetEncoder.UNSEEN_CATEGORY.get) {
+                val (original, encoded) = mapping
+                if (original != TargetEncoder.UNSEEN_CATEGORY) {
                   new_col.when(col === original, lit(encoded))
                 } else { // unseen category
                   new_col.otherwise(
@@ -436,7 +438,7 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
   private[TargetEncoderModel]
   class TargetEncoderModelWriter(instance: TargetEncoderModel) extends MLWriter {
 
-    private case class Data(stats: Array[Map[Option[Double], (Double, Double)]])
+    private case class Data(stats: Array[Map[Double, (Double, Double)]])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
@@ -456,7 +458,7 @@ object TargetEncoderModel extends MLReadable[TargetEncoderModel] {
       val data = sparkSession.read.parquet(dataPath)
         .select("encodings")
         .head()
-      val stats = data.getAs[Array[Map[Option[Double], (Double, Double)]]](0)
+      val stats = data.getAs[Array[Map[Double, (Double, Double)]]](0)
       val model = new TargetEncoderModel(metadata.uid, stats)
       metadata.getAndSetParams(model)
       model

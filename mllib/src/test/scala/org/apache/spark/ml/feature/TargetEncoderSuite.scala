@@ -33,8 +33,8 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
   @transient var data_binary: Seq[Row] = _
   @transient var data_continuous: Seq[Row] = _
   @transient var schema: StructType = _
-  @transient var expected_stats_binary: Array[Map[Option[Double], (Double, Double)]] = _
-  @transient var expected_stats_continuous: Array[Map[Option[Double], (Double, Double)]] = _
+  @transient var expected_stats_binary: Array[Map[Double, (Double, Double)]] = _
+  @transient var expected_stats_continuous: Array[Map[Double, (Double, Double)]] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -75,14 +75,14 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
       StructField("smoothing3", DoubleType)))
 
     expected_stats_binary = Array(
-      Map(Some(0.0) -> (3.0, 1.0), Some(1.0) -> (3.0, 2.0), Some(2.0) -> (3.0, 1.0), Some(-1.0) -> (9.0, 4.0)),
-      Map(Some(3.0) -> (5.0, 0.0), Some(4.0) -> (4.0, 4.0), Some(-1.0) -> (9.0, 4.0)),
-      HashMap(Some(5.0) -> (3.0, 1.0), Some(6.0) -> (3.0, 2.0), Some(7.0) -> (1.0, 0.0), Some(8.0) -> (1.0, 1.0), Some(9.0) -> (1.0, 0.0), Some(-1.0) -> (9.0, 4.0)))
+      Map(0.0 -> (3.0, 1.0), 1.0 -> (3.0, 2.0), 2.0 -> (3.0, 1.0), TargetEncoder.UNSEEN_CATEGORY -> (9.0, 4.0)),
+      Map(3.0 -> (5.0, 0.0), 4.0 -> (4.0, 4.0), TargetEncoder.UNSEEN_CATEGORY -> (9.0, 4.0)),
+      HashMap(5.0 -> (3.0, 1.0), 6.0 -> (3.0, 2.0), 7.0 -> (1.0, 0.0), 8.0 -> (1.0, 1.0), 9.0 -> (1.0, 0.0), TargetEncoder.UNSEEN_CATEGORY -> (9.0, 4.0)))
 
     expected_stats_continuous = Array(
-      Map(Some(0.0) -> (3.0, 40.0), Some(1.0) -> (3.0, 50.0), Some(2.0) -> (3.0, 60.0), Some(-1.0) -> (9.0, 50.0)),
-      Map(Some(3.0) -> (5.0, 50.0), Some(4.0) -> (4.0, 50.0), Some(-1.0) -> (9.0, 50.0)),
-      HashMap(Some(5.0) -> (3.0, 20.0), Some(6.0) -> (3.0, 50.0), Some(7.0) -> (1.0, 70.0), Some(8.0) -> (1.0, 80.0), Some(9.0) -> (1.0, 90.0), Some(-1.0) -> (9.0, 50.0)))
+      Map(0.0 -> (3.0, 40.0), 1.0 -> (3.0, 50.0), 2.0 -> (3.0, 60.0), TargetEncoder.UNSEEN_CATEGORY -> (9.0, 50.0)),
+      Map(3.0 -> (5.0, 50.0), 4.0 -> (4.0, 50.0), TargetEncoder.UNSEEN_CATEGORY -> (9.0, 50.0)),
+      HashMap(5.0 -> (3.0, 20.0), 6.0 -> (3.0, 50.0), 7.0 -> (1.0, 70.0), 8.0 -> (1.0, 80.0), 9.0 -> (1.0, 90.0), TargetEncoder.UNSEEN_CATEGORY -> (9.0, 50.0)))
     // scalastyle:on
   }
 
@@ -247,8 +247,8 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
       .createDataFrame(sc.parallelize(data_continuous :+ data_unseen), schema)
 
     val ex = intercept[SparkRuntimeException] {
-      val out = model.transform(df_unseen)
-      out.show(false)
+      val output = model.transform(df_unseen)
+      output.show()
     }
 
     assert(ex.isInstanceOf[SparkRuntimeException])
@@ -320,7 +320,7 @@ class TargetEncoderSuite extends MLTest with DefaultReadWriteTest {
     val expected_stats = Array(
       expected_stats_continuous(0),
       expected_stats_continuous(1),
-      expected_stats_continuous(2) - Some(9.0) + (None -> (1.0, 90.0)))
+      expected_stats_continuous(2) + (TargetEncoder.NULL_CATEGORY -> (1.0, 90.0)) - 9.0)
 
     model.stats.zip(expected_stats).foreach{
       case (actual, expected) => assert(actual.equals(expected))
