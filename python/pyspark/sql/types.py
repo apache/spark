@@ -1575,6 +1575,7 @@ class VariantType(AtomicType):
         assert isinstance(variant, VariantVal)
         return {"value": variant.value, "metadata": variant.metadata}
 
+
 class UserDefinedType(DataType):
     """User-defined type (UDT).
 
