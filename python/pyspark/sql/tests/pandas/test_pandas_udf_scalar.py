@@ -779,7 +779,6 @@ class ScalarPandasUDFTestsMixin:
         expected = [Row(udf=i) for i in range(10)]
 
         for f in [scalar_f, iter_f]:
-            # with self.assertRaises(AnalysisException) as ae:
             result = self.spark.range(10).select(f(col("id")).cast("int").alias("udf")).collect()
             self.assertEqual(result, expected)
 

@@ -144,8 +144,8 @@ private[sql] object ArrowUtils {
         val fieldType = new FieldType(
           nullable,
           ArrowType.Struct.INSTANCE,
-          null,
-          Map("variant" -> "true").asJava)
+          null
+        )
         val metadataFieldType = new FieldType(
           false,
           toArrowType(BinaryType, timeZoneId, largeVarTypes),
