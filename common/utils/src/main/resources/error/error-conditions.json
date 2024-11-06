@@ -3642,18 +3642,18 @@
     },
     "sqlState" : "42601"
   },
-  "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE": {
-    "message": [
+  "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE" : {
+    "message" : [
       "Not allowed in the pipe WHERE clause:"
     ],
-    "subClass": {
-      "WINDOW_CLAUSE": {
-        "message": [
+    "subClass" : {
+      "WINDOW_CLAUSE" : {
+        "message" : [
           "WINDOW clause."
         ]
       }
     },
-    "sqlState": "42601"
+    "sqlState" : "42601"
   },
   "NOT_A_CONSTANT_STRING" : {
     "message" : [
