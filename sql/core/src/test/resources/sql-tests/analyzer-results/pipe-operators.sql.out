@@ -720,13 +720,17 @@ table t
 |> where sum(x) over w = 1
    window w as (partition by y)
 -- !query analysis
-org.apache.spark.SparkException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Cannot find main error class 'NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE'"
-  }
+  "errorClass" : "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "table t\n|> where sum(x) over w = 1\n   window w as (partition by y)"
+  } ]
 }
 
 
