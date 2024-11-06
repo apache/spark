@@ -795,11 +795,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def failedToCastValueToDataTypeForPartitionColumnError(
       value: String, dataType: DataType, columnName: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2058",
+      errorClass = "INVALID_PARTITION_COLUMN_CAST",
       messageParameters = Map(
-        "value" -> value,
-        "dataType" -> dataType.toString(),
-        "columnName" -> columnName))
+        "value" -> toSQLValue(value),
+        "dataType" -> toSQLType(dataType),
+        "columnName" -> toSQLId(columnName)))
   }
 
   def endOfStreamError(): Throwable = {
