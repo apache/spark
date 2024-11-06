@@ -1437,10 +1437,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def malformedRecordsDetectedInSchemaInferenceError(dataType: DataType): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2167",
+      errorClass = "MALFORMED_RECORD_IN_SCHEMA_INFERENCE",
       messageParameters = Map(
         "failFastMode" -> FailFastMode.name,
-        "dataType" -> dataType.catalogString),
+        "dataType" -> toSQLType(dataType)),
       cause = null)
   }
 

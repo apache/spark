@@ -3439,6 +3439,12 @@
     },
     "sqlState" : "22023"
   },
+  "MALFORMED_RECORD_IN_SCHEMA_INFERENCE" : {
+    "message" : [
+      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>. Reasons: Failed to infer a common schema. Struct types are expected, but <dataType> was found."
+    ],
+    "sqlState" : "22023"
+  },
   "MALFORMED_VARIANT" : {
     "message" : [
       "Variant binary is malformed. Please check the data source is valid."
@@ -7282,11 +7288,6 @@
   "_LEGACY_ERROR_TEMP_2166" : {
     "message" : [
       "Malformed JSON."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2167" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>. Reasons: Failed to infer a common schema. Struct types are expected, but `<dataType>` was found."
     ]
   },
   "_LEGACY_ERROR_TEMP_2168" : {
