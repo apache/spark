@@ -314,7 +314,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       } else {
         None
       }
-    case Invoke(Literal(obj, _), functionName, _, arguments, _, _, _, _) =>
+    case Invoke(Literal(obj, _), functionName, _, arguments, _, _, _, _, _) =>
       obj match {
         case function: ScalarFunction[_] if ScalarFunction.MAGIC_METHOD_NAME == functionName =>
           val argumentExpressions = arguments.flatMap(generateExpression(_))
@@ -327,7 +327,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case _ =>
           None
       }
-    case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc)) =>
+    case StaticInvoke(_, _, _, arguments, _, _, _, _, Some(scalarFunc), _) =>
       val argumentExpressions = arguments.flatMap(generateExpression(_))
       if (argumentExpressions.length == arguments.length) {
         Some(new UserDefinedScalarFunc(

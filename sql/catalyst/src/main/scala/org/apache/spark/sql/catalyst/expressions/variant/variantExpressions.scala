@@ -136,9 +136,8 @@ case class IsVariantNull(child: Expression) extends UnaryExpression
 // scalastyle:on line.size.limit
 case class ToVariantObject(child: Expression)
     extends UnaryExpression
-    with NullIntolerant
     with QueryErrorsBase {
-
+  override def nullIntolerant: Boolean = true
   override val dataType: DataType = VariantType
 
   // Only accept nested types at the root but any types can be nested inside.
@@ -236,7 +235,6 @@ case class VariantGet(
     timeZoneId: Option[String] = None)
     extends BinaryExpression
     with TimeZoneAwareExpression
-    with NullIntolerant
     with ExpectsInputTypes
     with QueryErrorsBase {
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -277,6 +275,7 @@ case class VariantGet(
   override def prettyName: String = if (failOnError) "variant_get" else "try_variant_get"
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   protected override def nullSafeEval(input: Any, path: Any): Any = {
     VariantGet.variantGet(
