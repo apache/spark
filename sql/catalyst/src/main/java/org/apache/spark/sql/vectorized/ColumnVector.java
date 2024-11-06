@@ -69,6 +69,18 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract void close();
 
   /**
+   * Cleans up memory for this column vector if it's not writable. The column vector is not usable
+   * after this.
+   *
+   * If this is a writable column vector, it is a no-op.
+   */
+  public void closeIfNotWritable() {
+    // By default, we just call close() for all column vectors. If a column vector is writable, it
+    // should override this method and do nothing.
+    close();
+  }
+
+  /**
    * Returns true if this column vector contains any null values.
    */
   public abstract boolean hasNull();

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.avro
 
-import org.apache.avro.LogicalType
-import org.apache.avro.Schema
+import org.apache.avro.{LogicalType, Schema}
 
 import org.apache.spark.sql.types.DecimalType
 
