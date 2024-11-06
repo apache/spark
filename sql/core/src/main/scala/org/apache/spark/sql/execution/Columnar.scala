@@ -194,8 +194,13 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
        |    $shouldStop
        |  }
        |  $idx = $numRows;
+       |  $batch.closeIfNotWritable();
        |  $batch = null;
        |  $nextBatchFuncName();
+       |}
+       |// clean up resources
+       |if ($batch != null) {
+       |  $batch.close();
        |}
      """.stripMargin
   }
