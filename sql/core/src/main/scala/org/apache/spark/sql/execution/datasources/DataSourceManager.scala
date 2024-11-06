@@ -99,7 +99,7 @@ object DataSourceManager extends Logging {
 
   private def normalize(name: String): String = name.toLowerCase(Locale.ROOT)
 
-  private def initialStaticDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
+  private lazy val initialStaticDataSourceBuilders: Map[String, UserDefinedPythonDataSource] = {
     if (shouldLoadPythonDataSources) this.synchronized {
       if (dataSourceBuilders.isEmpty) {
         val maybeResult = try {
