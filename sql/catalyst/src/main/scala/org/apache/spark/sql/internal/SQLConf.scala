@@ -3940,8 +3940,11 @@ object SQLConf {
   val ARTIFACTS_SESSION_ISOLATION_ENABLED =
     buildConf("spark.sql.artifact.isolation.enabled")
       .internal()
-      .doc("When enabled, artifacts (such as JARs, files, archives) added to one SparkSession " +
-        "are isolated from other sessions within the same Spark instance.")
+      .doc("When enabled for a Spark Session, artifacts (such as JARs, files, archives) added to " +
+        "this session are isolated from other sessions within the same Spark instance. When " +
+        "disabled for a session, artifacts added to this session are visible to other sessions " +
+        "that have this config disabled. This config can only be set during the creation of a " +
+        "Spark Session and will have no effect when changed in the middle of session usage.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
