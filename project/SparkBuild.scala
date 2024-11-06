@@ -1059,9 +1059,25 @@ object KubernetesIntegrationTests {
 object DependencyOverrides {
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("33.1.0-jre")
   lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
-    dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.11.3")
+    dependencyOverrides ++= {
+      val nettyVersion = SbtPomKeys.effectivePom.value.getProperties.get(
+        "netty.version").asInstanceOf[String]
+      Seq(
+        "com.google.guava" % "guava" % guavaVersion,
+        "jline" % "jline" % "2.14.6",
+        "org.apache.avro" % "avro" % "1.11.3",
+        "io.netty" % "netty-buffer" % nettyVersion,
+        "io.netty" % "netty-codec" % nettyVersion,
+        "io.netty" % "netty-common" % nettyVersion,
+        "io.netty" % "netty-handler" % nettyVersion,
+        "io.netty" % "netty-resolver" % nettyVersion,
+        "io.netty" % "netty-transport" % nettyVersion,
+        "io.netty" % "netty-transport-classes-epoll" % nettyVersion,
+        "io.netty" % "netty-transport-native-epoll" % nettyVersion,
+        "io.netty" % "netty-transport-native-unix-common" % nettyVersion
+      )
+    }
+  )
 }
 
 /**
