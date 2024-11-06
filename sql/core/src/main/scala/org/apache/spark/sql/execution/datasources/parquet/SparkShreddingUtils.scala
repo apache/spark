@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import scala.jdk.CollectionConverters._
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -166,9 +164,9 @@ case object SparkShreddingUtils {
     val row = new GenericInternalRow(schema.numFields)
 
     override def addArray(schema: VariantSchema,
-        array: java.util.List[VariantShreddingWriter.ShreddedResult]): Unit = {
+        array: Array[VariantShreddingWriter.ShreddedResult]): Unit = {
       val arrayResult = new GenericArrayData(
-          array.asScala.map(_.asInstanceOf[SparkShreddedResult].row))
+          array.map(_.asInstanceOf[SparkShreddedResult].row))
       row.update(schema.typedIdx, arrayResult)
     }
 

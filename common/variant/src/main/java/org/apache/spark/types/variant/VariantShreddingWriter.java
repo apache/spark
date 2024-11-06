@@ -36,7 +36,7 @@ public class VariantShreddingWriter {
   // to populate it.
   public interface ShreddedResult {
     // Create an array. The elements are the result of shredding each element.
-    void addArray(VariantSchema schema, List<ShreddedResult> array);
+    void addArray(VariantSchema schema, ShreddedResult[] array);
     // Create an object. The values are the result of shredding each field, order by the index in
     // objectSchema. Missing fields are populated with an empty result.
     void addObject(VariantSchema schema, ShreddedResult[] values);
@@ -75,15 +75,14 @@ public class VariantShreddingWriter {
       // The array element is always a struct containing untyped and typed fields.
       VariantSchema elementSchema = schema.arraySchema;
       int size = v.arraySize();
-      ArrayList<ShreddedResult> array = new ArrayList<>(size);
+      ShreddedResult[] array = new ShreddedResult[size];
       for (int i = 0; i < size; ++i) {
         ShreddedResult shreddedArray = castShredded(v.getElementAtIndex(i), elementSchema, builder);
-        array.add(shreddedArray);
+        array[i] = shreddedArray;
       }
       result.addArray(schema, array);
     } else if (schema.objectSchema != null && variantType == VariantUtil.Type.OBJECT) {
       Map<String, VariantSchema.ObjectField> objectSchema = schema.objectSchema;
-      int maxSize = Math.min(v.objectSize(), objectSchema.size());
       ShreddedResult[] shreddedValues = new ShreddedResult[objectSchema.size()];
 
       // Create a variantBuilder for any mismatched fields.
@@ -157,9 +156,9 @@ public class VariantShreddingWriter {
           ShreddedResultBuilder builder) {
     switch (variantType) {
       case LONG:
-        if (targetType instanceof VariantSchema.IntegralType) {
+        if (targetType instanceof VariantSchema.IntegralType integralType) {
           // Check that the target type can hold the actual value.
-          VariantSchema.IntegralSize size = ((VariantSchema.IntegralType) targetType).size;
+          VariantSchema.IntegralSize size = integralType.size;
           long value = v.getLong();
           switch (size) {
             case BYTE:
@@ -180,11 +179,10 @@ public class VariantShreddingWriter {
             case LONG:
               return value;
           }
-        } else if (targetType instanceof VariantSchema.DecimalType &&
+        } else if (targetType instanceof VariantSchema.DecimalType decimalType &&
                    builder.allowNumericScaleChanges()) {
           // If the integer can fit in the given decimal precision, allow it.
           long value = v.getLong();
-          VariantSchema.DecimalType decimalType = (VariantSchema.DecimalType) targetType;
           // Set to the requested scale, and check if the precision is large enough.
           BigDecimal decimalValue = BigDecimal.valueOf(value);
           BigDecimal scaledValue = decimalValue.setScale(decimalType.scale);
@@ -196,8 +194,7 @@ public class VariantShreddingWriter {
         }
         break;
       case DECIMAL:
-        if (targetType instanceof VariantSchema.DecimalType) {
-          VariantSchema.DecimalType decimalType = (VariantSchema.DecimalType) targetType;
+        if (targetType instanceof VariantSchema.DecimalType decimalType) {
           // Use getDecimalWithOriginalScale so that we retain scale information if
           // allowNumericScaleChanges() is false.
           BigDecimal value = VariantUtil.getDecimalWithOriginalScale(v.value, v.pos);
@@ -214,11 +211,11 @@ public class VariantShreddingWriter {
               return scaledValue;
             }
           }
-        } else if (targetType instanceof VariantSchema.IntegralType &&
+        } else if (targetType instanceof VariantSchema.IntegralType integralType &&
           builder.allowNumericScaleChanges()) {
           // Check if the decimal happens to be an integer.
           BigDecimal value = v.getDecimal();
-          VariantSchema.IntegralSize size = ((VariantSchema.IntegralType) targetType).size;
+          VariantSchema.IntegralSize size = integralType.size;
           // Try to cast to the appropriate type, and check if any information is lost.
           switch (size) {
             case BYTE:
