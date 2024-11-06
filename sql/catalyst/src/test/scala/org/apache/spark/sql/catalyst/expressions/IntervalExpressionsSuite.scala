@@ -316,7 +316,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
       val durationExpr = MakeDTInterval(Literal(days), Literal(hours), Literal(minutes),
         Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
-      checkExceptionInExpression[ArithmeticException](durationExpr, "ARITHMETIC_OVERFLOW")
+      checkExceptionInExpression[ArithmeticException](durationExpr, "ARITHMETIC_OVERFLOW.DATETIME")
     }
 
     check(millis = -123)
@@ -528,7 +528,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(MakeYMInterval(Literal(178956970), Literal(8)),
       MakeYMInterval(Literal(-178956970), Literal(-9)))
       .foreach { ym =>
-        checkExceptionInExpression[ArithmeticException](ym, "ARITHMETIC_OVERFLOW")
+        checkExceptionInExpression[ArithmeticException](ym, "ARITHMETIC_OVERFLOW.DATETIME")
       }
 
     def checkImplicitEvaluation(expr: Expression, value: Any): Unit = {

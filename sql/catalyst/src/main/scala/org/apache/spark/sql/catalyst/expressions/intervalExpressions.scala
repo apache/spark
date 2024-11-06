@@ -467,7 +467,8 @@ case class MakeDTInterval(
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeYMInterval(years: Expression, months: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable
+    with SupportQueryContext {
 
   def this(years: Expression) = this(years, Literal(0))
   def this() = this(Literal(0))
@@ -479,25 +480,26 @@ case class MakeYMInterval(years: Expression, months: Expression)
 
   override def nullSafeEval(year: Any, month: Any): Any = {
     try {
-      Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
-        Math.multiplyExact(year.asInstanceOf[Number].longValue(), MONTHS_PER_YEAR)))
+      Math.toIntExact(
+        Math.addExact(month.asInstanceOf[Int],
+          Math.multiplyExact(year.asInstanceOf[Int], MONTHS_PER_YEAR)))
     } catch {
-      case e: ArithmeticException =>
-        throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage)
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.datetimeIntervalArithmeticOverflowError()
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (years, months) => {
       val math = classOf[Math].getName.stripSuffix("$")
+      val errorContext = getContextOrNullCode(ctx)
       s"""
          |try {
          |  ${ev.value} = $math.toIntExact(
          |    $math.addExact($months, $math.multiplyExact($years, $MONTHS_PER_YEAR)));
          |} catch (java.lang.ArithmeticException e) {
-         |  throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", null);
-         |}
-      """.stripMargin
+         |  throw QueryExecutionErrors.datetimeIntervalArithmeticOverflowError($errorContext);
+         |}""".stripMargin
     })
   }
 
@@ -506,6 +508,10 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression =
     copy(years = newLeft, months = newRight)
+
+  override def initQueryContext(): Option[QueryContext] = {
+    Some(origin.context)
+  }
 }
 
 // Multiply an year-month interval by a numeric
@@ -616,7 +622,7 @@ trait IntervalDivide {
       context: QueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
-        throw QueryExecutionErrors.intervalArithmeticOverflowError(
+        throw QueryExecutionErrors.numericIntervalArithmeticOverflowError(
           "Interval value overflows after being divided by -1", "try_divide", context)
       }
     }

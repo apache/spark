@@ -791,8 +791,8 @@ object IntervalUtils extends SparkIntervalUtils {
       micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
       micros
     } catch {
-      case e: ArithmeticException =>
-        throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage)
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.datetimeIntervalArithmeticOverflowError()
     }
   }
 

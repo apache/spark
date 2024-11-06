@@ -2020,11 +2020,23 @@
     ],
     "sqlState" : "XX000"
   },
-  "INTERVAL_ARITHMETIC_OVERFLOW" : {
-    "message" : [
-      "<message>.<alternative>"
+  "INTERVAL_ARITHMETIC_OVERFLOW": {
+    "message": [
+      "Integer overflow while creating interval."
     ],
-    "sqlState" : "22015"
+    "subClass": {
+      "NUMERIC": {
+        "message": [
+          "<message>.<alternative>."
+        ]
+      },
+      "DATETIME": {
+        "message": [
+          "Too big interval for datetime, check how you create it."
+        ]
+      }
+    },
+    "sqlState": "22015"
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
     "message" : [
