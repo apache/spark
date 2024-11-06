@@ -454,8 +454,8 @@ class FunctionsTestsMixin:
 
     def test_try_make_interval(self):
         df = self.spark.createDataFrame([(2147483647,)], ["num"])
-        actual = df.select(F.try_make_interval("num").alias("res")).collect()
-        self.assertEqual([Row(res=None)], actual)
+        actual = df.select(F.isnull(F.try_make_interval("num"))).collect()
+        self.assertEqual([Row(True)], actual)
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
