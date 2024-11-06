@@ -454,7 +454,7 @@ class FunctionsTestsMixin:
 
     def test_try_make_interval(self):
         df = self.spark.createDataFrame([(2147483647,)], ["num"])
-        actual = df.select(F.try_make_interval(df.num).alias("res")).collect()
+        actual = df.select(F.try_make_interval("num").alias("res")).collect()
         self.assertEqual([Row(res=None)], actual)
 
     def test_octet_length_function(self):
