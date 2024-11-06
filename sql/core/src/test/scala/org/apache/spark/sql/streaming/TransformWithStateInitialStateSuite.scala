@@ -113,10 +113,10 @@ abstract class InitialStateWithStateDataSourceBase[V]
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _valState = getHandle.getValueState[String]("testValueInit", Encoders.STRING)
-    _listState = getHandle.getListState[Long]("testListInit", Encoders.scalaLong)
+    _valState = getHandle.getValueState[String]("testValueInit", Encoders.STRING, TTLConfig.NONE)
+    _listState = getHandle.getListState[Long]("testListInit", Encoders.scalaLong, TTLConfig.NONE)
     _mapState = getHandle.getMapState[String, Long](
-      "testMapInit", Encoders.STRING, Encoders.scalaLong)
+      "testMapInit", Encoders.STRING, Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -310,11 +310,11 @@ class StatefulProcessorWithAllStateVars extends RunningCountStatefulProcessor {
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
     _listState = getHandle.getListState[Long](
-      "listState", Encoders.scalaLong)
+      "listState", Encoders.scalaLong, TTLConfig.NONE)
     _mapState = getHandle.getMapState[String, Long](
-      "mapState", Encoders.STRING, Encoders.scalaLong)
+      "mapState", Encoders.STRING, Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
