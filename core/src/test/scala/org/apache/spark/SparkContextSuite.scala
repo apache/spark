@@ -1425,6 +1425,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test("SPARK-50247: BLOCK_MANAGER_REREGISTRATION_FAILED should be counted as network failure") {
+    // This test case follows the test structure of HEARTBEAT_FAILURE error code (SPARK-39957)
     val conf = new SparkConf().set(TASK_MAX_FAILURES, 1)
     val sc = new SparkContext("local-cluster[1, 1, 1024]", "test-exit-code", conf)
     val result = sc.parallelize(1 to 10, 1).map { x =>
@@ -1441,6 +1442,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("SPARK-50247: BLOCK_MANAGER_REREGISTRATION_FAILED will be counted as task failure when " +
     "EXECUTOR_REMOVE_DELAY is disabled") {
+    // This test case follows the test structure of HEARTBEAT_FAILURE error code (SPARK-39957)
     val conf = new SparkConf().set(TASK_MAX_FAILURES, 1).set(EXECUTOR_REMOVE_DELAY.key, "0s")
     val sc = new SparkContext("local-cluster[1, 1, 1024]", "test-exit-code", conf)
     eventually(timeout(30.seconds), interval(1.seconds)) {
