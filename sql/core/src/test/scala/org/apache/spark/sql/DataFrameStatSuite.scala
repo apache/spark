@@ -589,15 +589,15 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
         person2.summary("foo")
       },
       condition = "UNRECOGNIZED_STATISTIC",
-      parameters = Map("stats" -> "`foo`")
+      parameters = Map("stats" -> "'foo'")
     )
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         person2.summary("foo%")
       },
-      condition = "_LEGACY_ERROR_TEMP_2113",
-      parameters = Map("stats" -> "foo%")
+      condition = "UNRECOGNIZED_STATISTIC",
+      parameters = Map("stats" -> "'foo%'")
     )
   }
 

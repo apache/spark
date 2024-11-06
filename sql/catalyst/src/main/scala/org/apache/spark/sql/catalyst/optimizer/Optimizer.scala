@@ -305,7 +305,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       SpecialDatetimeValues,
       RewriteAsOfJoin,
       EvalInlineTables,
-      ReplaceTranspose
+      ReplaceTranspose,
+      RewriteCollationJoin
     )
 
     override def apply(plan: LogicalPlan): LogicalPlan = {
