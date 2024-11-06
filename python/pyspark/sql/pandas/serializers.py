@@ -427,6 +427,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             and not is_variant(arrow_column.type)
         ):
             import pandas as pd
+
             series = [
                 super(ArrowStreamPandasUDFSerializer, self)
                 .arrow_to_pandas(column, self._struct_in_pandas, self._ndarray_as_list)
