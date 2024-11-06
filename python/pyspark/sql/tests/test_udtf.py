@@ -55,6 +55,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    VariantVal,
 )
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.sqlutils import (
@@ -2529,6 +2530,28 @@ class BaseUDTFTestsMixin:
             ),
             [Row(current=4, total=4), Row(current=13, total=4), Row(current=20, total=1)],
         )
+
+    def test_udtf_with_variant_input(self):
+        @udtf(returnType="i int, s: string")
+        class TestUDTF:
+            def eval(self, v):
+                for i in range(10):
+                    yield i, v.toJson()
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        rows = self.spark.sql("select i, s from test_udtf(parse_json('{\"a\":\"b\"}'))").collect()
+        self.assertEqual(rows, [Row(i=n, s='{\"a\":\"b\"}') for n in range(10)])
+
+    def test_udtf_with_variant_output(self):
+        @udtf(returnType="i int, v: variant")
+        class TestUDTF:
+            def eval(self, n):
+                for i in range(n):
+                    yield i, VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+        rows = self.spark.sql("select i, to_json(v) from test_udtf(8)").collect()
+        self.assertEqual(rows, [Row(i=n, s=f'{{\"a\":\"{chr(97 + n)}\"}}') for n in range(8)])
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):

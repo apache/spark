@@ -64,23 +64,6 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   override def nullable: Boolean = true
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val check = super.checkInputDataTypes()
-    if (check.isFailure) {
-      check
-    } else {
-      val exprReturningVariant = children.collectFirst {
-        case e: Expression if VariantExpressionEvalUtils.typeContainsVariant(e.dataType) => e
-      }
-      exprReturningVariant match {
-        case Some(e) => TypeCheckResult.DataTypeMismatch(
-          errorSubClass = "UNSUPPORTED_UDF_INPUT_TYPE",
-          messageParameters = Map("dataType" -> s"${e.dataType.sql}"))
-        case None => TypeCheckResult.TypeCheckSuccess
-      }
-    }
-  }
 }
 
 /**
@@ -96,10 +79,6 @@ case class PythonUDF(
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable {
-
-  if (VariantExpressionEvalUtils.typeContainsVariant(dataType)) {
-    throw QueryCompilationErrors.unsupportedUDFOuptutType(this, dataType)
-  }
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
@@ -169,6 +148,23 @@ case class PythonUDAF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDAF =
     copy(children = newChildren)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val check = super.checkInputDataTypes()
+    if (check.isFailure) {
+      check
+    } else {
+      val exprReturningVariant = children.collectFirst {
+        case e: Expression if VariantExpressionEvalUtils.typeContainsVariant(e.dataType) => e
+      }
+      exprReturningVariant match {
+        case Some(e) => TypeCheckResult.DataTypeMismatch(
+          errorSubClass = "UNSUPPORTED_UDF_INPUT_TYPE",
+          messageParameters = Map("dataType" -> s"${e.dataType.sql}"))
+        case None => TypeCheckResult.TypeCheckSuccess
+      }
+    }
+  }
 }
 
 abstract class UnevaluableGenerator extends Generator {
@@ -212,13 +208,6 @@ case class PythonUDTF(
     resultId: ExprId = NamedExpression.newExprId,
     pythonUDTFPartitionColumnIndexes: Option[PythonUDTFPartitionColumnIndexes] = None)
   extends UnevaluableGenerator with PythonFuncExpression {
-
-  elementSchema.collectFirst {
-    case sf: StructField if VariantExpressionEvalUtils.typeContainsVariant(sf.dataType) => sf
-  } match {
-    case Some(sf) => throw QueryCompilationErrors.unsupportedUDFOuptutType(this, sf.dataType)
-    case None =>
-  }
 
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)

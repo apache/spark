@@ -2542,6 +2542,7 @@ class TypesTestsMixin:
             ("struct<>", True),
             ("struct<a: string, b: array<long>>", True),
             ("", True),
+            ("a: int, b: variant", True),
             ("<a: int, b: variant>", False),
             ("randomstring", False),
             ("struct", False),

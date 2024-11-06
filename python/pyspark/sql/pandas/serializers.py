@@ -31,6 +31,7 @@ from pyspark.serializers import (
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,
+    is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
     _create_converter_to_pandas,
@@ -420,9 +421,12 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
 
-        if self._df_for_struct and types.is_struct(arrow_column.type):
+        if (
+            self._df_for_struct
+            and types.is_struct(arrow_column.type)
+            and not is_variant(arrow_column.type)
+        ):
             import pandas as pd
-
             series = [
                 super(ArrowStreamPandasUDFSerializer, self)
                 .arrow_to_pandas(column, self._struct_in_pandas, self._ndarray_as_list)
@@ -505,7 +509,12 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         arrs = []
         for s, t in series:
-            if self._struct_in_pandas == "dict" and t is not None and pa.types.is_struct(t):
+            if (
+                self._struct_in_pandas == "dict"
+                and t is not None
+                and pa.types.is_struct(t)
+                and not is_variant(t)
+            ):
                 # A pandas UDF should return pd.DataFrame when the return type is a struct type.
                 # If it returns a pd.Series, it should throw an error.
                 if not isinstance(s, pd.DataFrame):

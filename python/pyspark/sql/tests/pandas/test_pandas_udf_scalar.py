@@ -752,46 +752,87 @@ class ScalarPandasUDFTestsMixin:
 
     def test_udf_with_variant_input(self):
         df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
-        from pyspark.sql.functions import col
 
-        scalar_f = pandas_udf(lambda u: str(u), StringType())
+        scalar_f = pandas_udf(lambda u: u.apply(str), StringType(), PandasUDFType.SCALAR)
         iter_f = pandas_udf(
-            lambda it: map(lambda u: str(u), it), StringType(), PandasUDFType.SCALAR_ITER
+            lambda it: map(lambda u: u.apply(str), it), StringType(), PandasUDFType.SCALAR_ITER
         )
 
-        for f in [scalar_f, iter_f]:
-            with self.assertRaises(AnalysisException) as ae:
-                df.select(f(col("v"))).collect()
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
 
-            self.check_error(
-                exception=ae.exception,
-                errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-                messageParameters={
-                    "sqlExpr": '"<lambda>(v)"',
-                    "dataType": "VARIANT",
-                },
-            )
+        for f in [scalar_f, iter_f]:
+            result = df.select(f(col("v")).alias("udf")).collect()
+            self.assertEqual(result, expected)
 
     def test_udf_with_variant_output(self):
-        # Corresponds to a JSON string of {"a": "b"}.
-        returned_variant = VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))
-        scalar_f = pandas_udf(lambda x: returned_variant, VariantType())
+        scalar_f = pandas_udf(
+            lambda u: u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))), VariantType()
+        )
         iter_f = pandas_udf(
-            lambda it: map(lambda x: returned_variant, it), VariantType(), PandasUDFType.SCALAR_ITER
+            lambda it: map(lambda u: u.apply(
+                lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))
+            ), it),
+            VariantType(),
+            PandasUDFType.SCALAR_ITER
         )
 
-        for f in [scalar_f, iter_f]:
-            with self.assertRaises(AnalysisException) as ae:
-                self.spark.range(0, 10).select(f()).collect()
+        expected = [Row(udf=i) for i in range(10)]
 
-            self.check_error(
-                exception=ae.exception,
-                errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-                messageParameters={
-                    "sqlExpr": '"<lambda>()"',
-                    "dataType": "VARIANT",
-                },
-            )
+        for f in [scalar_f, iter_f]:
+            # with self.assertRaises(AnalysisException) as ae:
+            result = self.spark.range(10).select(f(col("id")).cast("int").alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+    def test_chained_udfs_with_variant(self):
+        scalar_first = pandas_udf(
+            lambda u: u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))), VariantType()
+        )
+        iter_first = pandas_udf(
+            lambda it: map(lambda u: u.apply(
+                lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))
+            ), it),
+            VariantType(),
+            PandasUDFType.SCALAR_ITER
+        )
+        scalar_second = pandas_udf(lambda u: u.apply(str), StringType(), PandasUDFType.SCALAR)
+        iter_second = pandas_udf(
+            lambda it: map(lambda u: u.apply(str), it), StringType(), PandasUDFType.SCALAR_ITER
+        )
+
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+
+        for f in [scalar_first, iter_first]:
+            for s in [scalar_second, iter_second]:
+                result = self.spark.range(10).select(s(f(col("id"))).alias("udf")).collect()
+                self.assertEqual(result, expected)
+
+    def test_chained_udfs_with_complex_variant(self):
+        scalar_first = pandas_udf(
+            lambda u: u.apply(lambda i: [VariantVal(bytes([12, i]), bytes([1, 0, 0]))]),
+            ArrayType(VariantType())
+        )
+        iter_first = pandas_udf(
+            lambda it: map(lambda u: u.apply(
+                lambda i: [VariantVal(bytes([12, i]), bytes([1, 0, 0]))]
+            ), it),
+            ArrayType(VariantType()),
+            PandasUDFType.SCALAR_ITER
+        )
+        scalar_second = pandas_udf(lambda u: u.apply(lambda v: str(v[0])),
+                                   StringType(),
+                                   PandasUDFType.SCALAR)
+        iter_second = pandas_udf(
+            lambda it: map(lambda u: u.apply(lambda v: str(v[0])), it),
+            StringType(),
+            PandasUDFType.SCALAR_ITER
+        )
+
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+
+        for f in [scalar_first, iter_first]:
+            for s in [scalar_second, iter_second]:
+                result = self.spark.range(10).select(s(f(col("id"))).alias("udf")).collect()
+                self.assertEqual(result, expected)
 
     def test_vectorized_udf_decorator(self):
         df = self.spark.range(10)

@@ -334,68 +334,72 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(sel.collect(), [Row(key=1, value="1")])
 
     def test_udf_with_variant_input(self):
-        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
-
-        u = udf(lambda u: str(u), StringType())
-        with self.assertRaises(AnalysisException) as ae:
-            df.select(u(col("v"))).collect()
-
-        self.check_error(
-            exception=ae.exception,
-            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-            messageParameters={"sqlExpr": '"<lambda>(v)"', "dataType": "VARIANT"},
-        )
+        for arrow_enabled in ["false", "true"]:
+            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
+                df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+                u = udf(lambda u: str(u), StringType())
+                expected = [Row(udf="{0}".format(i)) for i in range(10)]
+                result = df.select(u(col("v")).alias("udf")).collect()
+                self.assertEqual(result, expected)
 
     def test_udf_with_complex_variant_input(self):
-        df = self.spark.range(0, 10).selectExpr(
-            "named_struct('v', parse_json(cast(id as string))) struct_of_v"
-        )
-
-        u = udf(lambda u: str(u), StringType())
-
-        with self.assertRaises(AnalysisException) as ae:
-            df.select(u(col("struct_of_v"))).collect()
-
-        self.check_error(
-            exception=ae.exception,
-            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-            messageParameters={
-                "sqlExpr": '"<lambda>(struct_of_v)"',
-                "dataType": "STRUCT<v: VARIANT NOT NULL>",
-            },
-        )
+        for arrow_enabled in ["false", "true"]:
+            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
+                df = self.spark.range(0, 10).selectExpr(
+                    "named_struct('v', parse_json(cast(id as string))) struct_of_v"
+                )
+                u = udf(lambda u: str(u["v"]), StringType())
+                result = df.select(u(col("struct_of_v"))).collect()
+                expected = [Row(udf="{0}".format(i)) for i in range(10)]
+                self.assertEqual(result, expected)
 
     def test_udf_with_variant_output(self):
-        # The variant value returned corresponds to a JSON string of {"a": "b"}.
-        u = udf(
-            lambda: VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97])),
-            VariantType(),
-        )
-
-        with self.assertRaises(AnalysisException) as ae:
-            self.spark.range(0, 10).select(u()).collect()
-
-        self.check_error(
-            exception=ae.exception,
-            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-            messageParameters={"sqlExpr": '"<lambda>()"', "dataType": "VARIANT"},
-        )
+        for arrow_enabled in ["false", "true"]:
+            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
+                # The variant value returned corresponds to a JSON string of {"a": "<a-j>"}.
+                u = udf(
+                    lambda i: VariantVal(
+                        bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])
+                    ),
+                    VariantType(),
+                )
+                result = self.spark.range(0, 10).select(
+                    u(col("id")).cast("string").alias("udf")
+                ).collect()
+                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+                self.assertEqual(result, expected)
 
     def test_udf_with_complex_variant_output(self):
-        # The variant value returned corresponds to a JSON string of {"a": "b"}.
-        u = udf(
-            lambda: {"v", VariantVal(bytes([2, 1, 0, 0, 2, 5, 98]), bytes([1, 1, 0, 1, 97]))},
-            MapType(StringType(), VariantType()),
-        )
+        for arrow_enabled in ["false", "true"]:
+            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
+                # The variant value returned corresponds to a JSON string of {"a": "<a-j>"}.
+                u = udf(
+                    lambda i: {
+                        "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+                    },
+                    MapType(StringType(), VariantType()),
+                )
+                result = self.spark.range(0, 10).select(
+                    u(col("id")).cast("string").alias("udf")
+                ).collect()
+                expected = [Row(udf=f"{{v -> {{\"a\":\"{chr(97 + i)}\"}}}}") for i in range(10)]
+                self.assertEqual(result, expected)
 
-        with self.assertRaises(AnalysisException) as ae:
-            self.spark.range(0, 10).select(u()).collect()
-
-        self.check_error(
-            exception=ae.exception,
-            errorClass="DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-            messageParameters={"sqlExpr": '"<lambda>()"', "dataType": "MAP<STRING, VARIANT>"},
-        )
+    def test_chained_udfs_with_variant(self):
+        for arrow_enabled in ["false", "true"]:
+            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
+                udf_first = udf(
+                    lambda i: VariantVal(
+                        bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])
+                    ),
+                    VariantType(),
+                )
+                udf_second = udf(lambda u: str(u), StringType())
+                result = self.spark.range(0, 10).select(
+                    udf_second(udf_first(col("id"))).cast("string").alias("udf")
+                ).collect()
+                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+                self.assertEqual(result, expected)
 
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
