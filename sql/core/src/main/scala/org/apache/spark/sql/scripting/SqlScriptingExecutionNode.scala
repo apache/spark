@@ -652,7 +652,7 @@ class ForStatementExec(
   body: CompoundBodyExec,
   label: Option[String],
   session: SparkSession) extends NonLeafStatementExec {
-  // fali reset, case when identifier is None
+
   private object ForState extends Enumeration {
     val VariableDeclaration, VariableAssignment, Body = Value
   }
@@ -693,12 +693,14 @@ class ForStatementExec(
 
       override def next(): CompoundStatementExec = state match {
         case ForState.VariableDeclaration =>
+          // when there is no for variable, skip var declaration and iterate only the body
           if (identifier.isEmpty) {
             state = ForState.Body
             body.reset()
             return next()
           }
 
+          // arguments of CreateNamedStruct must be formatted like (name1, val1, name2, val2, ...)
           val namedStructArgs: Seq[Expression] =
             cachedQueryDataframe().schema.names.toSeq.flatMap { colName =>
               Seq(Literal(colName), Literal(cachedQueryResult()(currRow).getAs(colName)))
@@ -773,6 +775,3 @@ class ForStatementExec(
     body.reset()
   }
 }
-
-//        val attributes = DataTypeUtils.toAttributes(queryResult.head.schema)
-//        LocalRelation.fromExternalRows(attributes, Seq(queryResult(0)))

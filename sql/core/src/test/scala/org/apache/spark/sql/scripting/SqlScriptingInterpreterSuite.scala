@@ -61,6 +61,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   }
 
 
+  // todo: complex types in for
   test("for test") {
     withTable("t") {
       val sqlScript =
@@ -93,6 +94,25 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row("second")), // select stringCol
         Seq(Row(2.0)), // select doubleCol
         Seq.empty[Row] // drop x
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("for test empty result") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (intCol INT) using parquet;
+          | FOR x AS SELECT * FROM t ORDER BY intCol DO
+          |   SELECT x.intCol;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -181,6 +201,50 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // declare x
         Seq.empty[Row], // set x to row 2
 //        Seq.empty[Row], // drop x
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("for test nested in while") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | DECLARE i = 0;
+          | CREATE TABLE t (intCol INT) using parquet;
+          | INSERT INTO t VALUES (0);
+          | WHILE i < 2 DO
+          |   SET i = i + 1;
+          |   FOR x AS SELECT * FROM t ORDER BY intCol DO
+          |     SELECT x.intCol;
+          |   END FOR;
+          |   INSERT INTO t VALUES (i);
+          | END WHILE;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // declare i
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // set i
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 0
+        Seq(Row(0)), // select intCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // set i
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 0
+        Seq(Row(0)), // select intCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 1
+        Seq(Row(1)), // select intCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // drop i
       )
       verifySqlScriptResult(sqlScript, expected)
     }
