@@ -916,7 +916,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         "archive/00002.log" -> 2000
       )
 
-      rocksDBFileMapping.currentVersion = 1
       saveCheckpointFiles(fileManager, cpFiles1, version = 1,
         numKeys = 101, rocksDBFileMapping)
       assert(fileManager.getLatestVersion() === 1)
@@ -2472,7 +2471,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       fileMapping: RocksDBFileMapping): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
-    fileMapping.currentVersion = version - 1
     val (dfsFileSuffix, immutableFileMapping) = fileMapping.createSnapshotFileMapping(
       fileManager, checkpointDir, version)
     fileManager.saveCheckpointToDfs(

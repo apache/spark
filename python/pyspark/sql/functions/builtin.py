@@ -40,6 +40,7 @@ from typing import (
 )
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors.utils import _with_origin
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.types import (
@@ -293,6 +294,7 @@ def lit(col: Any) -> Column:
 
 
 @_try_remote_functions
+@_with_origin
 def col(col: str) -> Column:
     """
     Returns a :class:`~pyspark.sql.Column` based on the given column name.
@@ -12819,7 +12821,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def instr(str: "ColumnOrName", substr: str) -> Column:
+def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
     """
     Locate the position of the first occurrence of substr column in the given string.
     Returns null if either of the arguments are null.
@@ -12836,10 +12838,13 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
 
     Parameters
     ----------
-    str : :class:`~pyspark.sql.Column` or str
+    str : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    substr : str
+    substr : :class:`~pyspark.sql.Column` or literal string
         substring to look for.
+
+        .. versionchanged:: 4.0.0
+            `substr` now accepts column.
 
     Returns
     -------
@@ -12848,13 +12853,31 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('abcd',)], ['s',])
-    >>> df.select(instr(df.s, 'b').alias('s')).collect()
-    [Row(s=2)]
-    """
-    from pyspark.sql.classic.column import _to_java_column
+    Example 1: Using a literal string as the 'substring'
 
-    return _invoke_function("instr", _to_java_column(str), _enum_to_value(substr))
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("abcd",), ("xyz",)], ["s",])
+    >>> df.select("*", sf.instr(df.s, "b")).show()
+    +----+-----------+
+    |   s|instr(s, b)|
+    +----+-----------+
+    |abcd|          2|
+    | xyz|          0|
+    +----+-----------+
+
+    Example 2: Using a Column 'substring'
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([("abcd",), ("xyz",)], ["s",])
+    >>> df.select("*", sf.instr("s", sf.lit("abc").substr(0, 2))).show()
+    +----+---------------------------+
+    |   s|instr(s, substr(abc, 0, 2))|
+    +----+---------------------------+
+    |abcd|                          1|
+    | xyz|                          0|
+    +----+---------------------------+
+    """
+    return _invoke_function_over_columns("instr", str, lit(substr))
 
 
 @_try_remote_functions

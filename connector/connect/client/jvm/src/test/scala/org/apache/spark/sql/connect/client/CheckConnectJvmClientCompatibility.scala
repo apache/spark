@@ -153,6 +153,9 @@ object CheckConnectJvmClientCompatibility {
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
 
+      // Skip any avro files
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+
       // Skip unsupported packages
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.api.*"), // Java, Python, R
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),

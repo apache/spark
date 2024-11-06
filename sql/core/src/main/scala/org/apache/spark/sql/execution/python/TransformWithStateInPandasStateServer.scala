@@ -591,20 +591,23 @@ class TransformWithStateInPandasStateServer(
     stateType match {
       case StateVariableType.ValueState => if (!valueStates.contains(stateName)) {
         val state = if (ttlDurationMs.isEmpty) {
-          statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema))
+          statefulProcessorHandle.getValueState[Row](stateName, Encoders.row(schema),
+            TTLConfig.NONE)
+          } else {
+            statefulProcessorHandle.getValueState(
+              stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+          }
+          valueStates.put(stateName,
+            ValueStateInfo(state, schema, expressionEncoder.createDeserializer()))
+          sendResponse(0)
         } else {
-          statefulProcessorHandle.getValueState(
-            stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
+          sendResponse(1, s"Value state $stateName already exists")
         }
-        valueStates.put(stateName,
-          ValueStateInfo(state, schema, expressionEncoder.createDeserializer()))
-        sendResponse(0)
-      } else {
-        sendResponse(1, s"Value state $stateName already exists")
-      }
+
       case StateVariableType.ListState => if (!listStates.contains(stateName)) {
         val state = if (ttlDurationMs.isEmpty) {
-          statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema))
+          statefulProcessorHandle.getListState[Row](stateName, Encoders.row(schema),
+            TTLConfig.NONE)
         } else {
           statefulProcessorHandle.getListState(
             stateName, Encoders.row(schema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))
@@ -616,12 +619,13 @@ class TransformWithStateInPandasStateServer(
       } else {
         sendResponse(1, s"List state $stateName already exists")
       }
+
       case StateVariableType.MapState => if (!mapStates.contains(stateName)) {
         val valueSchema = StructType.fromString(mapStateValueSchemaString)
         val valueExpressionEncoder = ExpressionEncoder(valueSchema).resolveAndBind()
         val state = if (ttlDurationMs.isEmpty) {
           statefulProcessorHandle.getMapState[Row, Row](stateName,
-            Encoders.row(schema), Encoders.row(valueSchema))
+            Encoders.row(schema), Encoders.row(valueSchema), TTLConfig.NONE)
         } else {
           statefulProcessorHandle.getMapState[Row, Row](stateName, Encoders.row(schema),
             Encoders.row(valueSchema), TTLConfig(Duration.ofMillis(ttlDurationMs.get)))

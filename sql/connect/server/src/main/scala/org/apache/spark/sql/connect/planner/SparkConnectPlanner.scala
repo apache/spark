@@ -55,8 +55,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
@@ -1510,14 +1509,13 @@ class SparkConnectPlanner(
   def transformExpression(
       exp: proto.Expression,
       baseRelationOpt: Option[LogicalPlan]): Expression = if (exp.hasCommon) {
-    try {
-      val origin = exp.getCommon.getOrigin
-      PySparkCurrentOrigin.set(
-        origin.getPythonOrigin.getFragment,
-        origin.getPythonOrigin.getCallSite)
-      withOrigin { doTransformExpression(exp, baseRelationOpt) }
-    } finally {
-      PySparkCurrentOrigin.clear()
+    CurrentOrigin.withOrigin {
+      val pythonOrigin = exp.getCommon.getOrigin.getPythonOrigin
+      val pysparkErrorContext = (pythonOrigin.getFragment, pythonOrigin.getCallSite)
+      val newOrigin = CurrentOrigin.get.copy(pysparkErrorContext = Some(pysparkErrorContext))
+      CurrentOrigin.withOrigin(newOrigin) {
+        doTransformExpression(exp, baseRelationOpt)
+      }
     }
   } else {
     doTransformExpression(exp, baseRelationOpt)

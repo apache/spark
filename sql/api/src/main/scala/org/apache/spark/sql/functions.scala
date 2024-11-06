@@ -3995,7 +3995,20 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def instr(str: Column, substring: String): Column = Column.fn("instr", str, lit(substring))
+  def instr(str: Column, substring: String): Column = instr(str, lit(substring))
+
+  /**
+   * Locate the position of the first occurrence of substr column in the given string. Returns
+   * null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def instr(str: Column, substring: Column): Column = Column.fn("instr", str, substring)
 
   /**
    * Computes the character length of a given string or number of bytes of a binary string. The
@@ -6809,7 +6822,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = {
-    from_json(e, lit(schema.sql), options.iterator)
+    from_json(e, lit(schema.json), options.iterator)
   }
 
   // scalastyle:off line.size.limit
@@ -7645,7 +7658,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(schema.sql), options.asScala.iterator)
+    from_xml(e, lit(schema.json), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
   /**
