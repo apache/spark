@@ -913,11 +913,52 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
       // Check that the exception will not be thrown in case of invalid collation name and
       // UNKNOWN_COLLATION_NAME enabled, but UTF8_BINARY collation will be returned.
-      withSQLConf(SQLConf.UNKNOWN_COLLATION_NAME_ENABLED.key -> "true") {
+      withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
         val dataType = DataType.fromJson(json)
         assert(dataType === StructType(
           StructField("c1", StringType(CollationFactory.UTF8_BINARY_COLLATION_ID), false) :: Nil))
       }
+    }
+  }
+
+  test("string field with invalid collation provider") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "string",
+         |      "nullable": false,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "INVALID.INVALID"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+
+    // Check that the exception will be thrown in case of invalid collation name and
+    // UNKNOWN_COLLATION_NAME config not enabled.
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson(json)
+      },
+      condition = "COLLATION_INVALID_PROVIDER",
+      parameters = Map(
+        "supportedProviders" -> "spark, icu",
+        "provider" -> "INVALID"))
+
+    // Check that the exception will not be thrown in case of invalid collation name and
+    // UNKNOWN_COLLATION_NAME enabled, but UTF8_BINARY collation will be returned.
+    withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
+      val dataType = DataType.fromJson(json)
+      assert(dataType === StructType(
+        StructField("c1", StringType(CollationFactory.UTF8_BINARY_COLLATION_ID), false) :: Nil))
     }
   }
 
@@ -1097,7 +1138,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
     // Check that the exception will not be thrown in case of invalid collation name and
     // UNKNOWN_COLLATION_NAME enabled, but UTF8_BINARY collation will be returned.
-    withSQLConf(SQLConf.UNKNOWN_COLLATION_NAME_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
       val dataType = DataType.parseDataType(
         JsonMethods.parse(arrayJson), collationsMap = collationsMap)
       assert(dataType === ArrayType(StringType(utf8BinaryCollationId)))
@@ -1157,7 +1198,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
     // Check that the exception will not be thrown in case of invalid collation name and
     // UNKNOWN_COLLATION_NAME enabled, but UTF8_BINARY collation will be returned.
-    withSQLConf(SQLConf.UNKNOWN_COLLATION_NAME_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
       val dataType = DataType.parseDataType(
         JsonMethods.parse(mapJson), collationsMap = collationsMap)
       assert(dataType === MapType(

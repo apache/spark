@@ -770,8 +770,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
-  lazy val UNKNOWN_COLLATION_NAME_ENABLED =
-    buildConf(SqlApiConfHelper.UNKNOWN_COLLATION_NAME_ENABLED)
+  lazy val ALLOW_READING_UNKNOWN_COLLATIONS =
+    buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
       .internal()
       .doc("Enables spark to read unknown collation name as UTF8_BINARY.")
       .version("4.0.0")
@@ -5530,7 +5530,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
-  override def unknownCollationNameEnabled: Boolean = getConf(UNKNOWN_COLLATION_NAME_ENABLED)
+  override def allowReadingUnknownCollations: Boolean = getConf(ALLOW_READING_UNKNOWN_COLLATIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 

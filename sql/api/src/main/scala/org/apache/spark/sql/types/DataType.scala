@@ -340,8 +340,17 @@ object DataType {
         fields.collect { case (fieldPath, JString(collation)) =>
           collation.split("\\.", 2) match {
             case Array(provider: String, collationName: String) =>
-              CollationFactory.assertValidProvider(provider)
-              fieldPath -> collationName
+              try {
+                CollationFactory.assertValidProvider(provider)
+                fieldPath -> collationName
+              } catch {
+                case e: SparkException
+                    if e.getCondition == "COLLATION_INVALID_PROVIDER" &&
+                      SqlApiConf.get.allowReadingUnknownCollations =>
+                  // If the collation provider is unknown and the config for reading such
+                  // collations is enabled, return the UTF8_BINARY collation.
+                  fieldPath -> "UTF8_BINARY"
+              }
           }
         }.toMap
 
@@ -352,10 +361,12 @@ object DataType {
   private def stringTypeWithCollation(collationName: String): StringType = {
     try {
       StringType(CollationFactory.collationNameToId(collationName))
-    }
-    catch {
-      case e: SparkException if e.getCondition == "COLLATION_INVALID_NAME" &&
-        SqlApiConf.get.unknownCollationNameEnabled =>
+    } catch {
+      case e: SparkException
+          if e.getCondition == "COLLATION_INVALID_NAME" &&
+            SqlApiConf.get.allowReadingUnknownCollations =>
+        // If the collation name is unknown and the config for reading such collations is enabled,
+        // return the UTF8_BINARY collation.
         StringType(CollationFactory.UTF8_BINARY_COLLATION_ID)
     }
   }
