@@ -5315,6 +5315,11 @@
         "message" : [
           "Update column nullability for MySQL and MS SQL Server."
         ]
+      },
+      "WRITE_FOR_BINARY_SOURCE" : {
+        "message" : [
+          "Write is not supported for binary file data source."
+        ]
       }
     },
     "sqlState" : "0A000"
@@ -7014,11 +7019,6 @@
   "_LEGACY_ERROR_TEMP_2074" : {
     "message" : [
       "user-specified schema."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2075" : {
-    "message" : [
-      "Write is not supported for binary file data source."
     ]
   },
   "_LEGACY_ERROR_TEMP_2076" : {
