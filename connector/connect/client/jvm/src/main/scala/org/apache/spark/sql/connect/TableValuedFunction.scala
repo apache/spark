@@ -14,13 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.connect
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.toExpr
+import org.apache.spark.sql
+import org.apache.spark.sql.{Column, Row}
 
-class TableValuedFunction(sparkSession: SparkSession) extends api.TableValuedFunction {
+class TableValuedFunction(sparkSession: SparkSession) extends sql.TableValuedFunction {
 
   /** @inheritdoc */
   override def range(end: Long): Dataset[java.lang.Long] = {

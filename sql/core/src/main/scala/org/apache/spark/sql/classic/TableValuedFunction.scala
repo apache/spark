@@ -14,12 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.classic
 
+import org.apache.spark.sql
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedTableValuedFunction
+import org.apache.spark.sql.classic.{Dataset, SparkSession}
 
 class TableValuedFunction(sparkSession: SparkSession)
-  extends api.TableValuedFunction {
+  extends sql.TableValuedFunction {
 
   /** @inheritdoc */
   override def range(end: Long): Dataset[java.lang.Long] = {
