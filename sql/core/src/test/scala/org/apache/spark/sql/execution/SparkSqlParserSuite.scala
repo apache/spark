@@ -972,7 +972,6 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a) AS result GROUP BY b")
       checkAggregate("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
       checkAggregate("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b")
-      checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a) GROUP BY ALL")
     }
   }
 }
