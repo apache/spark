@@ -734,8 +734,8 @@ class ForStatementExec(
   private def createExpressionFromValue(value: Any): Expression = value match {
     case m: Map[_, _] =>
       // arguments of CreateMap are in the format: (key1, val1, key2, val2, ...)
-      val mapArgs = m.keys.toSeq.zip(m.values.toSeq).flatMap { case (k, v) =>
-        Seq(createExpressionFromValue(k), createExpressionFromValue(v))
+      val mapArgs = m.keys.toSeq.flatMap { key =>
+        Seq(createExpressionFromValue(key), createExpressionFromValue(m(key)))
       }
       CreateMap(mapArgs, false)
     case s: GenericRowWithSchema =>
