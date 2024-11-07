@@ -168,6 +168,8 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("CollationKey generates correct collation key for collated string") {
+    // In version `75.1`, its value is 0x2A (42), while in version `76.1`, its value is 0x2B (43)
+    val b: Byte = 0x2B
     val testCases = Seq(
       ("", "UTF8_BINARY", UTF8String.fromString("").getBytes),
       ("aa", "UTF8_BINARY", UTF8String.fromString("aa").getBytes),
@@ -180,15 +182,15 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       (" AA ", "UTF8_LCASE_RTRIM", UTF8String.fromString(" aa").getBytes),
       ("aA", "UTF8_LCASE", UTF8String.fromString("aa").getBytes),
       ("", "UNICODE", Array[Byte](1, 1, 0)),
-      ("aa", "UNICODE", Array[Byte](42, 42, 1, 6, 1, 6, 0)),
-      ("AA", "UNICODE", Array[Byte](42, 42, 1, 6, 1, -36, -36, 0)),
-      ("aA", "UNICODE", Array[Byte](42, 42, 1, 6, 1, -59, -36, 0)),
-      ("aa ", "UNICODE_RTRIM", Array[Byte](42, 42, 1, 6, 1, 6, 0)),
+      ("aa", "UNICODE", Array[Byte](b, b, 1, 6, 1, 6, 0)),
+      ("AA", "UNICODE", Array[Byte](b, b, 1, 6, 1, -36, -36, 0)),
+      ("aA", "UNICODE", Array[Byte](b, b, 1, 6, 1, -59, -36, 0)),
+      ("aa ", "UNICODE_RTRIM", Array[Byte](b, b, 1, 6, 1, 6, 0)),
       ("", "UNICODE_CI", Array[Byte](1, 0)),
-      ("aa", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
-      ("aa ", "UNICODE_CI_RTRIM", Array[Byte](42, 42, 1, 6, 0)),
-      ("AA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0)),
-      ("aA", "UNICODE_CI", Array[Byte](42, 42, 1, 6, 0))
+      ("aa", "UNICODE_CI", Array[Byte](b, b, 1, 6, 0)),
+      ("aa ", "UNICODE_CI_RTRIM", Array[Byte](b, b, 1, 6, 0)),
+      ("AA", "UNICODE_CI", Array[Byte](b, b, 1, 6, 0)),
+      ("aA", "UNICODE_CI", Array[Byte](b, b, 1, 6, 0))
     )
     for ((input, collation, expected) <- testCases) {
       val str = Literal.create(input, StringType(collation))

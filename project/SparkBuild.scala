@@ -411,6 +411,9 @@ object SparkBuild extends PomBuild {
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
 
+  /* Spark SQL Core settings */
+  enable(SQL.settings)(sql)
+
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
@@ -1142,6 +1145,34 @@ object SqlApi {
     (Antlr4 / antlr4GenVisitor) := true,
     (Antlr4 / antlr4TreatWarningsAsErrors) := true
   )
+}
+
+object SQL {
+  import BuildCommons.protoVersion
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value
+    )
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 object Hive {

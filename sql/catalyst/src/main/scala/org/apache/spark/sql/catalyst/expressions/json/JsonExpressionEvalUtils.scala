@@ -103,7 +103,6 @@ case class JsonToStructsEvaluator(
   }
 
   final def evaluate(json: UTF8String): Any = {
-    if (json == null) return null
     nullableSchema match {
       case _: VariantType =>
         VariantExpressionEvalUtils.parseJson(json,
@@ -157,7 +156,6 @@ case class StructsToJsonEvaluator(
   }
 
   final def evaluate(value: Any): Any = {
-    if (value == null) return null
     converter(value)
   }
 }

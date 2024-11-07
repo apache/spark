@@ -145,6 +145,8 @@ case class AdaptiveSparkPlanExec(
       CoalesceBucketsInJoin,
       RemoveRedundantProjects,
       ensureRequirements,
+      // This rule must be run after `EnsureRequirements`.
+      InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
       ReplaceHashWithSortAgg,

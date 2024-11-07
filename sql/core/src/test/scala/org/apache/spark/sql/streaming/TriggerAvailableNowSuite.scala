@@ -57,8 +57,10 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
       if (currentOffset == 0) currentOffset = getOffsetValue(end)
       val plan = Range(
         start.map(getOffsetValue).getOrElse(0L) + 1L, getOffsetValue(end) + 1L, 1, None,
-        isStreaming = true)
-      Dataset.ofRows(spark, plan)
+        // Intentionally set isStreaming to false; we only use RDD plan in below.
+        isStreaming = false)
+      sqlContext.internalCreateDataFrame(
+        plan.queryExecution.toRdd, plan.schema, isStreaming = true)
     }
 
     override def incrementAvailableOffset(numNewRows: Int): Unit = {
@@ -115,23 +117,24 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
     }
   }
 
-  def testWithConfigMatrix(testName: String)(testFun: => Any): Unit = {
+  def testWithConfigMatrix(testName: String)(testFun: Boolean => Any): Unit = {
     Seq(true, false).foreach { useWrapper =>
       test(testName + s" (using wrapper: $useWrapper)") {
         withSQLConf(
           SQLConf.STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED.key -> useWrapper.toString) {
-          testFun
+          testFun(useWrapper)
         }
       }
     }
   }
 
   Seq(
-    new TestSource,
-    new TestSourceWithAdmissionControl,
-    new TestMicroBatchStream
-  ).foreach { testSource =>
-    testWithConfigMatrix(s"TriggerAvailableNow for multiple sources with ${testSource.getClass}") {
+    (new TestSource, false),
+    (new TestSourceWithAdmissionControl, false),
+    (new TestMicroBatchStream, true)
+  ).foreach { case (testSource, supportTriggerAvailableNow) =>
+    testWithConfigMatrix(s"TriggerAvailableNow for multiple sources with " +
+      s"${testSource.getClass}") { useWrapper =>
       testSource.reset()
 
       withTempDirs { (src, target) =>
@@ -170,10 +173,16 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
 
         val q = startQuery()
 
+        val expectedNumBatches = if (!useWrapper && !supportTriggerAvailableNow) {
+          // Spark will decide to fall back to SingleBatchExecutor.
+          1
+        } else {
+          3
+        }
+
         try {
           assert(q.awaitTermination(streamingTimeout.toMillis))
-          // only one batch has data in both sources, thus counted, see SPARK-24050
-          assert(q.recentProgress.count(_.numInputRows != 0) == 1)
+          assert(q.recentProgress.count(_.numInputRows != 0) == expectedNumBatches)
           q.recentProgress.foreach { p =>
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
@@ -193,8 +202,7 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
         val q2 = startQuery()
         try {
           assert(q2.awaitTermination(streamingTimeout.toMillis))
-          // only one batch has data in both sources, thus counted, see SPARK-24050
-          assert(q2.recentProgress.count(_.numInputRows != 0) == 1)
+          assert(q2.recentProgress.count(_.numInputRows != 0) == expectedNumBatches)
           q2.recentProgress.foreach { p =>
             assert(p.sources.exists(_.description.startsWith(testSource.sourceName)))
           }
@@ -212,7 +220,8 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
     new TestSourceWithAdmissionControl,
     new TestMicroBatchStream
   ).foreach { testSource =>
-    testWithConfigMatrix(s"TriggerAvailableNow for single source with ${testSource.getClass}") {
+    testWithConfigMatrix(s"TriggerAvailableNow for single source with " +
+      s"${testSource.getClass}") { _ =>
       testSource.reset()
 
       val tableName = "trigger_available_now_test_table"

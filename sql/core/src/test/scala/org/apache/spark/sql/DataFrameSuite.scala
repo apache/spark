@@ -2074,7 +2074,7 @@ class DataFrameSuite extends QueryTest
     val emptyDf = spark.emptyDataFrame.withColumn("id", lit(1L))
     val joined = spark.range(10).join(emptyDf, "id")
     joined.queryExecution.optimizedPlan match {
-      case LocalRelation(Seq(id), Nil, _) =>
+      case LocalRelation(Seq(id), Nil, _, _) =>
         assert(id.name == "id")
       case _ =>
         fail("emptyDataFrame should be foldable")
