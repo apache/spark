@@ -35,6 +35,15 @@ case class ScopedExpression(expr: Expression, scope: Seq[Attribute])
   override def sql: String = s"$prettyName(${expr.sql}, $scope)"
   override lazy val resolved: Boolean = expr.resolved
 
+  def mapScope(f: Expression => Expression): Expression = {
+    // similar to mapChildren, but only for the scope children
+    if (scope.nonEmpty) {
+      this.copy(scope = scope.map(f).map(_.asInstanceOf[Attribute]))
+    } else {
+      this
+    }
+  }
+
   override protected def withNewChildrenInternal(children: IndexedSeq[Expression]): Expression = {
     val scope = children.tail
     assert(scope.forall(_.isInstanceOf[Attribute]), "Scope children have to be attributes")

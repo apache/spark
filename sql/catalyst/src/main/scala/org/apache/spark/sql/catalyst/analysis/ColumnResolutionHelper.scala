@@ -197,6 +197,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             u.copy(child = newChild)
           }
 
+        // Do not map (resolve) all children, but only the scope
+        case s : ScopedExpression => s.mapScope(innerResolve(_, isTopLevel = false))
+
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
       resolved.copyTagsFrom(e)
