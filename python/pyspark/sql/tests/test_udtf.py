@@ -2593,6 +2593,45 @@ class BaseUDTFTestsMixin:
         rows = self.spark.sql("select i, to_json(v) from test_udtf(8)").collect()
         self.assertEqual(rows, [Row(i=n, s=f'{{\"a\":\"{chr(97 + n)}\"}}') for n in range(8)])
 
+    def test_udtf_with_nested_variant_output(self):
+        # struct<variant>
+        @udtf(returnType="i int, v: struct<v1 variant>")
+        class TestUDTFStruct:
+            def eval(self, n):
+                for i in range(n):
+                    yield i, {
+                        "v1": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+                    }
+
+        self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
+        rows = self.spark.sql("select i, to_json(v.v1) from test_udtf_struct(8)").collect()
+        self.assertEqual(rows, [Row(i=n, s=f'{{\"a\":\"{chr(97 + n)}\"}}') for n in range(8)])
+
+        # array<variant>
+        @udtf(returnType="i int, v: array<variant>")
+        class TestUDTFArray:
+            def eval(self, n):
+                for i in range(n):
+                    yield i, [
+                        VariantVal(bytes([2, 1, 0, 0, 2, 5, 98 + i]), bytes([1, 1, 0, 1, 97]))
+                    ]
+
+        self.spark.udtf.register("test_udtf_array", TestUDTFArray)
+        rows = self.spark.sql("select i, to_json(v[0]) from test_udtf_array(8)").collect()
+        self.assertEqual(rows, [Row(i=n, s=f'{{\"a\":\"{chr(98 + n)}\"}}') for n in range(8)])
+
+        # map<string, variant>
+        @udtf(returnType="i int, v: map<string, variant>")
+        class TestUDTFStruct:
+            def eval(self, n):
+                for i in range(n):
+                    yield i, {
+                        "v1": VariantVal(bytes([2, 1, 0, 0, 2, 5, 99 + i]), bytes([1, 1, 0, 1, 97]))
+                    }
+
+        self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
+        rows = self.spark.sql("select i, to_json(v['v1']) from test_udtf_struct(8)").collect()
+        self.assertEqual(rows, [Row(i=n, s=f'{{\"a\":\"{chr(99 + n)}\"}}') for n in range(8)])
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
