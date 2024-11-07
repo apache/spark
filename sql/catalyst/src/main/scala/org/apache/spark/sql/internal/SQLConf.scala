@@ -770,10 +770,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
-  lazy val ALLOW_READING_UNKNOWN_COLLATIONS =
+  val ALLOW_READING_UNKNOWN_COLLATIONS =
     buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
       .internal()
-      .doc("Enables spark to read unknown collation name as UTF8_BINARY.")
+      .doc("Enables spark to read unknown collation name as UTF8_BINARY. If the config is " +
+        "not enabled, when spark encounters an unknown collation name, it will throw an error.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
