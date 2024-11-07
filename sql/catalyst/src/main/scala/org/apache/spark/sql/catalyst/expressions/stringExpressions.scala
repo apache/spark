@@ -753,8 +753,7 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
   with UnaryLike[Expression] {
   override def nullIntolerant: Boolean = true
 
-  override lazy val replacement: Expression =
-    Invoke(input, "isValid", BooleanType, nullIntolerant = true)
+  override lazy val replacement: Expression = Invoke(input, "isValid", BooleanType)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -803,8 +802,7 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
   with UnaryLike[Expression] {
   override def nullIntolerant: Boolean = true
 
-  override lazy val replacement: Expression =
-    Invoke(input, "makeValid", input.dataType, nullIntolerant = true)
+  override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -852,8 +850,7 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
       input.dataType,
       "validateUTF8String",
       Seq(input),
-      inputTypes,
-      nullIntolerant = true)
+      inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -905,8 +902,7 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
       input.dataType,
       "tryValidateUTF8String",
       Seq(input),
-      inputTypes,
-      nullIntolerant = true)
+      inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
