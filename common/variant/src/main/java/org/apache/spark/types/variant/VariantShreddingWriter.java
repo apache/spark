@@ -18,13 +18,8 @@
 package org.apache.spark.types.variant;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Class to implement shredding a Variant value.
@@ -96,13 +91,15 @@ public class VariantShreddingWriter {
         Integer fieldIdx = schema.objectSchemaMap.get(field.key);
         if (fieldIdx != null) {
           // The field exists in the shredding schema. Recursively shred, and write the result.
-          ShreddedResult shreddedField = castShredded(field.value, objectSchema[fieldIdx].schema, builder);
+          ShreddedResult shreddedField = castShredded(
+              field.value, objectSchema[fieldIdx].schema, builder);
           shreddedValues[fieldIdx] = shreddedField;
           numFieldsMatched++;
         } else {
           // The field is not shredded. Put it in the untyped_value column.
           int id = v.getDictionaryIdAtIndex(i);
-          fieldEntries.add(new VariantBuilder.FieldEntry(field.key, id, variantBuilder.getWritePos() - start));
+          fieldEntries.add(new VariantBuilder.FieldEntry(
+              field.key, id, variantBuilder.getWritePos() - start));
           variantBuilder.appendVariant(field.value);
         }
       }

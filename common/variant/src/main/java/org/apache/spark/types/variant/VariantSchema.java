@@ -50,7 +50,7 @@ public class VariantSchema {
     }
   }
 
-  public static abstract class ScalarType {
+  public abstract static class ScalarType {
   }
 
   public static final class StringType extends ScalarType {
