@@ -108,8 +108,7 @@ abstract class SparkSession extends Serializable with Closeable {
   def sessionState: SessionState
 
   /**
-   * A wrapped version of this session in the form of a `SQLContext`, for backward
-   * compatibility.
+   * A wrapped version of this session in the form of a `SQLContext`, for backward compatibility.
    *
    * @note
    *   this method is not supported in Spark Connect.
