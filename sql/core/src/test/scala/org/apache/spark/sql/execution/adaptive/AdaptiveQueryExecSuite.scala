@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, EmptyRelationExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryTableScanLike}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -3096,13 +3096,16 @@ class AdaptiveQueryExecSuite
           |FROM t ORDER BY year, course
           |LIMIT 100
           |""".stripMargin)
-
-      df.queryExecution.optimizedPlan.collectLeaves().foreach { p =>
-        assert(p.maxRows.isEmpty)
-      }
-
       df.collect()
+
       val plan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      assert(plan.inputPlan.isInstanceOf[TakeOrderedAndProjectExec])
+      plan.finalPhysicalPlan match {
+        case WholeStageCodegenExec(p) =>
+          assert(p.isInstanceOf[ProjectExec])
+        case _ =>
+          fail("There should be a WholeStageCodegenExec")
+      }
       plan.inputPlan.output.zip(plan.finalPhysicalPlan.output).foreach { case (o1, o2) =>
         assert(o1.semanticEquals(o2), "Different output after AQE optimization")
       }
