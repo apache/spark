@@ -61,7 +61,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   }
 
   test("testetst") {
-    val sqlScript = "DECLARE my_map DEFAULT MAP('x', 0, 'y', 0);"
+    val sqlScript = "DECLARE my_map DEFAULT MAP(1,1);"
     verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
   }
 
@@ -109,10 +109,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | CREATE TABLE t (int_column INT, map_column MAP<STRING, MAP<STRING, INT>>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
+          | CREATE TABLE t (int_column INT, map_column MAP<STRING, MAP<INT, INT>>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
           | INSERT INTO t VALUES
-          |  (1, MAP('a', MAP('1', 1)), STRUCT('John', 25), ARRAY('apple', 'banana')),
-          |  (1, MAP('b', MAP('2', 2)), STRUCT('Jane', 30), ARRAY('apple', 'banana'));
+          |  (1, MAP('a', MAP(1, 1)), STRUCT('John', 25), ARRAY('apple', 'banana')),
+          |  (1, MAP('b', MAP(2, 2)), STRUCT('Jane', 30), ARRAY('apple', 'banana'));
           | FOR row AS SELECT * FROM t ORDER BY int_column DO
           |   SELECT row.map_column;
           |   SELECT row.struct_column;
