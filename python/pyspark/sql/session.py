@@ -543,9 +543,12 @@ class SparkSession(SparkConversionMixin):
 
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
+                    SparkContext._ensure_initialized()
                     sparkConf = SparkConf()
                     for key, value in self._options.items():
                         sparkConf.set(key, value)
+                    if sparkConf.contains("spark.submit.appName"):
+                        sparkConf.setAppName(sparkConf.get("spark.submit.appName", ""))
                     # This SparkContext may be an existing one.
                     sc = SparkContext.getOrCreate(sparkConf)
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
