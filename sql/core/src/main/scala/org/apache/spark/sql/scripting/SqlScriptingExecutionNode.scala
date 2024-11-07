@@ -22,7 +22,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateMap, CreateNamedStruct, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateMap, CreateNamedStruct, Expression, GenericRowWithSchema, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -660,10 +660,11 @@ class ForStatementExec(
   }
   private var state = ForState.VariableDeclaration
   private var currRow = 0
-  private var currVariable: CreateNamedStruct = null
+  private var currVariable: Expression = null
 
   private var queryDataframe: DataFrame = null
   private var isDataframeCacheValid = false
+  // todo: see if you need this
   private def cachedQueryDataframe(): DataFrame = {
     if (!isDataframeCacheValid) {
       query.isExecuted = true
@@ -703,13 +704,7 @@ class ForStatementExec(
           }
 
           // arguments of CreateNamedStruct must be formatted like (name1, val1, name2, val2, ...)
-          val namedStructArgs: Seq[Expression] =
-            cachedQueryDataframe().schema.names.toSeq.flatMap { colName =>
-              val valueExpression =
-                createExpressionFromValue(cachedQueryResult()(currRow).getAs(colName))
-              Seq(Literal(colName), valueExpression)
-            }
-          currVariable = CreateNamedStruct(namedStructArgs)
+          currVariable = createExpressionFromValue(cachedQueryResult()(currRow))
 
           state = ForState.VariableAssignment
           createDeclareVarExec(currVariable)
@@ -754,6 +749,13 @@ class ForStatementExec(
         Seq(createExpressionFromValue(k), createExpressionFromValue(v))
       }.toSeq
       CreateMap(mapArgs, false)
+    case s: GenericRowWithSchema =>
+      val namedStructArgs = s.schema.names.toSeq.flatMap { colName =>
+        val valueExpression =
+          createExpressionFromValue(s.getAs(colName))
+        Seq(Literal(colName), valueExpression)
+      }
+      CreateNamedStruct(namedStructArgs)
     case _ => Literal(value)
   }
 

@@ -48,6 +48,14 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection.head.isInstanceOf[ForStatement])
   }
 
+  test("testtesttest") {
+    val sqlScriptText = "DECLARE my_struct DEFAULT STRUCT<'x', 0, 1.2>;"
+
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[ForStatement])
+  }
+
   test("initial for") {
     val sqlScriptText =
       """
