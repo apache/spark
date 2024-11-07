@@ -95,6 +95,7 @@ RUN python3.9 -m pip install \
     'ipython' \
     'ipython_genutils' \
     'jinja2' \
+    'matplotlib' \
     'markupsafe' \
     'mkdocs' \
     'mypy==1.8.0' \
