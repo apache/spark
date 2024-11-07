@@ -60,8 +60,13 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
   }
 
+  test("testetst") {
+    val sqlScript = "DECLARE my_map DEFAULT MAP('x', 0, 'y', 0);"
+    verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+  }
 
-  // todo: complex types in for
+
+  // todo: complex types in for, better var names in tests
   test("for test") {
     withTable("t") {
       val sqlScript =
@@ -98,6 +103,83 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       verifySqlScriptResult(sqlScript, expected)
     }
   }
+
+  test("for test complex types") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (int_column INT, map_column MAP<STRING, MAP<STRING, INT>>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
+          | INSERT INTO t VALUES
+          |  (1, MAP('a', MAP('1', 1)), STRUCT('John', 25), ARRAY('apple', 'banana')),
+          |  (1, MAP('b', MAP('2', 2)), STRUCT('Jane', 30), ARRAY('apple', 'banana'));
+          | FOR row AS SELECT * FROM t ORDER BY int_column DO
+          |   SELECT row.map_column;
+          |   SELECT row.struct_column;
+          |   SELECT row.array_column;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 0
+        Seq(Row(1)), // select intCol
+        Seq(Row("first")), // select stringCol
+        Seq(Row(1.0)), // select doubleCol
+        Seq.empty[Row], // drop x
+        Seq.empty[Row], // declare x
+        Seq.empty[Row], // set x to row 1
+        Seq(Row(2)), // select intCol
+        Seq(Row("second")), // select stringCol
+        Seq(Row(2.0)), // select doubleCol
+        Seq.empty[Row] // drop x
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+//  test("for test complex types") {
+//    withTable("t") {
+//      val sqlScript =
+//        """
+//          |BEGIN
+//          | CREATE TABLE t (int_column INT, map_column MAP<STRING, INT>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
+//          | INSERT INTO t VALUES
+//          |  (1, MAP('a', 1, 'b', 2), STRUCT('John', 25), ARRAY('apple', 'banana')),
+//          |  (2, MAP('c', 3, 'd', 4), STRUCT('Jane', 30), ARRAY('orange', 'grape')),
+//          |  (3, MAP('e', 5, 'f', 6), STRUCT('Bob', 35), ARRAY('pear', 'peach'));
+//          | FOR row AS SELECT * FROM t ORDER BY int_column DO
+//          |   SELECT row.map_column;
+//          |   SELECT row.struct_column;
+//          |   SELECT row.array_column;
+//          | END FOR;
+//          |END
+//          |""".stripMargin
+//
+//      val expected = Seq(
+//        Seq.empty[Row], // create table
+//        Seq.empty[Row], // insert
+//        Seq.empty[Row], // insert
+//        Seq.empty[Row], // declare x
+//        Seq.empty[Row], // set x to row 0
+//        Seq(Row(1)), // select intCol
+//        Seq(Row("first")), // select stringCol
+//        Seq(Row(1.0)), // select doubleCol
+//        Seq.empty[Row], // drop x
+//        Seq.empty[Row], // declare x
+//        Seq.empty[Row], // set x to row 1
+//        Seq(Row(2)), // select intCol
+//        Seq(Row("second")), // select stringCol
+//        Seq(Row(2.0)), // select doubleCol
+//        Seq.empty[Row] // drop x
+//      )
+//      verifySqlScriptResult(sqlScript, expected)
+//    }
+//  }
 
   test("for test empty result") {
     withTable("t") {

@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.immutable.Map
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateMap, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
+
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
@@ -703,7 +705,9 @@ class ForStatementExec(
           // arguments of CreateNamedStruct must be formatted like (name1, val1, name2, val2, ...)
           val namedStructArgs: Seq[Expression] =
             cachedQueryDataframe().schema.names.toSeq.flatMap { colName =>
-              Seq(Literal(colName), Literal(cachedQueryResult()(currRow).getAs(colName)))
+              val valueExpression =
+                createExpressionFromValue(cachedQueryResult()(currRow).getAs(colName))
+              Seq(Literal(colName), valueExpression)
             }
           currVariable = CreateNamedStruct(namedStructArgs)
 
@@ -743,6 +747,15 @@ class ForStatementExec(
           retStmt
       }
     }
+
+  private def createExpressionFromValue(value: Any): Expression = value match {
+    case m: Map[_, _] =>
+      val mapArgs = m.keys.zip(m.values).flatMap {case (k, v) =>
+        Seq(createExpressionFromValue(k), createExpressionFromValue(v))
+      }.toSeq
+      CreateMap(mapArgs, false)
+    case _ => Literal(value)
+  }
 
   private def createDeclareVarExec(variable: Expression): SingleStatementExec = {
     val defaultExpression = DefaultValueExpression(Literal(null, variable.dataType), "null")
