@@ -21,7 +21,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Encoders, KeyValueGroupedDatase
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
-import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
@@ -101,53 +101,49 @@ abstract class StatefulProcessorWithInitialStateTestClass[V]
   }
 }
 
-/** Stateful processor that takes input rows, put the count into value state, update the key
- * into list state, and keep a map of key -> count into map state. */
+/**
+ * Class that updates all state variables with input rows. Act as a counter -
+ * keep the count in value state; keep all the occurrences in list state; and
+ * keep a map of key -> occurrence count in the map state.
+ */
 abstract class InitialStateWithStateDataSourceBase[V]
   extends StatefulProcessorWithInitialState[
-    String, (String, String, Long), (String, String, String), V] {
-  @transient var _valState: ValueState[String] = _
+    String, String, (String, String), V] {
+  @transient var _valState: ValueState[Long] = _
   @transient var _listState: ListState[Long] = _
   @transient var _mapState: MapState[String, Long] = _
 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _valState = getHandle.getValueState[String]("testValueInit", Encoders.STRING, TTLConfig.NONE)
-    _listState = getHandle.getListState[Long]("testListInit", Encoders.scalaLong, TTLConfig.NONE)
+    _valState = getHandle.getValueState[Long]("testVal", Encoders.scalaLong, TTLConfig.NONE)
+    _listState = getHandle.getListState[Long]("testList", Encoders.scalaLong, TTLConfig.NONE)
     _mapState = getHandle.getMapState[String, Long](
-      "testMapInit", Encoders.STRING, Encoders.scalaLong, TTLConfig.NONE)
+      "testMap", Encoders.STRING, Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
-      inputRows: Iterator[(String, String, Long)],
-      timerValues: TimerValues): Iterator[(String, String, String)] = {
-    var output = List[(String, String, String)]()
-    for (row <- inputRows) {
-      if (row._2 == "getValue") {
-        output = (key, row._2, _valState.getOption().getOrElse(-1).toString) :: output
-      } else if (row._2 == "updateValue") {
-        _valState.update(row._3.toString)
-      } else if (row._2 == "getList") {
-        _listState.get().foreach { element =>
-          output = (key, row._2, element.toString) :: output
-        }
-      } else if (row._2 == "clearList") {
-        _listState.clear()
-      } else if (row._2 == "getMapVal") {
-        val count =
-          if (!_mapState.containsKey(row._1)) 0
-          else _mapState.getValue(row._1)
-        output = (key, row._2, count.toString) :: output
-      } else if (row._2 == "incMapVal") {
-        val count =
-          if (!_mapState.containsKey(row._1)) 0
-          else _mapState.getValue(row._1)
-        _mapState.updateValue(row._1, count + 1)
-      }
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val curCountValue = if (_valState.exists()) {
+      _valState.get()
+    } else {
+      0L
     }
-    output.iterator
+    var cnt = curCountValue
+    inputRows.foreach { row =>
+      cnt += 1
+      _listState.appendValue(cnt)
+      val mapCurVal = if (_mapState.containsKey(row)) {
+        _mapState.getValue(row)
+      } else {
+        0
+      }
+      _mapState.updateValue(row, mapCurVal + 1L)
+    }
+    _valState.update(cnt)
+    Iterator.single((key, cnt.toString))
   }
 
   override def close(): Unit = super.close()
@@ -158,7 +154,7 @@ class InitialStatefulProcessorWithStateDataSource
   override def handleInitialState(
       key: String, initialState: UnionInitialStateRow, timerValues: TimerValues): Unit = {
     if (initialState.value.isDefined) {
-      _valState.update(initialState.value.get.toString)
+      _valState.update(initialState.value.get)
     } else if (initialState.listValue.isDefined) {
       _listState.appendValue(initialState.listValue.get)
     } else if (initialState.userMapKey.isDefined) {
@@ -173,7 +169,7 @@ class InitialStatefulProcessorWithUnflattenStateDataSource
   override def handleInitialState(
       key: String, initialState: UnionUnflattenInitialStateRow, timerValues: TimerValues): Unit = {
     if (initialState.value.isDefined) {
-      _valState.update(initialState.value.get.toString)
+      _valState.update(initialState.value.get)
     } else if (initialState.listValue.isDefined) {
       _listState.appendList(
         initialState.listValue.get.toArray)
@@ -297,51 +293,6 @@ class StatefulProcessorWithInitialStateProcTimerClass
     Iterator((key, "-1"))
   }
 }
-
-/**
- * Class that updates all state variables with input rows. Act as a counter -
- * keep the count in value state; keep all the occurrences in list state; and
- * keep a map of key -> occurrence count in the map state.
- */
-class StatefulProcessorWithAllStateVars extends RunningCountStatefulProcessor {
-  @transient private var _listState: ListState[Long] = _
-  @transient private var _mapState: MapState[String, Long] = _
-
-  override def init(
-      outputMode: OutputMode,
-      timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
-    _listState = getHandle.getListState[Long](
-      "listState", Encoders.scalaLong, TTLConfig.NONE)
-    _mapState = getHandle.getMapState[String, Long](
-      "mapState", Encoders.STRING, Encoders.scalaLong, TTLConfig.NONE)
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
-    val curCountValue = if (_countState.exists()) {
-      _countState.get()
-    } else {
-      0L
-    }
-    var cnt = curCountValue
-    inputRows.foreach { row =>
-      cnt += 1
-      _listState.appendValue(cnt)
-      val mapCurVal = if (_mapState.containsKey(row)) {
-        _mapState.getValue(row)
-      } else {
-        0
-      }
-      _mapState.updateValue(row, mapCurVal + 1L)
-    }
-    _countState.update(cnt)
-    Iterator.single((key, cnt.toString))
-  }
-}
-
 
 /**
  * Class to test stateful processor with initial state and event timers.
@@ -624,17 +575,17 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         s"shuffle partition for 1st stream=${partitions._2})") {
         withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
           classOf[RocksDBStateStoreProvider].getName) {
-          withTempDir { checkpointDir =>
+          withTempPaths(2) { checkpointDirs =>
             SQLConf.get.setConfString(SQLConf.SHUFFLE_PARTITIONS.key, partitions._1)
             val inputData = MemoryStream[String]
             val result = inputData.toDS()
               .groupByKey(x => x)
-              .transformWithState(new StatefulProcessorWithAllStateVars(),
+              .transformWithState(new InitialStatefulProcessorWithStateDataSource(),
                 TimeMode.None(),
                 OutputMode.Update())
 
             testStream(result, OutputMode.Update())(
-              StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+              StartStream(checkpointLocation = checkpointDirs(0).getCanonicalPath),
               AddData(inputData, "a", "b"),
               CheckNewAnswer(("a", "1"), ("b", "1")),
               AddData(inputData, "a", "b", "a"),
@@ -650,45 +601,59 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
             // state variable, and we union them together into a single dataframe.
             val valueDf = spark.read
               .format("statestore")
-              .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
-              .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+              .option(StateSourceOptions.PATH, checkpointDirs(0).getAbsolutePath)
+              .option(StateSourceOptions.STATE_VAR_NAME, "testVal")
               .load()
 
             val listDf = spark.read
               .format("statestore")
-              .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
-              .option(StateSourceOptions.STATE_VAR_NAME, "listState")
+              .option(StateSourceOptions.PATH, checkpointDirs(0).getAbsolutePath)
+              .option(StateSourceOptions.STATE_VAR_NAME, "testList")
               .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
               .load()
 
             val mapDf = spark.read
               .format("statestore")
-              .option(StateSourceOptions.PATH, checkpointDir.getAbsolutePath)
-              .option(StateSourceOptions.STATE_VAR_NAME, "mapState")
+              .option(StateSourceOptions.PATH, checkpointDirs(0).getAbsolutePath)
+              .option(StateSourceOptions.STATE_VAR_NAME, "testMap")
               .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
               .load()
 
             // create a df where each row contains all value, list, map state rows
             // fill the missing column with null.
             SQLConf.get.setConfString(SQLConf.SHUFFLE_PARTITIONS.key, partitions._2)
-            val inputData2 = MemoryStream[(String, String, Long)]
+            val inputData2 = MemoryStream[String]
             val query = startQueryWithDataSourceDataframeAsInitState(
               flattenOption, valueDf, listDf, mapDf, inputData2)
 
             testStream(query, OutputMode.Update())(
+              StartStream(checkpointLocation = checkpointDirs(1).getCanonicalPath),
               // check initial state is updated for state vars
-              AddData(inputData2,
-                ("a", "getValue", 0L),
-                ("a", "getList", 0L),
-                ("a", "getMapVal", 0L)),
-              CheckNewAnswer(("a", "getMapVal", "3"),
-                ("a", "getList", "1"), ("a", "getList", "2"), ("a", "getList", "3"),
-                ("a", "getValue", "3")),
-              // check we can make updates on state vars after first batch
-              AddData(inputData2,
-                ("b", "updateValue", 37L), ("b", "clearList", 0L), ("b", "incMapVal", 1L),
-                ("b", "getValue", 0L), ("b", "getList", 0L), ("b", "getMapVal", 0L)),
-              CheckNewAnswer(("b", "getValue", "37"), ("b", "getMapVal", "3"))
+              AddData(inputData2, "c"),
+              CheckNewAnswer(("c", "1")),
+              Execute { _ =>
+                // value state var is checked by the stateful processor output
+                val listDf2 = spark.read
+                  .format("statestore")
+                  .option(StateSourceOptions.PATH, checkpointDirs(1).getAbsolutePath)
+                  .option(StateSourceOptions.STATE_VAR_NAME, "testList")
+                  .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
+                  .load()
+                  .drop("partition_id")
+                  .filter(col("key.value") =!= "c")
+                val mapDf2 = spark.read
+                  .format("statestore")
+                  .option(StateSourceOptions.PATH, checkpointDirs(1).getAbsolutePath)
+                  .option(StateSourceOptions.STATE_VAR_NAME, "testMap")
+                  .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
+                  .load()
+                  .drop("partition_id")
+                  .filter(col("key.value") =!= "c")
+
+                // simple validation on initial state process
+                assert(listDf2.count() == listDf.count())
+                assert(mapDf2.count() == mapDf.count())
+              }
             )
           }
         }
@@ -701,7 +666,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       valDf: DataFrame,
       listDf: DataFrame,
       mapDf: DataFrame,
-      inputData: MemoryStream[(String, String, Long)]): DataFrame = {
+      inputData: MemoryStream[String]): DataFrame = {
     if (flattenOption) {
       // when we read the state rows with flattened option set to true, values of a composite
       // state variable will be flattened into multiple rows where each row is a
@@ -717,11 +682,11 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val df_joined =
         valueDf.unionByName(flattenListDf, true)
           .unionByName(flattenMapDf, true)
-      val kvDataSet = inputData.toDS().groupByKey(x => x._1)
+      val kvDataSet = inputData.toDS().groupByKey(x => x)
       val initDf = df_joined.as[UnionInitialStateRow].groupByKey(x => x.groupingKey)
-      kvDataSet.transformWithState(
+      (kvDataSet.transformWithState(
         new InitialStatefulProcessorWithStateDataSource(),
-        TimeMode.None(), OutputMode.Append(), initDf).toDF()
+        TimeMode.None(), OutputMode.Append(), initDf).toDF())
     } else {
       // when we read the state rows with flattened option set to false, values of a composite
       // state variable will be composed into a single row of list/map type
@@ -737,7 +702,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
       val df_joined =
         valueDf.unionByName(unflattenListDf, true)
           .unionByName(unflattenMapDf, true)
-      val kvDataSet = inputData.toDS().groupByKey(x => x._1)
+      val kvDataSet = inputData.toDS().groupByKey(x => x)
       val initDf = df_joined.as[UnionUnflattenInitialStateRow].groupByKey(x => x.groupingKey)
       kvDataSet.transformWithState(
         new InitialStatefulProcessorWithUnflattenStateDataSource(),
