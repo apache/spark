@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.parser
 import java.util
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
@@ -28,8 +30,6 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
 import org.apache.spark.sql.errors.{QueryParsingErrors, SqlScriptingErrors}
-
-import scala.collection.mutable
 
 /**
  * A collection of utility methods for use during the parsing process.
@@ -141,19 +141,26 @@ object ParserUtils extends SparkParserUtils {
 }
 
 object LabelUtils {
+  /** A set to keep track of seen labels. */
   private val seenLabels: mutable.Set[String] = mutable.Set.empty
 
+  /** Clear the seenLabels set to start fresh analysis. */
   def init(): Unit = {
     seenLabels.clear()
   }
 
+  /**
+   * Check if the beginLabelCtx and endLabelCtx match.
+   * If the labels are defined, they must follow rules:
+   *  - If both labels exist, they must match.
+   *  - Begin label must exist if end label exists.
+   */
   private def checkLabels(
       beginLabelCtx: Option[BeginLabelContext],
       endLabelCtx: Option[EndLabelContext]) : Unit = {
     (beginLabelCtx, endLabelCtx) match {
       case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.multipartIdentifier().getText.nonEmpty &&
-          bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
+        if bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
             el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         withOrigin(bl) {
           seenLabels.clear()
@@ -172,10 +179,16 @@ object LabelUtils {
     }
   }
 
+  /** Check if the label is defined. */
   private def isLabelDefined(beginLabelCtx: Option[BeginLabelContext]): Boolean = {
     beginLabelCtx.map(_.multipartIdentifier().getText).isDefined
   }
 
+  /**
+   * Enter a labeled scope and return the label text.
+   * If the label is defined, it will be returned and added to seenLabels.
+   * If the label is not defined, a random UUID will be returned.
+   */
   def enterLabeledScope(
       beginLabelCtx: Option[BeginLabelContext],
       endLabelCtx: Option[EndLabelContext]): String = {
@@ -200,6 +213,10 @@ object LabelUtils {
     labelText
   }
 
+  /**
+   * Exit a labeled scope.
+   * If the label is defined, it will be removed from seenLabels.
+   */
   def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
     if (isLabelDefined(beginLabelCtx)) {
       seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))

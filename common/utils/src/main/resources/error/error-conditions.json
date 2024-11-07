@@ -1198,12 +1198,6 @@
     ],
     "sqlState" : "23505"
   },
-  "DUPLICATE_LABEL" : {
-    "message" : [
-      "Label <label> already exists."
-    ],
-    "sqlState" : "42K0L"
-  },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
       "Call to routine <routineName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
@@ -3382,6 +3376,12 @@
   "LABELS_MISMATCH" : {
     "message" : [
       "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
+  },
+  "LABEL_ALREADY_EXISTS" : {
+    "message" : [
+      "The label <label> already exists. Choose another name or rename the existing label."
     ],
     "sqlState" : "42K0L"
   },

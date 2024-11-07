@@ -1620,8 +1620,29 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "DUPLICATE_LABEL",
+      condition = "LABEL_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: nested begin-end blocks with same prefix") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl_1: BEGIN
+        |  lbl_11: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+    val body_1 = tree.collection.head.asInstanceOf[CompoundBody]
+    assert(body_1.label.get == "lbl_1")
+    assert(body_1.collection.length == 1)
+    assert(body_1.collection.head.isInstanceOf[CompoundBody])
+    val body_11 = body_1.collection.head.asInstanceOf[CompoundBody]
+    assert(body_11.label.get == "lbl_11")
   }
 
   test("unique label names: multi-level nested begin-end blocks") {
@@ -1641,7 +1662,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "DUPLICATE_LABEL",
+      condition = "LABEL_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl_1")))
   }
 
@@ -1660,7 +1681,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "DUPLICATE_LABEL",
+      condition = "LABEL_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -1679,7 +1700,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "DUPLICATE_LABEL",
+      condition = "LABEL_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("lbl")))
   }
 
@@ -1698,7 +1719,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "DUPLICATE_LABEL",
+      condition = "LABEL_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("w_loop")))
   }
 
@@ -1719,7 +1740,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "DUPLICATE_LABEL",
+      condition = "LABEL_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("r_loop")))
   }
 
@@ -1738,7 +1759,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     }
     checkError(
       exception = exception,
-      condition = "DUPLICATE_LABEL",
+      condition = "LABEL_ALREADY_EXISTS",
       parameters = Map("label" -> toSQLId("l_loop")))
   }
 
