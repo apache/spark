@@ -326,7 +326,15 @@ object SQLConf {
       "catalyst rules, to make sure every rule returns a valid plan")
     .version("3.4.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(Utils.isTesting)
+
+  val LIGHTWEIGHT_PLAN_CHANGE_VALIDATION = buildConf("spark.sql.lightweightPlanChangeValidation")
+    .internal()
+    .doc(s"Similar to ${PLAN_CHANGE_VALIDATION.key}, this validates plan changes and runs after " +
+      s"every rule, however it is enabled by default and so it should be lightweight.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val ALLOW_NAMED_FUNCTION_ARGUMENTS = buildConf("spark.sql.allowNamedFunctionArguments")
     .doc("If true, Spark will turn on support for named parameters for all functions that has" +
