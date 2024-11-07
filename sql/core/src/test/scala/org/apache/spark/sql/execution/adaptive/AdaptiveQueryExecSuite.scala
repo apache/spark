@@ -3086,6 +3086,28 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-50258: Keep the output order after AQE optimization") {
+    withTable("t") {
+      sql("SELECT course, year, earnings FROM courseSales").write.saveAsTable("t")
+      val df = sql(
+        """
+          |SELECT year, course, earnings, SUM(earnings) OVER (ORDER BY year, course) AS balance
+          |FROM t ORDER BY year, course
+          |LIMIT 100
+          |""".stripMargin)
+
+      df.queryExecution.optimizedPlan.collectLeaves().foreach { p =>
+        assert(p.maxRows.isEmpty)
+      }
+
+      df.collect()
+      val plan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      plan.inputPlan.output.zip(plan.finalPhysicalPlan.output).foreach { case (o1, o2) =>
+        assert(o1.semanticEquals(o2), "Different output after AQE optimization")
+      }
+    }
+  }
 }
 
 /**

@@ -773,7 +773,11 @@ case class AdaptiveSparkPlanExec(
         case _ => newPlan
       }
 
-      Some((finalPlan, optimized))
+      if (!RemoveRedundantProjects.isOutputMatched(inputPlan.output, finalPlan.output)) {
+        Some((ProjectExec(inputPlan.output, finalPlan), optimized))
+      } else {
+        Some((finalPlan, optimized))
+      }
     } catch {
       case e: InvalidAQEPlanException[_] =>
         logOnLevel(log"Re-optimize - ${MDC(ERROR, e.getMessage())}:\n" +
