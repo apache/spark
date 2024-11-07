@@ -23,6 +23,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
+  private val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
+
   test("validate default collation") {
     val collationId = CollationFactory.collationNameToId("UTF8_BINARY")
     assert(collationId == 0)
@@ -67,17 +69,17 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("collation on non-explicit default collation") {
-    checkEvaluation(Collation(Literal("abc")), "UTF8_BINARY")
+    checkEvaluation(Collation(Literal("abc")), fullyQualifiedPrefix + "UTF8_BINARY")
   }
 
   test("collation on explicitly collated string") {
     checkEvaluation(
       Collation(Literal.create("abc",
         StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))),
-      "UTF8_LCASE")
+      fullyQualifiedPrefix + "UTF8_LCASE")
     checkEvaluation(
       Collation(Collate(Literal("abc"), "UTF8_LCASE")),
-      "UTF8_LCASE")
+      fullyQualifiedPrefix + "UTF8_LCASE")
   }
 
   test("Array operations on arrays of collated strings") {
@@ -220,7 +222,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     ).foreach {
       case (collation, normalized) =>
         checkEvaluation(Collation(Literal.create("abc", StringType(collation))),
-          normalized)
+          fullyQualifiedPrefix + normalized)
     }
   }
 
