@@ -69,17 +69,4 @@ object PipeOperators {
   val sortByClause = "SORT BY"
   val sortByDistributeByClause = "SORT BY ... DISTRIBUTE BY ..."
   val windowClause = "WINDOW"
-
-  /**
-   * Prepends grouping keys to the list of aggregate functions for a pipe AGGREGATE clause, since
-   * this returns the GROUP BY expressions followed by the list of aggregate functions.
-   */
-  def prependGroupingExpressions(a: Aggregate): Aggregate = {
-    val namedGroupingExpressions: Seq[NamedExpression] =
-      a.groupingExpressions.map {
-        case n: NamedExpression => n
-        case e: Expression => UnresolvedAlias(e, None)
-      }
-    a.copy(aggregateExpressions = namedGroupingExpressions ++ a.aggregateExpressions)
-  }
 }
