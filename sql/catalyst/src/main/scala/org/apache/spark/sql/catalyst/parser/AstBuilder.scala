@@ -133,6 +133,7 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitCompoundOrSingleStatement(
       ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
+      LabelUtils.init()
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())
@@ -184,37 +185,11 @@ class AstBuilder extends DataTypeAstBuilder
     CompoundBody(buff.toSeq, label)
   }
 
-
-  private def generateLabelText(
-      beginLabelCtx: Option[BeginLabelContext],
-      endLabelCtx: Option[EndLabelContext]): String = {
-
-    (beginLabelCtx, endLabelCtx) match {
-      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.multipartIdentifier().getText.nonEmpty &&
-          bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        withOrigin(bl) {
-          throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get,
-            bl.multipartIdentifier().getText,
-            el.multipartIdentifier().getText)
-        }
-      case (None, Some(el: EndLabelContext)) =>
-        withOrigin(el) {
-          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, el.multipartIdentifier().getText)
-        }
-      case _ =>
-    }
-
-    beginLabelCtx.map(_.multipartIdentifier().getText)
-      .getOrElse(java.util.UUID.randomUUID.toString).toLowerCase(Locale.ROOT)
-  }
-
   override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
+    val labelText = LabelUtils.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
+    LabelUtils.exitLabeledScope(Option(ctx.beginLabel()))
+    body
   }
 
   override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
@@ -246,7 +221,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitWhileStatement(ctx: WhileStatementContext): WhileStatement = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val labelText = LabelUtils.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
 
     val condition = withOrigin(boolExpr) {
@@ -255,6 +230,7 @@ class AstBuilder extends DataTypeAstBuilder
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
     val body = visitCompoundBody(ctx.compoundBody())
+    LabelUtils.exitLabeledScope(Option(ctx.beginLabel()))
 
     WhileStatement(condition, body, Some(labelText))
   }
@@ -306,7 +282,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitRepeatStatement(ctx: RepeatStatementContext): RepeatStatement = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val labelText = LabelUtils.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
 
     val condition = withOrigin(boolExpr) {
@@ -315,6 +291,7 @@ class AstBuilder extends DataTypeAstBuilder
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
     val body = visitCompoundBody(ctx.compoundBody())
+    LabelUtils.exitLabeledScope(Option(ctx.beginLabel()))
 
     RepeatStatement(condition, body, Some(labelText))
   }
@@ -378,8 +355,9 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
   override def visitLoopStatement(ctx: LoopStatementContext): LoopStatement = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val labelText = LabelUtils.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val body = visitCompoundBody(ctx.compoundBody())
+    LabelUtils.exitLabeledScope(Option(ctx.beginLabel()))
 
     LoopStatement(body, Some(labelText))
   }

@@ -23,8 +23,13 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
-import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
+import org.apache.spark.sql.errors.{QueryParsingErrors, SqlScriptingErrors}
+
+import scala.collection.mutable
 
 /**
  * A collection of utility methods for use during the parsing process.
@@ -132,5 +137,72 @@ object ParserUtils extends SparkParserUtils {
     }
     concatTerms(ctx)
     sb.toString()
+  }
+}
+
+object LabelUtils {
+  private val seenLabels: mutable.Set[String] = mutable.Set.empty
+
+  def init(): Unit = {
+    seenLabels.clear()
+  }
+
+  private def checkLabels(
+      beginLabelCtx: Option[BeginLabelContext],
+      endLabelCtx: Option[EndLabelContext]) : Unit = {
+    (beginLabelCtx, endLabelCtx) match {
+      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
+        if bl.multipartIdentifier().getText.nonEmpty &&
+          bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
+            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
+        withOrigin(bl) {
+          seenLabels.clear()
+          throw SqlScriptingErrors.labelsMismatch(
+            CurrentOrigin.get,
+            bl.multipartIdentifier().getText,
+            el.multipartIdentifier().getText)
+        }
+      case (None, Some(el: EndLabelContext)) =>
+        withOrigin(el) {
+          seenLabels.clear()
+          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
+            CurrentOrigin.get, el.multipartIdentifier().getText)
+        }
+      case _ =>
+    }
+  }
+
+  private def isLabelDefined(beginLabelCtx: Option[BeginLabelContext]): Boolean = {
+    beginLabelCtx.map(_.multipartIdentifier().getText).isDefined
+  }
+
+  def enterLabeledScope(
+      beginLabelCtx: Option[BeginLabelContext],
+      endLabelCtx: Option[EndLabelContext]): String = {
+
+    checkLabels(beginLabelCtx, endLabelCtx)
+
+    val labelText = if (isLabelDefined(beginLabelCtx)) {
+      val txt = beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      if (seenLabels.contains(txt)) {
+        withOrigin(beginLabelCtx.get) {
+          seenLabels.clear()
+          throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
+        }
+      }
+      seenLabels.add(beginLabelCtx.get.multipartIdentifier().getText)
+      txt
+    } else {
+      // Do not add the label to the seenLabels set if it is not defined.
+      java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
+    }
+
+    labelText
+  }
+
+  def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
+    if (isLabelDefined(beginLabelCtx)) {
+      seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
+    }
   }
 }

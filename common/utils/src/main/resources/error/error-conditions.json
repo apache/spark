@@ -1198,6 +1198,12 @@
     ],
     "sqlState" : "23505"
   },
+  "DUPLICATE_LABEL" : {
+    "message" : [
+      "Label <label> already exists."
+    ],
+    "sqlState" : "42K0L"
+  },
   "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT" : {
     "message" : [
       "Call to routine <routineName> is invalid because it includes multiple argument assignments to the same parameter name <parameterName>."
