@@ -1767,7 +1767,11 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @Experimental
   def addArchive(path: String): Unit = {
-    addFile(path, false, false, isArchive = true)
+    addFile(path, recursive = false, addedOnSubmit = false, isArchive = true)
+  }
+
+  private[spark] def addArchive(path: String, jobArtifactUUID: String): Unit = {
+    addFile(path, recursive = false, addedOnSubmit = false, isArchive = true, Some(jobArtifactUUID))
   }
 
   /**
@@ -1793,14 +1797,22 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addFile(path: String, recursive: Boolean): Unit = {
-    addFile(path, recursive, false)
+    addFile(path, recursive, addedOnSubmit = false)
+  }
+
+  private[spark] def addFile(path: String, recursive: Boolean, jobArtifactUUID: String): Unit = {
+    addFile(path, recursive, addedOnSubmit = false, isArchive = false, Some(jobArtifactUUID))
   }
 
   private def addFile(
-      path: String, recursive: Boolean, addedOnSubmit: Boolean, isArchive: Boolean = false
-    ): Unit = {
-    val jobArtifactUUID = JobArtifactSet
-      .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+      path: String,
+      recursive: Boolean,
+      addedOnSubmit: Boolean,
+      isArchive: Boolean = false,
+      jobArtifactUUIDOpt: Option[String] = None): Unit = {
+    val jobArtifactUUID = jobArtifactUUIDOpt.getOrElse {
+      JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+    }
     val uri = Utils.resolveURI(path)
     val schemeCorrectedURI = uri.getScheme match {
       case null => new File(path).getCanonicalFile.toURI
@@ -2160,9 +2172,17 @@ class SparkContext(config: SparkConf) extends Logging {
     addJar(path, false)
   }
 
-  private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
-    val jobArtifactUUID = JobArtifactSet
-      .getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+  private[spark] def addJar(path: String, jobArtifactUUID: String): Unit = {
+    addJar(path, addedOnSubmit = false, Some(jobArtifactUUID))
+  }
+
+  private def addJar(
+      path: String,
+      addedOnSubmit: Boolean,
+      jobArtifactUUIDOpt: Option[String] = None): Unit = {
+    val jobArtifactUUID = jobArtifactUUIDOpt.getOrElse {
+      JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+    }
     def addLocalJarFile(file: File): Seq[String] = {
       try {
         if (!file.exists()) {

@@ -29,6 +29,7 @@ import org.apache.spark.util.Utils
  */
 case class AddJarsCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    // TODO(SPARK-50244): Enable isolation for added files, often used in Hive.
     paths.foreach(sparkSession.sessionState.resourceLoader.addJar(_))
     Seq.empty[Row]
   }
@@ -40,7 +41,8 @@ case class AddJarsCommand(paths: Seq[String]) extends LeafRunnableCommand {
 case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val recursive = !sparkSession.sessionState.conf.addSingleFileInAddFile
-    paths.foreach(sparkSession.sparkContext.addFile(_, recursive))
+    // TODO(SPARK-50244): Enable isolation for added files, often used in Hive.
+    paths.foreach(sparkSession.sparkContext.addFile(_, recursive, "default"))
     Seq.empty[Row]
   }
 }
@@ -50,7 +52,8 @@ case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
  */
 case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    paths.foreach(sparkSession.sparkContext.addArchive(_))
+    // TODO(SPARK-50244): Enable isolation for added files, often used in Hive.
+    paths.foreach(sparkSession.sparkContext.addArchive(_, "default"))
     Seq.empty[Row]
   }
 }
