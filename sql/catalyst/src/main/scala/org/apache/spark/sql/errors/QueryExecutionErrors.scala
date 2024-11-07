@@ -636,7 +636,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def numericIntervalArithmeticOverflowError(
+  def withTrySuggestionIntervalArithmeticOverflowError(
       message: String,
       hint: String = "",
       context: QueryContext = null): ArithmeticException = {
@@ -644,7 +644,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       s" Use '$hint' to tolerate overflow and return NULL instead."
     } else ""
     new SparkArithmeticException(
-      errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.NUMERIC",
+      errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
       messageParameters = Map(
         "message" -> message,
         "alternative" -> alternative),
@@ -652,10 +652,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
-  def datetimeIntervalArithmeticOverflowError(
+  def withoutSuggestionIntervalArithmeticOverflowError(
     context: QueryContext = null): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.DATETIME",
+      errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
       messageParameters = Map(),
       context = getQueryContext(context),
       summary = getSummary(context))

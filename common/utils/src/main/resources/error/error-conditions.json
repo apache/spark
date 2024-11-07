@@ -2022,17 +2022,17 @@
   },
   "INTERVAL_ARITHMETIC_OVERFLOW": {
     "message": [
-      "Integer overflow while creating interval."
+      "Integer overflow while operating with intervals."
     ],
     "subClass": {
-      "NUMERIC": {
+      "WITH_TRY_SUGGESTION": {
         "message": [
           "<message>.<alternative>."
         ]
       },
-      "DATETIME": {
+      "WITHOUT_SUGGESTION": {
         "message": [
-          "Too big interval for datetime, check how you create it."
+          ""
         ]
       }
     },

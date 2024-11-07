@@ -485,7 +485,7 @@ case class MakeYMInterval(years: Expression, months: Expression)
           Math.multiplyExact(year.asInstanceOf[Int], MONTHS_PER_YEAR)))
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.datetimeIntervalArithmeticOverflowError()
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError()
     }
   }
 
@@ -493,13 +493,14 @@ case class MakeYMInterval(years: Expression, months: Expression)
     nullSafeCodeGen(ctx, ev, (years, months) => {
       val math = classOf[Math].getName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
+      // scalastyle:off line.size.limit
       s"""
          |try {
-         |  ${ev.value} = $math.toIntExact(
-         |    $math.addExact($months, $math.multiplyExact($years, $MONTHS_PER_YEAR)));
+         |  ${ev.value} = $math.toIntExact($math.addExact($months, $math.multiplyExact($years, $MONTHS_PER_YEAR)));
          |} catch (java.lang.ArithmeticException e) {
-         |  throw QueryExecutionErrors.datetimeIntervalArithmeticOverflowError($errorContext);
+         |  throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError($errorContext);
          |}""".stripMargin
+      // scalastyle:on line.size.limit
     })
   }
 
@@ -622,7 +623,7 @@ trait IntervalDivide {
       context: QueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
-        throw QueryExecutionErrors.numericIntervalArithmeticOverflowError(
+        throw QueryExecutionErrors.withTrySuggestionIntervalArithmeticOverflowError(
           "Interval value overflows after being divided by -1", "try_divide", context)
       }
     }
