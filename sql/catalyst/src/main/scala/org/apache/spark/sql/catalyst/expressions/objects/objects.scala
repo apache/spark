@@ -322,8 +322,7 @@ case class StaticInvoke(
     propagateNull: Boolean = true,
     returnNullable: Boolean = true,
     isDeterministic: Boolean = true,
-    scalarFunction: Option[ScalarFunction[_]] = None,
-    override val nullIntolerant: Boolean = false) extends InvokeLike {
+    scalarFunction: Option[ScalarFunction[_]] = None) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
   val cls = if (staticObject.getName == objectName) {
@@ -333,6 +332,7 @@ case class StaticInvoke(
   }
 
   override def nullable: Boolean = needNullCheck || returnNullable
+  override def nullIntolerant: Boolean = propagateNull
   override def children: Seq[Expression] = arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
@@ -448,9 +448,8 @@ case class Invoke(
     methodInputTypes: Seq[AbstractDataType] = Nil,
     propagateNull: Boolean = true,
     returnNullable : Boolean = true,
-    isDeterministic: Boolean = true,
-    override val nullIntolerant: Boolean = false) extends InvokeLike {
-
+    isDeterministic: Boolean = true) extends InvokeLike {
+  override def nullIntolerant: Boolean = propagateNull
   lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
