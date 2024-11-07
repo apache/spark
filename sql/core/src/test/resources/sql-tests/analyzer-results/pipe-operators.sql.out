@@ -266,6 +266,31 @@ CreateViewCommand `windowTestData`, select * from values
 
 
 -- !query
+create temporary view groupByAllData as select * from values
+  ("USA", "San Francisco", "Reynold", 1, 11.0),
+  ("USA", "San Francisco", "Matei", 2, 12.0),
+  ("USA", "Berkeley", "Xiao", 3, 13.0),
+  ("China", "Hangzhou", "Wenchen", 4, 14.0),
+  ("China", "Shanghai", "Shanghaiese", 5, 15.0),
+  ("Korea", "Seoul", "Hyukjin", 6, 16.0),
+  ("UK", "London", "Sean", 7, 17.0)
+  as data(country, city, name, id, power)
+-- !query analysis
+CreateViewCommand `groupByAllData`, select * from values
+  ("USA", "San Francisco", "Reynold", 1, 11.0),
+  ("USA", "San Francisco", "Matei", 2, 12.0),
+  ("USA", "Berkeley", "Xiao", 3, 13.0),
+  ("China", "Hangzhou", "Wenchen", 4, 14.0),
+  ("China", "Shanghai", "Shanghaiese", 5, 15.0),
+  ("Korea", "Seoul", "Hyukjin", 6, 16.0),
+  ("UK", "London", "Sean", 7, 17.0)
+  as data(country, city, name, id, power), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [country#x, city#x, name#x, id#x, power#x]
+      +- SubqueryAlias data
+         +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query analysis
@@ -2467,11 +2492,65 @@ Aggregate [a#x], [a#x, (cast(a#x as bigint) + count(b#x)) AS (a + count(b))#xL]
 
 -- !query
 select 3 as x, 4 as y
-|> aggregate group by all
+|> aggregate x, y group by all
 -- !query analysis
-Aggregate
+Aggregate [x#x, y#x], [x#x, y#x]
 +- Project [3 AS x#x, 4 AS y#x]
    +- OneRowRelation
+
+
+-- !query
+table groupByAllData
+ |> select country as all, city, id
+ |> aggregate all, count(*) as total group by all, city
+ |> select all, city, total
+-- !query analysis
+Project [all#x, city#x, total#xL]
++- Aggregate [all#x, city#x], [all#x, city#x, all#x, count(1) AS total#xL]
+   +- Project [pipeselect(country#x) AS all#x, city#x, id#x]
+      +- SubqueryAlias groupbyalldata
+         +- View (`groupByAllData`, [country#x, city#x, name#x, id#x, power#x])
+            +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+               +- Project [country#x, city#x, name#x, id#x, power#x]
+                  +- SubqueryAlias data
+                     +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+
+
+-- !query
+values (1), (2), (3) as t(all)
+|> aggregate count(1) as total group by all
+|> select total
+-- !query analysis
+Project [total#xL]
++- Aggregate [count(1) AS total#xL]
+   +- SubqueryAlias t
+      +- LocalRelation [all#x]
+
+
+-- !query
+table groupByAllData
+|> aggregate country, city, name, id, count(*) as total, sum(power) as sumPower group by all
+-- !query analysis
+Aggregate [country#x, city#x, name#x, id#x], [country#x, city#x, name#x, id#x, count(1) AS total#xL, sum(power#x) AS sumPower#x]
++- SubqueryAlias groupbyalldata
+   +- View (`groupByAllData`, [country#x, city#x, name#x, id#x, power#x])
+      +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+         +- Project [country#x, city#x, name#x, id#x, power#x]
+            +- SubqueryAlias data
+               +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
+
+
+-- !query
+table groupByAllData
+|> aggregate country, city, name, id, power group by all
+-- !query analysis
+Aggregate [country#x, city#x, name#x, id#x, power#x], [country#x, city#x, name#x, id#x, power#x]
++- SubqueryAlias groupbyalldata
+   +- View (`groupByAllData`, [country#x, city#x, name#x, id#x, power#x])
+      +- Project [cast(country#x as string) AS country#x, cast(city#x as string) AS city#x, cast(name#x as string) AS name#x, cast(id#x as int) AS id#x, cast(power#x as decimal(3,1)) AS power#x]
+         +- Project [country#x, city#x, name#x, id#x, power#x]
+            +- SubqueryAlias data
+               +- LocalRelation [country#x, city#x, name#x, id#x, power#x]
 
 
 -- !query
@@ -2754,6 +2833,88 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "expression" : "\"b\"",
     "expressionAnyValue" : "\"any_value(b)\""
   }
+}
+
+
+-- !query
+table groupByAllData
+|> aggregate group by all
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "The AGGREGATE clause requires a list of aggregate expressions or a list of grouping expressions, or both"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 46,
+    "fragment" : "table groupByAllData\n|> aggregate group by all"
+  } ]
+}
+
+
+-- !query
+table groupByAllData
+|> aggregate id + count(*) group by all
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 60,
+    "fragment" : "table groupByAllData\n|> aggregate id + count(*) group by all"
+  } ]
+}
+
+
+-- !query
+table groupByAllData
+|> aggregate group by all
+|> select non_exist
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "The AGGREGATE clause requires a list of aggregate expressions or a list of grouping expressions, or both"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "table groupByAllData\n|> aggregate group by all\n|> select non_exist"
+  } ]
+}
+
+
+-- !query
+table groupByAllData
+|> aggregate count(*) as total, sum(power) as sumPower group by all
+|> select country, city, total, sumPower
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`country`",
+    "proposal" : "`total`, `sumPower`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 100,
+    "stopIndex" : 106,
+    "fragment" : "country"
+  } ]
 }
 
 

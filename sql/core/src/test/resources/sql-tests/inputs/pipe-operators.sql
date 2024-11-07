@@ -71,6 +71,16 @@ create temporary view windowTestData as select * from values
   (3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
   AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
 
+create temporary view groupByAllData as select * from values
+  ("USA", "San Francisco", "Reynold", 1, 11.0),
+  ("USA", "San Francisco", "Matei", 2, 12.0),
+  ("USA", "Berkeley", "Xiao", 3, 13.0),
+  ("China", "Hangzhou", "Wenchen", 4, 14.0),
+  ("China", "Shanghai", "Shanghaiese", 5, 15.0),
+  ("Korea", "Seoul", "Hyukjin", 6, 16.0),
+  ("UK", "London", "Sean", 7, 17.0)
+  as data(country, city, name, id, power);
+
 -- SELECT operators: positive tests.
 ---------------------------------------
 
@@ -750,7 +760,28 @@ table other
 
 -- GROUP BY ALL is supported.
 select 3 as x, 4 as y
-|> aggregate group by all;
+|> aggregate x, y group by all;
+
+-- A column named "all" should still work.
+table groupByAllData
+ |> select country as all, city, id
+ |> aggregate all, count(*) as total group by all, city
+ |> select all, city, total;
+
+-- A column named "all" should take precedence over the normal group by all expansion
+-- if all refers to the column, then the following should return 3 rows.
+-- if all refers to the global aggregate, then 1 row.
+values (1), (2), (3) as t(all)
+|> aggregate count(1) as total group by all
+|> select total;
+
+-- Two grouping columns and two aggregates with GROUP BY ALL.
+table groupByAllData
+|> aggregate country, city, name, id, count(*) as total, sum(power) as sumPower group by all;
+
+-- GROUP BY ALL without any aggregates, which should just become a distinct.
+table groupByAllData
+|> aggregate country, city, name, id, power group by all;
 
 -- Aggregation operators: negative tests.
 -----------------------------------------
@@ -820,6 +851,25 @@ select 1 x, 2 y, 3 z
 -- in the GROUP BY clause.
 table other
 |> aggregate b group by a;
+
+-- GROUP BY ALL without any aggregate functions is invalid.
+table groupByAllData
+|> aggregate group by all;
+
+-- GROUP BY ALL with a complex case that we choose not to infer; fail with a useful error message.
+table groupByAllData
+|> aggregate id + count(*) group by all;
+
+-- The SELECT list contains unresolved column, should not report UNRESOLVED_ALL_IN_GROUP_BY.
+table groupByAllData
+|> aggregate group by all
+|> select non_exist;
+
+-- It is not possible to select a column from the table unless it was explicitly included in the
+-- AGGREGATE list when using GROUP BY ALL.
+table groupByAllData
+|> aggregate count(*) as total, sum(power) as sumPower group by all
+|> select country, city, total, sumPower;
 
 -- Cleanup.
 -----------

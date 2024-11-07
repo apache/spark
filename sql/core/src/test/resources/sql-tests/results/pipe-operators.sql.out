@@ -233,6 +233,22 @@ struct<>
 
 
 -- !query
+create temporary view groupByAllData as select * from values
+  ("USA", "San Francisco", "Reynold", 1, 11.0),
+  ("USA", "San Francisco", "Matei", 2, 12.0),
+  ("USA", "Berkeley", "Xiao", 3, 13.0),
+  ("China", "Hangzhou", "Wenchen", 4, 14.0),
+  ("China", "Shanghai", "Shanghaiese", 5, 15.0),
+  ("Korea", "Seoul", "Hyukjin", 6, 16.0),
+  ("UK", "London", "Sean", 7, 17.0)
+  as data(country, city, name, id, power)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query schema
@@ -2110,11 +2126,67 @@ struct<a:int,(a + count(b)):bigint>
 
 -- !query
 select 3 as x, 4 as y
-|> aggregate group by all
+|> aggregate x, y group by all
 -- !query schema
-struct<>
+struct<x:int,y:int>
 -- !query output
+3	4
 
+
+-- !query
+table groupByAllData
+ |> select country as all, city, id
+ |> aggregate all, count(*) as total group by all, city
+ |> select all, city, total
+-- !query schema
+struct<all:string,city:string,total:bigint>
+-- !query output
+China	Hangzhou	1
+China	Shanghai	1
+Korea	Seoul	1
+UK	London	1
+USA	Berkeley	1
+USA	San Francisco	2
+
+
+-- !query
+values (1), (2), (3) as t(all)
+|> aggregate count(1) as total group by all
+|> select total
+-- !query schema
+struct<total:bigint>
+-- !query output
+3
+
+
+-- !query
+table groupByAllData
+|> aggregate country, city, name, id, count(*) as total, sum(power) as sumPower group by all
+-- !query schema
+struct<country:string,city:string,name:string,id:int,total:bigint,sumPower:decimal(13,1)>
+-- !query output
+China	Hangzhou	Wenchen	4	1	14.0
+China	Shanghai	Shanghaiese	5	1	15.0
+Korea	Seoul	Hyukjin	6	1	16.0
+UK	London	Sean	7	1	17.0
+USA	Berkeley	Xiao	3	1	13.0
+USA	San Francisco	Matei	2	1	12.0
+USA	San Francisco	Reynold	1	1	11.0
+
+
+-- !query
+table groupByAllData
+|> aggregate country, city, name, id, power group by all
+-- !query schema
+struct<country:string,city:string,name:string,id:int,power:decimal(3,1)>
+-- !query output
+China	Hangzhou	Wenchen	4	14.0
+China	Shanghai	Shanghaiese	5	15.0
+Korea	Seoul	Hyukjin	6	16.0
+UK	London	Sean	7	17.0
+USA	Berkeley	Xiao	3	13.0
+USA	San Francisco	Matei	2	12.0
+USA	San Francisco	Reynold	1	11.0
 
 
 -- !query
@@ -2425,6 +2497,96 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "expression" : "\"b\"",
     "expressionAnyValue" : "\"any_value(b)\""
   }
+}
+
+
+-- !query
+table groupByAllData
+|> aggregate group by all
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "The AGGREGATE clause requires a list of aggregate expressions or a list of grouping expressions, or both"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 46,
+    "fragment" : "table groupByAllData\n|> aggregate group by all"
+  } ]
+}
+
+
+-- !query
+table groupByAllData
+|> aggregate id + count(*) group by all
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_ALL_IN_GROUP_BY",
+  "sqlState" : "42803",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 60,
+    "fragment" : "table groupByAllData\n|> aggregate id + count(*) group by all"
+  } ]
+}
+
+
+-- !query
+table groupByAllData
+|> aggregate group by all
+|> select non_exist
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "The AGGREGATE clause requires a list of aggregate expressions or a list of grouping expressions, or both"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "table groupByAllData\n|> aggregate group by all\n|> select non_exist"
+  } ]
+}
+
+
+-- !query
+table groupByAllData
+|> aggregate count(*) as total, sum(power) as sumPower group by all
+|> select country, city, total, sumPower
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`country`",
+    "proposal" : "`total`, `sumPower`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 100,
+    "stopIndex" : 106,
+    "fragment" : "country"
+  } ]
 }
 
 
