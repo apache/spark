@@ -19,7 +19,6 @@ package org.apache.spark.sql.classic
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedTableValuedFunction
-import org.apache.spark.sql.classic.{Dataset, SparkSession}
 
 class TableValuedFunction(sparkSession: SparkSession)
   extends sql.TableValuedFunction {
