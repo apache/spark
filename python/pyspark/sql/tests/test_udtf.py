@@ -2542,6 +2542,46 @@ class BaseUDTFTestsMixin:
         rows = self.spark.sql("select i, s from test_udtf(parse_json('{\"a\":\"b\"}'))").collect()
         self.assertEqual(rows, [Row(i=n, s='{\"a\":\"b\"}') for n in range(10)])
 
+    def test_udtf_with_nested_variant_input(self):
+        # struct<variant>
+        @udtf(returnType="i int, s: string")
+        class TestUDTFStruct:
+            def eval(self, v):
+                for i in range(10):
+                    yield i, v["v"].toJson()
+
+        self.spark.udtf.register("test_udtf_struct", TestUDTFStruct)
+        rows = self.spark.sql(
+            "select i, s from test_udtf_struct(named_struct('v', parse_json('{\"a\":\"c\"}')))"
+        ).collect()
+        self.assertEqual(rows, [Row(i=n, s='{\"a\":\"c\"}') for n in range(10)])
+
+        # array<variant>
+        @udtf(returnType="i int, s: string")
+        class TestUDTFArray:
+            def eval(self, v):
+                for i in range(10):
+                    yield i, v[0].toJson()
+
+        self.spark.udtf.register("test_udtf_array", TestUDTFArray)
+        rows = self.spark.sql(
+            "select i, s from test_udtf_array(array(parse_json('{\"a\":\"d\"}')))"
+        ).collect()
+        self.assertEqual(rows, [Row(i=n, s='{\"a\":\"d\"}') for n in range(10)])
+
+        # map<string, variant>
+        @udtf(returnType="i int, s: string")
+        class TestUDTFMap:
+            def eval(self, v):
+                for i in range(10):
+                    yield i, v["v"].toJson()
+
+        self.spark.udtf.register("test_udtf_map", TestUDTFMap)
+        rows = self.spark.sql(
+            "select i, s from test_udtf_map(map('v', parse_json('{\"a\":\"e\"}')))"
+        ).collect()
+        self.assertEqual(rows, [Row(i=n, s='{\"a\":\"e\"}') for n in range(10)])
+
     def test_udtf_with_variant_output(self):
         @udtf(returnType="i int, v: variant")
         class TestUDTF:
