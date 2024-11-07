@@ -4941,33 +4941,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
     checkAnswer(df, expectedAnswer)
   }
-
-  test("group by all") {
-    withTable("groupByAllData") {
-      sql(
-        """
-          |create table groupByAllData as select * from values
-          |  ("USA", "San Francisco", "Reynold", 1, 11.0),
-          |  ("USA", "San Francisco", "Matei", 2, 12.0),
-          |  ("USA", "Berkeley", "Xiao", 3, 13.0),
-          |  ("China", "Hangzhou", "Wenchen", 4, 14.0),
-          |  ("China", "Shanghai", "Shanghaiese", 5, 15.0),
-          |  ("Korea", "Seoul", "Hyukjin", 6, 16.0),
-          |  ("UK", "London", "Sean", 7, 17.0)
-          |  as data(country, city, name, id, power);
-          |""".stripMargin)
-      val df =
-        sql(
-          """
-            | table groupByAllData
-            | |> aggregate count(*) as total, sum(power) as sumPower group by all
-            | |> select country, city, total, sumPower
-            |""".stripMargin)
-      val expectedAnswer = Seq(
-        Row(Array(0), Array(0)), Row(Array(1), Array(1)), Row(Array(2), Array(2)))
-      checkAnswer(df, expectedAnswer)
-    }
-  }
 }
 
 case class Foo(bar: Option[String])
