@@ -770,6 +770,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  val ALLOW_READING_UNKNOWN_COLLATIONS =
+    buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
+      .internal()
+      .doc("Enables spark to read unknown collation name as UTF8_BINARY. If the config is " +
+        "not enabled, when spark encounters an unknown collation name, it will throw an error.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -5524,6 +5533,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
     }
   }
+
+  override def allowReadingUnknownCollations: Boolean = getConf(ALLOW_READING_UNKNOWN_COLLATIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
