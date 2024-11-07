@@ -2479,6 +2479,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * can resolve outer references.
      *
      * Outer references of the subquery are updated as children of Subquery expression.
+     *
+     * If hasExplicitOuterRefs is true, the subquery should have an explicit outer reference,
+     * instead of common `UnresolvedAttribute`s. In this case, tries to resolve inner and outer
+     * references separately.
      */
     private def resolveSubQuery(
         e: SubqueryExpression,

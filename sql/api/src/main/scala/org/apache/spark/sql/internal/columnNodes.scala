@@ -167,6 +167,14 @@ private[sql] object UnresolvedAttribute {
     apply(unparsedIdentifier, None, false, CurrentOrigin.get)
 }
 
+/**
+ * Reference to an attribute in the outer context, used for Subqueries.
+ *
+ * @param nameParts
+ *   name of the attribute.
+ * @param planId
+ *   id of the plan (Dataframe) that produces the attribute.
+ */
 private[sql] case class LazyOuterReference(
     nameParts: Seq[String],
     planId: Option[Long] = None,

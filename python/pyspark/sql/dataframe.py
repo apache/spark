@@ -6503,7 +6503,8 @@ class DataFrame:
         ... ]
         >>> employees = spark.createDataFrame(data, ["id", "name", "salary", "department_id"])
 
-        Example 1: Filter for employees with salary greater than the average salary.
+        Example 1 (non-correlated): Filter for employees with salary greater than the average
+        salary.
 
         >>> from pyspark.sql import functions as sf
         >>> employees.where(
@@ -6517,8 +6518,8 @@ class DataFrame:
         |  Eve| 48000|          101|
         +-----+------+-------------+
 
-        Example 2: Filter for employees with salary greater than the average salary in their
-        department.
+        Example 2 (correlated): Filter for employees with salary greater than the average salary
+        in their department.
 
         >>> from pyspark.sql import functions as sf
         >>> employees.where(
@@ -6533,7 +6534,8 @@ class DataFrame:
         |David| 61000|          102|
         +-----+------+-------------+
 
-        Example 3: Select the name, salary, and the proportion of the salary in the department.
+        Example 3 (in select): Select the name, salary, and the proportion of the salary in the
+        department.
 
         >>> from pyspark.sql import functions as sf
         >>> employees.select(
@@ -6595,7 +6597,7 @@ class DataFrame:
         >>> from pyspark.sql import functions as sf
         >>> customers.where(
         ...     orders.where(sf.col("customer_id") == sf.col("customer_id").outer()).exists()
-        ... ).show()
+        ... ).orderBy("customer_id").show()
         +-----------+-------------+-------+
         |customer_id|customer_name|country|
         +-----------+-------------+-------+
@@ -6604,7 +6606,19 @@ class DataFrame:
         |        103|      Charlie|    USA|
         +-----------+-------------+-------+
 
-        Example 2: Find Orders from Customers in the USA.
+        Example 2: Filter for customers who have never placed an order.
+
+        >>> from pyspark.sql import functions as sf
+        >>> customers.where(
+        ...     ~orders.where(sf.col("customer_id") == sf.col("customer_id").outer()).exists()
+        ... ).orderBy("customer_id").show()
+        +-----------+-------------+---------+
+        |customer_id|customer_name|  country|
+        +-----------+-------------+---------+
+        |        104|        David|Australia|
+        +-----------+-------------+---------+
+
+        Example 3: Find Orders from Customers in the USA.
 
         >>> from pyspark.sql import functions as sf
         >>> orders.where(
@@ -6612,13 +6626,13 @@ class DataFrame:
         ...         (sf.col("customer_id") == sf.col("customer_id").outer())
         ...         & (sf.col("country") == "USA")
         ...     ).exists()
-        ... ).show()
+        ... ).orderBy("order_id").show()
         +--------+-----------+----------+------------+
         |order_id|customer_id|order_date|total_amount|
         +--------+-----------+----------+------------+
         |       1|        101|2023-01-15|         250|
-        |       4|        101|2023-02-05|         150|
         |       3|        103|2023-01-25|         400|
+        |       4|        101|2023-02-05|         150|
         +--------+-----------+----------+------------+
         """
         ...
