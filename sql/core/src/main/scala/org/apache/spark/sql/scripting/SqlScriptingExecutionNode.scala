@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.scripting
 
-import scala.collection.immutable.Map
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateMap, CreateNamedStruct, Expression, GenericRowWithSchema, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
@@ -662,23 +661,12 @@ class ForStatementExec(
   private var currRow = 0
   private var currVariable: Expression = null
 
-  private var queryDataframe: DataFrame = null
-  private var isDataframeCacheValid = false
-  // todo: see if you need this
-  private def cachedQueryDataframe(): DataFrame = {
-    if (!isDataframeCacheValid) {
-      query.isExecuted = true
-      queryDataframe = Dataset.ofRows(session, query.parsedPlan)
-      isDataframeCacheValid = true
-    }
-    queryDataframe
-  }
-
   private var queryResult: Array[Row] = null
   private var isResultCacheValid = false
   private def cachedQueryResult(): Array[Row] = {
     if (!isResultCacheValid) {
-      queryResult = cachedQueryDataframe().collect()
+      query.isExecuted = true
+      queryResult = Dataset.ofRows(session, query.parsedPlan).collect()
       isResultCacheValid = true
     }
     queryResult
@@ -702,8 +690,6 @@ class ForStatementExec(
             body.reset()
             return next()
           }
-
-          // arguments of CreateNamedStruct must be formatted like (name1, val1, name2, val2, ...)
           currVariable = createExpressionFromValue(cachedQueryResult()(currRow))
 
           state = ForState.VariableAssignment
@@ -745,12 +731,15 @@ class ForStatementExec(
 
   private def createExpressionFromValue(value: Any): Expression = value match {
     case m: Map[_, _] =>
+      // arguments of CreateMap are in the format: (key1, val1, key2, val2, ...)
       val mapArgs = m.keys.zip(m.values).flatMap {case (k, v) =>
         Seq(createExpressionFromValue(k), createExpressionFromValue(v))
       }.toSeq
       CreateMap(mapArgs, false)
+    // structs enter this case
     case s: GenericRowWithSchema =>
-      val namedStructArgs = s.schema.names.toSeq.flatMap { colName =>
+    // arguments of CreateNamedStruct are in the format: (name1, val1, name2, val2, ...)
+    val namedStructArgs = s.schema.names.toSeq.flatMap { colName =>
         val valueExpression =
           createExpressionFromValue(s.getAs(colName))
         Seq(Literal(colName), valueExpression)
@@ -783,7 +772,6 @@ class ForStatementExec(
 
   override def reset(): Unit = {
     state = ForState.VariableDeclaration
-    isDataframeCacheValid = false
     isResultCacheValid = false
     currRow = 0
     currVariable = null
