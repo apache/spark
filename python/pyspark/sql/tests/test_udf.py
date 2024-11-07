@@ -447,6 +447,48 @@ class BaseUDFTestsMixin(object):
                 expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
                 self.assertEqual(result, expected)
 
+                # struct<variant>
+                u_first = udf(
+                    lambda i: {
+                        "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+                    },
+                    StructType([StructField("v", VariantType(), True)]),
+                )
+                u_second = udf(lambda u: str(u["v"]), StringType())
+                result = self.spark.range(0, 10).select(
+                    u_second(u_first(col("id"))).alias("udf")
+                ).collect()
+                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+                self.assertEqual(result, expected)
+
+                # array<variant>
+                u_first = udf(
+                    lambda i: [
+                        VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+                    ],
+                    ArrayType(VariantType()),
+                )
+                u_second = udf(lambda u: str(u[0]), StringType())
+                result = self.spark.range(0, 10).select(
+                    u_second(u_first(col("id"))).alias("udf")
+                ).collect()
+                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+                self.assertEqual(result, expected)
+
+                # map<string, variant>
+                u_first = udf(
+                    lambda i: {
+                        "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+                    },
+                    ArrayType(VariantType()),
+                )
+                u_second = udf(lambda u: str(u["v"]), StringType())
+                result = self.spark.range(0, 10).select(
+                    u_second(u_first(col("id"))).alias("udf")
+                ).collect()
+                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+                self.assertEqual(result, expected)
+
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
         from pyspark.sql.functions import col, sum
