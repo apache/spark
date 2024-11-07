@@ -2020,23 +2020,23 @@
     ],
     "sqlState" : "XX000"
   },
-  "INTERVAL_ARITHMETIC_OVERFLOW": {
-    "message": [
+  "INTERVAL_ARITHMETIC_OVERFLOW" : {
+    "message" : [
       "Integer overflow while operating with intervals."
     ],
-    "subClass": {
-      "WITH_TRY_SUGGESTION": {
-        "message": [
-          "<message>.<alternative>."
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "Try devising appropriate values for the interval parameters."
         ]
       },
-      "WITHOUT_SUGGESTION": {
-        "message": [
-          ""
+      "WITH_TRY_SUGGESTION" : {
+        "message" : [
+          "<message>.<alternative>."
         ]
       }
     },
-    "sqlState": "22015"
+    "sqlState" : "22015"
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
     "message" : [
