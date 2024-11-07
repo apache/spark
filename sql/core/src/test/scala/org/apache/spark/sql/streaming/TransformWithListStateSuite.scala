@@ -33,7 +33,7 @@ class TestListStateProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("testListState", Encoders.STRING)
+    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -89,8 +89,9 @@ class ToggleSaveAndEmitProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("testListState", Encoders.STRING)
-    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean)
+    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
+    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
