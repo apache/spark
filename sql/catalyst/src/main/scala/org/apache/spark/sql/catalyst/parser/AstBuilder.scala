@@ -351,10 +351,10 @@ class AstBuilder extends DataTypeAstBuilder
     val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
 
     val query = SingleStatement(visitQuery(ctx.query()))
-    val identifier = Option(ctx.multipartIdentifier()).map(_.getText)
+    val varName = Option(ctx.multipartIdentifier()).map(_.getText)
     val body = visitCompoundBody(ctx.compoundBody())
 
-    ForStatement(query, identifier, body, Some(labelText))
+    ForStatement(query, varName, body, Some(labelText))
   }
 
   private def leaveOrIterateContextHasLabel(

@@ -641,15 +641,17 @@ class LoopStatementExec(
 }
 
 /**
- * Executable node for WhileStatement.
- * @param condition Executable node for the condition.
- * @param body Executable node for the body.
- * @param label Label set to WhileStatement by user or None otherwise.
+ * Executable node for ForStatement.
+ * @param query Executable node for the query.
+ * @param variableName Name of variable used for accessing current row during iteration.
+ * @param body Executable node for the body. If variableName is not None, will have DropVariable
+ *             as the last statement.
+ * @param label Label set to ForStatement by user or None otherwise.
  * @param session Spark session that SQL script is executed within.
  */
 class ForStatementExec(
   query: SingleStatementExec,
-  identifier: Option[String],
+  variableName: Option[String],
   body: CompoundBodyExec,
   label: Option[String],
   session: SparkSession) extends NonLeafStatementExec {
@@ -685,7 +687,7 @@ class ForStatementExec(
       override def next(): CompoundStatementExec = state match {
         case ForState.VariableDeclaration =>
           // when there is no for variable, skip var declaration and iterate only the body
-          if (identifier.isEmpty) {
+          if (variableName.isEmpty) {
             state = ForState.Body
             body.reset()
             return next()
@@ -693,12 +695,12 @@ class ForStatementExec(
           currVariable = createExpressionFromValue(cachedQueryResult()(currRow))
 
           state = ForState.VariableAssignment
-          createDeclareVarExec(currVariable)
+          createDeclareVarExec(variableName.get, currVariable)
 
         case ForState.VariableAssignment =>
           state = ForState.Body
           body.reset()
-          createSetVarExec(currVariable)
+          createSetVarExec(variableName.get, currVariable)
 
         case ForState.Body =>
           val retStmt = body.getTreeIterator.next()
@@ -736,35 +738,34 @@ class ForStatementExec(
         Seq(createExpressionFromValue(k), createExpressionFromValue(v))
       }.toSeq
       CreateMap(mapArgs, false)
-    // structs enter this case
     case s: GenericRowWithSchema =>
+    // struct types match this case
     // arguments of CreateNamedStruct are in the format: (name1, val1, name2, val2, ...)
     val namedStructArgs = s.schema.names.toSeq.flatMap { colName =>
-        val valueExpression =
-          createExpressionFromValue(s.getAs(colName))
+        val valueExpression = createExpressionFromValue(s.getAs(colName))
         Seq(Literal(colName), valueExpression)
       }
       CreateNamedStruct(namedStructArgs)
     case _ => Literal(value)
   }
 
-  private def createDeclareVarExec(variable: Expression): SingleStatementExec = {
+  private def createDeclareVarExec(varName: String, variable: Expression): SingleStatementExec = {
     val defaultExpression = DefaultValueExpression(Literal(null, variable.dataType), "null")
     val declareVariable = CreateVariable(
-      UnresolvedIdentifier(Seq(identifier.get)),
+      UnresolvedIdentifier(Seq(varName)),
       defaultExpression,
       replace = true
     )
     new SingleStatementExec(declareVariable, Origin(), isInternal = true)
   }
 
-  private def createSetVarExec(variable: Expression): SingleStatementExec = {
+  private def createSetVarExec(varName: String, variable: Expression): SingleStatementExec = {
     val projectNamedStruct = Project(
-      Seq(Alias(variable, identifier.get)()),
+      Seq(Alias(variable, varName)()),
       OneRowRelation()
     )
     val setIdentifierToCurrentRow =
-      SetVariable(Seq(UnresolvedAttribute(identifier.get)), projectNamedStruct)
+      SetVariable(Seq(UnresolvedAttribute(variableName.get)), projectNamedStruct)
     new SingleStatementExec(setIdentifierToCurrentRow, Origin(), isInternal = true)
   }
 
