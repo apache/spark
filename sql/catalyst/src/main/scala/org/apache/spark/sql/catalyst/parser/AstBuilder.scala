@@ -350,7 +350,10 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitForStatement(ctx: ForStatementContext): ForStatement = {
     val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
 
-    val query = SingleStatement(visitQuery(ctx.query()))
+    val queryCtx = ctx.query()
+    val query = withOrigin(queryCtx) {
+      SingleStatement(visitQuery(queryCtx))
+    }
     val varName = Option(ctx.multipartIdentifier()).map(_.getText)
     val body = visitCompoundBody(ctx.compoundBody())
 
