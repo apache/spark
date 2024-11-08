@@ -645,7 +645,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     } else ""
     new SparkArithmeticException(
       errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
-      messageParameters = Map("alternative" -> alternative),
+      messageParameters = Map(
+        "message" -> message,
+        "alternative" -> alternative),
       context = getQueryContext(context),
       summary = getSummary(context))
   }

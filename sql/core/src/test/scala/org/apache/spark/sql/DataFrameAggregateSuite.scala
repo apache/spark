@@ -1485,17 +1485,28 @@ class DataFrameAggregateSuite extends QueryTest
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))
       .toDF("year-month", "day")
-    val error = intercept[SparkArithmeticException] {
-      checkAnswer(df2.select(sum($"year-month")), Nil)
-    }
-    assert(error.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION]")
-    assert(error.getMessage contains "try_add")
 
-    val error2 = intercept[SparkArithmeticException] {
-      checkAnswer(df2.select(sum($"day")), Nil)
-    }
-    assert(error.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION]")
-    assert(error.getMessage contains "try_add")
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        checkAnswer(df2.select(sum($"year-month")), Nil)
+      },
+      condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+      parameters = Map(
+        "message" -> "",
+        "alternative" -> " Use 'try_add' to tolerate overflow and return NULL instead."
+      )
+    )
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        checkAnswer(df2.select(sum($"day")), Nil)
+      },
+      condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+      parameters = Map(
+        "message" -> "",
+        "alternative" -> " Use 'try_add' to tolerate overflow and return NULL instead."
+      )
+    )
   }
 
   test("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`") {

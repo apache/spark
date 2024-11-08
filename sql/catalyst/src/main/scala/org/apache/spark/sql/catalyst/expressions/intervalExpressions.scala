@@ -568,7 +568,7 @@ case class MakeYMInterval(years: Expression, months: Expression)
           Math.multiplyExact(year.asInstanceOf[Int], MONTHS_PER_YEAR)))
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError()
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(origin.context)
     }
   }
 

@@ -2032,7 +2032,7 @@
       },
       "WITH_TRY_SUGGESTION" : {
         "message" : [
-          "<alternative>."
+          "<message>.<alternative>."
         ]
       }
     },
