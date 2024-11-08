@@ -279,7 +279,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
-      errorClass = "DATETIME_ARGUMENT_OUT_OF_RANGE",
+      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS",
       messageParameters = Map(
         "rangeMessage" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
