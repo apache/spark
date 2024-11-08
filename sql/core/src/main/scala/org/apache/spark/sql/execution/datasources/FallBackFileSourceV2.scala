@@ -43,7 +43,7 @@ class FallBackFileSourceV2(sparkSession: SparkSession) extends Rule[LogicalPlan]
         table.schema,
         None,
         v1FileFormat,
-        d.options.asScala.toMap)(sparkSession)
+        (table.properties.asScala ++ d.options.asScala).toMap)(sparkSession)
       i.copy(table = LogicalRelation(relation))
   }
 }
