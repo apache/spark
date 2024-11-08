@@ -100,7 +100,7 @@ RUN python3.9 -m pip install \
     'mkdocs' \
     'mypy==1.8.0' \
     'nbsphinx' \
-    'numpy==1.26.4' \
+    'numpy==2.0.2' \
     'numpydoc' \
     'pandas' \
     'pandas-stubs==1.2.0.53' \
