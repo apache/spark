@@ -661,7 +661,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
     /** @inheritdoc */
     override def remote(connectionString: String): this.type = {
-      builder.connectionString(connectionString) // TODO this is borked
+      builder.connectionString(connectionString)
       this
     }
 

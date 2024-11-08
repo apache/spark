@@ -828,6 +828,7 @@ object SparkSession extends SparkSessionCompanion {
   class Builder extends SparkSessionBuilder {
     private val extensionModifications = mutable.Buffer.empty[SparkSessionExtensions => Unit]
     private var sc: Option[SparkContext] = None
+    private var connectionString: Option[String] = None
 
     /** @inheritdoc */
     override def appName(name: String): this.type = super.appName(name)
@@ -860,7 +861,10 @@ object SparkSession extends SparkSessionCompanion {
     override def config(conf: SparkConf): this.type = super.config(conf)
 
     /** @inheritdoc */
-    override def remote(connectionString: String): this.type = super.remote(connectionString)
+    override def remote(connectionString: String): this.type = synchronized {
+      this.connectionString = Option(connectionString)
+      this
+    }
 
     /** @inheritdoc */
     override def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
@@ -912,6 +916,7 @@ object SparkSession extends SparkSessionCompanion {
 
       val builder = companion.builder()
       sc.foreach(builder.sparkContext)
+      connectionString.foreach(builder.remote)
       options.foreach {
         case (k, v) if k != API_MODE_KEY => builder.config(k, v)
         case _ =>
@@ -1096,8 +1101,7 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Connect.
    * @since 3.5.0
    */
-  def remote(connectionString: String): this.type =
-    config("spark.connect.remote", connectionString)
+  def remote(connectionString: String): this.type
 
   /**
    * Sets a config option. Options set using this method are automatically propagated to both
