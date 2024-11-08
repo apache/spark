@@ -509,10 +509,6 @@ public final class CollationFactory {
 
       private static int collationNameToId(String originalName, String collationName)
           throws SparkException {
-        // Have a check for UTF8_BINARY collation to early-out and not introduce any regression.
-        if (UTF8_BINARY_COLLATION.collationName.equals(collationName)) {
-          return UTF8_BINARY_COLLATION_ID;
-        }
 
         int baseId;
         String collationNamePrefix;
