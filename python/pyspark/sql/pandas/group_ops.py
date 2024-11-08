@@ -565,6 +565,14 @@ class PandasGroupedOpsMixin:
                     StatefulProcessorHandleState.INITIALIZED
                 )
 
+            # Key is None when we have processed all the input data from the worker and ready to
+            # proceed with the cleanup steps.
+            if key is None:
+                statefulProcessorApiClient.remove_implicit_key()
+                statefulProcessor.close()
+                statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
+                return iter([])
+
             result = handle_data_with_timers(statefulProcessorApiClient, key, inputRows)
             return result
 
@@ -593,6 +601,14 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(
                     StatefulProcessorHandleState.INITIALIZED
                 )
+
+            # Key is None when we have processed all the input data from the worker and ready to
+            # proceed with the cleanup steps.
+            if key is None:
+                statefulProcessorApiClient.remove_implicit_key()
+                statefulProcessor.close()
+                statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
+                return iter([])
 
             # only process initial state if first batch and initial state is not None
             if initialStates is not None:
