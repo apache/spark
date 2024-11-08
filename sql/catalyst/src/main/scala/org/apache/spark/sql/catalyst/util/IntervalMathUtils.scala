@@ -31,17 +31,17 @@ object IntervalMathUtils {
 
   def subtractExact(a: Long, b: Long): Long = withOverflow(Math.subtractExact(a, b), "try_subtract")
 
-  def negateExact(a: Int): Int = withOverflow(Math.negateExact(a))
+  def negateExact(a: Int): Int = withOverflow(Math.negateExact(a), "try_multiply")
 
-  def negateExact(a: Long): Long = withOverflow(Math.negateExact(a))
+  def negateExact(a: Long): Long = withOverflow(Math.negateExact(a), "try_multiply")
 
-  private def withOverflow[A](f: => A, hint: String = ""): A = {
+  private def withOverflow[A](f: => A, suggestedFunc: String): A = {
     try {
       f
     } catch {
-      case e: ArithmeticException =>
+      case _: ArithmeticException =>
         throw QueryExecutionErrors.withTrySuggestionIntervalArithmeticOverflowError(
-          "", hint, null)
+          suggestedFunc, null)
     }
   }
 }

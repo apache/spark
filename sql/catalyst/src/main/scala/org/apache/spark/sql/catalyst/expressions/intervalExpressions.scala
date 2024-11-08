@@ -707,7 +707,7 @@ trait IntervalDivide {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
         throw QueryExecutionErrors.withTrySuggestionIntervalArithmeticOverflowError(
-          "Interval value overflows after being divided by -1", "try_divide", context)
+          "try_divide", context)
       }
     }
   }

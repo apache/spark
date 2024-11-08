@@ -2032,7 +2032,7 @@
       },
       "WITH_TRY_SUGGESTION" : {
         "message" : [
-          "<message>.<alternative>."
+          "Use <functionName> to tolerate overflow and return NULL instead."
         ]
       }
     },
