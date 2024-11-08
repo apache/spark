@@ -25,6 +25,7 @@ import unittest
 from typing import cast
 
 from pyspark import SparkConf
+from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import split
 from pyspark.sql.types import (
     StringType,
@@ -835,17 +836,21 @@ class ProcTimeStatefulProcessor(StatefulProcessor):
         pass
 
 
-class SimpleStatefulProcessor(StatefulProcessor):
+class SimpleStatefulProcessor(StatefulProcessor, unittest.TestCase):
     dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
     batch_id = 0
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.num_violations_state = handle.getValueState("numViolations", state_schema)
+        self.temp_state = handle.getValueState("tempState", state_schema)
+        handle.deleteIfExists("tempState")
 
     def handleInputRows(
         self, key, rows, timer_values, expired_timer_info
     ) -> Iterator[pd.DataFrame]:
+        with self.assertRaisesRegex(PySparkRuntimeError, "Error checking value state exists"):
+            self.temp_state.exists()
         new_violations = 0
         count = 0
         key_str = key[0]
@@ -873,10 +878,12 @@ class SimpleStatefulProcessor(StatefulProcessor):
 
 # A stateful processor that inherit all behavior of SimpleStatefulProcessor except that it use
 # ttl state with a large timeout.
-class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
+class SimpleTTLStatefulProcessor(SimpleStatefulProcessor, unittest.TestCase):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.num_violations_state = handle.getValueState("numViolations", state_schema, 30000)
+        self.temp_state = handle.getValueState("tempState", state_schema)
+        handle.deleteIfExists("tempState")
 
 
 class TTLStatefulProcessor(StatefulProcessor):

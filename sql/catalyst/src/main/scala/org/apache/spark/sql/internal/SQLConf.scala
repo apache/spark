@@ -326,7 +326,15 @@ object SQLConf {
       "catalyst rules, to make sure every rule returns a valid plan")
     .version("3.4.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(Utils.isTesting)
+
+  val LIGHTWEIGHT_PLAN_CHANGE_VALIDATION = buildConf("spark.sql.lightweightPlanChangeValidation")
+    .internal()
+    .doc(s"Similar to ${PLAN_CHANGE_VALIDATION.key}, this validates plan changes and runs after " +
+      s"every rule, however it is enabled by default and so it should be lightweight.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val ALLOW_NAMED_FUNCTION_ARGUMENTS = buildConf("spark.sql.allowNamedFunctionArguments")
     .doc("If true, Spark will turn on support for named parameters for all functions that has" +
@@ -769,6 +777,15 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
+
+  val ALLOW_READING_UNKNOWN_COLLATIONS =
+    buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
+      .internal()
+      .doc("Enables spark to read unknown collation name as UTF8_BINARY. If the config is " +
+        "not enabled, when spark encounters an unknown collation name, it will throw an error.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
@@ -5524,6 +5541,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
     }
   }
+
+  override def allowReadingUnknownCollations: Boolean = getConf(ALLOW_READING_UNKNOWN_COLLATIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 

@@ -48,6 +48,7 @@ message StatefulProcessorCall {
     StateCallCommand getListState = 3;
     StateCallCommand getMapState = 4;
     TimerStateCallCommand timerStateCall = 5;
+    StateCallCommand deleteIfExists = 6;
   }
 }
 

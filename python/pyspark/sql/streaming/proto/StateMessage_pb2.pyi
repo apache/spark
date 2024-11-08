@@ -98,17 +98,26 @@ class StateResponseWithLongTypeVal(_message.Message):
     ) -> None: ...
 
 class StatefulProcessorCall(_message.Message):
-    __slots__ = ("setHandleState", "getValueState", "getListState", "getMapState", "timerStateCall")
+    __slots__ = (
+        "setHandleState",
+        "getValueState",
+        "getListState",
+        "getMapState",
+        "timerStateCall",
+        "deleteIfExists",
+    )
     SETHANDLESTATE_FIELD_NUMBER: _ClassVar[int]
     GETVALUESTATE_FIELD_NUMBER: _ClassVar[int]
     GETLISTSTATE_FIELD_NUMBER: _ClassVar[int]
     GETMAPSTATE_FIELD_NUMBER: _ClassVar[int]
     TIMERSTATECALL_FIELD_NUMBER: _ClassVar[int]
+    DELETEIFEXISTS_FIELD_NUMBER: _ClassVar[int]
     setHandleState: SetHandleState
     getValueState: StateCallCommand
     getListState: StateCallCommand
     getMapState: StateCallCommand
     timerStateCall: TimerStateCallCommand
+    deleteIfExists: StateCallCommand
     def __init__(
         self,
         setHandleState: _Optional[_Union[SetHandleState, _Mapping]] = ...,
@@ -116,6 +125,7 @@ class StatefulProcessorCall(_message.Message):
         getListState: _Optional[_Union[StateCallCommand, _Mapping]] = ...,
         getMapState: _Optional[_Union[StateCallCommand, _Mapping]] = ...,
         timerStateCall: _Optional[_Union[TimerStateCallCommand, _Mapping]] = ...,
+        deleteIfExists: _Optional[_Union[StateCallCommand, _Mapping]] = ...,
     ) -> None: ...
 
 class StateVariableRequest(_message.Message):

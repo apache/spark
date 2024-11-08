@@ -363,6 +363,12 @@ class StatefulProcessorHandle:
         """
         return ListTimerIterator(self.stateful_processor_api_client)
 
+    def deleteIfExists(self, state_name: str) -> None:
+        """
+        Function to delete and purge state variable if defined previously
+        """
+        self.stateful_processor_api_client.delete_if_exists(state_name)
+
 
 class StatefulProcessor(ABC):
     """
