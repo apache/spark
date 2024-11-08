@@ -604,6 +604,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
               .option(StateSourceOptions.PATH, checkpointDirs(0).getAbsolutePath)
               .option(StateSourceOptions.STATE_VAR_NAME, "testVal")
               .load()
+              .drop("partition_id")
 
             val listDf = spark.read
               .format("statestore")
@@ -611,6 +612,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
               .option(StateSourceOptions.STATE_VAR_NAME, "testList")
               .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
               .load()
+              .drop("partition_id")
 
             val mapDf = spark.read
               .format("statestore")
@@ -618,6 +620,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
               .option(StateSourceOptions.STATE_VAR_NAME, "testMap")
               .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
               .load()
+              .drop("partition_id")
 
             // create a df where each row contains all value, list, map state rows
             // fill the missing column with null.
@@ -632,7 +635,15 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
               AddData(inputData2, "c"),
               CheckNewAnswer(("c", "1")),
               Execute { _ =>
-                // value state var is checked by the stateful processor output
+                val valueDf2 = spark.read
+                  .format("statestore")
+                  .option(StateSourceOptions.PATH, checkpointDirs(1).getAbsolutePath)
+                  .option(StateSourceOptions.STATE_VAR_NAME, "testVal")
+                  .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, flattenOption)
+                  .load()
+                  .drop("partition_id")
+                  .filter(col("key.value") =!= "c")
+
                 val listDf2 = spark.read
                   .format("statestore")
                   .option(StateSourceOptions.PATH, checkpointDirs(1).getAbsolutePath)
@@ -641,6 +652,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
                   .load()
                   .drop("partition_id")
                   .filter(col("key.value") =!= "c")
+
                 val mapDf2 = spark.read
                   .format("statestore")
                   .option(StateSourceOptions.PATH, checkpointDirs(1).getAbsolutePath)
@@ -650,9 +662,9 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
                   .drop("partition_id")
                   .filter(col("key.value") =!= "c")
 
-                // simple validation on initial state process
-                assert(listDf2.count() == listDf.count())
-                assert(mapDf2.count() == mapDf.count())
+                checkAnswer(valueDf, valueDf2)
+                checkAnswer(listDf, listDf2)
+                checkAnswer(mapDf, mapDf2)
               }
             )
           }
