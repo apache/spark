@@ -78,7 +78,7 @@ import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{CatalogImpl, MergeIntoWriterImpl, TypedAggUtils}
 import org.apache.spark.sql.internal.ExpressionUtils.column
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.CacheId
@@ -224,13 +224,16 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
         case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
           throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
-
         // Catalog API (internal-only)
         case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
 
         // Handle plugins for Spark Connect Relation types.
         case proto.Relation.RelTypeCase.EXTENSION =>
           transformRelationPlugin(rel.getExtension)
+
+        case proto.Relation.RelTypeCase.TRANSFORMWITHSTATE =>
+          convertToTransformWithState(rel.getTransformWithState)
+
         case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
       }
       if (rel.hasCommon && rel.getCommon.hasPlanId) {
@@ -669,6 +672,43 @@ class SparkConnectPlanner(
     }
   }
 
+  private def convertToTransformWithState(rel: proto.TransformWithState): LogicalPlan = {
+    val ds = UntypedKeyValueGroupedDataset(
+      rel.getInput,
+      rel.getGroupingExpressionsList)
+
+    val timeMode = rel.getTimeMode
+    val outputMode = rel.getOutputMode
+    val statefulProcessorStr = rel.getStatefulProcessorPayload
+    val statefulProcessor = Utils.deserialize[StatefulProcessor[Any, Any, Any]](
+      statefulProcessorStr.toByteArray,
+      Utils.getContextOrSparkClassLoader)
+
+    val udf = TypedScalaUdf(rel.getFunc)
+
+    throw new Exception(s"I am here in tws, timeMode: $timeMode, output: $outputMode")
+
+    /*
+    val transformWithState = new TransformWithState(
+      ds.kEncoder,
+      ds.valueDeserializer,
+      ds.groupingAttributes,
+      ds.dataAttributes,
+      statefulProcessor,
+      timeMode,
+      outputMode,
+      ds.kEncoder,
+      udf.outputObjAttr,
+      ds.analyzed,
+      false,
+      ds.groupingAttributes,
+      ds.dataAttributes,
+      udf.inputDeserializer(ds.groupingAttributes),
+      LocalRelation(ds.vEncoder.schema), // empty data set
+      ds.analyzed)
+    SerializeFromObject(udf.outputNamedExpression, transformWithState) */
+  }
+
   private def transformTypedGroupMap(
       rel: proto.GroupMap,
       commonUdf: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
@@ -677,6 +717,11 @@ class SparkConnectPlanner(
       rel.getInput,
       rel.getGroupingExpressionsList,
       rel.getSortingExpressionsList)
+
+    if (rel.hasIsTransformWithState) {
+      val keyDes = udf.inputDeserializer(ds.groupingAttributes)
+      throw new Exception(s"I got the func des here: ${keyDes}")
+    }
 
     if (rel.hasIsMapGroupsWithState) {
       val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty && rel.hasInitialInput
@@ -848,6 +893,12 @@ class SparkConnectPlanner(
   private object UntypedKeyValueGroupedDataset {
     def apply(
         input: proto.Relation,
+        groupingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
+      apply(transformRelation(input), groupingExprs, Seq.empty[SortOrder])
+    }
+
+    def apply(
+        input: proto.Relation,
         groupingExprs: java.util.List[proto.Expression],
         sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
 
@@ -904,16 +955,21 @@ class SparkConnectPlanner(
       val groupFunc = TypedScalaUdf(groupingExprs.get(0), Some(logicalPlan.output))
       val vEnc = groupFunc.inEnc
       val kEnc = groupFunc.outEnc
+      // throw new Exception(s"I am inside createFromGroupByKeyFunc, groupFunc: ${groupFunc}")
 
       val withGroupingKey = AppendColumns(groupFunc.function, vEnc, kEnc, logicalPlan)
       // The input logical plan of KeyValueGroupedDataset need to be executed and analyzed
       val analyzed = session.sessionState.executePlan(withGroupingKey).analyzed
+      /*
+      throw new Exception(s"I am inside createFromGroupByKeyFunc, before analyzed: " +
+        s"${session.sessionState.executePlan(withGroupingKey)}, after analyzed: $analyzed")
+       */
 
       UntypedKeyValueGroupedDataset(
         kEnc,
         vEnc,
         analyzed,
-        logicalPlan.output,
+        analyzed.output,
         withGroupingKey.newColumns,
         sortOrder)
     }

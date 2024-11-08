@@ -833,4 +833,13 @@ object UDFAdaptors extends Serializable {
       case None => f.asInstanceOf[(K, Iterator[IV], GroupState[S]) => Iterator[U]]
     }
   }
+
+  def transformWithStateWithMappedValues[K, IV, V, U](
+      f: (K, V) => Iterator[U],
+      valueMapFunc: Option[IV => V]): (K, IV) => Iterator[U] = {
+    valueMapFunc match {
+      case Some(mapValue) => (k, value) => f(k, mapValue.apply(value))
+      case None => f.asInstanceOf[(K, IV) => Iterator[U]]
+    }
+  }
 }

@@ -22,6 +22,8 @@ import java.util.Arrays
 import scala.annotation.unused
 import scala.jdk.CollectionConverters._
 
+// import com.google.protobuf.ByteString
+
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -33,6 +35,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.toExpr
 import org.apache.spark.sql.internal.UDFAdaptors
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
+// import org.apache.spark.util.SparkSerDeUtils
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -135,12 +138,20 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends api.KeyValueGroupedDa
       isMapGroupWithState = false)(func)
   }
 
+  private[sql] def transformWithStateHelper[U: Encoder](
+      statefulProcessor: StatefulProcessor[K, V, U],
+      timeMode: TimeMode,
+      outputMode: OutputMode): Dataset[U] = unsupported()
+
   /** @inheritdoc */
   private[sql] def transformWithState[U: Encoder](
       statefulProcessor: StatefulProcessor[K, V, U],
       timeMode: TimeMode,
       outputMode: OutputMode): Dataset[U] =
-    unsupported()
+    transformWithStateHelper(
+      statefulProcessor,
+      timeMode,
+      outputMode)
 
   /** @inheritdoc */
   private[sql] def transformWithState[U: Encoder, S: Encoder](
@@ -520,6 +531,25 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
           .addAllInitialGroupingExpressions(initialStateImpl.groupingExprs)
           .setInitialInput(initialStateImpl.plan.getRoot)
       }
+    }
+  }
+
+  override protected[sql] def transformWithStateHelper[U: Encoder](
+    statefulProcessor: StatefulProcessor[K, V, U],
+    timeMode: TimeMode,
+    outputMode: OutputMode): Dataset[U] = {
+    val outputEncoder = agnosticEncoderFor[U]
+
+    val dummyFunc: (K, V) => Iterator[U] = (k: K, v: V) => Iterator.empty[U]
+
+    sparkSession.newDataset[U](outputEncoder) { builder =>
+      val twsBuilder = builder.getGroupMapBuilder
+      twsBuilder.setInput(plan.getRoot)
+        .addAllGroupingExpressions(groupingExprs)
+        .setFunc(getUdf(dummyFunc, outputEncoder)(ivEncoder))
+        /* .setStatefulProcessorPayload(
+          ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor))) */
+        .setOutputMode("Update")
     }
   }
 
