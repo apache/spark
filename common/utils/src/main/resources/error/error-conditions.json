@@ -1111,7 +1111,7 @@
     ],
     "sqlState" : "42K03"
   },
-  "DATETIME_ARGUMENT_OUT_OF_RANGE" : {
+  "DATETIME_FIELD_OUT_OF_BOUNDS" : {
     "message" : [
       "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
@@ -2901,7 +2901,7 @@
       },
       "INTERVAL_WITH_MICROSECONDS" : {
         "message" : [
-          "Cannot add hours, minutes, seconds or microseconds to a date. If necessary set <ansiConfig> to \"false\" to bypass this error."
+          "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
         ]
       },
       "LENGTH" : {
