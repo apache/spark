@@ -114,7 +114,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def windowClauseInOperatorPipeWhereClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
+  def windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE", ctx)
   }
 
@@ -185,6 +185,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def cannotResolveWindowReferenceError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE",
+      messageParameters = Map("windowName" -> toSQLId(name)),
+      ctx)
+  }
+
+  def cannotFindWindowReferenceError(name: String, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.WINDOW_REFERENCE_NOT_FOUND",
       messageParameters = Map("windowName" -> toSQLId(name)),
       ctx)
   }
