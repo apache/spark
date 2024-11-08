@@ -109,6 +109,7 @@ class TransformWithStateInPandasTestsMixin:
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         if not single_batch:
+            time.sleep(10)
             self._prepare_test_resource2(input_path)
 
         df = self._build_test_df(input_path)
@@ -385,7 +386,9 @@ class TransformWithStateInPandasTestsMixin:
     def _test_transform_with_state_in_pandas_proc_timer(self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource3(input_path)
+        time.sleep(10)
         self._prepare_test_resource1(input_path)
+        time.sleep(10)
         self._prepare_test_resource2(input_path)
 
         df = self._build_test_df(input_path)
