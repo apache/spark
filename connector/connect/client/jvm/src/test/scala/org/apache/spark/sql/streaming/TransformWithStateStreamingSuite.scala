@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalatest.concurrent.Eventually.eventually
+import org.scalatest.concurrent.Futures.timeout
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Encoders, SparkSession}
-import org.apache.spark.sql.functions.{col, unix_timestamp}
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
-class RunningCountStatefulProcessor
-  extends StatefulProcessor[String, (String, String), (String, String)]
+class NotTheSameRunningCountStatefulProcessor
+  extends StatefulProcessor[String, String, (String, String)]
   with Logging {
   @transient protected var _countState: ValueState[Long] = _
 
@@ -35,15 +39,17 @@ class RunningCountStatefulProcessor
 
   override def handleInputRows(
     key: String,
-    inputRows: Iterator[(String, String)],
+    inputRows: Iterator[String],
     timerValues: TimerValues): Iterator[(String, String)] = {
-    val count = _countState.getOption().getOrElse(0L) + 1
+    val count = _countState.getOption().getOrElse(0L) + inputRows.toSeq.length
     _countState.update(count)
     Iterator((key, count.toString))
   }
 }
 
 class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession {
+  val testData: Seq[String] = Seq("a", "b", "a")
+
   test("transformWithState - streaming") {
     withSQLConf("spark.sql.streaming.stateStore.providerClass" ->
       "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
@@ -54,18 +60,22 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
       spark.sql("DROP TABLE IF EXISTS my_sink")
 
       withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        testData.toDS().toDF("value").write.parquet(path)
+
+        val testSchema = StructType(Array(StructField("value", StringType)))
+
+        val df = spark.read.format("text").load(path)
+
+
         val q = spark.readStream
-          .format("rate")
-          .option("rowsPerSecond", "10")
-          .option("numPartitions", "5")
-          .load()
-          .withColumn("id", unix_timestamp(col("timestamp")).cast("string"))
-          .withColumn("value", col("value").cast("string"))
-          .select("id", "value")
-          .as[(String, String)]
-          .groupByKey(x => x._1)
+          .schema(testSchema)
+          .option("maxFilesPerTrigger", 1)
+          .parquet(path)
+          .as[String]
+          .groupByKey(x => x)
           .transformWithState(
-            new RunningCountStatefulProcessor(),
+            new NotTheSameRunningCountStatefulProcessor(),
             TimeMode.None(), OutputMode.Update())
           .writeStream
           .format("memory")
@@ -74,7 +84,12 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
 
         try {
           q.processAllAvailable()
-
+          eventually(timeout(30.seconds)) {
+            checkDataset(
+              spark.table("my_sink").toDF().as[(String, String)],
+              ("a", "2"), ("b", "1")
+            )
+          }
         } finally {
           q.stop()
           spark.sql("DROP TABLE IF EXISTS my_sink")

@@ -62,6 +62,7 @@ class FlatMapGroupsWithStateStreamingSuite extends QueryTest with RemoteSparkSes
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       flatMapGroupsWithStateData.toDS().write.parquet(path)
+
       val q = spark.readStream
         .schema(flatMapGroupsWithStateSchema)
         .parquet(path)

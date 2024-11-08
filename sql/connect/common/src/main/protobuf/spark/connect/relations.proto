@@ -78,7 +78,6 @@ message Relation {
     WithRelations with_relations = 41;
     Transpose transpose = 42;
     UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
-    TransformWithState transformWithState = 44;
 
     // NA functions
     NAFill fill_na = 90;
@@ -976,19 +975,13 @@ message GroupMap {
   // (Optional) Timeout configuration for groups that do not receive data for a while.
   optional string timeout_conf = 9;
 
-  optional bool is_transform_with_state = 10;
+  optional TransformWithStateInfo tws = 11;
 }
 
-message TransformWithState {
-  // (Required) Input relation for Group Map API: apply, applyInPandas.
-  Relation input = 1;
-
-  // (Required) Expressions for grouping keys.
-  repeated Expression grouping_expressions = 2;
-  string time_mode = 3;
-  string output_mode = 4;
-  optional CommonInlineUserDefinedFunction func = 5;
-  optional bytes statefulProcessorPayload = 6;
+message TransformWithStateInfo {
+  bytes stateful_processor_payload = 1;
+  string time_mode = 2;
+  string output_mode = 3;
 }
 
 message CoGroupMap {

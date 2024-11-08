@@ -3546,52 +3546,57 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * to the given input attributes.
    */
   object ResolveDeserializer extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
-      _.containsPattern(UNRESOLVED_DESERIALIZER), ruleId) {
-      case p if !p.childrenResolved => p
-      case p if p.resolved => p
-
-      case p => p.transformExpressionsWithPruning(
+    def apply(plan: LogicalPlan): LogicalPlan = {
+      plan.resolveOperatorsUpWithPruning(
         _.containsPattern(UNRESOLVED_DESERIALIZER), ruleId) {
-        case UnresolvedDeserializer(deserializer, inputAttributes) =>
-          val inputs = if (inputAttributes.isEmpty) {
-            p.children.flatMap(_.output)
-          } else {
-            inputAttributes
-          }
+        case p if !p.childrenResolved => p
+        case p if p.resolved => p
 
-          validateTopLevelTupleFields(deserializer, inputs)
-          val resolved = resolveExpressionByPlanOutput(
-            deserializer, LocalRelation(inputs), throws = true)
-          val result = resolved transformDown {
-            case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
-              inputData.dataType match {
-                case ArrayType(et, cn) =>
-                  MapObjects(func, inputData, et, cn, cls) transformUp {
-                    case UnresolvedExtractValue(child, fieldName) if child.resolved =>
-                      ExtractValue(child, fieldName, resolver)
-                  }
-                case other =>
-                  throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other,
-                    "array")
-              }
-            case u: UnresolvedCatalystToExternalMap if u.child.resolved =>
-              u.child.dataType match {
-                case _: MapType =>
-                  CatalystToExternalMap(u) transformUp {
-                    case UnresolvedExtractValue(child, fieldName) if child.resolved =>
-                      ExtractValue(child, fieldName, resolver)
-                  }
-                case other =>
-                  throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other, "map")
-              }
-          }
-          validateNestedTupleFields(result)
-          result
+        case p => p.transformExpressionsWithPruning(
+          _.containsPattern(UNRESOLVED_DESERIALIZER), ruleId) {
+          case UnresolvedDeserializer(deserializer, inputAttributes) =>
+            // throw new Exception(s"unresolved deserializer: ${deserializer}, " +
+            // s"inputattr: ${inputAttributes}")
+            val inputs = if (inputAttributes.isEmpty) {
+              p.children.flatMap(_.output)
+            } else {
+              inputAttributes
+            }
+
+            validateTopLevelTupleFields(deserializer, inputs)
+            val resolved = resolveExpressionByPlanOutput(
+              deserializer, LocalRelation(inputs), throws = true)
+            val result = resolved transformDown {
+              case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
+                inputData.dataType match {
+                  case ArrayType(et, cn) =>
+                    MapObjects(func, inputData, et, cn, cls) transformUp {
+                      case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+                        ExtractValue(child, fieldName, resolver)
+                    }
+                  case other =>
+                    throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other,
+                      "array")
+                }
+              case u: UnresolvedCatalystToExternalMap if u.child.resolved =>
+                u.child.dataType match {
+                  case _: MapType =>
+                    CatalystToExternalMap(u) transformUp {
+                      case UnresolvedExtractValue(child, fieldName) if child.resolved =>
+                        ExtractValue(child, fieldName, resolver)
+                    }
+                  case other =>
+                    throw QueryCompilationErrors.dataTypeMismatchForDeserializerError(other, "map")
+                }
+            }
+            validateNestedTupleFields(result)
+            result
+        }
       }
     }
 
     private def fail(schema: StructType, maxOrdinal: Int): Unit = {
+      throw new Exception(s"fail, schema: ${schema}, maxOrdinal: ${maxOrdinal}")
       throw QueryCompilationErrors.fieldNumberMismatchForDeserializerError(schema, maxOrdinal)
     }
 
@@ -3608,6 +3613,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }.distinct.sorted
 
       if (ordinals.nonEmpty && ordinals != inputs.indices) {
+        throw new Exception(s"deserializer here: ${deserializer}, inputs: ${inputs}")
         fail(inputs.toStructType, ordinals.last)
       }
     }

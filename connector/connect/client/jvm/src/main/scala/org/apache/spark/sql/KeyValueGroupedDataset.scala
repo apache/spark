@@ -22,10 +22,11 @@ import java.util.Arrays
 import scala.annotation.unused
 import scala.jdk.CollectionConverters._
 
-// import com.google.protobuf.ByteString
+import com.google.protobuf.ByteString
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.TransformWithStateInfo
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.connect.ConnectConversions._
@@ -35,7 +36,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.toExpr
 import org.apache.spark.sql.internal.UDFAdaptors
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
-// import org.apache.spark.util.SparkSerDeUtils
+import org.apache.spark.util.SparkSerDeUtils
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not
@@ -540,16 +541,26 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     outputMode: OutputMode): Dataset[U] = {
     val outputEncoder = agnosticEncoderFor[U]
 
-    val dummyFunc: (K, V) => Iterator[U] = (k: K, v: V) => Iterator.empty[U]
+    val inputEncoders: Seq[AgnosticEncoder[_]] = Seq(kEncoder, ivEncoder)
+    val dummyGroupingFunc = SparkUserDefinedFunction(
+      function = UdfUtils.noOp[K, U](),
+      inputEncoders = inputEncoders,
+      outputEncoder = outputEncoder)
+    val udf = dummyGroupingFunc.apply(inputEncoders.map(_ => col("*")): _*)
+      .expr.getCommonInlineUserDefinedFunction
 
     sparkSession.newDataset[U](outputEncoder) { builder =>
       val twsBuilder = builder.getGroupMapBuilder
       twsBuilder.setInput(plan.getRoot)
         .addAllGroupingExpressions(groupingExprs)
-        .setFunc(getUdf(dummyFunc, outputEncoder)(ivEncoder))
-        /* .setStatefulProcessorPayload(
-          ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor))) */
-        .setOutputMode("Update")
+        .setFunc(udf).setTws(
+        TransformWithStateInfo.newBuilder()
+          .setOutputMode(outputMode.toString)
+          .setTimeMode("none")
+          .setStatefulProcessorPayload(
+            ByteString.copyFrom(SparkSerDeUtils.serialize(statefulProcessor)))
+          .build()
+      )
     }
   }
 

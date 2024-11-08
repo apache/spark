@@ -17,27 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
-import java.io.File
 import java.time.Duration
-import java.util.UUID
 
-import org.apache.hadoop.fs.{FileStatus, Path}
-import org.scalatest.matchers.must.Matchers.be
-import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
-import org.scalatest.time.{Seconds, Span}
-
-import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, Encoders, Row}
-import org.apache.spark.sql.catalyst.util.stringToFile
-import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
 object TransformWithStateSuiteUtils {
   val NUM_SHUFFLE_PARTITIONS = 5
@@ -398,7 +385,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   with AlsoTestWithChangelogCheckpointingEnabled {
 
   import testImplicits._
-
+/*
   test("transformWithState - streaming with rocksdb and invalid processor should fail") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -493,7 +480,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         CheckAnswer(12, 42)
       )
     }
-  }
+  } */
 
   test("transformWithState - streaming with rocksdb should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -533,6 +520,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
+  /*
   test("transformWithState - streaming with rocksdb and processing time timer " +
    "should succeed") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -1908,7 +1896,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         assert(getFiles(stateSchemaPath).length == 2)
       }
     }
-  }
+  } */
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {

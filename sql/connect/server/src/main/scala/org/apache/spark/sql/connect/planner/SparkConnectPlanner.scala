@@ -53,7 +53,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -230,9 +230,6 @@ class SparkConnectPlanner(
         // Handle plugins for Spark Connect Relation types.
         case proto.Relation.RelTypeCase.EXTENSION =>
           transformRelationPlugin(rel.getExtension)
-
-        case proto.Relation.RelTypeCase.TRANSFORMWITHSTATE =>
-          convertToTransformWithState(rel.getTransformWithState)
 
         case _ => throw InvalidPlanInput(s"${rel.getUnknown} not supported.")
       }
@@ -672,43 +669,6 @@ class SparkConnectPlanner(
     }
   }
 
-  private def convertToTransformWithState(rel: proto.TransformWithState): LogicalPlan = {
-    val ds = UntypedKeyValueGroupedDataset(
-      rel.getInput,
-      rel.getGroupingExpressionsList)
-
-    val timeMode = rel.getTimeMode
-    val outputMode = rel.getOutputMode
-    val statefulProcessorStr = rel.getStatefulProcessorPayload
-    val statefulProcessor = Utils.deserialize[StatefulProcessor[Any, Any, Any]](
-      statefulProcessorStr.toByteArray,
-      Utils.getContextOrSparkClassLoader)
-
-    val udf = TypedScalaUdf(rel.getFunc)
-
-    throw new Exception(s"I am here in tws, timeMode: $timeMode, output: $outputMode")
-
-    /*
-    val transformWithState = new TransformWithState(
-      ds.kEncoder,
-      ds.valueDeserializer,
-      ds.groupingAttributes,
-      ds.dataAttributes,
-      statefulProcessor,
-      timeMode,
-      outputMode,
-      ds.kEncoder,
-      udf.outputObjAttr,
-      ds.analyzed,
-      false,
-      ds.groupingAttributes,
-      ds.dataAttributes,
-      udf.inputDeserializer(ds.groupingAttributes),
-      LocalRelation(ds.vEncoder.schema), // empty data set
-      ds.analyzed)
-    SerializeFromObject(udf.outputNamedExpression, transformWithState) */
-  }
-
   private def transformTypedGroupMap(
       rel: proto.GroupMap,
       commonUdf: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
@@ -718,9 +678,38 @@ class SparkConnectPlanner(
       rel.getGroupingExpressionsList,
       rel.getSortingExpressionsList)
 
-    if (rel.hasIsTransformWithState) {
-      val keyDes = udf.inputDeserializer(ds.groupingAttributes)
-      throw new Exception(s"I got the func des here: ${keyDes}")
+    if (rel.hasTws) {
+      val tws = rel.getTws
+      val keyDeserializer = udf.inputDeserializer(ds.groupingAttributes)
+
+      val outputAttr = udf.outputObjAttr
+
+      val timeMode = TimeModes(tws.getTimeMode)
+      val outputMode = InternalOutputModes(tws.getOutputMode)
+
+      val statefulProcessorStr = tws.getStatefulProcessorPayload
+      val statefulProcessor = Utils.deserialize[StatefulProcessor[Any, Any, Any]](
+        statefulProcessorStr.toByteArray,
+        Utils.getContextOrSparkClassLoader)
+
+      val node = new TransformWithState(
+        keyDeserializer,
+        ds.valueDeserializer,
+        ds.groupingAttributes,
+        ds.dataAttributes,
+        statefulProcessor,
+        timeMode,
+        outputMode,
+        udf.inEnc.asInstanceOf[ExpressionEncoder[Any]],
+        outputAttr,
+        ds.analyzed,
+        false,
+        ds.groupingAttributes,
+        ds.dataAttributes,
+        keyDeserializer,
+        LocalRelation(ds.vEncoder.schema)
+      )
+      return SerializeFromObject(udf.outputNamedExpression, node)
     }
 
     if (rel.hasIsMapGroupsWithState) {
@@ -956,20 +945,17 @@ class SparkConnectPlanner(
       val vEnc = groupFunc.inEnc
       val kEnc = groupFunc.outEnc
       // throw new Exception(s"I am inside createFromGroupByKeyFunc, groupFunc: ${groupFunc}")
+      val analyzedPlan = session.sessionState.executePlan(logicalPlan).analyzed
 
-      val withGroupingKey = AppendColumns(groupFunc.function, vEnc, kEnc, logicalPlan)
+      val withGroupingKey = AppendColumns(groupFunc.function, vEnc, kEnc, analyzedPlan)
       // The input logical plan of KeyValueGroupedDataset need to be executed and analyzed
       val analyzed = session.sessionState.executePlan(withGroupingKey).analyzed
-      /*
-      throw new Exception(s"I am inside createFromGroupByKeyFunc, before analyzed: " +
-        s"${session.sessionState.executePlan(withGroupingKey)}, after analyzed: $analyzed")
-       */
 
       UntypedKeyValueGroupedDataset(
         kEnc,
         vEnc,
         analyzed,
-        analyzed.output,
+        analyzedPlan.output,
         withGroupingKey.newColumns,
         sortOrder)
     }
