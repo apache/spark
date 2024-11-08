@@ -97,11 +97,13 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
     checkError(
       exception = intercept[SparkDateTimeException] {
-        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
+        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.1)").collect()
       },
       condition = "INVALID_FRACTION_OF_SECOND",
       sqlState = "22023",
-      parameters = Map("ansiConfig" -> ansiConf))
+      parameters = Map(
+        "secAndMicros" -> "60.1"
+      ))
   }
 
   test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {
@@ -390,5 +392,15 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sparkContext.removeSparkListener(listener)
       }
     }
+  }
+
+  test("SPARK-49773: INVALID_TIMEZONE for bad timezone") {
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        sql("select make_timestamp(1, 2, 28, 23, 1, 1, -100)").collect()
+      },
+      condition = "INVALID_TIMEZONE",
+      parameters = Map("timeZone" -> "-100")
+    )
   }
 }

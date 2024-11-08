@@ -17,6 +17,8 @@
 
 # mypy: disable-error-code="empty-body"
 
+import sys
+import random
 from typing import (
     Any,
     Callable,
@@ -1015,7 +1017,9 @@ class DataFrame:
         """
         ...
 
-    def localCheckpoint(self, eager: bool = True) -> "DataFrame":
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> "DataFrame":
         """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can
         be used to truncate the logical plan of this :class:`DataFrame`, which is especially
         useful in iterative algorithms where the plan may grow exponentially. Local checkpoints
@@ -1026,11 +1030,16 @@ class DataFrame:
 
         .. versionchanged:: 4.0.0
             Supports Spark Connect.
+            Added storageLevel parameter.
 
         Parameters
         ----------
         eager : bool, optional, default True
             Whether to checkpoint this :class:`DataFrame` immediately.
+
+        storageLevel : :class:`StorageLevel`, optional, default None
+            The StorageLevel with which the checkpoint will be stored.
+            If not specified, default for RDD local checkpoints.
 
         Returns
         -------
@@ -2039,6 +2048,46 @@ class DataFrame:
         10
         """
         ...
+
+    def _preapare_args_for_sample(
+        self,
+        withReplacement: Optional[Union[float, bool]] = None,
+        fraction: Optional[Union[int, float]] = None,
+        seed: Optional[int] = None,
+    ) -> Tuple[bool, float, int]:
+        from pyspark.errors import PySparkTypeError
+
+        if isinstance(withReplacement, bool) and isinstance(fraction, float):
+            # For the cases below:
+            #   sample(True, 0.5 [, seed])
+            #   sample(True, fraction=0.5 [, seed])
+            #   sample(withReplacement=False, fraction=0.5 [, seed])
+            _seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
+            return withReplacement, fraction, _seed
+
+        elif withReplacement is None and isinstance(fraction, float):
+            # For the case below:
+            #   sample(faction=0.5 [, seed])
+            _seed = int(seed) if seed is not None else random.randint(0, sys.maxsize)
+            return False, fraction, _seed
+
+        elif isinstance(withReplacement, float):
+            # For the case below:
+            #   sample(0.5 [, seed])
+            _seed = int(fraction) if fraction is not None else random.randint(0, sys.maxsize)
+            _fraction = float(withReplacement)
+            return False, _fraction, _seed
+
+        else:
+            argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
+            raise PySparkTypeError(
+                errorClass="NOT_BOOL_OR_FLOAT_OR_INT",
+                messageParameters={
+                    "arg_name": "withReplacement (optional), "
+                    + "fraction (required) and seed (optional)",
+                    "arg_type": ", ".join(argtypes),
+                },
+            )
 
     @dispatch_df_method
     def sampleBy(

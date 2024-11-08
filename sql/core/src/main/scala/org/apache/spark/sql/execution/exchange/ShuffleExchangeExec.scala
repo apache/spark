@@ -177,6 +177,11 @@ case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
 // the output needs to be partitioned by the given columns.
 case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule, but
+// was required by a stateful operator. The physical partitioning is static and Spark shouldn't
+// change it.
+case object REQUIRED_BY_STATEFUL_OPERATOR extends ShuffleOrigin
+
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */

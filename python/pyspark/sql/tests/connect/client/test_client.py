@@ -408,8 +408,8 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             def checks():
                 self.assertEqual(1, stub.execute_calls)
                 self.assertEqual(1, stub.attach_calls)
-                self.assertEqual(0, stub.release_calls)
-                self.assertEqual(0, stub.release_until_calls)
+                self.assertEqual(1, stub.release_calls)
+                self.assertEqual(1, stub.release_until_calls)
 
             eventually(timeout=1, catch_assertions=True)(checks)()
 

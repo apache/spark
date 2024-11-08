@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, ReportsSinkMetrics, ReportsSourceMetrics, SparkDataStream}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
@@ -401,8 +401,42 @@ abstract class ProgressContext(
     }
   }
 
-  /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(
+      lastExecution: IncrementalExecution): Map[SparkDataStream, Long] = {
+
+    def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
+      tuples.groupBy(_._1).transform((_, v) => v.map(_._2).sum) // sum up rows for each source
+    }
+
+    val sources = newData.keys.toSet
+
+    val sourceToInputRowsTuples = lastExecution.executedPlan
+      .collect {
+        case node: StreamSourceAwareSparkPlan if node.getStream.isDefined =>
+          val numRows = node.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+          node.getStream.get -> numRows
+      }
+
+    val capturedSources = sourceToInputRowsTuples.map(_._1).toSet
+
+    if (sources == capturedSources) {
+      logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))
+      sumRows(sourceToInputRowsTuples)
+    } else {
+      // Falling back to the legacy approach to avoid any regression.
+      val inputRows = legacyExtractSourceToNumInputRows(lastExecution)
+      // If the legacy approach fails to extract the input rows, we just pick the new approach
+      // as it is more likely that the source nodes have been pruned in valid reason.
+      if (inputRows.isEmpty) {
+        sumRows(sourceToInputRowsTuples)
+      } else {
+        inputRows
+      }
+    }
+  }
+
+  /** Extract number of input sources for each streaming source in plan */
+  private def legacyExtractSourceToNumInputRows(
       lastExecution: IncrementalExecution): Map[SparkDataStream, Long] = {
 
     def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {

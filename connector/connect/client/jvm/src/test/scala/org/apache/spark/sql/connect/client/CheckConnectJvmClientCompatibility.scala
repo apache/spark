@@ -153,6 +153,9 @@ object CheckConnectJvmClientCompatibility {
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
 
+      // Skip any avro files
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+
       // Skip unsupported packages
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.api.*"), // Java, Python, R
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalyst.*"),
@@ -227,6 +230,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.canUseSession"),
 
       // SparkSession#implicits
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -265,6 +270,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.artifact.ArtifactManager"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.ArtifactManager$SparkContextResourceType$"),
 
       // ColumnNode conversions
       ProblemFilters.exclude[DirectMissingMethodProblem](
