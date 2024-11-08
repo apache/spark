@@ -280,7 +280,7 @@ case class LoopStatement(
  *              The label can be used to LEAVE or ITERATE the loop.
  */
 case class ForStatement(
-  query: SingleStatement,
-  variableName: Option[String],
-  body: CompoundBody,
-  label: Option[String]) extends CompoundPlanStatement
+    query: SingleStatement,
+    variableName: Option[String],
+    body: CompoundBody,
+    label: Option[String]) extends CompoundPlanStatement

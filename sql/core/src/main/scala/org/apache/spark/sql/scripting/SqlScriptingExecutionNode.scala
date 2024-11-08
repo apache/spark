@@ -650,11 +650,11 @@ class LoopStatementExec(
  * @param session Spark session that SQL script is executed within.
  */
 class ForStatementExec(
-  query: SingleStatementExec,
-  variableName: Option[String],
-  body: CompoundBodyExec,
-  label: Option[String],
-  session: SparkSession) extends NonLeafStatementExec {
+    query: SingleStatementExec,
+    variableName: Option[String],
+    body: CompoundBodyExec,
+    label: Option[String],
+    session: SparkSession) extends NonLeafStatementExec {
 
   private object ForState extends Enumeration {
     val VariableDeclaration, VariableAssignment, Body = Value
