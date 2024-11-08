@@ -354,7 +354,7 @@
     <repository>
       <id>parquet-release-candidate</id>
       <name>Parquet Release Candidate</name>
-      <url>https://repository.apache.org/content/repositories/orgapacheparquet-1064</url>
+      <url>https://repository.apache.org/content/repositories/orgapacheparquet-1065</url>
       <releases>
         <enabled>true</enabled>
       </releases>
