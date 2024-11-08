@@ -638,7 +638,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def withTrySuggestionIntervalArithmeticOverflowError(
       suggestedFunc: String,
-      context: QueryContext = null): ArithmeticException = {
+      context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
       messageParameters = Map("functionName" -> suggestedFunc),
@@ -647,7 +647,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def withoutSuggestionIntervalArithmeticOverflowError(
-    context: QueryContext = null): SparkArithmeticException = {
+    context: QueryContext): SparkArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
       messageParameters = Map(),

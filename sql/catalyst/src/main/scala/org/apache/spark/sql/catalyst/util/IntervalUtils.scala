@@ -792,7 +792,7 @@ object IntervalUtils extends SparkIntervalUtils {
       micros
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError()
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context = null)
     }
   }
 

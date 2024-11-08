@@ -41,7 +41,7 @@ object IntervalMathUtils {
     } catch {
       case _: ArithmeticException =>
         throw QueryExecutionErrors.withTrySuggestionIntervalArithmeticOverflowError(
-          suggestedFunc, null)
+          suggestedFunc, context = null)
     }
   }
 }
