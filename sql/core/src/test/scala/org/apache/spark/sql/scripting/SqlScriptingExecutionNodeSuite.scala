@@ -706,7 +706,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq("body1", "lbl"))
   }
 
-  test("for statement enters body once") {
+  test("for statement - enters body once") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
         query = TestForStatementQuery(1, "query1"),
@@ -724,7 +724,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     ))
   }
 
-  test("for statement enters body with multiple statements multiple times") {
+  test("for statement - enters body with multiple statements multiple times") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
         query = TestForStatementQuery(2, "query1"),
@@ -749,7 +749,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     ))
   }
 
-  test("for statement empty result") {
+  test("for statement - empty result") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
         query = TestForStatementQuery(0, "query1"),
@@ -763,7 +763,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq.empty[String])
   }
 
-  test("for statement nested") {
+  test("for statement - nested") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
         query = TestForStatementQuery(2, "query1"),
@@ -802,7 +802,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     ))
   }
 
-  test("for statement no variable enters body once") {
+  test("for statement no variable - enters body once") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
         query = TestForStatementQuery(1, "query1"),
@@ -816,7 +816,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq("body"))
   }
 
-  test("for statement no variable enters body with multiple statements multiple times") {
+  test("for statement no variable - enters body with multiple statements multiple times") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
         query = TestForStatementQuery(2, "query1"),
@@ -832,7 +832,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq("statement1", "statement2", "statement1", "statement2"))
   }
 
-  test("for statement no variable empty result") {
+  test("for statement no variable - empty result") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
         query = TestForStatementQuery(0, "query1"),
@@ -846,7 +846,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq.empty[String])
   }
 
-  test("for statement no variable nested") {
+  test("for statement no variable - nested") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
         query = TestForStatementQuery(2, "query1"),
@@ -866,5 +866,207 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("body", "body", "body", "body"))
+  }
+
+  test("for statement - iterate") {
+    val iter = new CompoundBodyExec(Seq(
+      new ForStatementExec(
+        query = TestForStatementQuery(2, "query1"),
+        variableName = Some("x"),
+        body = new CompoundBodyExec(Seq(
+          TestLeafStatement("statement1"),
+          new IterateStatementExec("lbl1"),
+          TestLeafStatement("statement2"))),
+        label = Some("lbl1"),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq(
+      "SingleStatementExec", // declare var
+      "SingleStatementExec", // set var
+      "statement1",
+      "lbl1",
+      "SingleStatementExec", // declare var
+      "SingleStatementExec", // set var
+      "statement1",
+      "lbl1"
+    ))
+  }
+
+  test("for statement - leave") {
+    val iter = new CompoundBodyExec(Seq(
+      new ForStatementExec(
+        query = TestForStatementQuery(2, "query1"),
+        variableName = Some("x"),
+        body = new CompoundBodyExec(Seq(
+          TestLeafStatement("statement1"),
+          new LeaveStatementExec("lbl1"),
+          TestLeafStatement("statement2"))),
+        label = Some("lbl1"),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq(
+      "SingleStatementExec", // declare var
+      "SingleStatementExec", // set var
+      "statement1",
+      "lbl1"
+    ))
+  }
+
+  test("for statement - nested - iterate outer loop") {
+    val iter = new CompoundBodyExec(Seq(
+      new ForStatementExec(
+        query = TestForStatementQuery(2, "query1"),
+        variableName = Some("x"),
+        body = new CompoundBodyExec(Seq(
+          new ForStatementExec(
+            query = TestForStatementQuery(2, "query2"),
+            variableName = Some("y"),
+            body = new CompoundBodyExec(Seq(
+              TestLeafStatement("body1"),
+              new IterateStatementExec("lbl1"),
+              TestLeafStatement("body2"))),
+            label = Some("lbl2"),
+            session = spark
+          )
+        )),
+        label = Some("lbl1"),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq(
+      "SingleStatementExec", // declare x
+      "SingleStatementExec", // set x
+      "SingleStatementExec", // declare y
+      "SingleStatementExec", // set y
+      "body1",
+      "lbl1",
+      "SingleStatementExec", // declare x
+      "SingleStatementExec", // set x
+      "SingleStatementExec", // declare y
+      "SingleStatementExec", // set y
+      "body1",
+      "lbl1"
+    ))
+  }
+
+  test("for statement - nested - leave outer loop") {
+    val iter = new CompoundBodyExec(Seq(
+      new ForStatementExec(
+        query = TestForStatementQuery(2, "query1"),
+        variableName = Some("x"),
+        body = new CompoundBodyExec(Seq(
+          new ForStatementExec(
+            query = TestForStatementQuery(2, "query2"),
+            variableName = Some("y"),
+            body = new CompoundBodyExec(Seq(
+              TestLeafStatement("body1"),
+              new LeaveStatementExec("lbl1"),
+              TestLeafStatement("body2"))),
+            label = Some("lbl2"),
+            session = spark
+          )
+        )),
+        label = Some("lbl1"),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq(
+      "SingleStatementExec", // declare x
+      "SingleStatementExec", // set x
+      "SingleStatementExec", // declare y
+      "SingleStatementExec", // set y
+      "body1",
+      "lbl1"
+    ))
+  }
+
+  test("for statement no variable - iterate") {
+    val iter = new CompoundBodyExec(Seq(
+      new ForStatementExec(
+        query = TestForStatementQuery(2, "query1"),
+        variableName = None,
+        body = new CompoundBodyExec(Seq(
+          TestLeafStatement("statement1"),
+          new IterateStatementExec("lbl1"),
+          TestLeafStatement("statement2"))),
+        label = Some("lbl1"),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("statement1", "lbl1", "statement1", "lbl1"))
+  }
+
+  test("for statement no variable - leave") {
+    val iter = new CompoundBodyExec(Seq(
+      new ForStatementExec(
+        query = TestForStatementQuery(2, "query1"),
+        variableName = None,
+        body = new CompoundBodyExec(Seq(
+          TestLeafStatement("statement1"),
+          new LeaveStatementExec("lbl1"),
+          TestLeafStatement("statement2"))),
+        label = Some("lbl1"),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("statement1", "lbl1"))
+  }
+
+  test("for statement no variable - nested - iterate outer loop") {
+    val iter = new CompoundBodyExec(Seq(
+      new ForStatementExec(
+        query = TestForStatementQuery(2, "query1"),
+        variableName = None,
+        body = new CompoundBodyExec(Seq(
+          new ForStatementExec(
+            query = TestForStatementQuery(2, "query2"),
+            variableName = None,
+            body = new CompoundBodyExec(Seq(
+              TestLeafStatement("body1"),
+              new IterateStatementExec("lbl1"),
+              TestLeafStatement("body2"))),
+            label = Some("lbl2"),
+            session = spark
+          )
+        )),
+        label = Some("lbl1"),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "lbl1", "body1", "lbl1"))
+  }
+
+  test("for statement no variable - nested - leave outer loop") {
+    val iter = new CompoundBodyExec(Seq(
+      new ForStatementExec(
+        query = TestForStatementQuery(2, "query1"),
+        variableName = None,
+        body = new CompoundBodyExec(Seq(
+          new ForStatementExec(
+            query = TestForStatementQuery(2, "query2"),
+            variableName = None,
+            body = new CompoundBodyExec(Seq(
+              TestLeafStatement("body1"),
+              new LeaveStatementExec("lbl1"),
+              TestLeafStatement("body2"))),
+            label = Some("lbl2"),
+            session = spark
+          )
+        )),
+        label = Some("lbl1"),
+        session = spark
+      )
+    )).getTreeIterator
+    val statements = iter.map(extractStatementValue).toSeq
+    assert(statements === Seq("body1", "lbl1"))
   }
 }
