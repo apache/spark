@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateMap, CreateNamedStruct, Expression, GenericRowWithSchema, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
@@ -124,6 +124,17 @@ class SingleStatementExec(
    * Example: Statements in conditions of If/Else, While, etc.
    */
   var isExecuted = false
+
+  /**
+   * Builds a DataFrame from the parsedPlan of this SingleStatementExec
+   * @param session The SparkSession on which the parsedPlan is built
+   * @return
+   *   The DataFrame.
+   */
+  def buildDataFrame(session: SparkSession): DataFrame = {
+      isExecuted = true
+      Dataset.ofRows(session, parsedPlan)
+  }
 
   /**
    * Get the SQL query text corresponding to this statement.
@@ -653,7 +664,7 @@ class ForStatementExec(
     query: SingleStatementExec,
     variableName: Option[String],
     body: CompoundBodyExec,
-    label: Option[String],
+    val label: Option[String],
     session: SparkSession) extends NonLeafStatementExec {
 
   private object ForState extends Enumeration {
@@ -667,8 +678,7 @@ class ForStatementExec(
   private var isResultCacheValid = false
   private def cachedQueryResult(): Array[Row] = {
     if (!isResultCacheValid) {
-      query.isExecuted = true
-      queryResult = Dataset.ofRows(session, query.parsedPlan).collect()
+      queryResult = query.buildDataFrame(session).collect()
       isResultCacheValid = true
     }
     queryResult
