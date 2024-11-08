@@ -788,15 +788,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object TransformWithStateInPandasStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case TransformWithStateInPandas(
-        func, groupingAttributes, outputAttrs, outputMode, timeMode, child) =>
+      case t @ TransformWithStateInPandas(
+      func, _, outputAttrs, outputMode, timeMode, child,
+      hasInitialState, initialState, _, initialStateSchema) =>
         val execPlan = TransformWithStateInPandasExec(
-          func, groupingAttributes, outputAttrs, outputMode, timeMode,
+          func, t.leftAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
           batchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
-          planLater(child)
+          planLater(child),
+          hasInitialState,
+          planLater(initialState),
+          t.rightAttributes,
+          initialStateSchema
         )
 
         execPlan :: Nil
@@ -865,7 +870,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case MemoryPlan(sink, output) =>
         val encoder = ExpressionEncoder(DataTypeUtils.fromAttributes(output))
         val toRow = encoder.createSerializer()
-        LocalTableScanExec(output, sink.allData.map(r => toRow(r).copy())) :: Nil
+        LocalTableScanExec(output, sink.allData.map(r => toRow(r).copy()), None) :: Nil
 
       case logical.Distinct(child) =>
         throw SparkException.internalError(
@@ -985,8 +990,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
-      case logical.LocalRelation(output, data, _) =>
-        LocalTableScanExec(output, data) :: Nil
+      case logical.LocalRelation(output, data, _, stream) =>
+        LocalTableScanExec(output, data, stream) :: Nil
       case logical.EmptyRelation(l) => EmptyRelationExec(l) :: Nil
       case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       // We should match the combination of limit and offset first, to get the optimal physical
@@ -1036,7 +1041,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           shuffleOrigin, r.optAdvisoryPartitionSize) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
-        RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
+        RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering,
+          r.stream) :: Nil
       case _: UpdateTable =>
         throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("UPDATE TABLE")
       case _: MergeIntoTable =>

@@ -19,7 +19,8 @@ package org.apache.spark.sql
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.execution.{FormattedMode, WholeStageCodegenExec}
+import org.apache.spark.sql.catalyst.expressions.IsNotNull
+import org.apache.spark.sql.execution.{FilterExec, FormattedMode, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1422,6 +1423,33 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
           assert(exception.getCause.getMessage.contains("No group 3"))
         }
       }
+    }
+  }
+
+  test("SPARK-50224: The replacement of validate utf8 functions should be NullIntolerant") {
+    def check(df: DataFrame, expected: Seq[Row]): Unit = {
+      val filter = df.queryExecution
+        .sparkPlan
+        .find(_.isInstanceOf[FilterExec])
+        .get.asInstanceOf[FilterExec]
+      assert(filter.condition.find(_.isInstanceOf[IsNotNull]).nonEmpty)
+      checkAnswer(df, expected)
+    }
+    withTable("test_table") {
+      sql("CREATE TABLE test_table" +
+        " AS SELECT * FROM VALUES ('abc', 'def'), ('ghi', 'jkl'), ('mno', NULL) T(a, b)")
+      check(
+        sql("SELECT * FROM test_table WHERE is_valid_utf8(b)"),
+        Seq(Row("abc", "def"), Row("ghi", "jkl")))
+      check(
+        sql("SELECT * FROM test_table WHERE make_valid_utf8(b) = 'def'"),
+        Seq(Row("abc", "def")))
+      check(
+        sql("SELECT * FROM test_table WHERE validate_utf8(b) = 'jkl'"),
+        Seq(Row("ghi", "jkl")))
+      check(
+        sql("SELECT * FROM test_table WHERE try_validate_utf8(b) = 'def'"),
+        Seq(Row("abc", "def")))
     }
   }
 }

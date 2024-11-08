@@ -1171,8 +1171,9 @@ case class EWM(input: Expression, alpha: Double, ignoreNA: Boolean)
 }
 
 private[expressions] object EWM {
-  def expressionToAlpha(e: Expression): Double = e match {
-    case DoubleLiteral(alpha) => alpha
+  def expressionToAlpha(e: Expression): Double = e.eval() match {
+    case d: Double => d
+    case f: Float => f.toDouble
     case _ => throw QueryCompilationErrors.invalidAlphaParameter(e)
   }
 }

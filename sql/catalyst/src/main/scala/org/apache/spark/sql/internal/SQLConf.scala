@@ -3679,6 +3679,9 @@ object SQLConf {
       .internal()
       .doc("When true, skip validation for partition spec in ALTER PARTITION. E.g., " +
         "`ALTER TABLE .. ADD PARTITION(p='a')` would work even the partition type is int. " +
+        "Besides, this config will also be used to skip type validation on partition spec " +
+        "when reading partitioned table. E.g., if the table partition spec is added without " +
+        "type validation, it might not be read correctly with the type validation. " +
         s"When false, the behavior follows ${STORE_ASSIGNMENT_POLICY.key}")
       .version("3.4.0")
       .booleanConf
@@ -5206,6 +5209,16 @@ object SQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
+
+  val ORDERING_AWARE_LIMIT_OFFSET = buildConf("spark.sql.orderingAwareLimitOffset")
+    .internal()
+    .doc("When set to true, a local sort will be inserted between GlobalLimitExec and " +
+      "single-partition ShuffleExchangeExec, if the underlying plan produces sorted data. " +
+      "This is because shuffle reader in Spark fetches shuffle blocks in a random order and " +
+      "can not preserve the data ordering, while LIMIT/OFFSET must preserve ordering.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
