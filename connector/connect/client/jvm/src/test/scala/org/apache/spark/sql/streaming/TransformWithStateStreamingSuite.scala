@@ -61,12 +61,9 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
 
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        testData.toDS().toDF("value").write.parquet(path)
+        testData.toDS().toDF("value").repartition(3).write.parquet(path)
 
         val testSchema = StructType(Array(StructField("value", StringType)))
-
-        val df = spark.read.format("text").load(path)
-
 
         val q = spark.readStream
           .schema(testSchema)
@@ -87,7 +84,7 @@ class TransformWithStateStreamingSuite extends QueryTest with RemoteSparkSession
           eventually(timeout(30.seconds)) {
             checkDataset(
               spark.table("my_sink").toDF().as[(String, String)],
-              ("a", "2"), ("b", "1")
+              ("a", "1"), ("b", "1"), ("a", "2")
             )
           }
         } finally {
