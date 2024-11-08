@@ -51,7 +51,7 @@ class TableValuedFunction(sparkSession: SparkSession) extends sql.TableValuedFun
     sparkSession.newDataFrame { builder =>
       builder.getUnresolvedTableValuedFunctionBuilder
         .setFunctionName(name)
-        .addAllArguments(args.map(toExpr).asJava)
+        .addAllArguments(args.map(ColumnNodeToProtoConverter.toExpr).asJava)
     }
   }
 
