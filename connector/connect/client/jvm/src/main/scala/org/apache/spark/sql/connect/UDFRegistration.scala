@@ -40,8 +40,9 @@ class UDFRegistration(session: SparkSession) extends sql.UDFRegistration {
     named
   }
 
+  /** @inheritdoc */
   override def register(
       name: String,
       udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction =
-    throw new UnsupportedOperationException("registering UDAFs is not supported in connect")
+    throw ConnectClientUnsupportedErrors.registerUdaf()
 }

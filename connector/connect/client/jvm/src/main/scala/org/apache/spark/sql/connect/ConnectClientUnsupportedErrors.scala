@@ -56,4 +56,7 @@ private[sql] object ConnectClientUnsupportedErrors {
 
   def sqlContext(): SparkUnsupportedOperationException =
     unsupportedFeatureException("SESSION_SQL_CONTEXT")
+
+  def registerUdaf(): SparkUnsupportedOperationException =
+    unsupportedFeatureException("REGISTER_UDAF")
 }

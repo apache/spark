@@ -4940,6 +4940,11 @@
           "Access to the Dataset Query Execution. This is server side developer API."
         ]
       },
+      "REGISTER_UDAF" : {
+        "message" : [
+          "Registering User Defined Aggregate Functions (UDAFs)."
+        ]
+      },
       "RDD" : {
         "message" : [
           "Resilient Distributed Datasets (RDDs)."
