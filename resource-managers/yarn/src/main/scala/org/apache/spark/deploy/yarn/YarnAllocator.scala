@@ -176,7 +176,7 @@ private[yarn] class YarnAllocator(
 
   private val minMemoryOverhead = sparkConf.get(EXECUTOR_MIN_MEMORY_OVERHEAD)
 
-  private val bindAddress = sparkConf.get(EXECUTOR_BIND_ADDRESS)
+  private val bindAddressMode = sparkConf.get(EXECUTOR_BIND_ADDRESS_MODE)
 
   private val memoryOverheadFactor = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD_FACTOR)
 
@@ -762,7 +762,10 @@ private[yarn] class YarnAllocator(
       val rpId = getResourceProfileIdFromPriority(container.getPriority)
       executorIdCounter += 1
       val executorHostname = container.getNodeId.getHost
-      val executorBindAddress = bindAddress.getOrElse(executorHostname)
+      val executorBindAddress = bindAddressMode match {
+        case "ALL_IPS" => "0.0.0.0"
+        case _ => executorHostname
+      }
       val containerId = container.getId
       val executorId = executorIdCounter.toString
       val yarnResourceForRpId = rpIdToYarnResource.get(rpId)
@@ -846,7 +849,10 @@ private[yarn] class YarnAllocator(
         new HashSet[ContainerId])
       containerSet += containerId
       allocatedContainerToHostMap.put(containerId, executorHostname)
-      allocatedContainerToBindAddressMap.put(containerId, bindAddress.getOrElse(executorHostname))
+      allocatedContainerToBindAddressMap.put(containerId, bindAddressMode match {
+        case "ALL_IPS" => "0.0.0.0"
+        case _ => executorHostname
+      })
       launchingExecutorContainerIds.remove(containerId)
     }
     getOrUpdateNumExecutorsStartingForRPId(rpId).decrementAndGet()

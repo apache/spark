@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.Logging
@@ -339,12 +339,16 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
-  private[spark] val EXECUTOR_BIND_ADDRESS =
-    ConfigBuilder("spark.yarn.executor.bindAddress")
-      .doc("Address where to bind network listen sockets on the executor.")
+  private[spark] val EXECUTOR_BIND_ADDRESS_MODE =
+    ConfigBuilder("spark.yarn.executor.bindAddress.mode")
+      .doc("Configures executor behaviour of which network to listen sockets to. " +
+        "Possible choices are: HOSTNAME means to bind to hostname, " +
+        "ALL_IPS means to bind to 0.0.0.0")
       .version("4.0.0")
       .stringConf
-      .createOptional
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(Set("HOSTNAME", "ALL_IPS"))
+      .createWithDefault("HOSTNAME")
 
   /* Unmanaged AM configuration. */
 

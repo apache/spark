@@ -905,9 +905,9 @@ class YarnAllocatorSuite extends SparkFunSuite
     handler.getNumExecutorsStarting should be(0)
   }
 
-  test("use requested bind-address") {
+  test("use 0.0.0.0 when requested bind-address mode is ALL_IPS") {
     val (handler, _) = createAllocator(maxExecutors = 1,
-        additionalConfigs = Map(EXECUTOR_BIND_ADDRESS.key -> "0.0.0.0"))
+      additionalConfigs = Map(EXECUTOR_BIND_ADDRESS_MODE.key -> "ALL_IPS"))
     handler.updateResourceRequests()
 
     val container = createContainer("host1")
@@ -915,6 +915,18 @@ class YarnAllocatorSuite extends SparkFunSuite
 
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
     handler.allocatedContainerToBindAddressMap.get(container.getId).get should be ("0.0.0.0")
+  }
+
+  test("use hostname when requested bind-address mode is HOSTNAME") {
+    val (handler, _) = createAllocator(maxExecutors = 1,
+      additionalConfigs = Map(EXECUTOR_BIND_ADDRESS_MODE.key -> "HOSTNAME"))
+    handler.updateResourceRequests()
+
+    val container = createContainer("host1")
+    handler.handleAllocatedContainers(Array(container).toImmutableArraySeq)
+
+    handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
+    handler.allocatedContainerToBindAddressMap.get(container.getId).get should be ("host1")
   }
 
 }
