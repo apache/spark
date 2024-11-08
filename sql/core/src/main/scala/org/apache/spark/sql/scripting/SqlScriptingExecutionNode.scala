@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
 
-
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
  */
