@@ -126,7 +126,7 @@ org.apache.spark.SparkDateTimeException
   "errorClass" : "INVALID_FRACTION_OF_SECOND",
   "sqlState" : "22023",
   "messageParameters" : {
-    "secAndMicros" : "60.007000"
+    "secAndMicros" : "60.007"
   }
 }
 
