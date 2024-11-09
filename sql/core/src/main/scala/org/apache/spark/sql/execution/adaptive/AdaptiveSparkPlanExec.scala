@@ -774,7 +774,11 @@ case class AdaptiveSparkPlanExec(
       }
 
       if (!RemoveRedundantProjects.isOutputMatched(inputPlan.output, finalPlan.output)) {
-        Some((ProjectExec(inputPlan.output, finalPlan), optimized))
+        val wrapProjectPlan = finalPlan match {
+          case e: Exchange => e.withNewChildren(ProjectExec(inputPlan.output, e.child) :: Nil)
+          case _ => ProjectExec(inputPlan.output, finalPlan)
+        }
+        Some((wrapProjectPlan, optimized))
       } else {
         Some((finalPlan, optimized))
       }
