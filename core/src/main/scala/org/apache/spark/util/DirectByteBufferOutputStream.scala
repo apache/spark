@@ -29,7 +29,7 @@ import org.apache.spark.unsafe.Platform
  * @param capacity The initial capacity of the direct byte buffer
  */
 private[spark] class DirectByteBufferOutputStream(capacity: Int) extends OutputStream {
-  private var buffer = Platform.allocateDirectBuffer(capacity)
+  private[this] var buffer = Platform.allocateDirectBuffer(capacity)
 
   def this() = this(32)
 
