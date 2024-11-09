@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io.OutputStream
 import java.nio.ByteBuffer
 
+import org.apache.spark.SparkException
 import org.apache.spark.storage.StorageUtils
 import org.apache.spark.unsafe.Platform
 
@@ -67,7 +68,7 @@ private[spark] class DirectByteBufferOutputStream(capacity: Int) extends OutputS
 
   private def checkNotClosed(): Unit = {
     if (buffer == null) {
-      throw new IllegalStateException(
+      throw SparkException.internalError(
         "Cannot call methods on a closed DirectByteBufferOutputStream")
     }
   }
