@@ -77,3 +77,13 @@ steps:
     agents:
       queue: applied-bk-agent-spark-private-sysbox
     branches: release-3.5-openai
+
+  - label: build and publish release artifacts
+    commands:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+      - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+      - SPARK_HOME=$(pwd) ci/build_and_publish_artifacts.sh
+    agents:
+      queue: applied-bk-agent-spark-private-sysbox
+    branches: release-3.5-openai
