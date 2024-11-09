@@ -58,8 +58,8 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           throw new AnalysisException(
             errorClass = "TRANSPOSE_NO_LEAST_COMMON_TYPE",
             messageParameters = Map(
-              "dt1" -> toSQLType(dt1.sql),
-              "dt2" -> toSQLType(dt2.sql))
+              "dt1" -> toSQLType(dt1),
+              "dt2" -> toSQLType(dt2))
           )
         }
       }
