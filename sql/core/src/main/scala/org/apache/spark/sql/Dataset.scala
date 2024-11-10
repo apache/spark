@@ -217,7 +217,6 @@ class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends api.Dataset[T] {
   type DS[U] = Dataset[U]
-  type RGD = RelationalGroupedDataset
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
