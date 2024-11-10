@@ -62,6 +62,9 @@ class ObjectAggregationIterator(
 
   private[this] var aggBufferIterator: Iterator[AggregationBufferEntry] = _
 
+  private[this] val aggregateBufferFieldTypes =
+    aggregateFunctions.flatMap(_.aggBufferAttributes.map(_.dataType))
+
   // Remember spill data size of this task before execute this operator so that we can
   // figure out how many bytes we spilled for this operator.
   private val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
@@ -121,8 +124,7 @@ class ObjectAggregationIterator(
   //  - when creating aggregation buffer for a new group in the hash map, and
   //  - when creating the re-used buffer for sort-based aggregation
   private def createNewAggregationBuffer(): SpecificInternalRow = {
-    val bufferFieldTypes = aggregateFunctions.flatMap(_.aggBufferAttributes.map(_.dataType))
-    val buffer = new SpecificInternalRow(bufferFieldTypes.toImmutableArraySeq)
+    val buffer = new SpecificInternalRow(aggregateBufferFieldTypes)
     initAggregationBuffer(buffer)
     buffer
   }
