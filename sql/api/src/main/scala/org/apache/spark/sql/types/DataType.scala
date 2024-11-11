@@ -27,7 +27,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.DataTypeParser
@@ -340,8 +340,17 @@ object DataType {
         fields.collect { case (fieldPath, JString(collation)) =>
           collation.split("\\.", 2) match {
             case Array(provider: String, collationName: String) =>
-              CollationFactory.assertValidProvider(provider)
-              fieldPath -> collationName
+              try {
+                CollationFactory.assertValidProvider(provider)
+                fieldPath -> collationName
+              } catch {
+                case e: SparkException
+                    if e.getCondition == "COLLATION_INVALID_PROVIDER" &&
+                      SqlApiConf.get.allowReadingUnknownCollations =>
+                  // If the collation provider is unknown and the config for reading such
+                  // collations is enabled, return the UTF8_BINARY collation.
+                  fieldPath -> "UTF8_BINARY"
+              }
           }
         }.toMap
 
@@ -350,7 +359,16 @@ object DataType {
   }
 
   private def stringTypeWithCollation(collationName: String): StringType = {
-    StringType(CollationFactory.collationNameToId(collationName))
+    try {
+      StringType(CollationFactory.collationNameToId(collationName))
+    } catch {
+      case e: SparkException
+          if e.getCondition == "COLLATION_INVALID_NAME" &&
+            SqlApiConf.get.allowReadingUnknownCollations =>
+        // If the collation name is unknown and the config for reading such collations is enabled,
+        // return the UTF8_BINARY collation.
+        StringType(CollationFactory.UTF8_BINARY_COLLATION_ID)
+    }
   }
 
   protected[types] def buildFormattedString(

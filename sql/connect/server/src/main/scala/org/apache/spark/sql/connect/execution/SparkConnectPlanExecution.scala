@@ -137,7 +137,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     }
 
     dataframe.queryExecution.executedPlan match {
-      case LocalTableScanExec(_, rows) =>
+      case LocalTableScanExec(_, rows, _) =>
         executePlan.eventsManager.postFinished(Some(rows.length))
         var offset = 0L
         converter(rows.iterator).foreach { case (bytes, count) =>

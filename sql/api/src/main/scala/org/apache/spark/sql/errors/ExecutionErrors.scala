@@ -116,10 +116,10 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
 
   def arithmeticOverflowError(
       message: String,
-      hint: String = "",
+      suggestedFunc: String = "",
       context: QueryContext = null): ArithmeticException = {
-    val alternative = if (hint.nonEmpty) {
-      s" Use '$hint' to tolerate overflow and return NULL instead."
+    val alternative = if (suggestedFunc.nonEmpty) {
+      s" Use '$suggestedFunc' to tolerate overflow and return NULL instead."
     } else ""
     new SparkArithmeticException(
       errorClass = "ARITHMETIC_OVERFLOW",
@@ -228,7 +228,11 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   }
 
   def elementsOfTupleExceedLimitError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_2150")
+    new SparkUnsupportedOperationException("TUPLE_SIZE_EXCEEDS_LIMIT")
+  }
+
+  def emptyTupleNotSupportedError(): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException("TUPLE_IS_EMPTY")
   }
 
   def invalidAgnosticEncoderError(encoder: AnyRef): Throwable = {

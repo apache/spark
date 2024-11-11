@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.tvf import TableValuedFunction
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
     from pyspark.sql.datasource import DataSourceRegistration
@@ -542,9 +543,12 @@ class SparkSession(SparkConversionMixin):
 
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
+                    SparkContext._ensure_initialized()
                     sparkConf = SparkConf()
                     for key, value in self._options.items():
                         sparkConf.set(key, value)
+                    if sparkConf.contains("spark.submit.appName"):
+                        sparkConf.setAppName(sparkConf.get("spark.submit.appName", ""))
                     # This SparkContext may be an existing one.
                     sc = SparkContext.getOrCreate(sparkConf)
                     # Do not update `SparkConf` for existing `SparkContext`, as it's shared
@@ -1962,6 +1966,41 @@ class SparkSession(SparkConversionMixin):
             return self._sqm
         self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
         return self._sqm
+
+    @property
+    def tvf(self) -> "TableValuedFunction":
+        """
+        Returns a :class:`TableValuedFunction` that can be used to call a table-valued function
+        (TVF).
+
+        .. versionadded:: 4.0.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        :class:`TableValuedFunction`
+
+        Examples
+        --------
+        >>> spark.tvf
+        <pyspark...TableValuedFunction object ...>
+
+        >>> import pyspark.sql.functions as sf
+        >>> spark.tvf.explode(sf.array(sf.lit(1), sf.lit(2), sf.lit(3))).show()
+        +---+
+        |col|
+        +---+
+        |  1|
+        |  2|
+        |  3|
+        +---+
+        """
+        from pyspark.sql.tvf import TableValuedFunction
+
+        return TableValuedFunction(self)
 
     def stop(self) -> None:
         """
