@@ -2491,7 +2491,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
       val newSubqueryPlan = if (hasExplicitOuterRefs) {
         executeSameContext(e.plan).transformAllExpressionsWithPruning(
-          _.containsPattern(UNRESOLVED_OUTER_REFERENCE), ruleId) {
+          _.containsPattern(UNRESOLVED_OUTER_REFERENCE)) {
           case u: UnresolvedOuterReference =>
             resolveOuterReference(u.nameParts, outer).getOrElse(u)
         }
