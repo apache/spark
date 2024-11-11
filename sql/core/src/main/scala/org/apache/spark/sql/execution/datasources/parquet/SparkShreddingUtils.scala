@@ -42,7 +42,7 @@ case object SparkShreddingUtils {
    * struct<
    *  metadata: binary,
    *  value: binary,
-   *  object: struct<
+   *  typed_value: struct<
    *   a: struct<typed_value: int, value: binary>,
    *   b: struct<typed_value: string, value: binary>>>
    *
