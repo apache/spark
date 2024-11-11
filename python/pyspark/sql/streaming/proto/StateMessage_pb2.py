@@ -46,7 +46,7 @@ DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(
-    DESCRIPTOR, "org.apache.spark.sql.execution.streaming.StateMessage_pb2", _globals
+    DESCRIPTOR, "pyspark.sql.streaming.proto.StateMessage_pb2", _globals
 )
 if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None

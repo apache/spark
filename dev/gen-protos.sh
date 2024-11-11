@@ -44,7 +44,7 @@ if [[ $1 == "connect" ]]; then
 elif [[ $1 == "streaming" ]]; then
   MODULE="streaming"
   OUTPUT_PATH=${SPARK_HOME}/python/pyspark/sql/streaming/proto/
-  SOURCE_MODULE="spark.streaming"
+  SOURCE_MODULE="org.apache.spark.sql.execution.streaming"
   TARGET_MODULE="pyspark.sql.streaming.proto"
 else
   usage
