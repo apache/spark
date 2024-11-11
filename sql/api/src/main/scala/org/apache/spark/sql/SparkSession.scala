@@ -873,10 +873,11 @@ object SparkSession extends SparkSessionCompanion {
     }
 
     /** @inheritdoc */
-    override private[spark] def sparkContext(sparkContext: SparkContext): this.type = synchronized {
-      sc = Option(sparkContext)
-      this
-    }
+    override private[spark] def sparkContext(sparkContext: SparkContext): this.type =
+      synchronized {
+        sc = Option(sparkContext)
+        this
+      }
 
     /**
      * Make the builder create a Classic SparkSession.
@@ -1198,7 +1199,7 @@ abstract class SparkSessionBuilder {
    * Set the [[SparkContext]] to use for the [[SparkSession]].
    *
    * @note
-   * *   this method is not supported in Spark Connect.
+   *   * this method is not supported in Spark Connect.
    */
   private[spark] def sparkContext(sparkContext: SparkContext): this.type
 

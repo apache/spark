@@ -1480,7 +1480,6 @@ class Dataset[T] private[sql] (
       encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
 
-
   /** @inheritdoc */
   override private[spark] def withColumns(
       colNames: Seq[String],

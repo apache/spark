@@ -2146,14 +2146,16 @@ abstract class Dataset[T] extends Serializable {
       colNames: Seq[String],
       cols: Seq[Column],
       metadata: Seq[Metadata]): DataFrame = {
-    require(colNames.size == cols.size,
+    require(
+      colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
-    require(colNames.size == metadata.size,
+    require(
+      colNames.size == metadata.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of metadata elements: ${metadata.size}")
-    val colsWithMetadata = colNames.zip(cols).zip(metadata).map {
-      case ((colName, col), meta) => col.as(colName, meta)
+    val colsWithMetadata = colNames.zip(cols).zip(metadata).map { case ((colName, col), meta) =>
+      col.as(colName, meta)
     }
     withColumns(colNames, colsWithMetadata)
   }
