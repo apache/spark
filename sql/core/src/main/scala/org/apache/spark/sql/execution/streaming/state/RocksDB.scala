@@ -793,18 +793,6 @@ class RocksDB(
         }
       }
 
-      if (enableStateStoreCheckpointIds) {
-        lastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
-        lastCommittedStateStoreCkptId = sessionStateStoreCkptId
-        loadedStateStoreCkptId = sessionStateStoreCkptId
-        versionToUniqueIdLineage = versionToUniqueIdLineage :+ (newVersion, sessionStateStoreCkptId)
-        logInfo(log"Update checkpoint IDs and lineage: ${MDC(
-          LogKeys.LOADED_CHECKPOINT_ID, loadedStateStoreCkptId)}," +
-          log" ${MDC(LogKeys.LAST_COMMITTED_CHECKPOINT_ID, lastCommittedStateStoreCkptId)}," +
-          log" ${MDC(LogKeys.LAST_COMMIT_BASED_CHECKPOINT_ID, lastCommitBasedStateStoreCkptId)}," +
-          log" ${MDC(LogKeys.LINEAGE, printLineage(versionToUniqueIdLineage))}")
-      }
-
       logInfo(log"Syncing checkpoint for ${MDC(LogKeys.VERSION_NUM, newVersion)} to DFS")
       val fileSyncTimeMs = timeTakenMs {
         if (enableChangelogCheckpointing) {
@@ -844,6 +832,18 @@ class RocksDB(
             loggingId
           )
         }
+      }
+
+      if (enableStateStoreCheckpointIds) {
+        lastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
+        lastCommittedStateStoreCkptId = sessionStateStoreCkptId
+        loadedStateStoreCkptId = sessionStateStoreCkptId
+        versionToUniqueIdLineage = versionToUniqueIdLineage :+ (newVersion, sessionStateStoreCkptId)
+        logInfo(log"Update checkpoint IDs and lineage: ${MDC(
+          LogKeys.LOADED_CHECKPOINT_ID, loadedStateStoreCkptId)}," +
+          log" ${MDC(LogKeys.LAST_COMMITTED_CHECKPOINT_ID, lastCommittedStateStoreCkptId)}," +
+          log" ${MDC(LogKeys.LAST_COMMIT_BASED_CHECKPOINT_ID, lastCommitBasedStateStoreCkptId)}," +
+          log" ${MDC(LogKeys.LINEAGE, printLineage(versionToUniqueIdLineage))}")
       }
 
       // Set maxVersion when checkpoint files are synced to DFS successfully
@@ -1192,7 +1192,6 @@ class RocksDB(
     loggingId: String): RocksDBFileManagerMetrics = {
     var fileManagerMetrics: RocksDBFileManagerMetrics = null
     try {
-      versionToUniqueIdLineage = versionToUniqueIdLineage.filter(_._1 >= snapshot.version)
       val uploadTime = timeTakenMs {
         fileManager.saveCheckpointToDfs(snapshot.checkpointDir,
           snapshot.version, snapshot.numKeys, snapshot.fileMapping,
@@ -1205,6 +1204,7 @@ class RocksDB(
         // have been uploaded to DFS. We don't touch the file mapping here to avoid corrupting it.
         snapshotsPendingUpload.remove(snapshotInfo)
       }
+      versionToUniqueIdLineage = versionToUniqueIdLineage.filter(_._1 >= snapshot.version)
       logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
         log"${MDC(LogKeys.VERSION_NUM, snapshot.version)}, with uniqueId: ${MDC(LogKeys.UUID,
           snapshot.uniqueId)} time taken: ${MDC(LogKeys.TIME_UNITS,
