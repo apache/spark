@@ -26,6 +26,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
+import org.apache.spark.sql.connect.ConnectClientUnsupportedErrors
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.StructType

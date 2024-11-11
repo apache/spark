@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.{StatefulOperatorCustomMetric, StatefulOperatorCustomSumMetric, StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulProcessorHandleImpl, StateStoreWriter, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateSchemaValidationResult, StateStore, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProviderId}
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
@@ -124,6 +124,29 @@ case class TransformWithStateInPandasExec(
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     // TODO(SPARK-49212): Implement schema evolution support
     List.empty
+  }
+
+  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
+    Seq(
+      // metrics around state variables
+      StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
+      StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
+      StatefulOperatorCustomSumMetric("numMapStateVars", "Number of map state variables"),
+      StatefulOperatorCustomSumMetric("numDeletedStateVars", "Number of deleted state variables"),
+      // metrics around timers
+      StatefulOperatorCustomSumMetric("numRegisteredTimers", "Number of registered timers"),
+      StatefulOperatorCustomSumMetric("numDeletedTimers", "Number of deleted timers"),
+      StatefulOperatorCustomSumMetric("numExpiredTimers", "Number of expired timers"),
+      // metrics around TTL
+      StatefulOperatorCustomSumMetric("numValueStateWithTTLVars",
+        "Number of value state variables with TTL"),
+      StatefulOperatorCustomSumMetric("numListStateWithTTLVars",
+        "Number of list state variables with TTL"),
+      StatefulOperatorCustomSumMetric("numMapStateWithTTLVars",
+        "Number of map state variables with TTL"),
+      StatefulOperatorCustomSumMetric("numValuesRemovedDueToTTLExpiry",
+        "Number of values removed due to TTL expiry")
+    )
   }
 
   /**
@@ -247,6 +270,7 @@ case class TransformWithStateInPandasExec(
       // by the upstream (consumer) operators in addition to the processing in this operator.
       allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
       commitTimeMs += timeTakenMs {
+        processorHandle.doTtlCleanup()
         store.commit()
       }
       setStoreMetrics(store)
