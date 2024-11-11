@@ -392,7 +392,7 @@ class SparkConversionMixin:
             if schema is None:
                 schema = data.schema.names
 
-            return self._create_from_arrow_table(data, schema, timezone)
+            return self._create_from_arrow_table(data, schema, timezone, verifySchema=verifySchema)
 
         # `data` is a PandasDataFrameLike object
         from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -745,7 +745,11 @@ class SparkConversionMixin:
         return df
 
     def _create_from_arrow_table(
-        self, table: "pa.Table", schema: Union[StructType, List[str]], timezone: str
+        self,
+        table: "pa.Table",
+        schema: Union[StructType, List[str]],
+        timezone: str,
+        verifySchema: bool,
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pyarrow.Table by slicing it into partitions then
@@ -785,7 +789,7 @@ class SparkConversionMixin:
         if not isinstance(schema, StructType):
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
-        safecheck = self._jconf.arrowSafeTypeCasting()
+        safecheck = verifySchema or self._jconf.arrowSafeTypeCasting()
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
             to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True), safe=safecheck
         )
