@@ -2585,6 +2585,7 @@ class BaseUDTFTestsMixin:
     def test_udtf_with_variant_output(self):
         @udtf(returnType="i int, v: variant")
         class TestUDTF:
+            # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
             def eval(self, n):
                 for i in range(n):
                     yield i, VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
@@ -2597,6 +2598,7 @@ class BaseUDTFTestsMixin:
         # struct<variant>
         @udtf(returnType="i int, v: struct<v1 variant>")
         class TestUDTFStruct:
+            # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
             def eval(self, n):
                 for i in range(n):
                     yield i, {
@@ -2610,6 +2612,7 @@ class BaseUDTFTestsMixin:
         # array<variant>
         @udtf(returnType="i int, v: array<variant>")
         class TestUDTFArray:
+            # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
             def eval(self, n):
                 for i in range(n):
                     yield i, [
@@ -2623,6 +2626,7 @@ class BaseUDTFTestsMixin:
         # map<string, variant>
         @udtf(returnType="i int, v: map<string, variant>")
         class TestUDTFStruct:
+            # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
             def eval(self, n):
                 for i in range(n):
                     yield i, {

@@ -366,6 +366,7 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_with_variant_output(self):
         # The variant value returned corresponds to a JSON string of {"a": "<a-j>"}.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u = udf(
             lambda i: VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])),
             VariantType(),
@@ -377,6 +378,7 @@ class BaseUDFTestsMixin(object):
     def test_udf_with_complex_variant_output(self):
         # The variant value returned corresponds to a JSON string of {"a": "<a-j>"}.
         # struct<variant>
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u = udf(
             lambda i: {
                 "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
@@ -390,6 +392,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(result, expected)
 
         # array<variant>
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u = udf(
             lambda i: [VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))],
             ArrayType(VariantType()),
@@ -399,6 +402,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(result, expected)
 
         # map<string, variant>
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u = udf(
             lambda i: {
                 "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
@@ -412,6 +416,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(result, expected)
 
     def test_chained_udfs_with_variant(self):
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         udf_first = udf(
             lambda i: VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])),
             VariantType(),
@@ -424,6 +429,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(result, expected)
 
         # struct<variant>
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u_first = udf(
             lambda i: {"v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))},
             StructType([StructField("v", VariantType(), True)]),
@@ -434,6 +440,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(result, expected)
 
         # array<variant>
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u_first = udf(
             lambda i: [VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))],
             ArrayType(VariantType()),
@@ -444,6 +451,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(result, expected)
 
         # map<string, variant>
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u_first = udf(
             lambda i: {"v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))},
             ArrayType(VariantType()),

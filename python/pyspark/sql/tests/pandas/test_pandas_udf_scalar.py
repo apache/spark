@@ -765,6 +765,8 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(result, expected)
 
     def test_udf_with_variant_output(self):
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         scalar_f = pandas_udf(
             lambda u: u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))), VariantType()
         )
@@ -828,6 +830,8 @@ class ScalarPandasUDFTestsMixin:
 
     def test_udf_with_variant_output(self):
         # struct<variant>
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         scalar_f = pandas_udf(
             lambda u: pd.DataFrame({
                 "v": u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0])))
@@ -847,6 +851,8 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(result, expected)
 
         #array<variant>
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         scalar_f = pandas_udf(
             lambda u: u.apply(lambda i: [VariantVal(bytes([12, i]), bytes([1, 0, 0]))]),
             ArrayType(VariantType())
@@ -866,6 +872,8 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(result, expected)
 
         #map<string, variant>
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         scalar_f = pandas_udf(
             lambda u: u.apply(lambda i: {"v": VariantVal(bytes([12, i]), bytes([1, 0, 0]))}),
             MapType(StringType(), VariantType())
@@ -885,6 +893,8 @@ class ScalarPandasUDFTestsMixin:
             self.assertEqual(result, expected)
 
     def test_chained_udfs_with_variant(self):
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         scalar_first = pandas_udf(
             lambda u: u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))), VariantType()
         )
@@ -908,6 +918,8 @@ class ScalarPandasUDFTestsMixin:
                 self.assertEqual(result, expected)
 
     def test_chained_udfs_with_complex_variant(self):
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         scalar_first = pandas_udf(
             lambda u: u.apply(lambda i: [VariantVal(bytes([12, i]), bytes([1, 0, 0]))]),
             ArrayType(VariantType())
