@@ -28,6 +28,7 @@ SOURCE_MODULE=""
 TARGET_MODULE=""
 
 function usage() {
+  echo "Illegal number of parameters."
   echo "Usage:./dev/gen-protos.sh [connect|streaming] [output_path]"
   exit -1
 }
