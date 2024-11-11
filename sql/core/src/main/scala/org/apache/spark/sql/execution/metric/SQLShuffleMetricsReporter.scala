@@ -214,6 +214,8 @@ class SQLShuffleWriteMetricsReporter(
     metricsReporter.decBytesWritten(v)
     _bytesWritten.set(_bytesWritten.value - v)
   }
+
+  override private[spark] def recordsWritten: Long = _recordsWritten.value
 }
 
 object SQLShuffleWriteMetricsReporter {

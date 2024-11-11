@@ -22,6 +22,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
+import java.util.Arrays;
 import java.util.Optional;
 import java.util.zip.Checksum;
 import javax.annotation.Nullable;
@@ -112,6 +113,8 @@ final class BypassMergeSortShuffleWriter<K, V>
    */
   private boolean stopping = false;
 
+  private boolean enableRowCountOptimize = false;
+  private boolean enableMetricsRowCountCheck = true;
   BypassMergeSortShuffleWriter(
       BlockManager blockManager,
       BypassMergeSortShuffleHandle<K, V> handle,
@@ -131,6 +134,8 @@ final class BypassMergeSortShuffleWriter<K, V>
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
+    this.enableRowCountOptimize = (boolean)conf.get(package$.MODULE$.SHUFFLE_MAP_STATUS_ROW_COUNT_OPTIMIZE_SKEWED_JOB());
+    this.enableMetricsRowCountCheck = (boolean)conf.get(package$.MODULE$.SHUFFLE_MAP_STATUS_ROW_COUNT_METRICS_CHCEK());
     this.partitionChecksums = createPartitionChecksums(numPartitions, conf);
   }
 
@@ -168,10 +173,15 @@ final class BypassMergeSortShuffleWriter<K, V>
       // included in the shuffle write time.
       writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
 
+      long[] partitionRecords = new long[numPartitions];
       while (records.hasNext()) {
         final Product2<K, V> record = records.next();
         final K key = record._1();
-        partitionWriters[partitioner.getPartition(key)].write(key, record._2());
+        int partitionIndex = partitioner.getPartition(key);
+        partitionWriters[partitionIndex].write(key, record._2());
+        if (enableRowCountOptimize) {
+          partitionRecords[partitionIndex] += 1;
+        }
       }
 
       for (int i = 0; i < numPartitions; i++) {
@@ -181,8 +191,32 @@ final class BypassMergeSortShuffleWriter<K, V>
       }
 
       partitionLengths = writePartitionedData(mapOutputWriter);
-      mapStatus = MapStatus$.MODULE$.apply(
-        blockManager.shuffleServerId(), partitionLengths, mapId);
+      boolean checkMetricsRowCountResult = true;
+      if (enableRowCountOptimize && enableMetricsRowCountCheck) {
+        long partitionRecordsSum = Arrays.stream(partitionRecords).sum();
+        long metricsRecordsSum = writeMetrics.recordsWritten();
+        if (logger.isDebugEnabled()) {
+          long partitionRecordsMax = Arrays.stream(partitionRecords).max().getAsLong();
+          long partitionRecordsMin = Arrays.stream(partitionRecords).min().getAsLong();
+          logger.debug("PartitionRecords ShuffleId : {}, max : {}, min : {}, sum : {}. MetricsRecords sum : {}.",
+                  shuffleId, partitionRecordsMax, partitionRecordsMin, partitionRecordsSum, metricsRecordsSum);
+        } else {
+          logger.info("PartitionRecords ShuffleId : {}, sum : {}. MetricsRecords sum : {}.",
+                  shuffleId, partitionRecordsSum, metricsRecordsSum);
+        }
+        if (partitionRecordsSum != metricsRecordsSum) {
+          checkMetricsRowCountResult = false;
+          logger.info("ShuffleId : {}, MetricsRecords sum : {} not equal PartitionRecords sum : {}", shuffleId,
+                  metricsRecordsSum, partitionRecordsSum);
+        }
+      }
+      if (enableRowCountOptimize && checkMetricsRowCountResult) {
+        mapStatus = MapStatus$.MODULE$.apply(
+                blockManager.shuffleServerId(), partitionLengths, mapId, Option.apply(partitionRecords));
+      } else {
+        mapStatus = MapStatus$.MODULE$.apply(
+                blockManager.shuffleServerId(), partitionLengths, mapId);
+      }
     } catch (Exception e) {
       try {
         mapOutputWriter.abort(e);

@@ -867,6 +867,15 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("256MB")
 
+  val SKEW_JOIN_SKEWED_PARTITION_ROW_COUNT_THRESHOLD =
+    buildConf("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInRowCount")
+      .doc("A partition is considered as skewed if its record in Long is larger than this " +
+        s"threshold and also larger than '${SKEW_JOIN_SKEWED_PARTITION_FACTOR.key}' " +
+        "multiplying the median partition record.")
+      .version("3.0.0")
+      .longConf
+      .createWithDefault(5000000L)
+
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
       .internal()

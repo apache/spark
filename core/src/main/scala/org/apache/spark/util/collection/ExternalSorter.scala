@@ -104,6 +104,10 @@ private[spark] class ExternalSorter[K, V, C](
   private val conf = SparkEnv.get.conf
 
   private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
+
+  private def getPartition(key: K): Int = {
+    if (numPartitions > 1) partitioner.get.getPartition(key) else 0
+  }
   private val actualPartitioner =
     if (numPartitions > 1) partitioner.get else new ConstantPartitioner
 
@@ -182,7 +186,8 @@ private[spark] class ExternalSorter[K, V, C](
    */
   private[spark] def numSpills: Int = spills.size
 
-  def insertAll(records: Iterator[Product2[K, V]]): Unit = {
+  def insertAll(records: Iterator[Product2[K, V]], partitionRecords:
+  Option[Array[Long]] = None): Unit = {
     // TODO: stop combining if we find that the reduction factor isn't high
     val shouldCombine = aggregator.isDefined
 
@@ -197,6 +202,10 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         kv = records.next()
+        if (partitionRecords.nonEmpty) {
+          val array = partitionRecords.get
+          array(getPartition(kv._1)) += 1
+        }
         map.changeValue((actualPartitioner.getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
       }
@@ -205,6 +214,10 @@ private[spark] class ExternalSorter[K, V, C](
       while (records.hasNext) {
         addElementsRead()
         val kv = records.next()
+        if (partitionRecords.nonEmpty) {
+          val array = partitionRecords.get
+          array(getPartition(kv._1)) += 1
+        }
         buffer.insert(actualPartitioner.getPartition(kv._1), kv._1, kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
       }

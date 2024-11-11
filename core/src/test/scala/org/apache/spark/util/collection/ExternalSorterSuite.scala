@@ -255,6 +255,35 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("ShuffleWriter ExternalSorter insertAll Partition records") {
+    val size = 1000
+    val conf = createSparkConf(loadDefaults = true, kryo = false)
+    conf.set(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD, size / 2)
+    sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
+    val context = MemoryTestingUtils.fakeTaskContext(sc.env)
+
+    def createCombiner(i: String): ArrayBuffer[String] = ArrayBuffer[String](i)
+
+    def mergeValue(buffer: ArrayBuffer[String], i: String): ArrayBuffer[String] = buffer += i
+
+    def mergeCombiners(buf1: ArrayBuffer[String], buf2: ArrayBuffer[String]): ArrayBuffer[String] =
+      buf1 ++= buf2
+
+    val agg = new Aggregator[String, String, ArrayBuffer[String]](
+      createCombiner, mergeValue, mergeCombiners)
+
+    val sorter = new ExternalSorter[String, String, ArrayBuffer[String]](
+      context, Some(agg), None, None)
+
+    val partitionRecords = new Array[Long](3)
+    sorter.insertAll(Iterator(
+      ("1", "2"),
+      ("2", "3"),
+      ("3", "4")
+    ), Some(partitionRecords))
+    assert(partitionRecords.sum == 3L)
+  }
+
   /* ============================= *
    |  Helper test utility methods  |
    * ============================= */
