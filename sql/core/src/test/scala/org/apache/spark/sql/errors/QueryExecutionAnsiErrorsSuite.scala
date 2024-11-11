@@ -102,7 +102,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       condition = "INVALID_FRACTION_OF_SECOND",
       sqlState = "22023",
       parameters = Map(
-        "secAndMicros" -> "60.100000"
+        "secAndMicros" -> "60.1"
       ))
   }
 
