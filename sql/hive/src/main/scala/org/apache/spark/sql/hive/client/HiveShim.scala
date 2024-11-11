@@ -1236,8 +1236,7 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
     loadPartitionMethod.invoke(hive, loadPath, table, partSpec, loadFileType.get,
       inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
       isSrcLocal: JBoolean, isAcid, hasFollowingStatsTask,
-      writeIdInLoadTableOrPartition, stmtIdInLoadTableOrPartition, replace: JBoolean
-    )
+      writeIdInLoadTableOrPartition, stmtIdInLoadTableOrPartition, replace: JBoolean)
   }
 
   override def loadTable(
@@ -1283,15 +1282,12 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
 private[client] class Shim_v3_1 extends Shim_v3_0
 
 private[client] class Shim_v4_0 extends Shim_v3_1 {
-
-  private lazy val addPartitionsMethod =
-    findMethod(
-      classOf[Hive],
-      "addPartitions",
-      classOf[JList[Partition]],
-      JBoolean.TYPE,
-      JBoolean.TYPE) // needResults
-
+  private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
+  private lazy val clazzLoadTableDesc = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.ql.plan.LoadTableDesc")
+  private lazy val clazzPartitionDetails =
+    Utils.classForName("org.apache.hadoop.hive.ql.exec.Utilities$PartitionDesc")
   private lazy val alterTableMethod =
     findMethod(
       classOf[Hive],
@@ -1300,22 +1296,6 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       classOf[Table],
       classOf[EnvironmentContext],
       JBoolean.TYPE)
-
-  private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
-    "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
-
-  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
-    recordHiveCall()
-    val transactional = false
-    alterTableMethod.invoke(
-      hive,
-      tableName,
-      table,
-      environmentContextInAlterTable,
-      transactional: JBoolean
-    )
-  }
-
   private lazy val loadTableMethod =
     findMethod(
       classOf[Hive],
@@ -1331,12 +1311,13 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       JInteger.TYPE,
       JBoolean.TYPE,
       JBoolean.TYPE)
-
-  private lazy val clazzLoadTableDesc = getClass.getClassLoader.loadClass(
-    "org.apache.hadoop.hive.ql.plan.LoadTableDesc")
-
-  private lazy val clazzPartitionDetails =
-    Utils.classForName("org.apache.hadoop.hive.ql.exec.Utilities$PartitionDesc")
+  private lazy val addPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "addPartitions",
+      classOf[JList[Partition]],
+      JBoolean.TYPE,
+      JBoolean.TYPE) // needResults
   private lazy val alterPartitionsMethod =
     findMethod(
       classOf[Hive],
@@ -1363,7 +1344,6 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       JInteger.TYPE,
       JBoolean.TYPE,
       JBoolean.TYPE)
-
   private lazy val loadDynamicPartitionsMethod =
     findMethod(
       classOf[Hive],
@@ -1376,7 +1356,6 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       JBoolean.TYPE, // resetStatistics
       classOf[AcidUtils.Operation],
       classOf[JMap[Path, clazzPartitionDetails.type]])
-
   private lazy val renamePartitionMethod =
     findMethod(
       classOf[Hive],
@@ -1385,6 +1364,18 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       classOf[JMap[String, String]],
       classOf[Partition],
       JLong.TYPE)
+
+  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
+    recordHiveCall()
+    val transactional = false
+    alterTableMethod.invoke(
+      hive,
+      tableName,
+      table,
+      environmentContextInAlterTable,
+      transactional: JBoolean
+    )
+  }
 
   override def loadTable(
       hive: Hive,
@@ -1429,6 +1420,7 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       environmentContextInAlterTable,
       transactional)
   }
+
   override def createPartitions(
       hive: Hive,
       table: Table,
@@ -1519,7 +1511,6 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
       classOf[Configuration],
       classOf[DynamicPartitionCtx],
       classOf[java.util.Map[String, java.util.List[Path]]])
-    fullDPSpecs.setAccessible(true)
     recordHiveCall()
     val resetPartitionStats: JBoolean = false
     loadDynamicPartitionsMethod.invoke(
