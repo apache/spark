@@ -509,18 +509,21 @@ public final class CollationFactory {
 
       private static int collationNameToId(String originalName, String collationName)
           throws SparkException {
-        // Have a check for UTF8_BINARY collation to early-out and not introduce any regression.
-        if (UTF8_BINARY_COLLATION.collationName.equals(collationName)) {
-          return UTF8_BINARY_COLLATION_ID;
-        }
 
         int baseId;
         String collationNamePrefix;
 
         if (collationName.startsWith(UTF8_BINARY_COLLATION.collationName)) {
+          // Have a check for UTF8_BINARY collation to early-out and not introduce any regression.
+          if (collationName.length() == UTF8_BINARY_COLLATION.collationName.length()) {
+            return UTF8_BINARY_COLLATION_ID;
+          }
           baseId = UTF8_BINARY_COLLATION_ID;
           collationNamePrefix = UTF8_BINARY_COLLATION.collationName;
         } else if (collationName.startsWith(UTF8_LCASE_COLLATION.collationName)) {
+          if (collationName.length() == UTF8_LCASE_COLLATION.collationName.length()) {
+            return UTF8_LCASE_COLLATION_ID;
+          }
           baseId = UTF8_LCASE_COLLATION_ID;
           collationNamePrefix = UTF8_LCASE_COLLATION.collationName;
         } else {
