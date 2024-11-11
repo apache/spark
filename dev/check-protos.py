@@ -18,7 +18,7 @@
 #
 
 # Utility for checking whether generated codes in PySpark are out of sync.
-#   usage: ./dev/streaming-state-gen-protos-check.py
+#   usage: ./dev/check-protos.py
 
 import os
 import sys
@@ -43,12 +43,12 @@ def run_cmd(cmd):
         return subprocess.check_output(cmd.split(" ")).decode("utf-8")
 
 
-def check_streaming_protos():
-    print("Start checking the generated codes in pyspark-streaming.")
-    with tempfile.TemporaryDirectory(prefix="check_streaming_protos") as tmp:
-        run_cmd(f"{SPARK_HOME}/dev/streaming-state-gen-protos.sh {tmp}")
+def check_protos(module_name, cmp_path, proto_path):
+    print(f"Start checking the generated codes in pyspark-${module_name}.")
+    with tempfile.TemporaryDirectory(prefix=f"check_${module_name}__protos") as tmp:
+        run_cmd(f"{SPARK_HOME}/dev/gen-protos.sh {module_name} {tmp}")
         result = filecmp.dircmp(
-            f"{SPARK_HOME}/python/pyspark/sql/streaming/proto/",
+            f"{SPARK_HOME}/{cmp_path}",
             tmp,
             ignore=["__init__.py", "__pycache__"],
         )
@@ -71,14 +71,17 @@ def check_streaming_protos():
             success = False
 
         if success:
-            print("Finish checking the generated codes in pyspark-streaming: SUCCESS")
+            print(f"Finish checking the generated codes in pyspark-${module_name}: SUCCESS")
         else:
             fail(
-                "Generated files for pyspark-streaming are out of sync! "
-                "If you have touched files under sql/core/src/main/protobuf/, "
-                "please run ./dev/streaming-state-gen-protos.sh. "
+                "Generated files for pyspark-connect are out of sync! "
+                f"If you have touched files under ${proto_path}, "
+                f"please run ./dev/${module_name}-gen-protos.sh. "
                 "If you haven't touched any file above, please rebase your PR against main branch."
             )
 
 
-check_streaming_protos()
+check_protos(
+    "connect", "python/pyspark/sql/connect/proto/", "sql/connect/common/src/main/protobuf/"
+)
+check_protos("streaming", "python/pyspark/sql/streaming/proto/", "sql/core/src/main/protobuf/")
