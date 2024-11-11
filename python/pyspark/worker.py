@@ -1958,6 +1958,17 @@ def main(infile, outfile):
             try:
                 serializer.dump_stream(out_iter, outfile)
             finally:
+                # Sending a signal to TransformWithState UDF to perform proper cleanup steps.
+                if (
+                    eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
+                    or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
+                ):
+                    # Sending key as None to indicate that process() has finished.
+                    end_iter = func(split_index, iter([(None, None)]))
+                    # Need to materialize the iterator to trigger the cleanup steps, nothing needs
+                    # to be done here.
+                    for _ in end_iter:
+                        pass
                 if hasattr(out_iter, "close"):
                     out_iter.close()
 

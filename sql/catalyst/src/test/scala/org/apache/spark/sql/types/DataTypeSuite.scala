@@ -23,11 +23,13 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
-class DataTypeSuite extends SparkFunSuite {
+class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
 
@@ -876,6 +878,90 @@ class DataTypeSuite extends SparkFunSuite {
       }
   }
 
+  test("string field with invalid collation name") {
+    val collationProviders = Seq("spark", "icu")
+    collationProviders.foreach { provider =>
+      val json =
+        s"""
+           |{
+           |  "type": "struct",
+           |  "fields": [
+           |    {
+           |      "name": "c1",
+           |      "type": "string",
+           |      "nullable": false,
+           |      "metadata": {
+           |        "${DataType.COLLATIONS_METADATA_KEY}": {
+           |          "c1": "$provider.INVALID"
+           |        }
+           |      }
+           |    }
+           |  ]
+           |}
+           |""".stripMargin
+
+      // Check that the exception will be thrown in case of invalid collation name and
+      // UNKNOWN_COLLATION_NAME config not enabled.
+      checkError(
+        exception = intercept[SparkException] {
+          DataType.fromJson(json)
+        },
+        condition = "COLLATION_INVALID_NAME",
+        parameters = Map(
+          "proposals" -> "id",
+          "collationName" -> "INVALID"))
+
+      // Check that the exception will not be thrown in case of invalid collation name and
+      // UNKNOWN_COLLATION_NAME enabled, but UTF8_BINARY collation will be returned.
+      withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
+        val dataType = DataType.fromJson(json)
+        assert(dataType === StructType(
+          StructField("c1", StringType(CollationFactory.UTF8_BINARY_COLLATION_ID), false) :: Nil))
+      }
+    }
+  }
+
+  test("string field with invalid collation provider") {
+    val json =
+      s"""
+         |{
+         |  "type": "struct",
+         |  "fields": [
+         |    {
+         |      "name": "c1",
+         |      "type": "string",
+         |      "nullable": false,
+         |      "metadata": {
+         |        "${DataType.COLLATIONS_METADATA_KEY}": {
+         |          "c1": "INVALID.INVALID"
+         |        }
+         |      }
+         |    }
+         |  ]
+         |}
+         |""".stripMargin
+
+
+    // Check that the exception will be thrown in case of invalid collation name and
+    // UNKNOWN_COLLATION_NAME config not enabled.
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.fromJson(json)
+      },
+      condition = "COLLATION_INVALID_PROVIDER",
+      parameters = Map(
+        "supportedProviders" -> "spark, icu",
+        "provider" -> "INVALID"))
+
+    // Check that the exception will not be thrown in case of invalid collation name and
+    // UNKNOWN_COLLATION_NAME enabled, but UTF8_BINARY collation will be returned.
+    withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
+      val dataType = DataType.fromJson(json)
+      assert(dataType === StructType(
+        StructField("c1", StringType(CollationFactory.UTF8_BINARY_COLLATION_ID), false) :: Nil))
+    }
+  }
+
   test("non string field has collation metadata") {
     val json =
       s"""
@@ -1023,6 +1109,42 @@ class DataTypeSuite extends SparkFunSuite {
     assert(parsedWithCollations === ArrayType(StringType(unicodeCollationId)))
   }
 
+  test("parse array type with invalid collation metadata") {
+    val utf8BinaryCollationId = CollationFactory.UTF8_BINARY_COLLATION_ID
+    val arrayJson =
+      s"""
+         |{
+         |  "type": "array",
+         |  "elementType": "string",
+         |  "containsNull": true
+         |}
+         |""".stripMargin
+
+    val collationsMap = Map("element" -> "INVALID")
+
+    // Parse without collations map
+    assert(DataType.parseDataType(JsonMethods.parse(arrayJson)) === ArrayType(StringType))
+
+    // Check that the exception will be thrown in case of invalid collation name and
+    // UNKNOWN_COLLATION_NAME config not enabled.
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.parseDataType(JsonMethods.parse(arrayJson), collationsMap = collationsMap)
+      },
+      condition = "COLLATION_INVALID_NAME",
+      parameters = Map(
+        "proposals" -> "id",
+        "collationName" -> "INVALID"))
+
+    // Check that the exception will not be thrown in case of invalid collation name and
+    // UNKNOWN_COLLATION_NAME enabled, but UTF8_BINARY collation will be returned.
+    withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
+      val dataType = DataType.parseDataType(
+        JsonMethods.parse(arrayJson), collationsMap = collationsMap)
+      assert(dataType === ArrayType(StringType(utf8BinaryCollationId)))
+    }
+  }
+
   test("parse map type with collation metadata") {
     val unicodeCollationId = CollationFactory.collationNameToId("UNICODE")
     val mapJson =
@@ -1044,6 +1166,44 @@ class DataTypeSuite extends SparkFunSuite {
       JsonMethods.parse(mapJson), collationsMap = collationsMap)
     assert(parsedWithCollations ===
       MapType(StringType(unicodeCollationId), StringType(unicodeCollationId)))
+  }
+
+  test("parse map type with invalid collation metadata") {
+    val utf8BinaryCollationId = CollationFactory.UTF8_BINARY_COLLATION_ID
+    val mapJson =
+      s"""
+         |{
+         |  "type": "map",
+         |  "keyType": "string",
+         |  "valueType": "string",
+         |  "valueContainsNull": true
+         |}
+         |""".stripMargin
+
+    val collationsMap = Map("key" -> "INVALID", "value" -> "INVALID")
+
+    // Parse without collations map
+    assert(DataType.parseDataType(JsonMethods.parse(mapJson)) === MapType(StringType, StringType))
+
+    // Check that the exception will be thrown in case of invalid collation name and
+    // UNKNOWN_COLLATION_NAME config not enabled.
+    checkError(
+      exception = intercept[SparkException] {
+        DataType.parseDataType(JsonMethods.parse(mapJson), collationsMap = collationsMap)
+      },
+      condition = "COLLATION_INVALID_NAME",
+      parameters = Map(
+        "proposals" -> "id",
+        "collationName" -> "INVALID"))
+
+    // Check that the exception will not be thrown in case of invalid collation name and
+    // UNKNOWN_COLLATION_NAME enabled, but UTF8_BINARY collation will be returned.
+    withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
+      val dataType = DataType.parseDataType(
+        JsonMethods.parse(mapJson), collationsMap = collationsMap)
+      assert(dataType === MapType(
+        StringType(utf8BinaryCollationId), StringType(utf8BinaryCollationId)))
+    }
   }
 
   test("SPARK-48680: Add CharType and VarcharType to DataTypes JAVA API") {
