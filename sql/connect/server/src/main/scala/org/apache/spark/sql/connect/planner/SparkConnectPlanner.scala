@@ -58,7 +58,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.classic.{CatalogImpl, Dataset, MergeIntoWriterImpl, RelationalGroupedDataset, SparkSession, TypedAggUtils}
+import org.apache.spark.sql.classic.{Catalog, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -3410,7 +3410,7 @@ class SparkConnectPlanner(
     val sourceDs = Dataset.ofRows(session, transformRelation(cmd.getSourceTablePlan))
     val mergeInto = sourceDs
       .mergeInto(cmd.getTargetTableName, Column(transformExpression(cmd.getMergeCondition)))
-      .asInstanceOf[MergeIntoWriterImpl[Row]]
+      .asInstanceOf[MergeIntoWriter[Row]]
     mergeInto.matchedActions ++= matchedActions
     mergeInto.notMatchedActions ++= notMatchedActions
     mergeInto.notMatchedBySourceActions ++= notMatchedBySourceActions
@@ -3486,14 +3486,14 @@ class SparkConnectPlanner(
   }
 
   private def transformGetDatabase(getGetDatabase: proto.GetDatabase): LogicalPlan = {
-    CatalogImpl
+    Catalog
       .makeDataset(session.catalog.getDatabase(getGetDatabase.getDbName) :: Nil, session)
       .logicalPlan
   }
 
   private def transformGetTable(getGetTable: proto.GetTable): LogicalPlan = {
     if (getGetTable.hasDbName) {
-      CatalogImpl
+      Catalog
         .makeDataset(
           session.catalog.getTable(
             dbName = getGetTable.getDbName,
@@ -3501,7 +3501,7 @@ class SparkConnectPlanner(
           session)
         .logicalPlan
     } else {
-      CatalogImpl
+      Catalog
         .makeDataset(session.catalog.getTable(getGetTable.getTableName) :: Nil, session)
         .logicalPlan
     }
@@ -3509,7 +3509,7 @@ class SparkConnectPlanner(
 
   private def transformGetFunction(getGetFunction: proto.GetFunction): LogicalPlan = {
     if (getGetFunction.hasDbName) {
-      CatalogImpl
+      Catalog
         .makeDataset(
           session.catalog.getFunction(
             dbName = getGetFunction.getDbName,
@@ -3517,7 +3517,7 @@ class SparkConnectPlanner(
           session)
         .logicalPlan
     } else {
-      CatalogImpl
+      Catalog
         .makeDataset(session.catalog.getFunction(getGetFunction.getFunctionName) :: Nil, session)
         .logicalPlan
     }

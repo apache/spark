@@ -37,8 +37,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
-import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, Row, RuntimeConfig, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SQLContext}
-import org.apache.spark.sql.catalog.Catalog
+import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SQLContext}
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
@@ -98,7 +97,7 @@ class SparkSession private[sql] (
     throw ConnectClientUnsupportedErrors.sparkContext()
 
   /** @inheritdoc */
-  val conf: RuntimeConfig = new ConnectRuntimeConfig(client)
+  val conf: RuntimeConfig = new RuntimeConfig(client)
 
   /** @inheritdoc */
   @transient
@@ -283,7 +282,7 @@ class SparkSession private[sql] (
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
 
   /** @inheritdoc */
-  lazy val catalog: Catalog = new CatalogImpl(this)
+  lazy val catalog: Catalog = new Catalog(this)
 
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
@@ -656,8 +655,10 @@ object SparkSession extends SparkSessionCompanion with Logging {
     private var client: SparkConnectClient = _
 
     /** @inheritdoc */
-    override private[spark] def sparkContext(sparkContext: SparkContext) =
-      throw ConnectClientUnsupportedErrors.sparkContext()
+    @deprecated("sparkContext does not work in Spark Connect")
+    override private[spark] def sparkContext(sparkContext: SparkContext): this.type = {
+      this
+    }
 
     /** @inheritdoc */
     override def remote(connectionString: String): this.type = {

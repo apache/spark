@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.classic
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.{analysis, expressions, InternalRow}
@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExprId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.classic.{ColumnNodeToExpressionConverter, Dataset, ExpressionColumnNode}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator}
+import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, InvokeInlineUserDefinedFunction, LambdaFunction, Literal, SortOrder, SQLConf, SqlExpression, TypedSumLong, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame, WindowSpec}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -401,8 +401,8 @@ class ColumnNodeToExpressionConverterSuite extends SparkFunSuite {
   }
 }
 
-private[internal] case class Nope(override val origin: Origin = CurrentOrigin.get)
+private[classic] case class Nope(override val origin: Origin = CurrentOrigin.get)
   extends ColumnNode {
-  override private[internal] def normalize(): Nope = this
+  override private[sql] def normalize(): Nope = this
   override def sql: String = "nope"
 }

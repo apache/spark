@@ -52,7 +52,7 @@ import org.apache.spark.util.ArrayImplicits._
  * @since 1.4.0
  */
 @Stable
-final class DataFrameWriterImpl[T] private[sql](ds: Dataset[T]) extends sql.DataFrameWriter[T] {
+final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFrameWriter[T] {
   format(ds.sparkSession.sessionState.conf.defaultDataSourceName)
 
   private val df = ds.toDF()

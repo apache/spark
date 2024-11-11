@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect
 
 import org.apache.spark.connect.proto.{ConfigRequest, ConfigResponse, KeyValue}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.RuntimeConfig
+import org.apache.spark.sql
 import org.apache.spark.sql.connect.client.SparkConnectClient
 
 /**
@@ -26,8 +26,8 @@ import org.apache.spark.sql.connect.client.SparkConnectClient
  *
  * @since 3.4.0
  */
-class ConnectRuntimeConfig private[sql] (client: SparkConnectClient)
-    extends RuntimeConfig
+class RuntimeConfig private[sql] (client: SparkConnectClient)
+    extends sql.RuntimeConfig
     with Logging {
 
   /** @inheritdoc */

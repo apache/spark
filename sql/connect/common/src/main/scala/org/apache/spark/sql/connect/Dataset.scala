@@ -31,7 +31,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
-import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
+import org.apache.spark.sql.{functions, AnalysisException, Column, Encoder, Observation, Row, TypedColumn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
@@ -1016,12 +1016,12 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def write: DataFrameWriter[T] = {
-    new DataFrameWriterImpl[T](this)
+    new DataFrameWriter[T](this)
   }
 
   /** @inheritdoc */
   def writeTo(table: String): DataFrameWriterV2[T] = {
-    new DataFrameWriterV2Impl[T](table, this)
+    new DataFrameWriterV2[T](table, this)
   }
 
   /** @inheritdoc */
@@ -1032,7 +1032,7 @@ class Dataset[T] private[sql] (
         messageParameters = Map("methodName" -> toSQLId("mergeInto")))
     }
 
-    new MergeIntoWriterImpl[T](table, this, condition)
+    new MergeIntoWriter[T](table, this, condition)
   }
 
   /** @inheritdoc */

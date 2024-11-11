@@ -21,7 +21,8 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
+import org.apache.spark.sql.catalog
+import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -47,7 +48,7 @@ import org.apache.spark.util.ArrayImplicits._
 /**
  * Internal implementation of the user-facing `Catalog`.
  */
-class CatalogImpl(sparkSession: SparkSession) extends Catalog {
+class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
 
   private def sessionCatalog: SessionCatalog = sparkSession.sessionState.catalog
 
@@ -114,7 +115,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val dbName = row.getString(0)
       makeDatabase(Some(catalog.name()), dbName)
     }
-    CatalogImpl.makeDataset(databases.toImmutableArraySeq, sparkSession)
+    Catalog.makeDataset(databases.toImmutableArraySeq, sparkSession)
   }
 
   /**
@@ -160,7 +161,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         sparkSession.sessionState.catalogManager.v2SessionCatalog
     }.get
     val tables = qe.toRdd.collect().flatMap { row => resolveTable(row, catalog.name()) }
-    CatalogImpl.makeDataset(tables.toImmutableArraySeq, sparkSession)
+    Catalog.makeDataset(tables.toImmutableArraySeq, sparkSession)
   }
 
   private[sql] def resolveTable(row: InternalRow, catalogName: String): Option[Table] = {
@@ -297,7 +298,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       functions += makeFunction(parseIdent(row.getString(0)))
     }
 
-    CatalogImpl.makeDataset(functions.result().toImmutableArraySeq, sparkSession)
+    Catalog.makeDataset(functions.result().toImmutableArraySeq, sparkSession)
   }
 
   private def toFunctionIdent(functionName: String): Seq[String] = {
@@ -315,7 +316,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def functionExists(ident: Seq[String]): Boolean = {
     val plan =
-      UnresolvedFunctionName(ident, CatalogImpl.FUNCTION_EXISTS_COMMAND_NAME, false, None)
+      UnresolvedFunctionName(ident, Catalog.FUNCTION_EXISTS_COMMAND_NAME, false, None)
     try {
       sparkSession.sessionState.executePlan(plan).analyzed match {
         case _: ResolvedPersistentFunc => true
@@ -413,7 +414,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case _ => throw QueryCompilationErrors.tableOrViewNotFound(ident)
     }
 
-    CatalogImpl.makeDataset(columns, sparkSession)
+    Catalog.makeDataset(columns, sparkSession)
   }
 
   private def schemaToColumns(
@@ -920,7 +921,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def listCatalogs(): Dataset[CatalogMetadata] = {
     val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(None)
-    CatalogImpl.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
+    Catalog.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
   }
 
   /**
@@ -930,7 +931,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def listCatalogs(pattern: String): Dataset[CatalogMetadata] = {
     val catalogs = sparkSession.sessionState.catalogManager.listCatalogs(Some(pattern))
-    CatalogImpl.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
+    Catalog.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
   }
 
   private def makeCatalog(name: String): CatalogMetadata = {
@@ -941,7 +942,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 }
 
 
-private[sql] object CatalogImpl {
+private[sql] object Catalog {
 
   def makeDataset[T <: DefinedByConstructorParams: TypeTag](
       data: Seq[T],

@@ -598,8 +598,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
     } {
       val dfWithDesiredNullability = new classic.DataFrame(
         df.queryExecution,
-        ExpressionEncoder(
-        StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
+        ExpressionEncoder(StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // tumbling windows
       val windowedProject = dfWithDesiredNullability
         .select(window($"time", "10 seconds").as("window"), $"value")

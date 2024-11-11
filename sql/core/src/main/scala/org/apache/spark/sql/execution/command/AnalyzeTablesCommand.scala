@@ -28,8 +28,7 @@ import org.apache.spark.sql.classic.SparkSession
 /**
  * Analyzes all tables in the given database to generate statistics.
  */
-case class
-AnalyzeTablesCommand(
+case class AnalyzeTablesCommand(
     databaseName: Option[String],
     noScan: Boolean) extends LeafRunnableCommand {
 

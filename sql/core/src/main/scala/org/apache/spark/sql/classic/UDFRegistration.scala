@@ -35,7 +35,6 @@ import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedAg
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
-
 /**
  * Functions for registering user-defined functions. Use `SparkSession.udf` to access this:
  *

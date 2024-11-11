@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProtoBuilder
 import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal._
+import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, InvokeInlineUserDefinedFunction, LambdaFunction, Literal, SortOrder, SqlExpression, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 
 /**
  * Converter for [[ColumnNode]] to [[proto.Expression]] conversions.

@@ -21,7 +21,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.classic
 
 
 /**
@@ -35,7 +34,7 @@ class HiveContext private[hive](_sparkSession: SparkSession)
   self =>
 
   def this(sc: SparkContext) = {
-    this(classic.SparkSession.builder().enableHiveSupport().sparkContext(sc).getOrCreate())
+    this(SparkSession.builder().enableHiveSupport().sparkContext(sc).getOrCreate())
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)

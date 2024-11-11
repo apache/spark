@@ -39,7 +39,7 @@ import org.apache.spark.sql.functions.expr
  * @since 4.0.0
  */
 @Experimental
-class MergeIntoWriterImpl[T] private[sql] (table: String, ds: Dataset[T], on: Column)
+class MergeIntoWriter[T] private[sql](table: String, ds: Dataset[T], on: Column)
   extends sql.MergeIntoWriter[T] {
 
   private val df: DataFrame = ds.toDF()

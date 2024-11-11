@@ -37,9 +37,8 @@ import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTE
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql
-import org.apache.spark.sql.{Artifact, Column, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, RuntimeConfig, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, SQLContext, UDTFRegistration}
+import org.apache.spark.sql.{Artifact, Column, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, SQLContext, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
@@ -176,7 +175,7 @@ class SparkSession private(
   val sqlContext: SQLContext = new SQLContext(this)
 
   /** @inheritdoc */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfigImpl(sessionState.conf)
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
 
   /** @inheritdoc */
   def listenerManager: ExecutionListenerManager = sessionState.listenerManager
@@ -397,7 +396,7 @@ class SparkSession private(
    * ------------------------- */
 
   /** @inheritdoc */
-  @transient lazy val catalog: Catalog = new CatalogImpl(self)
+  @transient lazy val catalog: Catalog = new Catalog(self)
 
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {

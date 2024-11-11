@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connect
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
+import org.apache.spark.sql.catalog
+import org.apache.spark.sql.catalog.{CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, StringEncoder}
@@ -26,7 +27,7 @@ import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevel
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
-class CatalogImpl(sparkSession: SparkSession) extends Catalog {
+class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
 
   /**
    * Returns the current default database in this session.
@@ -61,7 +62,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def listDatabases(): Dataset[Database] = {
-    sparkSession.newDataset(CatalogImpl.databaseEncoder) { builder =>
+    sparkSession.newDataset(Catalog.databaseEncoder) { builder =>
       builder.getCatalogBuilder.getListDatabasesBuilder
     }
   }
@@ -73,7 +74,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def listDatabases(pattern: String): Dataset[Database] = {
-    sparkSession.newDataset(CatalogImpl.databaseEncoder) { builder =>
+    sparkSession.newDataset(Catalog.databaseEncoder) { builder =>
       builder.getCatalogBuilder.getListDatabasesBuilder.setPattern(pattern)
     }
   }
@@ -96,7 +97,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
-    sparkSession.newDataset(CatalogImpl.tableEncoder) { builder =>
+    sparkSession.newDataset(Catalog.tableEncoder) { builder =>
       builder.getCatalogBuilder.getListTablesBuilder.setDbName(dbName)
     }
   }
@@ -109,7 +110,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   def listTables(dbName: String, pattern: String): Dataset[Table] = {
-    sparkSession.newDataset(CatalogImpl.tableEncoder) { builder =>
+    sparkSession.newDataset(Catalog.tableEncoder) { builder =>
       builder.getCatalogBuilder.getListTablesBuilder.setDbName(dbName).setPattern(pattern)
     }
   }
@@ -132,7 +133,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
-    sparkSession.newDataset(CatalogImpl.functionEncoder) { builder =>
+    sparkSession.newDataset(Catalog.functionEncoder) { builder =>
       builder.getCatalogBuilder.getListFunctionsBuilder.setDbName(dbName)
     }
   }
@@ -146,7 +147,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   def listFunctions(dbName: String, pattern: String): Dataset[Function] = {
-    sparkSession.newDataset(CatalogImpl.functionEncoder) { builder =>
+    sparkSession.newDataset(Catalog.functionEncoder) { builder =>
       builder.getCatalogBuilder.getListFunctionsBuilder.setDbName(dbName).setPattern(pattern)
     }
   }
@@ -162,7 +163,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database or table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
-    sparkSession.newDataset(CatalogImpl.columnEncoder) { builder =>
+    sparkSession.newDataset(Catalog.columnEncoder) { builder =>
       builder.getCatalogBuilder.getListColumnsBuilder.setTableName(tableName)
     }
   }
@@ -182,7 +183,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   @throws[AnalysisException]("database does not exist")
   override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
-    sparkSession.newDataset(CatalogImpl.columnEncoder) { builder =>
+    sparkSession.newDataset(Catalog.columnEncoder) { builder =>
       builder.getCatalogBuilder.getListColumnsBuilder
         .setTableName(tableName)
         .setDbName(dbName)
@@ -197,7 +198,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def getDatabase(dbName: String): Database = {
     sparkSession
-      .newDataset(CatalogImpl.databaseEncoder) { builder =>
+      .newDataset(Catalog.databaseEncoder) { builder =>
         builder.getCatalogBuilder.getGetDatabaseBuilder.setDbName(dbName)
       }
       .head()
@@ -215,7 +216,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def getTable(tableName: String): Table = {
     sparkSession
-      .newDataset(CatalogImpl.tableEncoder) { builder =>
+      .newDataset(Catalog.tableEncoder) { builder =>
         builder.getCatalogBuilder.getGetTableBuilder.setTableName(tableName)
       }
       .head()
@@ -232,7 +233,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def getTable(dbName: String, tableName: String): Table = {
     sparkSession
-      .newDataset(CatalogImpl.tableEncoder) { builder =>
+      .newDataset(Catalog.tableEncoder) { builder =>
         builder.getCatalogBuilder.getGetTableBuilder
           .setTableName(tableName)
           .setDbName(dbName)
@@ -252,7 +253,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def getFunction(functionName: String): Function = {
     sparkSession
-      .newDataset(CatalogImpl.functionEncoder) { builder =>
+      .newDataset(Catalog.functionEncoder) { builder =>
         builder.getCatalogBuilder.getGetFunctionBuilder.setFunctionName(functionName)
       }
       .head()
@@ -273,7 +274,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def getFunction(dbName: String, functionName: String): Function = {
     sparkSession
-      .newDataset(CatalogImpl.functionEncoder) { builder =>
+      .newDataset(Catalog.functionEncoder) { builder =>
         builder.getCatalogBuilder.getGetFunctionBuilder
           .setFunctionName(functionName)
           .setDbName(dbName)
@@ -688,7 +689,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def listCatalogs(): Dataset[CatalogMetadata] =
     sparkSession
-      .newDataset(CatalogImpl.catalogEncoder) { builder =>
+      .newDataset(Catalog.catalogEncoder) { builder =>
         builder.getCatalogBuilder.getListCatalogsBuilder
       }
 
@@ -700,12 +701,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def listCatalogs(pattern: String): Dataset[CatalogMetadata] =
     sparkSession
-      .newDataset(CatalogImpl.catalogEncoder) { builder =>
+      .newDataset(Catalog.catalogEncoder) { builder =>
         builder.getCatalogBuilder.getListCatalogsBuilder.setPattern(pattern)
       }
 }
 
-private object CatalogImpl {
+private object Catalog {
   private val databaseEncoder: AgnosticEncoder[Database] = ScalaReflection
     .encoderFor(ScalaReflection.localTypeOf[Database])
     .asInstanceOf[AgnosticEncoder[Database]]

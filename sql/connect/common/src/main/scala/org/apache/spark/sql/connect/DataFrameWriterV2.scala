@@ -21,7 +21,8 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.{Column, DataFrameWriterV2}
+import org.apache.spark.sql
+import org.apache.spark.sql.Column
 
 /**
  * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage using the v2
@@ -30,8 +31,8 @@ import org.apache.spark.sql.{Column, DataFrameWriterV2}
  * @since 3.4.0
  */
 @Experimental
-final class DataFrameWriterV2Impl[T] private[sql] (table: String, ds: Dataset[T])
-    extends DataFrameWriterV2[T] {
+final class DataFrameWriterV2[T] private[sql] (table: String, ds: Dataset[T])
+    extends sql.DataFrameWriterV2[T] {
   import ds.sparkSession.RichColumn
 
   private val builder = proto.WriteOperationV2

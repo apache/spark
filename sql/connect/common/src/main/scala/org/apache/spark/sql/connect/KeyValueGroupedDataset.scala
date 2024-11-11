@@ -34,7 +34,7 @@ import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.UDFAdaptors
-import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, TimeMode}
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key. Users should not

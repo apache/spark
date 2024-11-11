@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.annotation.Stable
 import org.apache.spark.internal.config.{ConfigEntry, DEFAULT_PARALLELISM}
-import org.apache.spark.sql.RuntimeConfig
+import org.apache.spark.sql
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * @since 2.0.0
  */
 @Stable
-class RuntimeConfigImpl private[sql](val sqlConf: SQLConf = new SQLConf) extends RuntimeConfig {
+class RuntimeConfig private[sql](val sqlConf: SQLConf = new SQLConf) extends sql.RuntimeConfig {
 
   /** @inheritdoc */
   def set(key: String, value: String): Unit = {

@@ -22,7 +22,8 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Expression, MergeAction, MergeIntoTableCommand}
 import org.apache.spark.connect.proto.MergeAction.ActionType._
-import org.apache.spark.sql.{Column, MergeIntoWriter}
+import org.apache.spark.sql
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions.expr
 
 /**
@@ -41,8 +42,8 @@ import org.apache.spark.sql.functions.expr
  * @since 4.0.0
  */
 @Experimental
-class MergeIntoWriterImpl[T] private[sql] (table: String, ds: Dataset[T], on: Column)
-    extends MergeIntoWriter[T] {
+class MergeIntoWriter[T] private[sql] (table: String, ds: Dataset[T], on: Column)
+    extends sql.MergeIntoWriter[T] {
   import ds.sparkSession.RichColumn
 
   private val builder = MergeIntoTableCommand

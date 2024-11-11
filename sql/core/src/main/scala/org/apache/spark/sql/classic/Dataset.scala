@@ -38,7 +38,7 @@ import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.{AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, Encoders, MergeIntoWriter, Observation, Row, SQLContext, TypedColumn}
+import org.apache.spark.sql.{AnalysisException, Column, Encoder, Encoders, Observation, Row, SQLContext, TypedColumn}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -1562,7 +1562,7 @@ class Dataset[T] private[sql](
         errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
         messageParameters = Map("methodName" -> toSQLId("write")))
     }
-    new DataFrameWriterImpl[T](this)
+    new DataFrameWriter[T](this)
   }
 
   /** @inheritdoc */
@@ -1573,7 +1573,7 @@ class Dataset[T] private[sql](
         errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
         messageParameters = Map("methodName" -> toSQLId("writeTo")))
     }
-    new DataFrameWriterV2Impl[T](table, this)
+    new DataFrameWriterV2[T](table, this)
   }
 
   /** @inheritdoc */
@@ -1584,7 +1584,7 @@ class Dataset[T] private[sql](
         messageParameters = Map("methodName" -> toSQLId("mergeInto")))
     }
 
-    new MergeIntoWriterImpl[T](table, this, condition)
+    new MergeIntoWriter[T](table, this, condition)
   }
 
   /** @inheritdoc */

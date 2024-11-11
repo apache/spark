@@ -17,7 +17,7 @@
 package org.apache.spark.sql.connect
 
 import java.sql.{Date, Timestamp}
-import java.time._
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 

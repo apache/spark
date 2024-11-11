@@ -23,7 +23,8 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters.MapHasAsScala
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{Column, DataFrameWriterV2}
+import org.apache.spark.sql
+import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedFunction, UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -34,13 +35,14 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Interface used to write a [[sql.classic.Dataset]] to external storage using the v2 API.
+ * Interface used to write a [[org.apache.spark.sql.classic.Dataset]] to external storage using
+ * the v2 API.
  *
  * @since 3.0.0
  */
 @Experimental
-final class DataFrameWriterV2Impl[T] private[sql](table: String, ds: Dataset[T])
-    extends DataFrameWriterV2[T] {
+final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
+    extends sql.DataFrameWriterV2[T] {
 
   private val df: DataFrame = ds.toDF()
 
