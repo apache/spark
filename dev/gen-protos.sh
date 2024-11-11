@@ -28,7 +28,7 @@ SOURCE_MODULE=""
 TARGET_MODULE=""
 
 function usage() {
-    echo "Usage:./dev/gen-protos.sh [connect|streaming] [output_path]"
+  echo "Usage:./dev/gen-protos.sh [connect|streaming] [output_path]"
   exit -1
 }
 
