@@ -421,6 +421,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
 
+        # If the arrow type is struct, return a pandas dataframe where the fields of the struct
+        # correspond to columns in the DataFrame. However, if the arrow struct is actually a
+        # Variant, which is an atomic type, treat it as a non-struct arrow type.
         if (
             self._df_for_struct
             and types.is_struct(arrow_column.type)
@@ -510,6 +513,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         arrs = []
         for s, t in series:
+            # Variants are represented in arrow as structs with additional metadata (checked by
+            # is_variant). If the data type is Variant, return a VariantVal atomic type instead of
+            # a dict of two binary values.
             if (
                 self._struct_in_pandas == "dict"
                 and t is not None

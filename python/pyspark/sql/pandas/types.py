@@ -171,6 +171,8 @@ def to_arrow_type(
     elif type(dt) == VariantType:
         fields = [
             pa.field("value", pa.binary(), nullable=False),
+            # The metadata field is tagged so we can identify that the arrow struct actually
+            # represents a variant.
             pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
         ]
         arrow_type = pa.struct(fields)
@@ -226,8 +228,11 @@ def is_variant(at: "pa.DataType") -> bool:
     import pyarrow.types as types
     assert types.is_struct(at)
 
-    return any((field.name == "metadata" and b"variant" in field.metadata and
-                field.metadata[b"variant"] == b"true") for field in at)
+    return (
+        any((field.name == "metadata" and b"variant" in field.metadata and
+            field.metadata[b"variant"] == b"true") for field in at) and
+        any(field.name == "value" for field in at)
+    )
 
 
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:

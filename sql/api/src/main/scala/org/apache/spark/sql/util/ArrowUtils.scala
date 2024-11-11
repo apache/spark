@@ -141,17 +141,14 @@ private[sql] object ArrowUtils {
       case udt: UserDefinedType[_] =>
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
       case _: VariantType =>
-        val fieldType = new FieldType(
-          nullable,
-          ArrowType.Struct.INSTANCE,
-          null
-        )
+        val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
+        // The metadata field is tagged with additional metadata so we can identify that the arrow
+        // struct actually represents a variant schema.
         val metadataFieldType = new FieldType(
           false,
           toArrowType(BinaryType, timeZoneId, largeVarTypes),
           null,
-          Map("variant" -> "true").asJava
-        )
+          Map("variant" -> "true").asJava)
         new Field(
           name,
           fieldType,
@@ -167,7 +164,9 @@ private[sql] object ArrowUtils {
 
   def isVariantField(field: Field): Boolean = {
     assert(field.getType.isInstanceOf[ArrowType.Struct])
-    field.getChildren.asScala.map(_.getName).asJava
+    field.getChildren.asScala
+      .map(_.getName)
+      .asJava
       .containsAll(Seq("value", "metadata").asJava) && field.getChildren.asScala.exists { child =>
       child.getName == "metadata" && child.getMetadata.getOrDefault("variant", "false") == "true"
     }

@@ -334,160 +334,124 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(sel.collect(), [Row(key=1, value="1")])
 
     def test_udf_with_variant_input(self):
-        for arrow_enabled in ["false", "true"]:
-            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
-                df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
-                u = udf(lambda u: str(u), StringType())
-                expected = [Row(udf="{0}".format(i)) for i in range(10)]
-                result = df.select(u(col("v")).alias("udf")).collect()
-                self.assertEqual(result, expected)
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        u = udf(lambda u: str(u), StringType())
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+        result = df.select(u(col("v")).alias("udf")).collect()
+        self.assertEqual(result, expected)
 
     def test_udf_with_complex_variant_input(self):
-        for arrow_enabled in ["false", "true"]:
-            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
-                # struct<variant>
-                df = self.spark.range(0, 10).selectExpr(
-                    "named_struct('v', parse_json(cast(id as string))) struct_of_v"
-                )
-                u = udf(lambda u: str(u["v"]), StringType())
-                result = df.select(u(col("struct_of_v"))).collect()
-                expected = [Row(udf="{0}".format(i)) for i in range(10)]
-                self.assertEqual(result, expected)
+        # struct<variant>
+        df = self.spark.range(0, 10).selectExpr(
+            "named_struct('v', parse_json(cast(id as string))) struct_of_v"
+        )
+        u = udf(lambda u: str(u["v"]), StringType())
+        result = df.select(u(col("struct_of_v"))).collect()
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+        self.assertEqual(result, expected)
 
-                # array<variant>
-                df = self.spark.range(0, 10).selectExpr(
-                    "array(parse_json(cast(id as string))) array_of_v"
-                )
-                u = udf(lambda u: str(u[0]), StringType())
-                result = df.select(u(col("array_of_v"))).collect()
-                expected = [Row(udf="{0}".format(i)) for i in range(10)]
-                self.assertEqual(result, expected)
+        # array<variant>
+        df = self.spark.range(0, 10).selectExpr("array(parse_json(cast(id as string))) array_of_v")
+        u = udf(lambda u: str(u[0]), StringType())
+        result = df.select(u(col("array_of_v"))).collect()
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+        self.assertEqual(result, expected)
 
-                # map<string, variant>
-                df = self.spark.range(0, 10).selectExpr(
-                    "map('v', parse_json(cast(id as string))) map_of_v"
-                )
-                u = udf(lambda u: str(u["v"]), StringType())
-                result = df.select(u(col("map_of_v"))).collect()
-                expected = [Row(udf="{0}".format(i)) for i in range(10)]
-                self.assertEqual(result, expected)
+        # map<string, variant>
+        df = self.spark.range(0, 10).selectExpr("map('v', parse_json(cast(id as string))) map_of_v")
+        u = udf(lambda u: str(u["v"]), StringType())
+        result = df.select(u(col("map_of_v"))).collect()
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+        self.assertEqual(result, expected)
 
     def test_udf_with_variant_output(self):
-        for arrow_enabled in ["false", "true"]:
-            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
-                # The variant value returned corresponds to a JSON string of {"a": "<a-j>"}.
-                u = udf(
-                    lambda i: VariantVal(
-                        bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])
-                    ),
-                    VariantType(),
-                )
-                result = self.spark.range(0, 10).select(
-                    u(col("id")).cast("string").alias("udf")
-                ).collect()
-                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
-                self.assertEqual(result, expected)
+        # The variant value returned corresponds to a JSON string of {"a": "<a-j>"}.
+        u = udf(
+            lambda i: VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])),
+            VariantType(),
+        )
+        result = self.spark.range(0, 10).select(u(col("id")).cast("string").alias("udf")).collect()
+        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        self.assertEqual(result, expected)
 
     def test_udf_with_complex_variant_output(self):
-        for arrow_enabled in ["false", "true"]:
-            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
-                # The variant value returned corresponds to a JSON string of {"a": "<a-j>"}.
-                # struct<variant>
-                u = udf(
-                    lambda i: {
-                        "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-                    },
-                    StructType([StructField("v", VariantType(), True)]),
-                )
-                result = self.spark.range(0, 10).select(
-                    u(col("id")).cast("string").alias("udf")
-                ).collect()
-                expected = [Row(udf=f"{{{{\"a\":\"{chr(97 + i)}\"}}}}") for i in range(10)]
-                self.assertEqual(result, expected)
+        # The variant value returned corresponds to a JSON string of {"a": "<a-j>"}.
+        # struct<variant>
+        u = udf(
+            lambda i: {
+                "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+            },
+            StructType([StructField("v", VariantType(), True)]),
+        )
+        result = self.spark.range(0, 10).select(
+            u(col("id")).cast("string").alias("udf")
+        ).collect()
+        expected = [Row(udf=f"{{{{\"a\":\"{chr(97 + i)}\"}}}}") for i in range(10)]
+        self.assertEqual(result, expected)
 
-                # array<variant>
-                u = udf(
-                    lambda i: [
-                        VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-                    ],
-                    ArrayType(VariantType()),
-                )
-                result = self.spark.range(0, 10).select(
-                    u(col("id")).cast("string").alias("udf")
-                ).collect()
-                expected = [Row(udf=f"[{{\"a\":\"{chr(97 + i)}\"}}]") for i in range(10)]
-                self.assertEqual(result, expected)
+        # array<variant>
+        u = udf(
+            lambda i: [VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))],
+            ArrayType(VariantType()),
+        )
+        result = self.spark.range(0, 10).select(u(col("id")).cast("string").alias("udf")).collect()
+        expected = [Row(udf=f"[{{\"a\":\"{chr(97 + i)}\"}}]") for i in range(10)]
+        self.assertEqual(result, expected)
 
-                # map<string, variant>
-                u = udf(
-                    lambda i: {
-                        "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-                    },
-                    MapType(StringType(), VariantType()),
-                )
-                result = self.spark.range(0, 10).select(
-                    u(col("id")).cast("string").alias("udf")
-                ).collect()
-                expected = [Row(udf=f"{{v -> {{\"a\":\"{chr(97 + i)}\"}}}}") for i in range(10)]
-                self.assertEqual(result, expected)
+        # map<string, variant>
+        u = udf(
+            lambda i: {
+                "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
+            },
+            MapType(StringType(), VariantType()),
+        )
+        result = self.spark.range(0, 10).select(
+            u(col("id")).cast("string").alias("udf")
+        ).collect()
+        expected = [Row(udf=f"{{v -> {{\"a\":\"{chr(97 + i)}\"}}}}") for i in range(10)]
+        self.assertEqual(result, expected)
 
     def test_chained_udfs_with_variant(self):
-        for arrow_enabled in ["false", "true"]:
-            with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": arrow_enabled}):
-                udf_first = udf(
-                    lambda i: VariantVal(
-                        bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])
-                    ),
-                    VariantType(),
-                )
-                udf_second = udf(lambda u: str(u), StringType())
-                result = self.spark.range(0, 10).select(
-                    udf_second(udf_first(col("id"))).cast("string").alias("udf")
-                ).collect()
-                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
-                self.assertEqual(result, expected)
+        udf_first = udf(
+            lambda i: VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97])),
+            VariantType(),
+        )
+        udf_second = udf(lambda u: str(u), StringType())
+        result = self.spark.range(0, 10).select(
+            udf_second(udf_first(col("id"))).cast("string").alias("udf")
+        ).collect()
+        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        self.assertEqual(result, expected)
 
-                # struct<variant>
-                u_first = udf(
-                    lambda i: {
-                        "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-                    },
-                    StructType([StructField("v", VariantType(), True)]),
-                )
-                u_second = udf(lambda u: str(u["v"]), StringType())
-                result = self.spark.range(0, 10).select(
-                    u_second(u_first(col("id"))).alias("udf")
-                ).collect()
-                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
-                self.assertEqual(result, expected)
+        # struct<variant>
+        u_first = udf(
+            lambda i: {"v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))},
+            StructType([StructField("v", VariantType(), True)]),
+        )
+        u_second = udf(lambda u: str(u["v"]), StringType())
+        result = self.spark.range(0, 10).select(u_second(u_first(col("id"))).alias("udf")).collect()
+        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        self.assertEqual(result, expected)
 
-                # array<variant>
-                u_first = udf(
-                    lambda i: [
-                        VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-                    ],
-                    ArrayType(VariantType()),
-                )
-                u_second = udf(lambda u: str(u[0]), StringType())
-                result = self.spark.range(0, 10).select(
-                    u_second(u_first(col("id"))).alias("udf")
-                ).collect()
-                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
-                self.assertEqual(result, expected)
+        # array<variant>
+        u_first = udf(
+            lambda i: [VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))],
+            ArrayType(VariantType()),
+        )
+        u_second = udf(lambda u: str(u[0]), StringType())
+        result = self.spark.range(0, 10).select(u_second(u_first(col("id"))).alias("udf")).collect()
+        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        self.assertEqual(result, expected)
 
-                # map<string, variant>
-                u_first = udf(
-                    lambda i: {
-                        "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-                    },
-                    ArrayType(VariantType()),
-                )
-                u_second = udf(lambda u: str(u["v"]), StringType())
-                result = self.spark.range(0, 10).select(
-                    u_second(u_first(col("id"))).alias("udf")
-                ).collect()
-                expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
-                self.assertEqual(result, expected)
+        # map<string, variant>
+        u_first = udf(
+            lambda i: {"v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))},
+            ArrayType(VariantType()),
+        )
+        u_second = udf(lambda u: str(u["v"]), StringType())
+        result = self.spark.range(0, 10).select(u_second(u_first(col("id"))).alias("udf")).collect()
+        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        self.assertEqual(result, expected)
 
     def test_udf_with_aggregate_function(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
