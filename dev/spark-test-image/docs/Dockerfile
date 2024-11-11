@@ -90,8 +90,8 @@ RUN python3.9 -m pip install \
     'flake8==3.9.0' \
     'googleapis-common-protos-stubs==2.2.0' \
     'grpc-stubs==1.24.11' \
-    'grpcio-status==1.62.0' \
-    'grpcio==1.62.0' \
+    'grpcio-status==1.67.0' \
+    'grpcio==1.67.0' \
     'ipython' \
     'ipython_genutils' \
     'jinja2' \
@@ -105,7 +105,7 @@ RUN python3.9 -m pip install \
     'pandas' \
     'pandas-stubs==1.2.0.53' \
     'plotly>=4.8' \
-    'pyarrow' \
+    'pyarrow>=18.0.0' \
     'pydata_sphinx_theme>=0.13' \
     'pytest-mypy-plugins==1.9.3' \
     'pytest==7.1.3' \
