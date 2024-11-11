@@ -61,12 +61,10 @@ case class ParseUrlEvaluator(
   }
 
   final def evaluate(url: UTF8String, path: UTF8String): Any = {
-    if (url == null || path == null) return null
     parseUrlWithoutKey(url, path)
   }
 
   final def evaluate(url: UTF8String, path: UTF8String, key: UTF8String): Any = {
-    if (url == null || path == null || key == null) return null
     if (path != QUERY) {
       return null
     }
