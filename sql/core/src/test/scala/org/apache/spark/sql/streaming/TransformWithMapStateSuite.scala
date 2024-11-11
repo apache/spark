@@ -33,7 +33,8 @@ class TestMapStateProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING)
+    _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(

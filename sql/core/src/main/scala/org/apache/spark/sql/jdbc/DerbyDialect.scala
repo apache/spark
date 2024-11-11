@@ -44,7 +44,7 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
-    case StringType => Option(JdbcType("CLOB", java.sql.Types.CLOB))
+    case _: StringType => Option(JdbcType("CLOB", java.sql.Types.CLOB))
     case ByteType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case BooleanType => Option(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))

@@ -243,7 +243,7 @@ class QueryExecution(
   def toRdd: RDD[InternalRow] = lazyToRdd.get
 
   /** Get the metrics observed during the execution of the query plan. */
-  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan, Some(analyzed))
+  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
@@ -518,6 +518,8 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),
+      // This rule must be run after `EnsureRequirements`.
+      InsertSortForLimitAndOffset,
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,

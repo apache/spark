@@ -130,7 +130,7 @@ class MultipleValueStatesTTLProcessor(
       .getValueState("valueStateTTL", Encoders.scalaInt, ttlConfig)
       .asInstanceOf[ValueStateImplWithTTL[Int]]
     _valueStateWithoutTTL = getHandle
-      .getValueState("valueState", Encoders.scalaInt)
+      .getValueState[Int]("valueState", Encoders.scalaInt, TTLConfig.NONE)
       .asInstanceOf[ValueStateImpl[Int]]
   }
 

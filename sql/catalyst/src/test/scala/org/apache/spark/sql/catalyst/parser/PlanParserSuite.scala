@@ -295,8 +295,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
     checkError(
       exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0038",
-      parameters = Map("duplicateNames" -> "'cte1'"),
+      condition = "DUPLICATED_CTE_NAMES",
+      parameters = Map("duplicateNames" -> "`cte1`"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,

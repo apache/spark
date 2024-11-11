@@ -26,7 +26,7 @@ import org.scalatest.matchers.must.Matchers.be
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -50,7 +50,8 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState",
+      Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -76,8 +77,8 @@ class RunningCountStatefulProcessorWithTTL
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState",
-      Encoders.scalaLong, TTLConfig(Duration.ofMillis(1000)))
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig(Duration.ofMillis(1000)))
   }
 
   override def handleInputRows(
@@ -106,7 +107,7 @@ class RunningCountListStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getListState[Long](
-      "countState", Encoders.scalaLong)
+      "countState", Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -124,7 +125,8 @@ class RunningCountStatefulProcessorInt
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt)
+    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -183,7 +185,8 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
       outputMode: OutputMode,
       timeMode: TimeMode) : Unit = {
     super.init(outputMode, timeMode)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   protected def processUnexpiredRows(
@@ -267,8 +270,9 @@ class MaxEventTimeStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
-      Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+      Encoders.scalaLong, TTLConfig.NONE)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   protected def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
@@ -313,8 +317,10 @@ class RunningCountMostRecentStatefulProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
-    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig.NONE)
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -343,7 +349,8 @@ class MostRecentStatefulProcessorWithDeletion
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     getHandle.deleteIfExists("countState")
-    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -370,7 +377,8 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
-    _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong)
+    _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong,
+      TTLConfig.NONE)
     Iterator.empty
   }
 }
@@ -383,11 +391,13 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig.NONE)
     _listState = getHandle.getListState[TestClass](
-      "listState", Encoders.product[TestClass])
+      "listState", Encoders.product[TestClass], TTLConfig.NONE)
     _mapState = getHandle.getMapState[POJOTestClass, String](
-      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING)
+      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING,
+      TTLConfig.NONE)
   }
 }
 
@@ -421,6 +431,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - lazy iterators can properly get/set keyed state") {
+    val spark = this.spark
+    import spark.implicits._
+
     class ProcessorWithLazyIterators
       extends StatefulProcessor[Long, Long, Long] {
       @transient protected var _myValueState: ValueState[Long] = _
@@ -429,7 +442,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
         _myValueState = getHandle.getValueState[Long](
           "myValueState",
-          Encoders.scalaLong
+          TTLConfig.NONE
         )
       }
 
@@ -1948,5 +1961,25 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         }
       }
     )
+  }
+
+  test("transformWithState - validate timeModes") {
+    // validation tests should pass for TimeMode.None
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.None(), None)
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.None(), Some(10L))
+
+    // validation tests should fail for TimeMode.ProcessingTime and TimeMode.EventTime
+    // when time values are not provided
+    val ex = intercept[SparkException] {
+      TransformWithStateVariableUtils.validateTimeMode(TimeMode.ProcessingTime(), None)
+    }
+    assert(ex.getMessage.contains("Failed to find time values"))
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.ProcessingTime(), Some(10L))
+
+    val ex1 = intercept[SparkException] {
+      TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), None)
+    }
+    assert(ex1.getMessage.contains("Failed to find time values"))
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), Some(10L))
   }
 }

@@ -302,7 +302,7 @@ class RocksDBFileManager(
       val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
       logInfo(log"Read metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
         log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
-      loadImmutableFilesFromDfs(metadata.immutableFiles, localDir, rocksDBFileMapping)
+      loadImmutableFilesFromDfs(metadata.immutableFiles, localDir, rocksDBFileMapping, version)
       versionToRocksDBFiles.put((version, checkpointUniqueId), metadata.immutableFiles)
       metadataFile.delete()
       metadata
@@ -675,7 +675,8 @@ class RocksDBFileManager(
   private def loadImmutableFilesFromDfs(
       immutableFiles: Seq[RocksDBImmutableFile],
       localDir: File,
-      rocksDBFileMapping: RocksDBFileMapping): Unit = {
+      rocksDBFileMapping: RocksDBFileMapping,
+      version: Long): Unit = {
     val requiredFileNameToFileDetails = immutableFiles.map(f => f.localFileName -> f).toMap
 
     val localImmutableFiles = listRocksDBFiles(localDir)._1
@@ -684,7 +685,7 @@ class RocksDBFileManager(
     localImmutableFiles.foreach { existingFile =>
       val existingFileSize = existingFile.length()
       val requiredFile = requiredFileNameToFileDetails.get(existingFile.getName)
-      val prevDfsFile = rocksDBFileMapping.getDfsFile(this, existingFile.getName)
+      val prevDfsFile = rocksDBFileMapping.getDfsFileForLoad(this, existingFile.getName, version)
       val isSameFile = if (requiredFile.isDefined && prevDfsFile.isDefined) {
         requiredFile.get.dfsFileName == prevDfsFile.get.dfsFileName &&
           existingFile.length() == requiredFile.get.sizeBytes
@@ -692,18 +693,18 @@ class RocksDBFileManager(
         false
       }
 
-        if (!isSameFile) {
-          rocksDBFileMapping.remove(existingFile.getName)
-          existingFile.delete()
-          logInfo(log"Deleted local file ${MDC(LogKeys.FILE_NAME, existingFile)} " +
-            log"with size ${MDC(LogKeys.NUM_BYTES, existingFileSize)} mapped" +
-            log" to previous dfsFile ${MDC(LogKeys.DFS_FILE, prevDfsFile.getOrElse("null"))}")
-        } else {
-          logInfo(log"reusing ${MDC(LogKeys.DFS_FILE, prevDfsFile)} present at " +
-            log"${MDC(LogKeys.EXISTING_FILE, existingFile)} " +
-            log"for ${MDC(LogKeys.FILE_NAME, requiredFile)}")
-        }
+      if (!isSameFile) {
+        rocksDBFileMapping.remove(existingFile.getName)
+        existingFile.delete()
+        logInfo(log"Deleted local file ${MDC(LogKeys.FILE_NAME, existingFile)} " +
+          log"with size ${MDC(LogKeys.NUM_BYTES, existingFileSize)} mapped" +
+          log" to previous dfsFile ${MDC(LogKeys.DFS_FILE, prevDfsFile.getOrElse("null"))}")
+      } else {
+        logInfo(log"reusing ${MDC(LogKeys.DFS_FILE, prevDfsFile)} present at " +
+          log"${MDC(LogKeys.EXISTING_FILE, existingFile)} " +
+          log"for ${MDC(LogKeys.FILE_NAME, requiredFile)}")
       }
+    }
 
     var filesCopied = 0L
     var bytesCopied = 0L
@@ -726,7 +727,7 @@ class RocksDBFileManager(
         }
         filesCopied += 1
         bytesCopied += localFileSize
-        rocksDBFileMapping.mapToDfsFileForCurrentVersion(localFileName, file)
+        rocksDBFileMapping.mapToDfsFile(localFileName, file, version)
         logInfo(log"Copied ${MDC(LogKeys.DFS_FILE, dfsFile)} to " +
           log"${MDC(LogKeys.FILE_NAME, localFile)} - " +
           log"${MDC(LogKeys.NUM_BYTES, localFileSize)} bytes")

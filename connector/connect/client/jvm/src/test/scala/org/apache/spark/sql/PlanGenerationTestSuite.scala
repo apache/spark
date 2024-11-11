@@ -1925,6 +1925,47 @@ class PlanGenerationTestSuite
     fn.make_interval()
   }
 
+  functionTest("try_make_interval years months weeks days hours mins secs") {
+    fn.try_make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_interval years months weeks days hours mins") {
+    fn.try_make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks days hours") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks days") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years") {
+    fn.try_make_interval(fn.col("a"))
+  }
+
   functionTest("make_timestamp with timezone") {
     fn.make_timestamp(
       fn.col("a"),
@@ -1969,6 +2010,58 @@ class PlanGenerationTestSuite
 
   functionTest("make_timestamp_ntz") {
     fn.make_timestamp_ntz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp with timezone") {
+    fn.try_make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("try_make_timestamp without timezone") {
+    fn.try_make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp_ltz with timezone") {
+    fn.try_make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("try_make_timestamp_ltz without timezone") {
+    fn.try_make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp_ntz") {
+    fn.try_make_timestamp_ntz(
       fn.col("a"),
       fn.col("a"),
       fn.col("a"),
@@ -2689,6 +2782,14 @@ class PlanGenerationTestSuite
 
   functionTest("parse_url with key") {
     fn.parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url with key") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
   }
 
   functionTest("printf") {

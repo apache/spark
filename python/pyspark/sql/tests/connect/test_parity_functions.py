@@ -34,10 +34,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
 
-    @unittest.skip("SPARK-50050: Spark Connect should support str ndarray.")
-    def test_str_ndarray(self):
-        super().test_str_ndarray()
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_functions import *  # noqa: F401
