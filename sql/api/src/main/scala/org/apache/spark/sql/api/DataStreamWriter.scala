@@ -94,6 +94,43 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
   def queryName(queryName: String): this.type
 
   /**
+   * Specifies the underlying output data source.
+   *
+   * @since 2.0.0
+   */
+  def format(source: String): this.type
+
+  /**
+   * Partitions the output by the given columns on the file system. If specified, the output is
+   * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
+   * partition a dataset by year and then month, the directory layout would look like:
+   *
+   * <ul> <li> year=2016/month=01/</li> <li> year=2016/month=02/</li> </ul>
+   *
+   * Partitioning is one of the most widely used techniques to optimize physical data layout. It
+   * provides a coarse-grained index for skipping unnecessary data reads when queries have
+   * predicates on the partitioned columns. In order for partitioning to work well, the number of
+   * distinct values in each column should typically be less than tens of thousands.
+   *
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def partitionBy(colNames: String*): this.type
+
+  /**
+   * Clusters the output by the given columns. If specified, the output is laid out such that
+   * records with similar values on the clustering column are grouped together in the same file.
+   *
+   * Clustering improves query efficiency by allowing queries with predicates on the clustering
+   * columns to skip unnecessary data. Unlike partitioning, clustering can be used on very high
+   * cardinality columns.
+   *
+   * @since 4.0.0
+   */
+  @scala.annotation.varargs
+  def clusterBy(colNames: String*): this.type
+
+  /**
    * Sets the output of the streaming query to be processed using the provided writer object.
    * object. See [[org.apache.spark.sql.ForeachWriter]] for more details on the lifecycle and
    * semantics.

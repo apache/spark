@@ -1373,6 +1373,7 @@ trait SharedUnidocSettings {
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka-clients-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka_2\..*-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.contains("apache-rat")))
+      .map(_.filterNot(_.data.getCanonicalPath.contains("connect-shims")))
   }
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
