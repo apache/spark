@@ -361,15 +361,12 @@ class TargetEncoderModel private[ml] (
           case Some(code) => lit(code)
           case _ => fillUnseenCol
         }
-
-        val filtered = mapping.toIndexedSeq.flatMap {
-          case (k, v) if k != TargetEncoder.UNSEEN_CATEGORY && k != TargetEncoder.NULL_CATEGORY =>
-            lit(k) :: lit(v) :: Nil
-          case _ => Nil
+        val filteredMapping = mapping.filter { case (k, _) =>
+          k != TargetEncoder.UNSEEN_CATEGORY && k != TargetEncoder.NULL_CATEGORY
         }
 
         val castedCol = col(featureIn).cast(DoubleType)
-        val targetCol = try_element_at(map(filtered: _*), castedCol)
+        val targetCol = try_element_at(typedlit(filteredMapping), castedCol)
         when(castedCol.isNull, fillNullCol)
           .when(!targetCol.isNull, targetCol)
           .otherwise(fillUnseenCol)
