@@ -109,6 +109,7 @@ class TransformWithStateInPandasTestsMixin:
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         if not single_batch:
+            time.sleep(2)
             self._prepare_test_resource2(input_path)
 
         df = self._build_test_df(input_path)
@@ -389,7 +390,9 @@ class TransformWithStateInPandasTestsMixin:
     def _test_transform_with_state_in_pandas_proc_timer(self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource3(input_path)
+        time.sleep(2)
         self._prepare_test_resource1(input_path)
+        time.sleep(2)
         self._prepare_test_resource2(input_path)
 
         df = self._build_test_df(input_path)
@@ -501,7 +504,9 @@ class TransformWithStateInPandasTestsMixin:
                 fw.write("a, 15\n")
 
         prepare_batch1(input_path)
+        time.sleep(2)
         prepare_batch2(input_path)
+        time.sleep(2)
         prepare_batch3(input_path)
 
         df = self._build_test_df(input_path)
@@ -559,6 +564,7 @@ class TransformWithStateInPandasTestsMixin:
     def _test_transform_with_state_init_state_in_pandas(self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
+        time.sleep(2)
         self._prepare_input_data(input_path + "/text-test2.txt", [0, 3], [67, 12])
 
         df = self._build_test_df(input_path)
