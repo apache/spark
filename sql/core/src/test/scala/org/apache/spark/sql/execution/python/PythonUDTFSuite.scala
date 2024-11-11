@@ -299,7 +299,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
         _, false, RepartitionByExpression(
           _, Project(
             _, SubqueryAlias(
-              _, _: LocalRelation)), _, _)) =>
+              _, _: LocalRelation)), _, _), _) =>
       case other =>
         failure(other)
     }
@@ -313,7 +313,7 @@ class PythonUDTFSuite extends QueryTest with SharedSparkSession {
       case Sort(
         _, false, Repartition(
           1, true, SubqueryAlias(
-            _, _: LocalRelation))) =>
+            _, _: LocalRelation)), _) =>
       case other =>
         failure(other)
     }

@@ -114,7 +114,7 @@ trait SQLQueryTestHelper extends Logging {
          | _: DescribeColumnCommand
          | _: DescribeRelation
          | _: DescribeColumn => true
-    case PhysicalOperation(_, _, Sort(_, true, _)) => true
+    case PhysicalOperation(_, _, Sort(_, true, _, _)) => true
     case _ => plan.children.iterator.exists(isSemanticallySorted)
   }
 
