@@ -350,8 +350,12 @@ class RocksDB(
       case e: Throwable =>
         throw e
     } finally {
-      if (changelogReader != null) changelogReader.closeIfNeeded()
-      if (currLineage.isEmpty) currLineage = Some(Array((version, stateStoreCkptId)))
+      if (changelogReader != null) {
+        changelogReader.closeIfNeeded()
+      }
+      if (currLineage.isEmpty) {
+        currLineage = Some(Array((version, stateStoreCkptId)))
+      }
     }
     currLineage
   }
@@ -382,9 +386,7 @@ class RocksDB(
           fileManager.getLatestSnapshotVersionAndUniqueId(version, stateStoreCkptId)
 
         // Update the lineage from changelog
-        // When loading from the first version (query restart, not necessarily version = 0,
-        // stateStoreCkptId is not defined even if enableStateStoreCheckpointIds is true
-        if (enableStateStoreCheckpointIds && stateStoreCkptId.isDefined) {
+        if (enableStateStoreCheckpointIds) {
           currLineage = getLineageFromChangelogFile(version, useColumnFamilies, stateStoreCkptId)
         }
 
@@ -393,8 +395,7 @@ class RocksDB(
           if (latestSnapshotVersionsAndUniqueIds.length == 0) {
             (0L, None)
           } else if (latestSnapshotVersionsAndUniqueIds.length == 1) {
-            getLatestSnapshotVersionAndUniqueIdFromLineage(
-              currLineage.get, latestSnapshotVersionsAndUniqueIds)
+            latestSnapshotVersionsAndUniqueIds.head
           } else {
             logInfo(log"Multiple snapshots found for the version. Found: ${MDC(LogKeys.LINEAGE,
               printLineage(latestSnapshotVersionsAndUniqueIds))}. " +
@@ -407,7 +408,6 @@ class RocksDB(
           MDC(LogKeys.SNAPSHOT_VERSION, latestSnapshotVersion)}, latestSnapshotUniqueId: ${
           MDC(LogKeys.UUID, latestSnapshotUniqueId)}")
 
-        rocksDBFileMapping.currentVersion = latestSnapshotVersion
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
           workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
         loadedVersion = latestSnapshotVersion

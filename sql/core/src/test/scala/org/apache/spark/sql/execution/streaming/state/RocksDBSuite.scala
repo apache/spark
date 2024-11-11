@@ -1056,7 +1056,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         case true => Some(UUID.randomUUID().toString)
       }
       val rocksDBFileMapping = new RocksDBFileMapping()
-      rocksDBFileMapping.currentVersion = 1
       saveCheckpointFiles(fileManager, cpFiles1, version = 1,
         numKeys = 101, rocksDBFileMapping, uuid)
       assert(fileManager.getLatestVersion() === 1)
@@ -2742,7 +2741,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       checkpointUniqueId: Option[String] = None): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
-    fileMapping.currentVersion = version - 1
     val (dfsFileSuffix, immutableFileMapping) = fileMapping.createSnapshotFileMapping(
       fileManager, checkpointDir, version)
     fileManager.saveCheckpointToDfs(
