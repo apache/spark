@@ -102,7 +102,9 @@ class PandasUDFTestsMixin:
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
-        udf = pandas_udf(lambda x: x, returnType="v variant", functionType=PandasUDFType.GROUPED_MAP)
+        udf = pandas_udf(
+            lambda x: x, returnType="v variant", functionType=PandasUDFType.GROUPED_MAP
+        )
         self.assertEqual(udf.returnType, StructType([StructField("v", VariantType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 

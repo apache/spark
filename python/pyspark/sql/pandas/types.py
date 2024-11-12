@@ -226,13 +226,17 @@ def to_arrow_schema(
 def is_variant(at: "pa.DataType") -> bool:
     """Check if a PyArrow struct data type represents a variant"""
     import pyarrow.types as types
+
     assert types.is_struct(at)
 
-    return (
-        any((field.name == "metadata" and b"variant" in field.metadata and
-            field.metadata[b"variant"] == b"true") for field in at) and
-        any(field.name == "value" for field in at)
-    )
+    return any(
+        (
+            field.name == "metadata"
+            and b"variant" in field.metadata
+            and field.metadata[b"variant"] == b"true"
+        )
+        for field in at
+    ) and any(field.name == "value" for field in at)
 
 
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
@@ -1312,12 +1316,10 @@ def _create_converter_from_pandas(
             return convert_udt
 
         elif isinstance(dt, VariantType):
+
             def convert_variant(variant: Any) -> Any:
                 assert isinstance(variant, VariantVal)
-                return {
-                    "value": variant.value,
-                    "metadata": variant.metadata
-                }
+                return {"value": variant.value, "metadata": variant.metadata}
 
             return convert_variant
 

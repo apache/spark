@@ -372,7 +372,7 @@ class BaseUDFTestsMixin(object):
             VariantType(),
         )
         result = self.spark.range(0, 10).select(u(col("id")).cast("string").alias("udf")).collect()
-        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        expected = [Row(udf=f'{{"a":"{chr(97 + i)}"}}') for i in range(10)]
         self.assertEqual(result, expected)
 
     def test_udf_with_complex_variant_output(self):
@@ -380,15 +380,11 @@ class BaseUDFTestsMixin(object):
         # struct<variant>
         # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u = udf(
-            lambda i: {
-                "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-            },
+            lambda i: {"v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))},
             StructType([StructField("v", VariantType(), True)]),
         )
-        result = self.spark.range(0, 10).select(
-            u(col("id")).cast("string").alias("udf")
-        ).collect()
-        expected = [Row(udf=f"{{{{\"a\":\"{chr(97 + i)}\"}}}}") for i in range(10)]
+        result = self.spark.range(0, 10).select(u(col("id")).cast("string").alias("udf")).collect()
+        expected = [Row(udf=f'{{{{"a":"{chr(97 + i)}"}}}}') for i in range(10)]
         self.assertEqual(result, expected)
 
         # array<variant>
@@ -398,21 +394,17 @@ class BaseUDFTestsMixin(object):
             ArrayType(VariantType()),
         )
         result = self.spark.range(0, 10).select(u(col("id")).cast("string").alias("udf")).collect()
-        expected = [Row(udf=f"[{{\"a\":\"{chr(97 + i)}\"}}]") for i in range(10)]
+        expected = [Row(udf=f'[{{"a":"{chr(97 + i)}"}}]') for i in range(10)]
         self.assertEqual(result, expected)
 
         # map<string, variant>
         # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
         u = udf(
-            lambda i: {
-                "v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))
-            },
+            lambda i: {"v": VariantVal(bytes([2, 1, 0, 0, 2, 5, 97 + i]), bytes([1, 1, 0, 1, 97]))},
             MapType(StringType(), VariantType()),
         )
-        result = self.spark.range(0, 10).select(
-            u(col("id")).cast("string").alias("udf")
-        ).collect()
-        expected = [Row(udf=f"{{v -> {{\"a\":\"{chr(97 + i)}\"}}}}") for i in range(10)]
+        result = self.spark.range(0, 10).select(u(col("id")).cast("string").alias("udf")).collect()
+        expected = [Row(udf=f'{{v -> {{"a":"{chr(97 + i)}"}}}}') for i in range(10)]
         self.assertEqual(result, expected)
 
     def test_chained_udfs_with_variant(self):
@@ -422,10 +414,12 @@ class BaseUDFTestsMixin(object):
             VariantType(),
         )
         udf_second = udf(lambda u: str(u), StringType())
-        result = self.spark.range(0, 10).select(
-            udf_second(udf_first(col("id"))).cast("string").alias("udf")
-        ).collect()
-        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        result = (
+            self.spark.range(0, 10)
+            .select(udf_second(udf_first(col("id"))).cast("string").alias("udf"))
+            .collect()
+        )
+        expected = [Row(udf=f'{{"a":"{chr(97 + i)}"}}') for i in range(10)]
         self.assertEqual(result, expected)
 
         # struct<variant>
@@ -436,7 +430,7 @@ class BaseUDFTestsMixin(object):
         )
         u_second = udf(lambda u: str(u["v"]), StringType())
         result = self.spark.range(0, 10).select(u_second(u_first(col("id"))).alias("udf")).collect()
-        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        expected = [Row(udf=f'{{"a":"{chr(97 + i)}"}}') for i in range(10)]
         self.assertEqual(result, expected)
 
         # array<variant>
@@ -447,7 +441,7 @@ class BaseUDFTestsMixin(object):
         )
         u_second = udf(lambda u: str(u[0]), StringType())
         result = self.spark.range(0, 10).select(u_second(u_first(col("id"))).alias("udf")).collect()
-        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        expected = [Row(udf=f'{{"a":"{chr(97 + i)}"}}') for i in range(10)]
         self.assertEqual(result, expected)
 
         # map<string, variant>
@@ -458,7 +452,7 @@ class BaseUDFTestsMixin(object):
         )
         u_second = udf(lambda u: str(u["v"]), StringType())
         result = self.spark.range(0, 10).select(u_second(u_first(col("id"))).alias("udf")).collect()
-        expected = [Row(udf=f"{{\"a\":\"{chr(97 + i)}\"}}") for i in range(10)]
+        expected = [Row(udf=f'{{"a":"{chr(97 + i)}"}}') for i in range(10)]
         self.assertEqual(result, expected)
 
     def test_udf_with_aggregate_function(self):
