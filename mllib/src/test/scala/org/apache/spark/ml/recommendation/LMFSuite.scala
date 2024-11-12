@@ -173,6 +173,7 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       OptimizerSuite.genData(4096, 32, 16, 5, useBias, implicitPrefs = true, rnd)
     val trainDf = sc.parallelize(trainData.toSeq)
       .toDF("user", "item", "label", "weight")
+
     spark.sparkContext.setCheckpointDir(
       tempDir.getAbsolutePath + "/_lmf_implicit_" + rnd.nextLong()
     )
@@ -223,6 +224,7 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     spark.sparkContext.setCheckpointDir(
       tempDir.getAbsolutePath + "/_lmf_explicit_" + rnd.nextLong()
     )
+
     val result = new LMF()
       .setUserCol("user")
       .setItemCol("item")
