@@ -40,7 +40,7 @@ object IntervalMathUtils {
       f
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.withTrySuggestionIntervalArithmeticOverflowError(
+        throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
           suggestedFunc, context = null)
     }
   }

@@ -706,7 +706,7 @@ trait IntervalDivide {
       context: QueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
-        throw QueryExecutionErrors.withTrySuggestionIntervalArithmeticOverflowError(
+        throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
           "try_divide", context)
       }
     }

@@ -636,11 +636,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def withTrySuggestionIntervalArithmeticOverflowError(
+  def withSuggestionIntervalArithmeticOverflowError(
       suggestedFunc: String,
       context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+      errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
       messageParameters = Map("functionName" -> suggestedFunc),
       context = getQueryContext(context),
       summary = getSummary(context))
