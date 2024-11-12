@@ -141,17 +141,6 @@ object ParserUtils extends SparkParserUtils {
 }
 
 object LabelUtils {
-
-  /** A ThreadLocal set to keep track of seen labels for each thread. */
-  private val seenLabels: ThreadLocal[mutable.Set[String]] =
-    ThreadLocal.withInitial(() => mutable.Set.empty[String])
-
-
-  /** Clear the seenLabels set to start fresh analysis. */
-  def init(): Unit = {
-    seenLabels.get().clear()
-  }
-
   /**
    * Check if the beginLabelCtx and endLabelCtx match.
    * If the labels are defined, they must follow rules:
@@ -166,7 +155,6 @@ object LabelUtils {
         if bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
             el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
         withOrigin(bl) {
-          seenLabels.get().clear()
           throw SqlScriptingErrors.labelsMismatch(
             CurrentOrigin.get,
             bl.multipartIdentifier().getText,
@@ -174,7 +162,6 @@ object LabelUtils {
         }
       case (None, Some(el: EndLabelContext)) =>
         withOrigin(el) {
-          seenLabels.get().clear()
           throw SqlScriptingErrors.endLabelWithoutBeginLabel(
             CurrentOrigin.get, el.multipartIdentifier().getText)
         }
@@ -194,19 +181,19 @@ object LabelUtils {
    */
   def enterLabeledScope(
       beginLabelCtx: Option[BeginLabelContext],
-      endLabelCtx: Option[EndLabelContext]): String = {
+      endLabelCtx: Option[EndLabelContext],
+      seenLabels: mutable.Set[String]): String = {
 
     checkLabels(beginLabelCtx, endLabelCtx)
 
     val labelText = if (isLabelDefined(beginLabelCtx)) {
       val txt = beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
-      if (seenLabels.get().contains(txt)) {
+      if (seenLabels.contains(txt)) {
         withOrigin(beginLabelCtx.get) {
-          seenLabels.get().clear()
           throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
         }
       }
-      seenLabels.get().add(beginLabelCtx.get.multipartIdentifier().getText)
+      seenLabels.add(beginLabelCtx.get.multipartIdentifier().getText)
       txt
     } else {
       // Do not add the label to the seenLabels set if it is not defined.
@@ -220,10 +207,11 @@ object LabelUtils {
    * Exit a labeled scope.
    * If the label is defined, it will be removed from seenLabels.
    */
-  def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
+  def exitLabeledScope(
+      beginLabelCtx: Option[BeginLabelContext],
+      seenLabels: mutable.Set[String]): Unit = {
     if (isLabelDefined(beginLabelCtx)) {
-      seenLabels.get()
-        .remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
+      seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
     }
   }
 }
