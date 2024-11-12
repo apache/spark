@@ -45,7 +45,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -55,8 +55,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.catalyst.trees.PySparkCurrentOrigin
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
@@ -203,6 +202,8 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
         case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
         case proto.Relation.RelTypeCase.TRANSPOSE => transformTranspose(rel.getTranspose)
+        case proto.Relation.RelTypeCase.UNRESOLVED_TABLE_VALUED_FUNCTION =>
+          transformUnresolvedTableValuedFunction(rel.getUnresolvedTableValuedFunction)
         case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
           transformRepartitionByExpression(rel.getRepartitionByExpression)
         case proto.Relation.RelTypeCase.MAP_PARTITIONS =>
@@ -1132,6 +1133,13 @@ class SparkConnectPlanner(
     UnresolvedTranspose(indices = indices, child = child)
   }
 
+  private def transformUnresolvedTableValuedFunction(
+      rel: proto.UnresolvedTableValuedFunction): LogicalPlan = {
+    UnresolvedTableValuedFunction(
+      rel.getFunctionName,
+      rel.getArgumentsList.asScala.map(transformExpression).toSeq)
+  }
+
   private def transformUnpivot(rel: proto.Unpivot): LogicalPlan = {
     val ids = rel.getIdsList.asScala.toArray.map { expr =>
       column(transformExpression(expr))
@@ -1501,14 +1509,13 @@ class SparkConnectPlanner(
   def transformExpression(
       exp: proto.Expression,
       baseRelationOpt: Option[LogicalPlan]): Expression = if (exp.hasCommon) {
-    try {
-      val origin = exp.getCommon.getOrigin
-      PySparkCurrentOrigin.set(
-        origin.getPythonOrigin.getFragment,
-        origin.getPythonOrigin.getCallSite)
-      withOrigin { doTransformExpression(exp, baseRelationOpt) }
-    } finally {
-      PySparkCurrentOrigin.clear()
+    CurrentOrigin.withOrigin {
+      val pythonOrigin = exp.getCommon.getOrigin.getPythonOrigin
+      val pysparkErrorContext = (pythonOrigin.getFragment, pythonOrigin.getCallSite)
+      val newOrigin = CurrentOrigin.get.copy(pysparkErrorContext = Some(pysparkErrorContext))
+      CurrentOrigin.withOrigin(newOrigin) {
+        doTransformExpression(exp, baseRelationOpt)
+      }
     }
   } else {
     doTransformExpression(exp, baseRelationOpt)

@@ -747,7 +747,8 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
 case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
   with UnaryLike[Expression] with NullIntolerant {
 
-  override lazy val replacement: Expression = Invoke(input, "isValid", BooleanType)
+  override lazy val replacement: Expression =
+    Invoke.withNullIntolerant(input, "isValid", BooleanType)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -795,7 +796,8 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
 case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
   with UnaryLike[Expression] with NullIntolerant {
 
-  override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
+  override lazy val replacement: Expression =
+    Invoke.withNullIntolerant(input, "makeValid", input.dataType)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -836,12 +838,13 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
 case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
   with UnaryLike[Expression] with NullIntolerant {
 
-  override lazy val replacement: Expression = StaticInvoke(
-    classOf[ExpressionImplUtils],
-    input.dataType,
-    "validateUTF8String",
-    Seq(input),
-    inputTypes)
+  override lazy val replacement: Expression =
+    StaticInvoke.withNullIntolerant(
+      classOf[ExpressionImplUtils],
+      input.dataType,
+      "validateUTF8String",
+      Seq(input),
+      inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -886,12 +889,13 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
 case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
   with UnaryLike[Expression] with NullIntolerant {
 
-  override lazy val replacement: Expression = StaticInvoke(
-    classOf[ExpressionImplUtils],
-    input.dataType,
-    "tryValidateUTF8String",
-    Seq(input),
-    inputTypes)
+  override lazy val replacement: Expression =
+    StaticInvoke.withNullIntolerant(
+      classOf[ExpressionImplUtils],
+      input.dataType,
+      "tryValidateUTF8String",
+      Seq(input),
+      inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))

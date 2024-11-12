@@ -1197,7 +1197,8 @@ case class Range(
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    hint: Option[AggregateHint] = None)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
@@ -2097,7 +2098,7 @@ case class LateralJoin(
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
 
-  override lazy val allAttributes: AttributeSeq = left.output ++ right.plan.output
+  override def allAttributes: AttributeSeq = left.output ++ right.plan.output
 
   require(Seq(Inner, LeftOuter, Cross).contains(joinType),
     s"Unsupported lateral join type $joinType")

@@ -94,7 +94,6 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val RANDOM_PORT = 9000
     val allMasters = s"$masterUrl,${Utils.localHostName()}:$RANDOM_PORT"
     conf.set("spark.master", allMasters)
-    conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
     val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
@@ -112,7 +111,6 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val masterUrl = startDummyServer(submitId = submittedDriverId, submitMessage = submitMessage)
     val conf = new SparkConf(loadDefaults = false)
     conf.set("spark.master", masterUrl)
-    conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
     val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
@@ -530,6 +528,21 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val submitRequestPath = s"$httpUrl/${RestSubmissionServer.PROTOCOL_VERSION}/submissions/create"
     val conn = sendHttpRequest(submitRequestPath, "POST", json)
     assert(conn.getResponseCode === HttpServletResponse.SC_FORBIDDEN)
+  }
+
+  test("SPARK-50195: Fix StandaloneRestServer to propagate app name to SparkSubmit properly") {
+    Seq((classOf[SparkSubmit].getName, Seq("-c", "spark.app.name=app1")),
+        ("", Seq.empty)).foreach { case (mainClass, expectedArguments) =>
+      val request = new CreateSubmissionRequest
+      request.appResource = ""
+      request.mainClass = mainClass
+      request.appArgs = Array.empty[String]
+      request.sparkProperties = Map("spark.app.name" -> "app1")
+      request.environmentVariables = Map.empty[String, String]
+      val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+      val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+      assert(desc.command.arguments.slice(3, 5) === expectedArguments)
+    }
   }
 
   /* --------------------- *

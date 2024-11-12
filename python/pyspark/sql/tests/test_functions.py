@@ -347,6 +347,61 @@ class FunctionsTestsMixin:
         actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
         self.assertEqual(actual, [Row(None)])
 
+    def test_try_make_timestamp(self):
+        data = [(2024, 5, 22, 10, 30, 0)]
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.try_make_timestamp(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        ).collect()
+        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30))])
+
+        data = [(2024, 13, 22, 10, 30, 0)]
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.try_make_timestamp(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        ).collect()
+        self.assertEqual(actual, [Row(None)])
+
+    def test_try_make_timestamp_ltz(self):
+        # use local timezone here to avoid flakiness
+        data = [(2024, 5, 22, 10, 30, 0, datetime.datetime.now().astimezone().tzinfo.__str__())]
+        df = self.spark.createDataFrame(
+            data, ["year", "month", "day", "hour", "minute", "second", "timezone"]
+        )
+        actual = df.select(
+            F.try_make_timestamp_ltz(
+                df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone
+            )
+        ).collect()
+        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 0))])
+
+        # use local timezone here to avoid flakiness
+        data = [(2024, 13, 22, 10, 30, 0, datetime.datetime.now().astimezone().tzinfo.__str__())]
+        df = self.spark.createDataFrame(
+            data, ["year", "month", "day", "hour", "minute", "second", "timezone"]
+        )
+        actual = df.select(
+            F.try_make_timestamp_ltz(
+                df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone
+            )
+        ).collect()
+        self.assertEqual(actual, [Row(None)])
+
+    def test_try_make_timestamp_ntz(self):
+        data = [(2024, 5, 22, 10, 30, 0)]
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.try_make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        ).collect()
+        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30))])
+
+        data = [(2024, 13, 22, 10, 30, 0)]
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.try_make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        ).collect()
+        self.assertEqual(actual, [Row(None)])
+
     def test_string_functions(self):
         string_functions = [
             "upper",
@@ -396,6 +451,11 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
         actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
         self.assertEqual([Row("SYSTEM.BUILTIN.UNICODE")], actual)
+
+    def test_try_make_interval(self):
+        df = self.spark.createDataFrame([(2147483647,)], ["num"])
+        actual = df.select(F.isnull(F.try_make_interval("num"))).collect()
+        self.assertEqual([Row(True)], actual)
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
