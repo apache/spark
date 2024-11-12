@@ -23,12 +23,21 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
 case class ParseUrlEvaluator(
-    cachedUrl: () => URI,
-    cachedExtractPartFunc: URI => String,
-    cachedPattern: () => Pattern,
+    url: UTF8String,
+    extractPart: UTF8String,
+    pattern: UTF8String,
     failOnError: Boolean) {
 
   import ParseUrlEvaluator._
+
+  private lazy val cachedUrl: URI =
+    if (url != null) getUrl(url, failOnError) else null
+
+  private lazy val cachedExtractPartFunc: URI => String =
+    if (extractPart != null) getExtractPartFunc(extractPart) else null
+
+  private lazy val cachedPattern: Pattern =
+    if (pattern != null) getPattern(pattern) else null
 
   private def extractValueFromQuery(query: UTF8String, pattern: Pattern): UTF8String = {
     val m = pattern.matcher(query.toString)
@@ -41,15 +50,15 @@ case class ParseUrlEvaluator(
 
   private def extractFromUrl(url: URI, partToExtract: UTF8String): UTF8String = {
     if (cachedExtractPartFunc ne null) {
-      UTF8String.fromString(cachedExtractPartFunc.apply(url))
+      UTF8String.fromString(cachedExtractPartFunc(url))
     } else {
-      UTF8String.fromString(getExtractPartFunc(partToExtract).apply(url))
+      UTF8String.fromString(getExtractPartFunc(partToExtract)(url))
     }
   }
 
   private def parseUrlWithoutKey(url: UTF8String, partToExtract: UTF8String): UTF8String = {
-    if ((cachedUrl ne null) && (cachedUrl.apply() ne null)) {
-      extractFromUrl(cachedUrl.apply(), partToExtract)
+    if (cachedUrl ne null) {
+      extractFromUrl(cachedUrl, partToExtract)
     } else {
       val currentUrl = getUrl(url, failOnError)
       if (currentUrl ne null) {
@@ -65,17 +74,13 @@ case class ParseUrlEvaluator(
   }
 
   final def evaluate(url: UTF8String, path: UTF8String, key: UTF8String): Any = {
-    if (path != QUERY) {
-      return null
-    }
+    if (path != QUERY) return null
 
     val query = parseUrlWithoutKey(url, path)
-    if (query eq null) {
-      return null
-    }
+    if (query eq null) return null
 
-    if ((cachedPattern ne null) && (cachedPattern.apply() ne null)) {
-      extractValueFromQuery(query, cachedPattern.apply())
+    if (cachedPattern ne null) {
+      extractValueFromQuery(query, cachedPattern)
     } else {
       extractValueFromQuery(query, getPattern(key))
     }
@@ -94,11 +99,11 @@ object ParseUrlEvaluator {
   private val REGEXPREFIX = "(&|^)"
   private val REGEXSUBFIX = "=([^&]*)"
 
-  def getPattern(key: UTF8String): Pattern = {
+  private def getPattern(key: UTF8String): Pattern = {
     Pattern.compile(REGEXPREFIX + key.toString + REGEXSUBFIX)
   }
 
-  def getUrl(url: UTF8String, failOnError: Boolean): URI = {
+  private def getUrl(url: UTF8String, failOnError: Boolean): URI = {
     try {
       new URI(url.toString)
     } catch {
@@ -108,7 +113,7 @@ object ParseUrlEvaluator {
     }
   }
 
-  def getExtractPartFunc(partToExtract: UTF8String): URI => String = {
+  private def getExtractPartFunc(partToExtract: UTF8String): URI => String = {
 
     // partToExtract match {
     //   case HOST => _.toURL().getHost
@@ -137,7 +142,7 @@ object ParseUrlEvaluator {
           }
       case AUTHORITY => _.getRawAuthority
       case USERINFO => _.getRawUserInfo
-      case _ => (url: URI) => null
+      case _ => (_: URI) => null
     }
   }
 }
