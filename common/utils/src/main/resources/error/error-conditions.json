@@ -3139,6 +3139,11 @@
           "Cannot resolve window reference <windowName>."
         ]
       },
+      "WINDOW_REFERENCE_NOT_FOUND" : {
+        "message" : [
+          "Window reference <windowName> not found."
+        ]
+      },
       "UNSUPPORTED_FUNC_NAME" : {
         "message" : [
           "Unsupported function name <funcName>."
@@ -3153,11 +3158,6 @@
         "message" : [
           "The definition of a SQL variable requires either a datatype or a DEFAULT clause.",
           "For example, use `DECLARE name STRING` or `DECLARE name = 'SQL'` instead of `DECLARE name`."
-        ]
-      },
-      "WINDOW_REFERENCE_NOT_FOUND" : {
-        "message" : [
-          "Window reference <windowName> not found."
         ]
       }
     },
