@@ -260,19 +260,32 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       q.transformExpressionsDownWithPruning(_.containsPattern(BINARY_ARITHMETIC)) {
       case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
-        if (foldables.size > 1) {
+        if (foldables.nonEmpty) {
           val foldableExpr = foldables.reduce((x, y) => Add(x, y, f))
-          val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
-          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y, f)), c, f)
+          val foldableValue = foldableExpr.eval(EmptyRow)
+          if (others.isEmpty) {
+            Literal.create(foldableValue, a.dataType)
+          } else if (foldableValue == 0) {
+            others.reduce((x, y) => Add(x, y, f))
+          } else {
+            Add(others.reduce((x, y) => Add(x, y, f)), Literal.create(foldableValue, a.dataType), f)
+          }
         } else {
           a
         }
       case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
         val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
-        if (foldables.size > 1) {
+        if (foldables.nonEmpty) {
           val foldableExpr = foldables.reduce((x, y) => Multiply(x, y, f))
-          val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
-          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y, f)), c, f)
+          val foldableValue = foldableExpr.eval(EmptyRow)
+          if (others.isEmpty || (foldableValue == 0 && !m.nullable)) {
+            Literal.create(foldableValue, m.dataType)
+          } else if (foldableValue == 1) {
+            others.reduce((x, y) => Multiply(x, y, f))
+          } else {
+            Multiply(others.reduce((x, y) => Multiply(x, y, f)),
+              Literal.create(foldableValue, m.dataType), f)
+          }
         } else {
           m
         }

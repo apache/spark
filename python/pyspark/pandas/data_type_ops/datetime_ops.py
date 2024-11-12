@@ -34,6 +34,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import pyspark_column_op
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
@@ -150,10 +151,7 @@ class DatetimeNTZOps(DatetimeOps):
     """
 
     def _cast_spark_column_timestamp_to_long(self, scol: Column) -> Column:
-        from pyspark import SparkContext
-
-        jvm = SparkContext._active_spark_context._jvm
-        return Column(jvm.PythonSQLUtils.castTimestampNTZToLong(scol._jc))
+        return SF.timestamp_ntz_to_long(scol)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

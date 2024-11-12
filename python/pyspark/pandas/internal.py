@@ -902,11 +902,10 @@ class InternalFrame:
 
     @staticmethod
     def attach_sequence_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:
-        scols = [scol_for(sdf, column) for column in sdf.columns]
         sequential_index = (
             F.row_number().over(Window.orderBy(F.monotonically_increasing_id())).cast("long") - 1
         )
-        return sdf.select(sequential_index.alias(column_name), *scols)
+        return sdf.select(sequential_index.alias(column_name), "*")
 
     @staticmethod
     def attach_distributed_column(sdf: PySparkDataFrame, column_name: str) -> PySparkDataFrame:

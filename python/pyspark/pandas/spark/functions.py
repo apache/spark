@@ -39,6 +39,10 @@ def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> 
         return Column(sc._jvm.PythonSQLUtils.internalFn(name, _to_seq(sc, cols, _to_java_column)))
 
 
+def timestamp_ntz_to_long(col: Column) -> Column:
+    return _invoke_internal_function_over_columns("timestamp_ntz_to_long", col)
+
+
 def product(col: Column, dropna: bool) -> Column:
     return _invoke_internal_function_over_columns("pandas_product", col, F.lit(dropna))
 

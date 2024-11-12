@@ -32,11 +32,11 @@ import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCaseA
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
-object ExprUtils extends QueryErrorsBase {
+object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   def evalTypeExpr(exp: Expression): DataType = {
     if (exp.foldable) {
-      exp.eval() match {
+      prepareForEval(exp).eval() match {
         case s: UTF8String if s != null =>
           val dataType = DataType.parseTypeWithFallback(
             s.toString,

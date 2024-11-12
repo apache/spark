@@ -81,7 +81,8 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
    */
   def infer[T](
       json: RDD[T],
-      createParser: (JsonFactory, T) => JsonParser): StructType = {
+      createParser: (JsonFactory, T) => JsonParser,
+      isReadFile: Boolean = false): StructType = {
     val parseMode = options.parseMode
     val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
 
@@ -96,6 +97,9 @@ class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
             Some(inferField(parser))
           }
         } catch {
+          // If we are not reading from files but hit `RuntimeException`, it means corrupted record.
+          case e: RuntimeException if !isReadFile =>
+            handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
           case e @ (_: JsonProcessingException | _: MalformedInputException) =>
             handleJsonErrorsByParseMode(parseMode, columnNameOfCorruptRecord, e)
           case e: CharConversionException if options.encoding.isEmpty =>
