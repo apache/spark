@@ -470,6 +470,26 @@ class SubqueryTestsMixin:
                     fragment="outer",
                 )
 
+            with self.subTest("missing `outer()` for another outer"):
+                with self.assertRaises(AnalysisException) as pe:
+                    self.spark.table("l").select(
+                        "a",
+                        (
+                            self.spark.table("r")
+                            .where(sf.col("b") == sf.col("a").outer())
+                            .select(sf.sum("d"))
+                            .scalar()
+                        ),
+                    ).collect()
+
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+                    messageParameters={"objectName": "`b`", "proposal": "`c`, `d`"},
+                    query_context_type=QueryContextType.DataFrame,
+                    fragment="col",
+                )
+
 
 class SubqueryTests(SubqueryTestsMixin, ReusedSQLTestCase):
     pass
