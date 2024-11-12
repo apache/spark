@@ -82,7 +82,7 @@ private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.
     } catch {
         case st: SparkThrowable =>
           logDebug(s"Failed in [$command]", st)
-          throw new QueryExecutionException(ExceptionUtils.getStackTrace(st))
+          throw st
         case cause: Throwable =>
           logError(log"Failed in [${MDC(COMMAND, command)}]", cause)
           throw new QueryExecutionException(ExceptionUtils.getStackTrace(cause))
