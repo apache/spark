@@ -813,7 +813,6 @@ abstract class RegExpExtractBase
   def regexp: Expression
   def idx: Expression
 
-
   // last regex in string, we will update the pattern iff regexp value changed.
   @transient private var lastRegex: UTF8String = _
   // last regex pattern, we cache it for performance concern

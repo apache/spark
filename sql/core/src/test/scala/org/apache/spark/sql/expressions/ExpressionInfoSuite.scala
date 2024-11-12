@@ -288,16 +288,16 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       candidateExprsToCheck.filter(superClass.isAssignableFrom).foreach { clazz =>
         val isEvalOverrode = clazz.getMethod("eval", classOf[InternalRow]) !=
           superClass.getMethod("eval", classOf[InternalRow])
-        val isNullIntolerantMixedIn = clazz.getMethod("nullIntolerant") !=
+        val isNullIntolerantOverridden = clazz.getMethod("nullIntolerant") !=
           classOf[Expression].getMethod("nullIntolerant")
-        if (isEvalOverrode && isNullIntolerantMixedIn) {
+        if (isEvalOverrode && isNullIntolerantOverridden) {
           fail(s"${clazz.getName} should not override nullIntolerant, " +
             s"or add ${clazz.getName} in the ignoreSet of this test.")
-        } else if (!isEvalOverrode && !isNullIntolerantMixedIn) {
+        } else if (!isEvalOverrode && !isNullIntolerantOverridden) {
           fail(s"${clazz.getName} should override nullIntolerant.")
         } else {
-          assert((!isEvalOverrode && isNullIntolerantMixedIn) ||
-            (isEvalOverrode && !isNullIntolerantMixedIn))
+          assert((!isEvalOverrode && isNullIntolerantOverridden) ||
+            (isEvalOverrode && !isNullIntolerantOverridden))
         }
       }
     }
