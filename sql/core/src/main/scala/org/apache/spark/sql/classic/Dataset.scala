@@ -1128,7 +1128,7 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def randomSplit(weights: Array[Double], seed: Long): Array[Dataset[T]] = {
+  def randomSplit(weights: Array[Double], seed: Long): Array[sql.Dataset[T]] = {
     require(weights.forall(_ >= 0),
       s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
     require(weights.sum > 0,
@@ -1158,7 +1158,7 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  override def randomSplit(weights: Array[Double]): Array[Dataset[T]] =
+  override def randomSplit(weights: Array[Double]): Array[sql.Dataset[T]] =
     randomSplit(weights, Utils.random.nextLong())
 
   /**
@@ -1167,12 +1167,12 @@ class Dataset[T] private[sql](
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
    */
-  private[spark] def randomSplit(weights: List[Double], seed: Long): Array[Dataset[T]] = {
+  private[spark] def randomSplit(weights: List[Double], seed: Long): Array[sql.Dataset[T]] = {
     randomSplit(weights.toArray, seed)
   }
 
   /** @inheritdoc */
-  override def randomSplitAsList(weights: Array[Double], seed: Long): util.List[Dataset[T]] =
+  override def randomSplitAsList(weights: Array[Double], seed: Long): util.List[sql.Dataset[T]] =
     util.Arrays.asList(randomSplit(weights, seed): _*)
 
   /** @inheritdoc */

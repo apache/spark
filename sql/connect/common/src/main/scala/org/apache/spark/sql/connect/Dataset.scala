@@ -686,7 +686,7 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  def randomSplit(weights: Array[Double], seed: Long): Array[Dataset[T]] = {
+  def randomSplit(weights: Array[Double], seed: Long): Array[sql.Dataset[T]] = {
     require(
       weights.forall(_ >= 0),
       s"Weights must be nonnegative, but got ${weights.mkString("[", ",", "]")}")
@@ -725,11 +725,11 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
-  override def randomSplitAsList(weights: Array[Double], seed: Long): util.List[Dataset[T]] =
+  override def randomSplitAsList(weights: Array[Double], seed: Long): util.List[sql.Dataset[T]] =
     util.Arrays.asList(randomSplit(weights, seed): _*)
 
   /** @inheritdoc */
-  override def randomSplit(weights: Array[Double]): Array[Dataset[T]] =
+  override def randomSplit(weights: Array[Double]): Array[sql.Dataset[T]] =
     randomSplit(weights, SparkClassUtils.random.nextLong())
 
   /** @inheritdoc */

@@ -2035,7 +2035,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def randomSplit(weights: Array[Double], seed: Long): Array[_ <: Dataset[T]]
+  def randomSplit(weights: Array[Double], seed: Long): Array[Dataset[T]]
 
   /**
    * Returns a Java list that contains randomly split Dataset with the provided weights.
@@ -2047,7 +2047,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def randomSplitAsList(weights: Array[Double], seed: Long): util.List[_ <: Dataset[T]]
+  def randomSplitAsList(weights: Array[Double], seed: Long): util.List[Dataset[T]]
 
   /**
    * Randomly splits this Dataset with the provided weights.
@@ -2057,7 +2057,7 @@ abstract class Dataset[T] extends Serializable {
    * @group typedrel
    * @since 2.0.0
    */
-  def randomSplit(weights: Array[Double]): Array[_ <: Dataset[T]]
+  def randomSplit(weights: Array[Double]): Array[Dataset[T]]
 
   /**
    * (Scala-specific) Returns a new Dataset where each row has been expanded to zero or more rows

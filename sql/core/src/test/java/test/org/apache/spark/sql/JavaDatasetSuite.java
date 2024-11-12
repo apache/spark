@@ -867,7 +867,7 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     double[] arraySplit = {1, 2, 3};
 
-    List<? extends Dataset<String>> randomSplit = ds.randomSplitAsList(arraySplit, 1);
+    List<Dataset<String>> randomSplit = ds.randomSplitAsList(arraySplit, 1);
     Assertions.assertEquals(randomSplit.size(), 3, "wrong number of splits");
   }
 
