@@ -734,7 +734,6 @@ class SparkConversionMixin:
 
         jsparkSession = self._jsparkSession
 
-        # safecheck = self._jconf.arrowSafeTypeConversion()
         ser = ArrowStreamPandasSerializer(timezone, verifySchema)
 
         @no_type_check
