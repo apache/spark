@@ -109,7 +109,8 @@ public class VariantBuilder {
 
   // Return the variant value only, without metadata.
   // Used in shredding to produce a final value, where all shredded values refer to a common
-  // metadata.
+  // metadata. It is expected to be called instead of `result()`, although it is valid to call both
+  // methods, in any order.
   public byte[] valueWithoutMetadata() {
     return Arrays.copyOfRange(writeBuffer, 0, writePos);
   }
@@ -411,11 +412,7 @@ public class VariantBuilder {
         });
         break;
       default:
-        int size = valueSize(value, pos);
-        checkIndex(pos + size - 1, value.length);
-        checkCapacity(size);
-        System.arraycopy(value, pos, writeBuffer, writePos, size);
-        writePos += size;
+        shallowAppendVariantImpl(value, pos);
         break;
     }
   }
@@ -424,10 +421,14 @@ public class VariantBuilder {
   // building an object during shredding, where there is a fixed pre-existing metadata that
   // all shredded values will refer to.
   public void shallowAppendVariant(Variant v) {
-    int size = valueSize(v.value, v.pos);
-    checkIndex(v.pos + size - 1, v.value.length);
+    shallowAppendVariantImpl(v.value, v.pos);
+  }
+
+  private void shallowAppendVariantImpl(byte[] value, int pos) {
+    int size = valueSize(value, pos);
+    checkIndex(pos + size - 1, value.length);
     checkCapacity(size);
-    System.arraycopy(v.value, v.pos, writeBuffer, writePos, size);
+    System.arraycopy(value, pos, writeBuffer, writePos, size);
     writePos += size;
   }
 

@@ -99,14 +99,21 @@ public class VariantSchema {
   public static final class TimestampNTZType extends ScalarType {
   }
 
+  // The index of the typed_value, value, and metadata fields in the schema, respectively. I given
+  // field is not in the schema, its value must be set to -1 to indicate that it is invalid. The
+  // indices of valid fields should be contiguous and start from 0.
   public final int typedIdx;
   public final int variantIdx;
+  // topLevelMetadataIdx must be non-negative in the top-level schema, and -1 at all other nesting
+  // levels.
   public final int topLevelMetadataIdx;
+  // The number of fields in the schema. I.e. a value between 1 and 3, depending on which of value,
+  // typed_value and metadata are present.
   public final int numFields;
 
   public final ScalarType scalarSchema;
   public final ObjectField[] objectSchema;
-  // Map for fast lookup of object fields by name.
+  // Map for fast lookup of object fields by name. The values are an index into `objectSchema`.
   public final Map<String, Integer> objectSchemaMap;
   public final VariantSchema arraySchema;
 

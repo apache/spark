@@ -26,20 +26,20 @@ import java.util.ArrayList;
  */
 public class VariantShreddingWriter {
 
-  // Interface to build up a shredded result. Callers should implement a ShreddedResultBuilder
-  // to create an empty result. The castShredded method will call one or more of the add* methods
-  // to populate it.
+  // Interface to build up a shredded result. Callers should implement a ShreddedResultBuilder to
+  // create an empty result with a given schema. The castShredded method will call one or more of
+  // the add* methods to populate it.
   public interface ShreddedResult {
     // Create an array. The elements are the result of shredding each element.
-    void addArray(VariantSchema schema, ShreddedResult[] array);
+    void addArray(ShreddedResult[] array);
     // Create an object. The values are the result of shredding each field, order by the index in
     // objectSchema. Missing fields are populated with an empty result.
-    void addObject(VariantSchema schema, ShreddedResult[] values);
-    void addVariantValue(VariantSchema schema, byte[] result);
+    void addObject(ShreddedResult[] values);
+    void addVariantValue(byte[] result);
     // Add a scalar to typed_value. The type of Object depends on the scalarSchema in the shredding
     // schema.
-    void addScalar(VariantSchema schema, Object result);
-    void addMetadata(VariantSchema schema, byte[] result);
+    void addScalar(Object result);
+    void addMetadata(byte[] result);
   }
 
   public interface ShreddedResultBuilder {
@@ -53,7 +53,8 @@ public class VariantShreddingWriter {
   /**
    * Converts an input variant into shredded components. Returns the shredded result, as well
    * as the original Variant with shredded fields removed.
-   * `dataType` must be a valid shredding schema, as described in common/variant/shredding.md.
+   * `dataType` must be a valid shredding schema, as described in
+   * https://github.com/apache/parquet-format/blob/master/VariantShredding.md.
    */
   public static ShreddedResult castShredded(
           Variant v,
@@ -63,7 +64,7 @@ public class VariantShreddingWriter {
     ShreddedResult result = builder.createEmpty(schema);
 
     if (schema.topLevelMetadataIdx >= 0) {
-      result.addMetadata(schema, v.getMetadata());
+      result.addMetadata(v.getMetadata());
     }
 
     if (schema.arraySchema != null && variantType == VariantUtil.Type.ARRAY) {
@@ -75,12 +76,12 @@ public class VariantShreddingWriter {
         ShreddedResult shreddedArray = castShredded(v.getElementAtIndex(i), elementSchema, builder);
         array[i] = shreddedArray;
       }
-      result.addArray(schema, array);
+      result.addArray(array);
     } else if (schema.objectSchema != null && variantType == VariantUtil.Type.OBJECT) {
       VariantSchema.ObjectField[] objectSchema = schema.objectSchema;
       ShreddedResult[] shreddedValues = new ShreddedResult[objectSchema.length];
 
-      // Create a variantBuilder for any mismatched fields.
+      // Create a variantBuilder for any field that exist in `v`, but not in the shredding schema.
       VariantBuilder variantBuilder = new VariantBuilder(false);
       ArrayList<VariantBuilder.FieldEntry> fieldEntries = new ArrayList<>();
       // Keep track of which schema fields we actually found in the Variant value.
@@ -119,26 +120,26 @@ public class VariantShreddingWriter {
         // to the same field twice; i.e. the Variant contained duplicate fields, which is invalid.
         throw VariantUtil.malformedVariant();
       }
-      result.addObject(schema, shreddedValues);
+      result.addObject(shreddedValues);
       if (variantBuilder.getWritePos() != start) {
         // We added something to the untyped value.
         variantBuilder.finishWritingObject(start, fieldEntries);
-        result.addVariantValue(schema, variantBuilder.valueWithoutMetadata());
+        result.addVariantValue(variantBuilder.valueWithoutMetadata());
       }
     } else if (schema.scalarSchema != null) {
       VariantSchema.ScalarType scalarType = schema.scalarSchema;
       Object typedValue = tryTypedShred(v, variantType, scalarType, builder);
       if (typedValue != null) {
         // Store the typed value.
-        result.addScalar(schema, typedValue);
+        result.addScalar(typedValue);
       } else {
         VariantBuilder variantBuilder = new VariantBuilder(false);
         variantBuilder.appendVariant(v);
-        result.addVariantValue(schema, v.getValue());
+        result.addVariantValue(v.getValue());
       }
     } else {
       // Store in untyped.
-      result.addVariantValue(schema, v.getValue());
+      result.addVariantValue(v.getValue());
     }
     return result;
   }
@@ -291,7 +292,7 @@ public class VariantShreddingWriter {
   // Add the result to the shredding result.
   private static void addVariantValueVariant(Variant variantResult,
       VariantSchema schema, ShreddedResult result) {
-    result.addVariantValue(schema, variantResult.getValue());
+    result.addVariantValue(variantResult.getValue());
   }
 
 }

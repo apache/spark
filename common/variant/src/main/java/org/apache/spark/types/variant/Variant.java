@@ -193,7 +193,7 @@ public final class Variant {
     });
   }
 
-  // Get the dictionary ID for the object field at the `index` slot. Throws malformedVariatn if
+  // Get the dictionary ID for the object field at the `index` slot. Throws malformedVariant if
   // `index` is out of the bound of `[0, objectSize())`.
   // It is only legal to call it when `getType()` is `Type.OBJECT`.
   public int getDictionaryIdAtIndex(int index) {

@@ -3319,7 +3319,7 @@
     ],
     "sqlState" : "22023"
   },
-  "INVALID_VARIANT_SCHEMA" : {
+  "INVALID_VARIANT_SHREDDING_SCHEMA" : {
     "message" : [
       "The schema `<schema>` is not a valid variant shredding schema."
     ],

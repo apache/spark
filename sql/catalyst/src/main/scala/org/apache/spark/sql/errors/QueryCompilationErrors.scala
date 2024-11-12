@@ -1989,8 +1989,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("field" -> field))
   }
 
-  def invalidVariantSchema(schema: DataType): Throwable = {
-    new AnalysisException(errorClass = "INVALID_VARIANT_SCHEMA",
+  def invalidVariantShreddingSchema(schema: DataType): Throwable = {
+    new AnalysisException(errorClass = "INVALID_VARIANT_SHREDDING_SCHEMA",
       messageParameters = Map("schema" -> toSQLType(schema)))
   }
 

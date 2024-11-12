@@ -26,10 +26,14 @@ import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types._
 
 case object SparkShreddingUtils {
+  val VariantValueFieldName = "value";
+  val TypedValueFieldName = "typed_value";
+  val MetadataFieldName = "metadata";
+
   def buildVariantSchema(schema: DataType): VariantSchema = {
     schema match {
       case s: StructType => buildVariantSchema(s, topLevel = true)
-      case _ => throw QueryCompilationErrors.invalidVariantSchema(schema)
+      case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
     }
   }
 
@@ -38,7 +42,7 @@ case object SparkShreddingUtils {
    * inserting appropriate intermediate value/typed_value fields at each level.
    * For example, to represent the JSON {"a": 1, "b": "hello"},
    * the schema struct<a: int, b: string> could be passed into this function, and it would return
-   * the shredding scheme:
+   * the shredding schema:
    * struct<
    *  metadata: binary,
    *  value: binary,
@@ -53,33 +57,33 @@ case object SparkShreddingUtils {
         val arrayShreddingSchema =
           ArrayType(variantShreddingSchema(elementType, false), containsNull)
         Seq(
-          StructField("value", BinaryType, nullable = true),
-          StructField("typed_value", arrayShreddingSchema, nullable = true)
+          StructField(VariantValueFieldName, BinaryType, nullable = true),
+          StructField(TypedValueFieldName, arrayShreddingSchema, nullable = true)
         )
       case StructType(fields) =>
         val objectShreddingSchema = StructType(fields.map(f =>
             f.copy(dataType = variantShreddingSchema(f.dataType, false))))
         Seq(
-          StructField("value", BinaryType, nullable = true),
-          StructField("typed_value", objectShreddingSchema, nullable = true)
+          StructField(VariantValueFieldName, BinaryType, nullable = true),
+          StructField(TypedValueFieldName, objectShreddingSchema, nullable = true)
         )
       case VariantType =>
         // For Variant, we don't need a typed column
         Seq(
-          StructField("value", BinaryType, nullable = true)
+          StructField(VariantValueFieldName, BinaryType, nullable = true)
         )
       case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType =>
         Seq(
-          StructField("value", BinaryType, nullable = true),
-          StructField("typed_value", dataType, nullable = true)
+          StructField(VariantValueFieldName, BinaryType, nullable = true),
+          StructField(TypedValueFieldName, dataType, nullable = true)
         )
       case _ =>
         // No other types have a corresponding shreddings schema.
-        throw QueryCompilationErrors.invalidVariantSchema(dataType)
+        throw QueryCompilationErrors.invalidVariantShreddingSchema(dataType)
     }
 
     if (isTopLevel) {
-      StructType(StructField("metadata", BinaryType, nullable = true) +: fields)
+      StructType(StructField(MetadataFieldName, BinaryType, nullable = false) +: fields)
     } else {
       StructType(fields)
     }
@@ -99,9 +103,9 @@ case object SparkShreddingUtils {
 
     schema.fields.zipWithIndex.foreach { case (f, i) =>
       f.name match {
-        case "typed_value" =>
+        case TypedValueFieldName =>
           if (typedIdx != -1) {
-            throw QueryCompilationErrors.invalidVariantSchema(schema)
+            throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
           }
           typedIdx = i
           f.dataType match {
@@ -113,13 +117,13 @@ case object SparkShreddingUtils {
                   case s: StructType =>
                     val fieldSchema = buildVariantSchema(s, topLevel = false)
                     objectSchema(fieldIdx) = new VariantSchema.ObjectField(field.name, fieldSchema)
-                  case _ => throw QueryCompilationErrors.invalidVariantSchema(schema)
+                  case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
                 }
               }
             case ArrayType(elementType, _) =>
               elementType match {
                 case s: StructType => arraySchema = buildVariantSchema(s, topLevel = false)
-                case _ => throw QueryCompilationErrors.invalidVariantSchema(schema)
+                case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
               }
             case t => scalarSchema = (t match {
               case BooleanType => new VariantSchema.BooleanType
@@ -135,25 +139,25 @@ case object SparkShreddingUtils {
               case TimestampType => new VariantSchema.TimestampType
               case TimestampNTZType => new VariantSchema.TimestampNTZType
               case d: DecimalType => new VariantSchema.DecimalType(d.precision, d.scale)
-              case _ => throw QueryCompilationErrors.invalidVariantSchema(schema)
+              case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
             })
           }
-        case "value" =>
+        case VariantValueFieldName =>
           if (variantIdx != -1 || f.dataType != BinaryType) {
-            throw QueryCompilationErrors.invalidVariantSchema(schema)
+            throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
           }
           variantIdx = i
-        case "metadata" =>
+        case MetadataFieldName =>
           if (topLevelMetadataIdx != -1 || f.dataType != BinaryType) {
-            throw QueryCompilationErrors.invalidVariantSchema(schema)
+            throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
           }
           topLevelMetadataIdx = i
-        case _ => throw QueryCompilationErrors.invalidVariantSchema(schema)
+        case _ => throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
       }
     }
 
     if (topLevel != (topLevelMetadataIdx >= 0)) {
-      throw QueryCompilationErrors.invalidVariantSchema(schema)
+      throw QueryCompilationErrors.invalidVariantShreddingSchema(schema)
     }
     new VariantSchema(typedIdx, variantIdx, topLevelMetadataIdx, schema.fields.length,
       scalarSchema, objectSchema, arraySchema)
@@ -163,15 +167,13 @@ case object SparkShreddingUtils {
     // Result is stored as an InternalRow.
     val row = new GenericInternalRow(schema.numFields)
 
-    override def addArray(schema: VariantSchema,
-        array: Array[VariantShreddingWriter.ShreddedResult]): Unit = {
+    override def addArray(array: Array[VariantShreddingWriter.ShreddedResult]): Unit = {
       val arrayResult = new GenericArrayData(
           array.map(_.asInstanceOf[SparkShreddedResult].row))
       row.update(schema.typedIdx, arrayResult)
     }
 
-    override def addObject(schema: VariantSchema,
-                           values: Array[VariantShreddingWriter.ShreddedResult]): Unit = {
+    override def addObject(values: Array[VariantShreddingWriter.ShreddedResult]): Unit = {
       val innerRow = new GenericInternalRow(schema.objectSchema.size)
       for (i <- 0 until values.length) {
         innerRow.update(i, values(i).asInstanceOf[SparkShreddedResult].row)
@@ -179,11 +181,11 @@ case object SparkShreddingUtils {
       row.update(schema.typedIdx, innerRow)
     }
 
-    override def addVariantValue(schema: VariantSchema, result: Array[Byte]): Unit = {
+    override def addVariantValue(result: Array[Byte]): Unit = {
       row.update(schema.variantIdx, result)
     }
 
-    override def addScalar(schema: VariantSchema, result: Any): Unit = {
+    override def addScalar(result: Any): Unit = {
       // Convert to native spark value, if necessary.
       val sparkValue = schema.scalarSchema match {
         case _: VariantSchema.StringType => UTF8String.fromString(result.asInstanceOf[String])
@@ -193,7 +195,7 @@ case object SparkShreddingUtils {
       row.update(schema.typedIdx, sparkValue)
     }
 
-    override def addMetadata(schema: VariantSchema, result: Array[Byte]): Unit = {
+    override def addMetadata(result: Array[Byte]): Unit = {
       row.update(schema.topLevelMetadataIdx, result)
     }
   }
