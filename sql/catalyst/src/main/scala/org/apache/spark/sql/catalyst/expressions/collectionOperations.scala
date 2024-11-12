@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCaseAccentSensitivity}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -1349,7 +1349,7 @@ case class Reverse(child: Expression)
 
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeWithCaseAccentSensitivity, ArrayType))
+    Seq(TypeCollection(StringTypeWithCollation, ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -1603,12 +1603,7 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
 
   @transient private lazy val elementType: DataType =
     array.dataType.asInstanceOf[ArrayType].elementType
-  @transient private lazy val resultArrayElementNullable: Boolean =
-    array.dataType.asInstanceOf[ArrayType].containsNull
-
   @transient private lazy val isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
-  @transient private lazy val canPerformFastBinarySearch: Boolean = isPrimitiveType &&
-    elementType != BooleanType && !resultArrayElementNullable
 
   @transient private lazy val comp: Comparator[Any] = new Comparator[Any] with Serializable {
     private val ordering = array.dataType match {
@@ -1619,39 +1614,28 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
     override def compare(o1: Any, o2: Any): Int =
       (o1, o2) match {
         case (null, null) => 0
-        case (null, _) => 1
-        case (_, null) => -1
+        case (null, _) => -1
+        case (_, null) => 1
         case _ => ordering.compare(o1, o2)
       }
   }
 
-  @transient private lazy val elementObjectType = ObjectType(classOf[DataType])
-  @transient private lazy val  comparatorObjectType = ObjectType(classOf[Comparator[Object]])
-  override def replacement: Expression =
-    if (canPerformFastBinarySearch) {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearch",
-        Seq(array, value),
-        inputTypes)
-    } else if (isPrimitiveType) {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearchNullSafe",
-        Seq(array, value),
-        inputTypes)
+  @transient private lazy val comparatorObjectType = ObjectType(classOf[Comparator[Object]])
+
+  override def replacement: Expression = {
+    val toJavaArray = ToJavaArray(array)
+    val (arguments, inputTypes) = if (isPrimitiveType) {
+      (Seq(toJavaArray, value), Seq(toJavaArray.dataType, value.dataType))
     } else {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearch",
-        Seq(Literal(elementType, elementObjectType),
-          Literal(comp, comparatorObjectType),
-          array,
-          value),
-        elementObjectType +: comparatorObjectType +: inputTypes)
+      (Seq(toJavaArray, value, Literal(comp, comparatorObjectType)),
+        Seq(toJavaArray.dataType, value.dataType, comparatorObjectType))
+    }
+    StaticInvoke(
+      classOf[ArrayExpressionUtils],
+      IntegerType,
+      "binarySearch",
+      arguments,
+      inputTypes)
   }
 
   override def prettyName: String = "array_binary_search"
@@ -2135,12 +2119,12 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
-      StringTypeWithCaseAccentSensitivity,
-        StringTypeWithCaseAccentSensitivity)
+    Seq(AbstractArrayType(StringTypeWithCollation),
+      StringTypeWithCollation,
+        StringTypeWithCollation)
   } else {
-    Seq(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
-        StringTypeWithCaseAccentSensitivity)
+    Seq(AbstractArrayType(StringTypeWithCollation),
+        StringTypeWithCollation)
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
@@ -2861,7 +2845,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   with QueryErrorsBase {
 
   private def allowedTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, BinaryType, ArrayType)
+    Seq(StringTypeWithCollation, BinaryType, ArrayType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 

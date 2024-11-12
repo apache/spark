@@ -21,11 +21,12 @@ import scala.reflect.runtime.universe.TypeTag
 
 import _root_.java.util
 
-import org.apache.spark.annotation.{DeveloperApi, Stable}
+import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -127,6 +128,8 @@ abstract class Dataset[T] extends Serializable {
   def sparkSession: SparkSession
 
   val encoder: Encoder[T]
+
+  @DeveloperApi @Unstable def queryExecution: QueryExecution
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe. In contrast to the

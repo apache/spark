@@ -154,12 +154,6 @@ private[sql] object PythonSQLUtils extends Logging {
 
   def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
 
-  def distributedIndex(): Column = {
-    val expr = MonotonicallyIncreasingID()
-    expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
-    expr
-  }
-
   @scala.annotation.varargs
   def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
 

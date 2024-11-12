@@ -936,7 +936,8 @@ class AdaptiveQueryExecSuite
           val error = intercept[SparkException] {
             joined.collect()
           }
-          assert(error.getMessage() contains "coalesce test error")
+          assert((Seq(error) ++ Option(error.getCause) ++ error.getSuppressed()).exists(
+            e => e.getMessage() != null && e.getMessage().contains("coalesce test error")))
 
           val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
@@ -2829,6 +2830,38 @@ class AdaptiveQueryExecSuite
       assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
       assert(findTopLevelUnion(adaptivePlan).size == 0)
     }
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq(1).toDF().createOrReplaceTempView("t1")
+        spark.range(100).createOrReplaceTempView("t2")
+        spark.range(2).createOrReplaceTempView("t3")
+        spark.range(2).createOrReplaceTempView("t4")
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT tt2.value
+            |FROM (
+            |  SELECT value
+            |  FROM t1
+            |  WHERE NOT EXISTS (
+            |      SELECT 1
+            |      FROM (
+            |        SELECT t2.id
+            |        FROM t2
+            |          JOIN t3 ON t2.id = t3.id
+            |        AND t2.id > 100
+            |      ) tt
+            |      WHERE t1.value = tt.id
+            |    )
+            |    AND t1.value = 1
+            |) tt2
+            |  LEFT JOIN t4 ON tt2.value = t4.id
+            |""".stripMargin
+        )
+        assert(findTopLevelBroadcastNestedLoopJoin(adaptivePlan).size == 1)
+      }
+    }
   }
 
   test("SPARK-39915: Dataset.repartition(N) may not create N partitions") {
@@ -3029,6 +3062,27 @@ class AdaptiveQueryExecSuite
           case read: AQEShuffleReadExec if read.isCoalescedRead => read
         }
         assert(coalescedReads.nonEmpty == expectCoalesce)
+      }
+    }
+  }
+
+  test("SPARK-49979: AQE hang forever when collecting twice on a failed AQE plan") {
+    val func: Long => Boolean = (i : Long) => {
+      throw new Exception("SPARK-49979")
+    }
+    withUserDefinedFunction("func" -> true) {
+      spark.udf.register("func", func)
+      val df1 = spark.range(1024).select($"id".as("key1"))
+      val df2 = spark.range(2048).select($"id".as("key2"))
+        .withColumn("group_key", $"key2" % 1024)
+      val df = df1.filter(expr("func(key1)")).hint("MERGE").join(df2, $"key1" === $"key2")
+        .groupBy($"group_key").agg("key1" -> "count")
+      intercept[Throwable] {
+        df.collect()
+      }
+      // second collect should not hang forever
+      intercept[Throwable] {
+        df.collect()
       }
     }
   }

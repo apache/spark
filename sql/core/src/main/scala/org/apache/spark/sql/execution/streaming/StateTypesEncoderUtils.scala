@@ -254,7 +254,7 @@ class SingleKeyTTLEncoder(
 /** Class for TTL with composite key serialization */
 class CompositeKeyTTLEncoder[K](
     keyExprEnc: ExpressionEncoder[Any],
-    userKeyEnc: Encoder[K]) {
+    userKeyEnc: ExpressionEncoder[Any]) {
 
   private val ttlKeyProjection = UnsafeProjection.create(
     getCompositeKeyTTLRowSchema(keyExprEnc.schema, userKeyEnc.schema))

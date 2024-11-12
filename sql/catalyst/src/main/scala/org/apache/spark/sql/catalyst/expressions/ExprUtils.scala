@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
-import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCaseAccentSensitivity}
+import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -61,7 +61,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
     case m: CreateMap
-      if AbstractMapType(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
+      if AbstractMapType(StringTypeWithCollation, StringTypeWithCollation)
         .acceptsType(m.dataType) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
@@ -83,7 +83,8 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
-        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError()
+        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
+          columnNameOfCorruptRecord, f.dataType)
       }
     }
   }

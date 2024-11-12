@@ -74,10 +74,6 @@ from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
-try:
-    from pyspark.sql.plot import PySparkPlotAccessor
-except ImportError:
-    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -1795,7 +1791,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         )
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+        from pyspark.sql.plot import PySparkPlotAccessor
+
         return PySparkPlotAccessor(self)
 
 

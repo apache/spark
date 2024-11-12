@@ -141,6 +141,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
   public static final UTF8String ZERO_UTF8 = UTF8String.fromString("0");
+  public static final UTF8String SPACE_UTF8 = UTF8String.fromString(" ");
 
 
   /**

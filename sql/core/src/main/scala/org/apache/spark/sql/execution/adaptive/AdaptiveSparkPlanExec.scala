@@ -145,6 +145,8 @@ case class AdaptiveSparkPlanExec(
       CoalesceBucketsInJoin,
       RemoveRedundantProjects,
       ensureRequirements,
+      // This rule must be run after `EnsureRequirements`.
+      InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
       ValidateSparkPlan,
       ReplaceHashWithSortAgg,
@@ -340,6 +342,7 @@ case class AdaptiveSparkPlanExec(
               }(AdaptiveSparkPlanExec.executionContext)
             } catch {
               case e: Throwable =>
+                stage.error.set(Some(e))
                 cleanUpAndThrowException(Seq(e), Some(stage.id))
             }
           }
@@ -355,6 +358,7 @@ case class AdaptiveSparkPlanExec(
           case StageSuccess(stage, res) =>
             stage.resultOption.set(Some(res))
           case StageFailure(stage, ex) =>
+            stage.error.set(Some(ex))
             errors.append(ex)
         }
 
@@ -600,6 +604,7 @@ case class AdaptiveSparkPlanExec(
         newStages = Seq(newStage))
 
     case q: QueryStageExec =>
+      assertStageNotFailed(q)
       CreateStageResult(newPlan = q,
         allChildStagesMaterialized = q.isMaterialized, newStages = Seq.empty)
 
@@ -812,6 +817,15 @@ case class AdaptiveSparkPlanExec(
         executionId,
         context.qe.explainString(planDescriptionMode),
         SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
+    }
+  }
+
+  private def assertStageNotFailed(stage: QueryStageExec): Unit = {
+    if (stage.hasFailed) {
+      throw stage.error.get().get match {
+        case fatal: SparkFatalException => fatal.throwable
+        case other => other
+      }
     }
   }
 

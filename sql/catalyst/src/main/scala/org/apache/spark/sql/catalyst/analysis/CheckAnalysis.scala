@@ -757,7 +757,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case p @ Project(projectList, _) =>
             checkForUnspecifiedWindow(projectList)
 
-          case agg@Aggregate(_, aggregateExpressions, _) if
+          case agg@Aggregate(_, aggregateExpressions, _, _) if
             PlanHelper.specialExpressionsInUnsupportedOperator(agg).isEmpty =>
             checkForUnspecifiedWindow(aggregateExpressions)
 
@@ -1573,9 +1573,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             case (CharType(l1), CharType(l2)) => l1 == l2
             case (CharType(l1), VarcharType(l2)) => l1 <= l2
             case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
-            case _ => Cast.canUpCast(from, to)
+            case _ =>
+              Cast.canUpCast(from, to) ||
+                DataType.equalsIgnoreCompatibleCollation(field.dataType, newDataType)
           }
-
           if (!canAlterColumnType(field.dataType, newDataType)) {
             alter.failAnalysis(
               errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",

@@ -512,6 +512,11 @@
       "A master URL must be set in your configuration."
     ]
   },
+  "MEMORY_PROFILE_INVALID_SOURCE":{
+    "message": [
+      "Memory profiler can only be used on editors with line numbers."
+    ]
+  },
   "MISSING_LIBRARY_FOR_PROFILER": {
     "message": [
       "Install the 'memory_profiler' library in the cluster to enable memory profiling."
@@ -812,7 +817,12 @@
       "Pipe function `<func_name>` exited with error code <error_code>."
     ]
   },
-  "PLOT_NOT_NUMERIC_COLUMN": {
+  "PLOT_INVALID_TYPE_COLUMN": {
+    "message": [
+      "Column <col_name> must be one of <valid_types> for plotting, got <col_type>."
+    ]
+  },
+  "PLOT_NOT_NUMERIC_COLUMN_ARGUMENT": {
     "message": [
       "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
     ]

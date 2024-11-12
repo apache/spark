@@ -15,31 +15,27 @@
 # limitations under the License.
 #
 
-from typing import Any, TYPE_CHECKING, List, Optional, Union
-from types import ModuleType
-from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
-from pyspark.sql import Column, functions as F
-from pyspark.sql.types import NumericType
-from pyspark.sql.utils import is_remote, require_minimum_plotly_version
+import math
 
+from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
+from types import ModuleType
+from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.sql import Column, functions as F
+from pyspark.sql.internal import InternalFunction as SF
+from pyspark.sql.pandas.utils import require_minimum_pandas_version
+from pyspark.sql.types import NumericType
+from pyspark.sql.utils import NumpyHelper, require_minimum_plotly_version
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, Row
-    from pyspark.sql._typing import ColumnOrName
     import pandas as pd
     from plotly.graph_objs import Figure
 
 
 class PySparkTopNPlotBase:
     def get_top_n(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import SparkSession
-
-        session = SparkSession.getActiveSession()
-        if session is None:
-            raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
-
         max_rows = int(
-            session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
+            sdf._session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
         )
         pdf = sdf.limit(max_rows + 1).toPandas()
 
@@ -53,16 +49,11 @@ class PySparkTopNPlotBase:
 
 class PySparkSampledPlotBase:
     def get_sampled(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import SparkSession, Observation, functions as F
-
-        session = SparkSession.getActiveSession()
-        if session is None:
-            raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
+        from pyspark.sql import Observation, functions as F
 
         max_rows = int(
-            session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
+            sdf._session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
         )
-
         observation = Observation("pyspark plotting")
 
         rand_col_name = "__pyspark_plotting_sampled_plot_base_rand__"
@@ -270,7 +261,7 @@ class PySparkPlotAccessor:
         """
         return self(kind="scatter", x=x, y=y, **kwargs)
 
-    def area(self, x: str, y: str, **kwargs: Any) -> "Figure":
+    def area(self, x: str, y: Union[str, list[str]], **kwargs: Any) -> "Figure":
         """
         Draw a stacked area plot.
 
@@ -326,6 +317,16 @@ class PySparkPlotAccessor:
 
         Examples
         --------
+        >>> from datetime import datetime
+        >>> data = [
+        ...     (3, 5, 20, datetime(2018, 1, 31)),
+        ...     (2, 5, 42, datetime(2018, 2, 28)),
+        ...     (3, 6, 28, datetime(2018, 3, 31)),
+        ...     (9, 12, 62, datetime(2018, 4, 30))
+        ... ]
+        >>> columns = ["sales", "signups", "visits", "date"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.pie(x='date', y='sales')  # doctest: +SKIP
         """
         schema = self.data.schema
 
@@ -333,17 +334,15 @@ class PySparkPlotAccessor:
         y_field = schema[y] if y in schema.names else None
         if y_field is None or not isinstance(y_field.dataType, NumericType):
             raise PySparkTypeError(
-                errorClass="PLOT_NOT_NUMERIC_COLUMN",
+                errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
                 messageParameters={
                     "arg_name": "y",
-                    "arg_type": str(y_field.dataType) if y_field else "None",
+                    "arg_type": str(y_field.dataType.__class__.__name__) if y_field else "None",
                 },
             )
         return self(kind="pie", x=x, y=y, **kwargs)
 
-    def box(
-        self, column: Union[str, List[str]], precision: float = 0.01, **kwargs: Any
-    ) -> "Figure":
+    def box(self, column: Optional[Union[str, List[str]]] = None, **kwargs: Any) -> "Figure":
         """
         Make a box plot of the DataFrame columns.
 
@@ -357,13 +356,13 @@ class PySparkPlotAccessor:
 
         Parameters
         ----------
-        column: str or list of str
-            Column name or list of names to be used for creating the boxplot.
-        precision: float, default = 0.01
-            This argument is used by pyspark to compute approximate statistics
-            for building a boxplot.
+        column: str or list of str, optional
+            Column name or list of names to be used for creating the box plot.
+            If None (default), all numeric columns will be used.
         **kwargs
-            Additional keyword arguments.
+            Extra arguments to `precision`: refer to a float that is used by
+            pyspark to compute approximate statistics for building a boxplot.
+            The default value is 0.01. Use smaller values to get more precise statistics.
 
         Returns
         -------
@@ -383,10 +382,313 @@ class PySparkPlotAccessor:
         ... ]
         >>> columns = ["student", "math_score", "english_score"]
         >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.box()  # doctest: +SKIP
         >>> df.plot.box(column="math_score")  # doctest: +SKIP
         >>> df.plot.box(column=["math_score", "english_score"])  # doctest: +SKIP
         """
-        return self(kind="box", column=column, precision=precision, **kwargs)
+        return self(kind="box", column=column, **kwargs)
+
+    def kde(
+        self,
+        bw_method: Union[int, float],
+        column: Optional[Union[str, List[str]]] = None,
+        ind: Optional[Union[Sequence[float], int]] = None,
+        **kwargs: Any,
+    ) -> "Figure":
+        """
+        Generate Kernel Density Estimate plot using Gaussian kernels.
+
+        In statistics, kernel density estimation (KDE) is a non-parametric way to
+        estimate the probability density function (PDF) of a random variable. This
+        function uses Gaussian kernels and includes automatic bandwidth determination.
+
+        Parameters
+        ----------
+        bw_method : int or float
+            The method used to calculate the estimator bandwidth.
+            See KernelDensity in PySpark for more information.
+        column: str or list of str, optional
+            Column name or list of names to be used for creating the kde plot.
+            If None (default), all numeric columns will be used.
+        ind : List of float, NumPy array or integer, optional
+            Evaluation points for the estimated PDF. If None (default),
+            1000 equally spaced points are used. If `ind` is a NumPy array, the
+            KDE is evaluated at the points passed. If `ind` is an integer,
+            `ind` number of equally spaced points are used.
+        **kwargs : optional
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+        >>> columns = ["length", "width", "species"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.kde(bw_method=0.3)  # doctest: +SKIP
+        >>> df.plot.kde(column=["length", "width"], bw_method=0.3)  # doctest: +SKIP
+        >>> df.plot.kde(column="length", bw_method=0.3)  # doctest: +SKIP
+        """
+        return self(kind="kde", column=column, bw_method=bw_method, ind=ind, **kwargs)
+
+    def hist(
+        self, column: Optional[Union[str, List[str]]] = None, bins: int = 10, **kwargs: Any
+    ) -> "Figure":
+        """
+        Draw one histogram of the DataFrame’s columns.
+
+        A `histogram`_ is a representation of the distribution of data.
+
+        .. _histogram: https://en.wikipedia.org/wiki/Histogram
+
+        Parameters
+        ----------
+        column: str or list of str, optional
+            Column name or list of names to be used for creating the hostogram plot.
+            If None (default), all numeric columns will be used.
+        bins : integer, default 10
+            Number of histogram bins to be used.
+        **kwargs
+            Additional keyword arguments.
+
+        Returns
+        -------
+        :class:`plotly.graph_objs.Figure`
+
+        Examples
+        --------
+        >>> data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+        >>> columns = ["length", "width", "species"]
+        >>> df = spark.createDataFrame(data, columns)
+        >>> df.plot.hist(bins=4)  # doctest: +SKIP
+        >>> df.plot.hist(column=["length", "width"])  # doctest: +SKIP
+        >>> df.plot.hist(column="length", bins=4)  # doctest: +SKIP
+        """
+        return self(kind="hist", column=column, bins=bins, **kwargs)
+
+
+class PySparkKdePlotBase:
+    @staticmethod
+    def get_ind(sdf: "DataFrame", ind: Optional[Union[Sequence[float], int]]) -> Sequence[float]:
+        def calc_min_max() -> "Row":
+            if len(sdf.columns) > 1:
+                min_col = F.least(*map(F.min, sdf))  # type: ignore
+                max_col = F.greatest(*map(F.max, sdf))  # type: ignore
+            else:
+                min_col = F.min(sdf.columns[-1])
+                max_col = F.max(sdf.columns[-1])
+            return sdf.select(min_col, max_col).first()  # type: ignore
+
+        if ind is None:
+            min_val, max_val = calc_min_max()
+            sample_range = max_val - min_val
+            ind = NumpyHelper.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                1000,
+            )
+        elif isinstance(ind, int):
+            min_val, max_val = calc_min_max()
+            sample_range = max_val - min_val
+            ind = NumpyHelper.linspace(
+                min_val - 0.5 * sample_range,
+                max_val + 0.5 * sample_range,
+                ind,
+            )
+        return ind
+
+    @staticmethod
+    def compute_kde_col(
+        input_col: Column,
+        bw_method: Union[int, float],
+        ind: Sequence[float],
+    ) -> Column:
+        # refers to org.apache.spark.mllib.stat.KernelDensity
+        assert bw_method is not None and isinstance(
+            bw_method, (int, float)
+        ), "'bw_method' must be set as a scalar number."
+
+        assert ind is not None, "'ind' must be a scalar array."
+
+        bandwidth = float(bw_method)
+        log_std_plus_half_log2_pi = math.log(bandwidth) + 0.5 * math.log(2 * math.pi)
+
+        def norm_pdf(
+            mean: Column,
+            std: Column,
+            log_std_plus_half_log2_pi: Column,
+            x: Column,
+        ) -> Column:
+            x0 = x - mean
+            x1 = x0 / std
+            log_density = -0.5 * x1 * x1 - log_std_plus_half_log2_pi
+            return F.exp(log_density)
+
+        return F.array(
+            [
+                F.avg(
+                    norm_pdf(
+                        input_col.cast("double"),
+                        F.lit(bandwidth),
+                        F.lit(log_std_plus_half_log2_pi),
+                        F.lit(point),
+                    )
+                )
+                for point in ind
+            ]
+        )
+
+
+class PySparkHistogramPlotBase:
+    @staticmethod
+    def get_bins(sdf: "DataFrame", bins: int) -> Sequence[float]:
+        if len(sdf.columns) > 1:
+            min_col = F.least(*map(F.min, sdf))  # type: ignore
+            max_col = F.greatest(*map(F.max, sdf))  # type: ignore
+        else:
+            min_col = F.min(sdf.columns[-1])
+            max_col = F.max(sdf.columns[-1])
+        boundaries = sdf.select(min_col, max_col).first()
+
+        if boundaries[0] == boundaries[1]:  # type: ignore
+            boundaries = (boundaries[0] - 0.5, boundaries[1] + 0.5)  # type: ignore
+
+        return NumpyHelper.linspace(boundaries[0], boundaries[1], bins + 1)  # type: ignore
+
+    @staticmethod
+    def compute_hist(sdf: "DataFrame", bins: Sequence[float]) -> List["pd.Series"]:
+        require_minimum_pandas_version()
+
+        assert isinstance(bins, list)
+
+        spark = sdf._session
+        assert spark is not None
+
+        # 1. Make the bucket output flat to:
+        #     +----------+--------+
+        #     |__group_id|__bucket|
+        #     +----------+--------+
+        #     |0         |0       |
+        #     |0         |0       |
+        #     |0         |1       |
+        #     |0         |2       |
+        #     |0         |3       |
+        #     |0         |3       |
+        #     |1         |0       |
+        #     |1         |1       |
+        #     |1         |1       |
+        #     |1         |2       |
+        #     |1         |1       |
+        #     |1         |0       |
+        #     +----------+--------+
+        colnames = sdf.columns
+
+        # determines which bucket a given value falls into, based on predefined bin intervals
+        # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
+        def binary_search_for_buckets(value: Column) -> Column:
+            index = SF.array_binary_search(F.lit(bins), value)
+            bucket = F.when(index >= 0, index).otherwise(-index - 2)
+            unboundErrMsg = F.lit(f"value %s out of the bins bounds: [{bins[0]}, {bins[-1]}]")
+            return (
+                F.when(value == F.lit(bins[-1]), F.lit(len(bins) - 2))
+                .when(value.between(F.lit(bins[0]), F.lit(bins[-1])), bucket)
+                .otherwise(F.raise_error(F.printf(unboundErrMsg, value)))
+            )
+
+        output_df = (
+            sdf.select(
+                F.posexplode(
+                    F.array([F.col(colname).cast("double") for colname in colnames])
+                ).alias("__group_id", "__value")
+            )
+            .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN())
+            .select(
+                F.col("__group_id"),
+                binary_search_for_buckets(F.col("__value")).alias("__bucket"),
+            )
+        )
+
+        # 2. Calculate the count based on each group and bucket, also fill empty bins.
+        #     +----------+--------+------+
+        #     |__group_id|__bucket| count|
+        #     +----------+--------+------+
+        #     |0         |0       |2     |
+        #     |0         |1       |1     |
+        #     |0         |2       |1     |
+        #     |0         |3       |2     |
+        #     |1         |0       |2     |
+        #     |1         |1       |3     |
+        #     |1         |2       |1     |
+        #     |1         |3       |0     | <- fill empty bins with zeros (by joining with bin_df)
+        #     +----------+--------+------+
+        output_df = output_df.groupby("__group_id", "__bucket").agg(F.count("*").alias("count"))
+
+        # Generate all possible combinations of group id and bucket
+        bin_df = (
+            spark.range(len(colnames))
+            .select(
+                F.col("id").alias("__group_id"),
+                F.explode(F.lit(list(range(len(bins) - 1)))).alias("__bucket"),
+            )
+            .hint("broadcast")
+        )
+
+        output_df = (
+            bin_df.join(output_df, ["__group_id", "__bucket"], "left")
+            .select("__group_id", "__bucket", F.nvl(F.col("count"), F.lit(0)).alias("count"))
+            .coalesce(1)
+            .sortWithinPartitions("__group_id", "__bucket")
+            .select("__group_id", "count")
+        )
+
+        # 3. Calculate based on each group id. From:
+        #     +----------+--------+------+
+        #     |__group_id|__bucket| count|
+        #     +----------+--------+------+
+        #     |0         |0       |2     |
+        #     |0         |1       |1     |
+        #     |0         |2       |1     |
+        #     |0         |3       |2     |
+        #     +----------+--------+------+
+        #     +----------+--------+------+
+        #     |__group_id|__bucket| count|
+        #     +----------+--------+------+
+        #     |1         |0       |2     |
+        #     |1         |1       |3     |
+        #     |1         |2       |1     |
+        #     |1         |3       |0     |
+        #     +----------+--------+------+
+        #
+        # to:
+        #     +-----------------+
+        #     |__values1__bucket|
+        #     +-----------------+
+        #     |2                |
+        #     |1                |
+        #     |1                |
+        #     |2                |
+        #     |0                |
+        #     +-----------------+
+        #     +-----------------+
+        #     |__values2__bucket|
+        #     +-----------------+
+        #     |2                |
+        #     |3                |
+        #     |1                |
+        #     |0                |
+        #     |0                |
+        #     +-----------------+
+        result = output_df.toPandas()
+        output_series = []
+        for i, input_column_name in enumerate(colnames):
+            pdf = result[result["__group_id"] == i]
+            pdf = pdf[["count"]]
+            pdf.columns = [input_column_name]
+            output_series.append(pdf[input_column_name])
+
+        return output_series
 
 
 class PySparkBoxPlotBase:
@@ -444,7 +746,7 @@ class PySparkBoxPlotBase:
                     outlier,
                     F.struct(F.abs(value - med), value.alias("val")),
                 ).otherwise(F.lit(None))
-                topk = collect_top_k(pair, 1001, False)
+                topk = SF.collect_top_k(pair, 1001, False)
                 fliers = F.when(F.size(topk) > 0, topk["val"]).otherwise(F.lit(None))
             else:
                 fliers = F.lit(None)
@@ -463,25 +765,3 @@ class PySparkBoxPlotBase:
 
         sdf_result = sdf.join(sdf_stats.hint("broadcast")).select(*result_scols)
         return sdf_result.first()
-
-
-def _invoke_internal_function_over_columns(name: str, *cols: "ColumnOrName") -> Column:
-    if is_remote():
-        from pyspark.sql.connect.functions.builtin import _invoke_function_over_columns
-
-        return _invoke_function_over_columns(name, *cols)
-
-    else:
-        from pyspark.sql.classic.column import _to_seq, _to_java_column
-        from pyspark import SparkContext
-
-        sc = SparkContext._active_spark_context
-        return Column(
-            sc._jvm.PythonSQLUtils.internalFn(  # type: ignore
-                name, _to_seq(sc, cols, _to_java_column)  # type: ignore
-            )
-        )
-
-
-def collect_top_k(col: Column, num: int, reverse: bool) -> Column:
-    return _invoke_internal_function_over_columns("collect_top_k", col, F.lit(num), F.lit(reverse))

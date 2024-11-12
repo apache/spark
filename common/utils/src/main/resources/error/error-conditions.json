@@ -376,6 +376,12 @@
     ],
     "sqlState" : "429BB"
   },
+  "CANNOT_REMOVE_RESERVED_PROPERTY" : {
+    "message" : [
+      "Cannot remove reserved property: <property>."
+    ],
+    "sqlState" : "42000"
+  },
   "CANNOT_RENAME_ACROSS_SCHEMA" : {
     "message" : [
       "Renaming a <type> across schemas is not allowed."
@@ -565,7 +571,7 @@
       },
       "IMPLICIT" : {
         "message" : [
-          "Error occurred due to the mismatch between multiple implicit non-default collations. Use COLLATE function to set the collation explicitly."
+          "Error occurred due to the mismatch between implicit collations: [<implicitTypes>]. Use COLLATE function to set the collation explicitly."
         ]
       }
     },
@@ -1137,6 +1143,12 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012"
+  },
+  "DUPLICATED_CTE_NAMES" : {
+    "message" : [
+      "CTE definition can't have duplicate names: <duplicateNames>."
+    ],
+    "sqlState" : "42602"
   },
   "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
     "message" : [
@@ -2056,6 +2068,12 @@
     ],
     "sqlState" : "22003"
   },
+  "INVALID_ATTRIBUTE_NAME_SYNTAX" : {
+    "message" : [
+      "Syntax error in the attribute name: <name>. Check that backticks appear in pairs, a quoted string is a complete name part and use a backtick only inside quoted name parts."
+    ],
+    "sqlState" : "42601"
+  },
   "INVALID_BITMAP_POSITION" : {
     "message" : [
       "The 0-indexed bitmap position <bitPosition> is out of bounds. The bitmap has <bitmapNumBits> bits (<bitmapNumBytes> bytes)."
@@ -2133,6 +2151,12 @@
       }
     },
     "sqlState" : "22022"
+  },
+  "INVALID_CORRUPT_RECORD_TYPE" : {
+    "message" : [
+      "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
+    ],
+    "sqlState" : "42804"
   },
   "INVALID_CURSOR" : {
     "message" : [
@@ -2379,7 +2403,8 @@
   },
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [
-      "The fraction of sec must be zero. Valid range is [0, 60]. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "Valid range for seconds is [0, 60] (inclusive), but the provided value is <secAndMicros>. To avoid this error, use `try_make_timestamp`, which returns NULL on error.",
+      "If you do not want to use the session default timestamp version of this function, use `try_make_timestamp_ntz` or `try_make_timestamp_ltz`."
     ],
     "sqlState" : "22023"
   },
@@ -2943,6 +2968,18 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_REGEXP_REPLACE" : {
+    "message" : [
+      "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
+    ],
+    "sqlState" : "22023"
+  },
+  "INVALID_RESET_COMMAND_FORMAT" : {
+    "message" : [
+      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_SAVE_MODE" : {
     "message" : [
       "The specified save mode <mode> is invalid. Valid save modes include \"append\", \"overwrite\", \"ignore\", \"error\", \"errorifexists\", and \"default\"."
@@ -3097,6 +3134,11 @@
           "Unsupported function name <funcName>."
         ]
       },
+      "UNSUPPORTED_SQL_STATEMENT" : {
+        "message" : [
+          "Unsupported SQL statement: <sqlText>."
+        ]
+      },
       "VARIABLE_TYPE_OR_DEFAULT_REQUIRED" : {
         "message" : [
           "The definition of a SQL variable requires either a datatype or a DEFAULT clause.",
@@ -3191,7 +3233,7 @@
   },
   "INVALID_URL" : {
     "message" : [
-      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+      "The url is invalid: <url>. Use `try_parse_url` to tolerate invalid URL and return NULL instead."
     ],
     "sqlState" : "22P02"
   },
@@ -3400,6 +3442,12 @@
     ],
     "sqlState" : "23K01"
   },
+  "MERGE_WITHOUT_WHEN" : {
+    "message" : [
+      "There must be at least one WHEN clause in a MERGE statement."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_AGGREGATION" : {
     "message" : [
       "The non-aggregating expression <expression> is based on columns which are not participating in the GROUP BY clause.",
@@ -3426,17 +3474,35 @@
     },
     "sqlState" : "XX000"
   },
+  "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
+    "message" : [
+      "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."
+    ],
+    "sqlState" : "3F000"
+  },
   "MISSING_GROUP_BY" : {
     "message" : [
       "The query does not include a GROUP BY clause. Add GROUP BY or turn it into the window functions using OVER clauses."
     ],
     "sqlState" : "42803"
   },
+  "MISSING_TIMEOUT_CONFIGURATION" : {
+    "message" : [
+      "The operation has timed out, but no timeout duration is configured. To set a processing time-based timeout, use 'GroupState.setTimeoutDuration()' in your 'mapGroupsWithState' or 'flatMapGroupsWithState' operation. For event-time-based timeout, use 'GroupState.setTimeoutTimestamp()' and define a watermark using 'Dataset.withWatermark()'."
+    ],
+    "sqlState" : "HY000"
+  },
   "MISSING_WINDOW_SPECIFICATION" : {
     "message" : [
       "Window specification is not defined in the WINDOW clause for <windowName>. For more information about WINDOW clauses, please refer to '<docroot>/sql-ref-syntax-qry-select-window.html'."
     ],
     "sqlState" : "42P20"
+  },
+  "MULTIPLE_QUERY_RESULT_CLAUSES_WITH_PIPE_OPERATORS" : {
+    "message" : [
+      "<clause1> and <clause2> cannot coexist in the same SQL pipe operator using '|>'. Please separate the multiple result clauses into separate pipe operators and then retry the query again."
+    ],
+    "sqlState" : "42000"
   },
   "MULTIPLE_TIME_TRAVEL_SPEC" : {
     "message" : [
@@ -3475,6 +3541,12 @@
       "Set \"spark.sql.allowNamedFunctionArguments\" to \"true\" to turn on feature."
     ],
     "sqlState" : "0A000"
+  },
+  "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION" : {
+    "message" : [
+      "Found the negative value in <frequencyExpression>: <negativeValue>, but expected a positive integral value."
+    ],
+    "sqlState" : "22003"
   },
   "NESTED_AGGREGATE_FUNCTION" : {
     "message" : [
@@ -3810,6 +3882,12 @@
       "Syntax error, unexpected empty statement."
     ],
     "sqlState" : "42617"
+  },
+  "PARSE_MODE_UNSUPPORTED" : {
+    "message" : [
+      "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
+    ],
+    "sqlState" : "42601"
   },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
@@ -4553,6 +4631,18 @@
     ],
     "sqlState" : "42K09"
   },
+  "TUPLE_IS_EMPTY" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, empty tuple is not supported."
+    ],
+    "sqlState" : "22004"
+  },
+  "TUPLE_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
+    ],
+    "sqlState" : "54011"
+  },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
@@ -4672,6 +4762,12 @@
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
       "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
+    ],
+    "sqlState" : "42704"
+  },
+  "UNRECOGNIZED_STATISTIC" : {
+    "message" : [
+      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values. Percentile must be a numeric value followed by '%', within the range 0% to 100%."
     ],
     "sqlState" : "42704"
   },
@@ -4824,6 +4920,64 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_CONNECT_FEATURE" : {
+    "message" : [
+      "Feature is not supported in Spark Connect:"
+    ],
+    "subClass" : {
+      "DATASET_QUERY_EXECUTION" : {
+        "message" : [
+          "Access to the Dataset Query Execution. This is server side developer API."
+        ]
+      },
+      "RDD" : {
+        "message" : [
+          "Resilient Distributed Datasets (RDDs)."
+        ]
+      },
+      "SESSION_BASE_RELATION_TO_DATAFRAME" : {
+        "message" : [
+          "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
+        ]
+      },
+      "SESSION_EXECUTE_COMMAND" : {
+        "message" : [
+          "Invoking SparkSession 'executeCommand'."
+        ]
+      },
+      "SESSION_EXPERIMENTAL_METHODS" : {
+        "message" : [
+          "Access to SparkSession Experimental (methods). This is server side developer API"
+        ]
+      },
+      "SESSION_LISTENER_MANAGER" : {
+        "message" : [
+          "Access to the SparkSession Listener Manager. This is server side developer API"
+        ]
+      },
+      "SESSION_SESSION_STATE" : {
+        "message" : [
+          "Access to the SparkSession Session State. This is server side developer API."
+        ]
+      },
+      "SESSION_SHARED_STATE" : {
+        "message" : [
+          "Access to the SparkSession Shared State. This is server side developer API."
+        ]
+      },
+      "SESSION_SPARK_CONTEXT" : {
+        "message" : [
+          "Access to the SparkContext."
+        ]
+      },
+      "SESSION_SQL_CONTEXT" : {
+        "message" : [
+          "Access to the SparkSession SQL Context."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [
       "Unsupported data source type for direct query on files: <dataSourceType>"
@@ -4938,6 +5092,11 @@
           "<functionName> with AES-<mode> does not support initialization vectors (IVs)."
         ]
       },
+      "ALTER_TABLE_SERDE_FOR_DATASOURCE_TABLE" : {
+        "message" : [
+          "ALTER TABLE SET SERDE is not supported for table <tableName> created with the datasource API. Consider using an external Hive table or updating the table properties with compatible options for your table format."
+        ]
+      },
       "ANALYZE_UNCACHED_TEMP_VIEW" : {
         "message" : [
           "The ANALYZE TABLE FOR COLUMNS command can operate on temporary views that have been cached already. Consider to cache the view <viewName>."
@@ -4956,6 +5115,11 @@
       "CATALOG_OPERATION" : {
         "message" : [
           "Catalog <catalogName> does not support <operation>."
+        ]
+      },
+      "CLAUSE_WITH_PIPE_OPERATORS" : {
+        "message" : [
+          "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
@@ -5066,6 +5230,11 @@
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
         "message" : [
           "Invalid partitioning: <cols> is missing or is in a map or array."
+        ]
+      },
+      "PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {
+        "message" : [
+          "The SQL pipe operator syntax with aggregation (using |> AGGREGATE) does not support <case>."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
@@ -5622,11 +5791,6 @@
       "The number of inserted values cannot match the fields."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0008" : {
-    "message" : [
-      "There must be at least one WHEN clause in a MERGE statement."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0012" : {
     "message" : [
       "DISTRIBUTE BY is not supported."
@@ -5667,11 +5831,6 @@
       "The value of from-to unit must be a string."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0028" : {
-    "message" : [
-      "Intervals FROM <from> TO <to> are not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0029" : {
     "message" : [
       "Cannot mix year-month and day-time fields: <literal>."
@@ -5705,21 +5864,6 @@
   "_LEGACY_ERROR_TEMP_0037" : {
     "message" : [
       "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0038" : {
-    "message" : [
-      "CTE definition can't have duplicate names: <duplicateNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0039" : {
-    "message" : [
-      "Unsupported SQL statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0043" : {
-    "message" : [
-      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0045" : {
@@ -5914,11 +6058,6 @@
       "<hintName> Hint expects a partition number as a parameter."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1049" : {
-    "message" : [
-      "Syntax error in attribute name: <name>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1050" : {
     "message" : [
       "Can only star expand struct data types. Attribute: `<attributes>`."
@@ -6019,19 +6158,9 @@
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1097" : {
-    "message" : [
-      "The field for corrupt records must be string type and nullable."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1098" : {
     "message" : [
       "DataType '<x>' is not supported by <className>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1099" : {
-    "message" : [
-      "<funcName>() doesn't support the <mode> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1103" : {
@@ -6094,11 +6223,6 @@
   "_LEGACY_ERROR_TEMP_1123" : {
     "message" : [
       "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1125" : {
-    "message" : [
-      "Database from v1 session catalog is not specified."
     ]
   },
   "_LEGACY_ERROR_TEMP_1126" : {
@@ -6488,11 +6612,6 @@
       "Operation not allowed: ALTER TABLE SET [SERDE | SERDEPROPERTIES] for a specific partition is not supported for tables created with the datasource API."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1248" : {
-    "message" : [
-      "Operation not allowed: ALTER TABLE SET SERDE is not supported for tables created with the datasource API."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1250" : {
     "message" : [
       "<action> is not allowed on <tableName> since filesource partition management is disabled (spark.sql.hive.manageFilesourcePartitions = false)."
@@ -6501,16 +6620,6 @@
   "_LEGACY_ERROR_TEMP_1251" : {
     "message" : [
       "<action> is not allowed on <tableName> since its partition metadata is not stored in the Hive metastore. To import this information into the metastore, run `msck repair table <tableName>`."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1252" : {
-    "message" : [
-      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1253" : {
-    "message" : [
-      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead."
     ]
   },
   "_LEGACY_ERROR_TEMP_1255" : {
@@ -6763,11 +6872,6 @@
       "Type <dataType> does not support ordered operations."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2013" : {
-    "message" : [
-      "Negative values found in <frequencyExpression>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2017" : {
     "message" : [
       "not resolved."
@@ -6846,11 +6950,6 @@
   "_LEGACY_ERROR_TEMP_2041" : {
     "message" : [
       "<methodName> is not implemented."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2042" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {
@@ -6943,11 +7042,6 @@
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2069" : {
-    "message" : [
-      "Cannot remove reserved property: <property>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2070" : {
@@ -7090,11 +7184,6 @@
       "Dictionary encoding should not be used because of dictionary overflow."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2104" : {
-    "message" : [
-      "End of the iterator."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2105" : {
     "message" : [
       "Could not allocate memory to grow BytesToBytesMap."
@@ -7133,16 +7222,6 @@
   "_LEGACY_ERROR_TEMP_2112" : {
     "message" : [
       "Unexpected window function frame <frame>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2113" : {
-    "message" : [
-      "Unable to parse <stats> as a percentile."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2114" : {
-    "message" : [
-      "<stats> is not a recognised statistic."
     ]
   },
   "_LEGACY_ERROR_TEMP_2115" : {
@@ -7230,11 +7309,6 @@
       "null value found but field <name> is not nullable."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2150" : {
-    "message" : [
-      "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2154" : {
     "message" : [
       "Failed to get outer pointer for <innerCls>."
@@ -7253,11 +7327,6 @@
   "_LEGACY_ERROR_TEMP_2164" : {
     "message" : [
       "Initial type <dataType> must be an <arrayType>, a <structType> or a <mapType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2165" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2166" : {
@@ -8090,11 +8159,6 @@
       "No handler for UDF/UDAF/UDTF '<clazz>': <e>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3085" : {
-    "message" : [
-      "from_avro() doesn't support the <name> mode. Acceptable modes are <permissiveMode> and <failFastMode>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3086" : {
     "message" : [
       "Cannot persist <tableName> into Hive metastore as table property keys may not start with 'spark.sql.': <invalidKeys>"
@@ -8380,11 +8444,6 @@
       "continuous mode is not supported!"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3168" : {
-    "message" : [
-      "hasTimedOut is true however there's no timeout configured"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3169" : {
     "message" : [
       "AcceptsLatestSeenOffset is not supported with DSv1 streaming source: <unsupportedSources>"
@@ -8605,11 +8664,6 @@
       "Cannot delete map key"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3227" : {
-    "message" : [
-      "Cannot find field: <fieldName>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_3228" : {
     "message" : [
       "AFTER column not found: <afterCol>"
@@ -8698,6 +8752,21 @@
   "_LEGACY_ERROR_TEMP_3262" : {
     "message" : [
       "Doesn't support month or year interval: <interval>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3300" : {
+    "message" : [
+      "error while calling spill() on <consumerToSpill> : <message>"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3301" : {
+    "message" : [
+      "Not enough memory to grow pointer array"
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_3302" : {
+    "message" : [
+      "No enough memory for aggregation"
     ]
   },
   "_LEGACY_ERROR_USER_RAISED_EXCEPTION" : {

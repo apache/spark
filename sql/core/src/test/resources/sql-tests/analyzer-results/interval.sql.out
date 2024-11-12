@@ -1233,9 +1233,11 @@ select interval '1' year to second
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0028",
+  "errorClass" : "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
+  "sqlState" : "22006",
   "messageParameters" : {
     "from" : "year",
+    "input" : "1",
     "to" : "second"
   },
   "queryContext" : [ {
