@@ -45,6 +45,7 @@ private[sql] trait SqlApiConf {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
   def defaultStringType: StringType
   def stackTracesInDataFrameContext: Int
+  def dataFrameQueryContextEnabled: Boolean
   def legacyAllowUntypedScalaUDFs: Boolean
 }
 
@@ -84,5 +85,6 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
   override def defaultStringType: StringType = StringType
   override def stackTracesInDataFrameContext: Int = 1
+  override def dataFrameQueryContextEnabled: Boolean = true
   override def legacyAllowUntypedScalaUDFs: Boolean = false
 }
