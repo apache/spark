@@ -5230,7 +5230,7 @@ class AstBuilder extends DataTypeAstBuilder
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val query = Option(ctx.query).map(plan)
-    withIdentClause(ctx.identifierReference, ident => {
+    withIdentClause(ctx.identifierReference, query.toSeq, (ident, children) => {
       if (query.isDefined && ident.length > 1) {
         val catalogAndNamespace = ident.init
         throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
@@ -5246,7 +5246,7 @@ class AstBuilder extends DataTypeAstBuilder
         // alongside the text.
         // The same rule can be found in CREATE VIEW builder.
         checkInvalidParameter(query.get, "the query of CACHE TABLE")
-        CacheTableAsSelect(ident.head, query.get, source(ctx.query()), isLazy, options)
+        CacheTableAsSelect(ident.head, children.head, source(ctx.query()), isLazy, options)
       } else {
         CacheTable(
           createUnresolvedRelation(ctx.identifierReference, ident, None, writePrivileges = Nil),
