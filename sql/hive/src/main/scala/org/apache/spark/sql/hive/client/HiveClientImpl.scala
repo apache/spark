@@ -28,6 +28,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
@@ -44,7 +45,7 @@ import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkThrowable}
 import org.apache.spark.deploy.SparkHadoopUtil.SOURCE_SPARK
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.internal.LogKeys._
@@ -877,8 +878,19 @@ private[hive] class HiveClientImpl(
       // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
       // and the CommandProcessorFactory.clean function removed.
       driver.getClass.getMethod("close").invoke(driver)
-      if (version != hive.v3_0 && version != hive.v3_1) {
+      if (version != hive.v3_0 && version != hive.v3_1 && version != hive.v4_0) {
         CommandProcessorFactory.clean(conf)
+      }
+    }
+
+    def getResponseCode(response: CommandProcessorResponse): Int = {
+      if (version < hive.v4_0) {
+        response.getResponseCode
+      } else {
+        // Since Hive 4.0, response code is removed from CommandProcessorResponse.
+        // Here we simply return 0 for the positive cases as for error cases it will
+        // throw exceptions early.
+        0
       }
     }
 
@@ -894,17 +906,27 @@ private[hive] class HiveClientImpl(
       val proc = shim.getCommandProcessor(tokens(0), conf)
       proc match {
         case driver: Driver =>
-          val response: CommandProcessorResponse = driver.run(cmd)
-          // Throw an exception if there is an error in query processing.
-          if (response.getResponseCode != 0) {
+          try {
+            val response: CommandProcessorResponse = driver.run(cmd)
+            if (getResponseCode(response) != 0) {
+              // Throw an exception if there is an error in query processing.
+              // This works for hive 3.x and earlier versions.
+              throw new QueryExecutionException(response.getErrorMessage)
+            }
+            driver.setMaxRows(maxRows)
+            val results = shim.getDriverResults(driver)
+            results
+          } catch {
+            case e @ (_: QueryExecutionException | _: SparkThrowable) =>
+              throw e
+            case e: Exception =>
+              // Wrap the original hive error with QueryExecutionException and throw it
+              // if there is an error in query processing.
+              // This works for hive 4.x and later versions.
+              throw new QueryExecutionException(ExceptionUtils.getStackTrace(e))
+          } finally {
             closeDriver(driver)
-            throw new QueryExecutionException(response.getErrorMessage)
           }
-          driver.setMaxRows(maxRows)
-
-          val results = shim.getDriverResults(driver)
-          closeDriver(driver)
-          results
 
         case _ =>
           val out = state.getClass.getField("out").get(state)
@@ -913,8 +935,15 @@ private[hive] class HiveClientImpl(
             out.asInstanceOf[PrintStream].println(tokens(0) + " " + cmd_1)
             // scalastyle:on println
           }
-          proc.run(cmd_1)
-          Seq("0")
+          val response: CommandProcessorResponse = proc.run(cmd_1)
+          val responseCode = getResponseCode(response)
+          if (responseCode != 0) {
+            // Throw an exception if there is an error in query processing.
+            // This works for hive 3.x and earlier versions. For 4.x and later versions,
+            // It will go to the catch block directly.
+            throw new QueryExecutionException(response.getErrorMessage)
+          }
+          Seq(responseCode.toString)
       }
     } catch {
       case e: Exception =>
