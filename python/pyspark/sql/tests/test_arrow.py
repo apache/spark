@@ -544,13 +544,11 @@ class ArrowTestsMixin:
             Row(id=3, value=-647710720),
         ]
 
-        with self.sql_conf({"spark.sql.execution.castArrowTableSafely": False}):
-            df = self.spark.createDataFrame(table, schema=schema)
-            self.assertEqual(df.collect(), expected)
+        df = self.spark.createDataFrame(table, schema=schema)
+        self.assertEqual(df.collect(), expected)
 
-        with self.sql_conf({"spark.sql.execution.castArrowTableSafely": True}):
-            with self.assertRaises(Exception):
-                self.spark.createDataFrame(table, schema=schema)
+        with self.assertRaises(Exception):
+            self.spark.createDataFrame(table, schema=schema, verifySchema=True)
 
     def _createDataFrame_toggle(self, data, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
