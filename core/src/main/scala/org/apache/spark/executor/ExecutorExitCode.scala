@@ -49,6 +49,9 @@ object ExecutorExitCode {
    * TaskReaper. */
   val KILLED_BY_TASK_REAPER = 57
 
+  /** Executor is unable to re-register BlockManager. */
+  val BLOCK_MANAGER_REREGISTRATION_FAILED = 58
+
   def explainExitCode(exitCode: Int): String = {
     exitCode match {
       case UNCAUGHT_EXCEPTION => "Uncaught exception"
@@ -63,6 +66,8 @@ object ExecutorExitCode {
         "ExternalBlockStore failed to create a local temporary directory."
       case HEARTBEAT_FAILURE =>
         "Unable to send heartbeats to driver."
+      case BLOCK_MANAGER_REREGISTRATION_FAILED =>
+        "Executor killed due to a failure of block manager re-registration."
       case KILLED_BY_TASK_REAPER =>
         "Executor killed by TaskReaper."
       case _ =>

@@ -43,6 +43,7 @@ import sys
 import numpy as np
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors.utils import _with_origin
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql import Column
 from pyspark.sql.connect.expressions import (
@@ -68,8 +69,6 @@ from pyspark.sql.types import (
     StructType,
     ArrayType,
     StringType,
-    ByteType,
-    ShortType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
 
@@ -240,6 +239,7 @@ def _options_to_col(options: Mapping[str, Any]) -> Column:
 # Normal Functions
 
 
+@_with_origin
 def col(col: str) -> Column:
     from pyspark.sql.connect.column import Column as ConnectColumn
 
@@ -275,16 +275,8 @@ def lit(col: Any) -> Column:
                 errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
                 messageParameters={"dtype": col.dtype.name},
             )
-
-        # NumpyArrayConverter for Py4J can not support ndarray with int8 values.
-        # Actually this is not a problem for Connect, but here still convert it
-        # to int16 for compatibility.
-        if dt == ByteType():
-            dt = ShortType()
-
         return array(*[lit(c) for c in col]).cast(ArrayType(dt))
-    else:
-        return ConnectColumn(LiteralExpression._from_value(col))
+    return ConnectColumn(LiteralExpression._from_value(col))
 
 
 lit.__doc__ = pysparkfuncs.lit.__doc__
@@ -2490,7 +2482,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 format_string.__doc__ = pysparkfuncs.format_string.__doc__
 
 
-def instr(str: "ColumnOrName", substr: str) -> Column:
+def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
     return _invoke_function("instr", _to_col(str), lit(substr))
 
 
@@ -2580,15 +2572,23 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
 locate.__doc__ = pysparkfuncs.locate.__doc__
 
 
-def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
-    return _invoke_function("lpad", _to_col(col), lit(len), lit(pad))
+def lpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
+    return _invoke_function_over_columns("lpad", col, lit(len), lit(pad))
 
 
 lpad.__doc__ = pysparkfuncs.lpad.__doc__
 
 
-def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
-    return _invoke_function("rpad", _to_col(col), lit(len), lit(pad))
+def rpad(
+    col: "ColumnOrName",
+    len: Union[Column, int],
+    pad: Union[Column, str],
+) -> Column:
+    return _invoke_function_over_columns("rpad", col, lit(len), lit(pad))
 
 
 rpad.__doc__ = pysparkfuncs.rpad.__doc__
@@ -2817,6 +2817,18 @@ def parse_url(
 
 
 parse_url.__doc__ = pysparkfuncs.parse_url.__doc__
+
+
+def try_parse_url(
+    url: "ColumnOrName", partToExtract: "ColumnOrName", key: Optional["ColumnOrName"] = None
+) -> Column:
+    if key is not None:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract, key)
+    else:
+        return _invoke_function_over_columns("try_parse_url", url, partToExtract)
+
+
+try_parse_url.__doc__ = pysparkfuncs.try_parse_url.__doc__
 
 
 def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
@@ -3178,21 +3190,21 @@ def dayname(col: "ColumnOrName") -> Column:
 dayname.__doc__ = pysparkfuncs.dayname.__doc__
 
 
-def extract(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def extract(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("extract", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def date_part(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def date_part(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("date_part", field, source)
 
 
 extract.__doc__ = pysparkfuncs.extract.__doc__
 
 
-def datepart(field: "ColumnOrName", source: "ColumnOrName") -> Column:
+def datepart(field: Column, source: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("datepart", field, source)
 
 
@@ -3702,6 +3714,31 @@ def make_dt_interval(
 make_dt_interval.__doc__ = pysparkfuncs.make_dt_interval.__doc__
 
 
+def try_make_interval(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    weeks: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+) -> Column:
+    _years = lit(0) if years is None else _to_col(years)
+    _months = lit(0) if months is None else _to_col(months)
+    _weeks = lit(0) if weeks is None else _to_col(weeks)
+    _days = lit(0) if days is None else _to_col(days)
+    _hours = lit(0) if hours is None else _to_col(hours)
+    _mins = lit(0) if mins is None else _to_col(mins)
+    _secs = lit(decimal.Decimal(0)) if secs is None else _to_col(secs)
+
+    return _invoke_function_over_columns(
+        "try_make_interval", _years, _months, _weeks, _days, _hours, _mins, _secs
+    )
+
+
+try_make_interval.__doc__ = pysparkfuncs.try_make_interval.__doc__
+
+
 def make_interval(
     years: Optional["ColumnOrName"] = None,
     months: Optional["ColumnOrName"] = None,
@@ -3749,6 +3786,28 @@ def make_timestamp(
 make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
 
 
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "try_make_timestamp", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "try_make_timestamp", years, months, days, hours, mins, secs
+        )
+
+
+try_make_timestamp.__doc__ = pysparkfuncs.try_make_timestamp.__doc__
+
+
 def make_timestamp_ltz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3771,6 +3830,28 @@ def make_timestamp_ltz(
 make_timestamp_ltz.__doc__ = pysparkfuncs.make_timestamp_ltz.__doc__
 
 
+def try_make_timestamp_ltz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: Optional["ColumnOrName"] = None,
+) -> Column:
+    if timezone is not None:
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ltz", years, months, days, hours, mins, secs, timezone
+        )
+    else:
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ltz", years, months, days, hours, mins, secs
+        )
+
+
+try_make_timestamp_ltz.__doc__ = pysparkfuncs.try_make_timestamp_ltz.__doc__
+
+
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3785,6 +3866,22 @@ def make_timestamp_ntz(
 
 
 make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
+
+
+def try_make_timestamp_ntz(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+) -> Column:
+    return _invoke_function_over_columns(
+        "try_make_timestamp_ntz", years, months, days, hours, mins, secs
+    )
+
+
+try_make_timestamp_ntz.__doc__ = pysparkfuncs.try_make_timestamp_ntz.__doc__
 
 
 def make_ym_interval(
