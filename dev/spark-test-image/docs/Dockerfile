@@ -17,53 +17,18 @@
 
 # Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
+
+# syntax = edrevo/dockerfile-plus
+
 FROM ubuntu:jammy-20240911.1
-LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
-LABEL org.opencontainers.image.licenses="Apache-2.0"
+
 LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Documentation"
-# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
-LABEL org.opencontainers.image.version=""
 
 ENV FULL_REFRESH_DATE 20241029
 
-ENV DEBIAN_FRONTEND noninteractive
-ENV DEBCONF_NONINTERACTIVE_SEEN true
+INCLUDE+ ../../infra/Dockerfile.common
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    ca-certificates \
-    curl \
-    gfortran \
-    git \
-    gnupg \
-    libcurl4-openssl-dev \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libfribidi-dev \
-    libgit2-dev \
-    libharfbuzz-dev \
-    libjpeg-dev \
-    liblapack-dev \
-    libopenblas-dev \
-    libpng-dev \
-    libpython3-dev \
-    libssl-dev \
-    libtiff5-dev \
-    libxml2-dev \
-    nodejs \
-    npm \
-    openjdk-17-jdk-headless \
-    pandoc \
-    pkg-config \
-    qpdf \
-    r-base \
-    ruby \
-    ruby-dev \
-    software-properties-common \
-    wget \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
-
+RUN rm -rf /var/lib/apt/lists/*
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat'), repos='https://cloud.r-project.org/')" && \

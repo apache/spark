@@ -1,5 +1,3 @@
-# syntax = edrevo/dockerfile-plus
-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -19,52 +17,22 @@
 
 # Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
+
+# syntax = edrevo/dockerfile-plus
+
 FROM ubuntu:jammy-20240911.1
 
-INCLUDE+ Dockerfile.common
+LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image"
 
 ENV FULL_REFRESH_DATE 20241028
 
-ENV DEBIAN_FRONTEND noninteractive
-ENV DEBCONF_NONINTERACTIVE_SEEN true
+INCLUDE+ Dockerfile.common
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    ca-certificates \
-    curl \
-    gfortran \
-    git \
-    gnupg \
-    libcurl4-openssl-dev \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libfribidi-dev \
-    libgit2-dev \
-    libharfbuzz-dev \
-    libjpeg-dev \
-    liblapack-dev \
-    libopenblas-dev \
-    libpng-dev \
-    libpython3-dev \
-    libssl-dev \
-    libtiff5-dev \
-    libxml2-dev \
-    nodejs \
-    npm \
-    openjdk-17-jdk-headless \
-    pandoc \
-    pkg-config \
+RUN apt-get install -y \
     python3.10 \
-    python3-psutil \
-    qpdf \
-    r-base \
-    ruby \
-    ruby-dev \
-    software-properties-common \
-    wget \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
+    python3-psutil
 
+RUN rm -rf /var/lib/apt/lists/*
 
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9
