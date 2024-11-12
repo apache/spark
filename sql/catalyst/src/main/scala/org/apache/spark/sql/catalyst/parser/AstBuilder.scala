@@ -5900,7 +5900,7 @@ class AstBuilder extends DataTypeAstBuilder
         isPipeOperatorSelect = true)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
-        throw QueryParsingErrors.windowClauseInOperatorPipeWhereClauseNotAllowedError(ctx)
+        throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
       }
       withWhereClause(c, withSubqueryAlias())
     }.getOrElse(Option(ctx.pivotClause()).map { c =>

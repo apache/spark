@@ -114,7 +114,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def windowClauseInOperatorPipeWhereClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
+  def windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE", ctx)
   }
 
