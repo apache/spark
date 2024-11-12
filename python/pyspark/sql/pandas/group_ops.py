@@ -516,10 +516,7 @@ class PandasGroupedOpsMixin:
                 watermark_timestamp = -1
             # process with invalid expiry timer info and emit data rows
             data_iter = statefulProcessor.handleInputRows(
-                key,
-                inputRows,
-                TimerValues(batch_timestamp, watermark_timestamp),
-                ExpiredTimerInfo(False),
+                key, inputRows, TimerValues(batch_timestamp, watermark_timestamp)
             )
             statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.DATA_PROCESSED)
 
@@ -540,9 +537,8 @@ class PandasGroupedOpsMixin:
             for expiry_list in expiry_list_iter:
                 for key_obj, expiry_timestamp in expiry_list:
                     result_iter_list.append(
-                        statefulProcessor.handleInputRows(
+                        statefulProcessor.handleExpiredTimer(
                             key_obj,
-                            iter([]),
                             TimerValues(batch_timestamp, watermark_timestamp),
                             ExpiredTimerInfo(True, expiry_timestamp),
                         )
