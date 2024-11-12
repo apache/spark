@@ -287,13 +287,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def invalidIntervalWithMicrosecondsError(funcName: String): SparkIllegalArgumentException = {
+  def invalidIntervalWithMicrosecondsAdditionError(funcName: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "INVALID_PARAMETER_VALUE.INTERVAL_WITH_MICROSECONDS",
-      messageParameters = Map(
-        "parameter" -> toSQLId("interval"),
-        "functionName" -> toSQLId(funcName),
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+      errorClass = "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION",
+      messageParameters = Map("ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def overflowInSumOfDecimalError(

@@ -2613,6 +2613,12 @@
     },
     "sqlState" : "22006"
   },
+  "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
+    "message" : [
+      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22006"
+  },
   "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
     "message" : [
       "Invalid inverse distribution function <funcName>."
@@ -2897,11 +2903,6 @@
       "INTEGER" : {
         "message" : [
           "expects an integer literal, but got <invalidValue>."
-        ]
-      },
-      "INTERVAL_WITH_MICROSECONDS" : {
-        "message" : [
-          "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
         ]
       },
       "LENGTH" : {
