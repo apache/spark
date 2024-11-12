@@ -2339,11 +2339,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
-  "sqlState" : "22015",
-  "messageParameters" : {
-    "functionName" : "try_multiply"
-  }
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
 }
 
 
@@ -2354,10 +2351,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "functionName" : "try_subtract"
+    "functionName" : "`try_subtract`"
   }
 }
 
@@ -2369,10 +2366,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "functionName" : "try_add"
+    "functionName" : "`try_add`"
   }
 }
 
@@ -2681,10 +2678,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "functionName" : "try_divide"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2703,10 +2700,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "functionName" : "try_divide"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2759,10 +2756,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "functionName" : "try_divide"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2781,10 +2778,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_TRY_SUGGESTION",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "functionName" : "try_divide"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
