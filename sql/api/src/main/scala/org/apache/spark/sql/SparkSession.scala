@@ -909,18 +909,10 @@ object SparkSession extends SparkSessionCompanion {
     def connect(): this.type = super.config(API_MODE_KEY, API_MODE_CONNECT)
 
     /** @inheritdoc */
-    override def getOrCreate(): SparkSession = {
-      val session = builder().getOrCreate()
-      setDefaultAndActiveSession(session)
-      session
-    }
+    override def getOrCreate(): SparkSession = builder().getOrCreate()
 
     /** @inheritdoc */
-    override def create(): SparkSession = {
-      val session = builder().create()
-      setDefaultAndActiveSession(session)
-      session
-    }
+    override def create(): SparkSession = builder().create()
 
     /**
      * Create an API mode implementation specific builder.

@@ -28,7 +28,8 @@ import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.ThreadUtils
 
-class SparkShellSuite extends SparkFunSuite {
+class
+SparkShellSuite extends SparkFunSuite {
   /**
    * Run a spark-shell operation and expect all the script and expected answers to be returned.
    * This method refers to [[runCliWithin()]] method in [[CliSuite]].

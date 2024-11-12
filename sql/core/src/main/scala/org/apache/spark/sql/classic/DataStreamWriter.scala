@@ -27,7 +27,6 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql.{streaming, Dataset => DS, ForeachWriter}
-import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer.CatalogAndIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -35,8 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTabl
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog, TableProvider, V1Table, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -141,6 +139,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
   @Evolving
   @throws[TimeoutException]
   def toTable(tableName: String): StreamingQuery = {
+    import ds.sparkSession.sessionState.analyzer.CatalogAndIdentifier
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
     val parser = ds.sparkSession.sessionState.sqlParser
     val originalMultipartIdentifier = parser.parseMultipartIdentifier(tableName)
     val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier

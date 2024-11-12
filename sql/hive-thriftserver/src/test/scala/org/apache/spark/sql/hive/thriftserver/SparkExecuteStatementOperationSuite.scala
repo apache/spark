@@ -30,7 +30,7 @@ import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, NullType, StringType, StructField, StructType}

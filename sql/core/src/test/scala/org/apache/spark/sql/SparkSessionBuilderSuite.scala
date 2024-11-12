@@ -48,7 +48,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   }
 
   test("SPARK-34087: Fix memory leak of ExecutionListenerBus") {
-    val spark = classic.SparkSession.builder()
+    val spark = SparkSession.builder()
       .master("local")
       .getOrCreate()
 
@@ -61,7 +61,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     }
 
     (1 to 10).foreach { _ =>
-      spark.cloneSession()
+      spark.asInstanceOf[classic.SparkSession].cloneSession()
       SparkSession.clearActiveSession()
     }
 
@@ -163,10 +163,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
   test("create SparkContext first then pass context to SparkSession") {
     val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
     val newSC = new SparkContext(conf)
-    val session = classic.SparkSession.builder()
-      .sparkContext(newSC)
-      .config("key2", "value2")
-      .getOrCreate()
+    val session = SparkSession.builder().sparkContext(newSC).config("key2", "value2").getOrCreate()
     assert(session.conf.get("key1") == "value1")
     assert(session.conf.get("key2") == "value2")
     assert(session.sparkContext == newSC)
@@ -215,7 +212,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .setMaster("local")
       .setAppName("test-app-SPARK-31354-1")
     val context = new SparkContext(conf)
-    classic.SparkSession
+    SparkSession
       .builder()
       .sparkContext(context)
       .master("local")
@@ -224,7 +221,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     SparkSession.clearActiveSession()
     SparkSession.clearDefaultSession()
 
-    classic.SparkSession
+    SparkSession
       .builder()
       .sparkContext(context)
       .master("local")
@@ -333,6 +330,10 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .set(wh, "./data1")
       .set(td, "bob")
 
+    // This creates an active SparkContext, which will be picked up the session.
+    new SparkContext(conf)
+
+    // The only way this could have ever worked if this is effectively a no-op.
     val spark = SparkSession.builder()
       .config(wh, "./data2")
       .config(td, "alice")
