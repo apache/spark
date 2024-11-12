@@ -733,7 +733,7 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
         else:
             yield pd.DataFrame({"id": key, "value": str(accumulated_value)})
 
-    def handleInitialState(self, key, initialState) -> None:
+    def handleInitialState(self, key, initialState, timer_values) -> None:
         init_val = initialState.at[0, "initVal"]
         self.value_state.update((init_val,))
         if len(key) == 1:

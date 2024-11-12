@@ -506,14 +506,10 @@ class PandasGroupedOpsMixin:
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
+            batch_timestamp: int,
+            watermark_timestamp: int,
         ) -> Iterator["PandasDataFrameLike"]:
             statefulProcessorApiClient.set_implicit_key(key)
-            if timeMode != "none":
-                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
-                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
-            else:
-                batch_timestamp = -1
-                watermark_timestamp = -1
             # process with invalid expiry timer info and emit data rows
             data_iter = statefulProcessor.handleInputRows(
                 key, inputRows, TimerValues(batch_timestamp, watermark_timestamp)
@@ -569,7 +565,15 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
 
-            result = handle_data_with_timers(statefulProcessorApiClient, key, inputRows)
+            if timeMode != "none":
+                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
+                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
+            else:
+                batch_timestamp = -1
+                watermark_timestamp = -1
+
+            result = handle_data_with_timers(
+                statefulProcessorApiClient, key, inputRows, batch_timestamp, watermark_timestamp)
             return result
 
         def transformWithStateWithInitStateUDF(
@@ -606,12 +610,19 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
 
+            if timeMode != "none":
+                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
+                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
+            else:
+                batch_timestamp = -1
+                watermark_timestamp = -1
+
             # only process initial state if first batch and initial state is not None
             if initialStates is not None:
                 for cur_initial_state in initialStates:
                     statefulProcessorApiClient.set_implicit_key(key)
-                    # TODO(SPARK-50194) integration with new timer API with initial state
-                    statefulProcessor.handleInitialState(key, cur_initial_state)
+                    statefulProcessor.handleInitialState(
+                        key, cur_initial_state, TimerValues(batch_timestamp, watermark_timestamp))
 
             # if we don't have input rows for the given key but only have initial state
             # for the grouping key, the inputRows iterator could be empty
@@ -624,7 +635,8 @@ class PandasGroupedOpsMixin:
                 inputRows = itertools.chain([first], inputRows)
 
             if not input_rows_empty:
-                result = handle_data_with_timers(statefulProcessorApiClient, key, inputRows)
+                result = handle_data_with_timers(
+                    statefulProcessorApiClient, key, inputRows, batch_timestamp, watermark_timestamp)
             else:
                 result = iter([])
 

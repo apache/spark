@@ -442,9 +442,23 @@ class StatefulProcessor(ABC):
         """
         ...
 
-    def handleInitialState(self, key: Any, initialState: "PandasDataFrameLike") -> None:
+    def handleInitialState(
+        self,
+        key: Any,
+        initialState: "PandasDataFrameLike",
+        timer_values: TimerValues) -> None:
         """
         Optional to implement. Will act as no-op if not defined or no initial state input.
          Function that will be invoked only in the first batch for users to process initial states.
+
+        Parameters
+        ----------
+        key : Any
+            grouping key.
+        initialState: :class:`pandas.DataFrame`
+                      One dataframe in the initial state associated with the key.
+        timer_values: TimerValues
+                      Timer value for the current batch that process the input rows.
+                      Users can get the processing or event time timestamp from TimerValues.
         """
         pass
