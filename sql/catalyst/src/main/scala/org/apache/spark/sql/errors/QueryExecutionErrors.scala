@@ -641,7 +641,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       context: QueryContext): ArithmeticException = {
     new SparkArithmeticException(
       errorClass = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
-      messageParameters = Map("functionName" -> suggestedFunc),
+      messageParameters = Map("functionName" -> toSQLId(suggestedFunc)),
       context = getQueryContext(context),
       summary = getSummary(context))
   }
