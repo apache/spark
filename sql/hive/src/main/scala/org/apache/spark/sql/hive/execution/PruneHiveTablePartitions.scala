@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Prune hive table partitions using partition filters on [[HiveTableRelation]]. The pruned
@@ -42,6 +43,8 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
  */
 private[sql] class PruneHiveTablePartitions(session: SparkSession)
   extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
+
+  override def conf: SQLConf = session.sessionState.conf
 
   /**
    * Extract the partition filters from the filters on the table.
@@ -105,7 +108,7 @@ private[sql] class PruneHiveTablePartitions(session: SparkSession)
       if filters.nonEmpty && relation.isPartitioned && relation.prunedPartitions.isEmpty =>
       val partitionKeyFilters = getPartitionKeyFilters(filters, relation)
       if (partitionKeyFilters.nonEmpty) {
-        val newPartitions = ExternalCatalogUtils.listPartitionsByFilter(session.sessionState.conf,
+        val newPartitions = ExternalCatalogUtils.listPartitionsByFilter(conf,
           session.sessionState.catalog, relation.tableMeta, partitionKeyFilters.toSeq)
         val newTableMeta = updateTableMeta(relation, newPartitions, partitionKeyFilters)
         val newRelation = relation.copy(

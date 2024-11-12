@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.DYNAMIC_PRUNING_SUBQUERY
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan, SubqueryBroadcastExec}
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This planner rule aims at rewriting dynamic pruning predicates in order to reuse the
@@ -35,6 +36,8 @@ import org.apache.spark.sql.execution.joins._
  * the fallback mechanism with subquery duplicate.
 */
 case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[SparkPlan] {
+
+  override def conf: SQLConf = sparkSession.sessionState.conf
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.
@@ -45,7 +48,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!sparkSession.sessionState.conf.dynamicPartitionPruningEnabled) {
+    if (!conf.dynamicPartitionPruningEnabled) {
       return plan
     }
 
@@ -56,8 +59,8 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
           sparkSession, sparkSession.sessionState.planner, buildPlan)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
-        val canReuseExchange = sparkSession.sessionState.conf.exchangeReuseEnabled &&
-          buildKeys.nonEmpty && plan.exists {
+        val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
+          plan.exists {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(sparkPlan)
             case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>

@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrate
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
 /**
@@ -117,13 +117,15 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 }
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
+
+  override def conf: SQLConf = session.sessionState.conf
+
   private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
     val table = relation.tableMeta
     val partitionCols = relation.partitionCols
     // For partitioned tables, the partition directory may be outside of the table directory.
     // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
-    val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled &&
-      partitionCols.isEmpty) {
+    val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
       try {
         val hadoopConf = session.sessionState.newHadoopConf()
         val tablePath = new Path(table.location)
@@ -132,10 +134,10 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       } catch {
         case e: IOException =>
           logWarning("Failed to get table size from HDFS.", e)
-          session.sessionState.conf.defaultSizeInBytes
+          conf.defaultSizeInBytes
       }
     } else {
-      session.sessionState.conf.defaultSizeInBytes
+      conf.defaultSizeInBytes
     }
 
     val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))

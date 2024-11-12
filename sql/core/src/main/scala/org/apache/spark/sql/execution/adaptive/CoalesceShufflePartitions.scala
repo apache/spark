@@ -33,6 +33,8 @@ import org.apache.spark.util.Utils
  */
 case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleReadRule {
 
+  override def conf: SQLConf = session.sessionState.conf
+
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
       REBALANCE_PARTITIONS_BY_COL)
@@ -42,7 +44,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!session.sessionState.conf.coalesceShufflePartitionsEnabled) {
+    if (!conf.coalesceShufflePartitionsEnabled) {
       return plan
     }
 
@@ -54,9 +56,8 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     // COALESCE_PARTITIONS_MIN_PARTITION_SIZE (default 1MB).
     // For history reason, this rule also need to support the config
     // COALESCE_PARTITIONS_MIN_PARTITION_NUM. We should remove this config in the future.
-    val minNumPartitions = session.sessionState.conf.getConf(
-      SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM).getOrElse {
-      if (session.sessionState.conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)) {
+    val minNumPartitions = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM).getOrElse {
+      if (conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)) {
         // We fall back to Spark default parallelism if the minimum number of coalesced partitions
         // is not set, so to avoid perf regressions compared to no coalescing.
         session.sparkContext.defaultParallelism
@@ -98,11 +99,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         // than the default value of the min partition size. Here we also adjust the min partition
         // size to be not larger than 20% of the target size, so that the tests don't need to set
         // both configs all the time to check the coalescing behavior.
-        session.sessionState.conf.getConf(
-          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE).min(advisoryTargetSize / 5)
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE).min(advisoryTargetSize / 5)
       } else {
-        session.sessionState.conf.getConf(
-          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
       }
 
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
@@ -131,10 +130,9 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
   // only one shuffle stage is expected in such cases
   private def advisoryPartitionSize(coalesceGroup: CoalesceGroup): Long = {
     if (coalesceGroup.hasExplodingJoin) {
-      return session.sessionState.conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
+      return conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
     }
-    val defaultAdvisorySize =
-      session.sessionState.conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+    val defaultAdvisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     coalesceGroup.shuffleStages match {
       case Seq(stage) =>
         stage.shuffleStage.advisoryPartitionSize.getOrElse(defaultAdvisorySize)

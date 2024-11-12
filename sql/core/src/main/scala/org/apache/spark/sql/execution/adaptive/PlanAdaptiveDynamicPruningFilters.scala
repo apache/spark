@@ -25,14 +25,18 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, HashedRelationBroadcastMode, HashJoin}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
  */
 case class PlanAdaptiveDynamicPruningFilters(
     rootPlan: AdaptiveSparkPlanExec) extends Rule[SparkPlan] with AdaptiveSparkPlanHelper {
+
+  override def conf: SQLConf = rootPlan.context.session.sessionState.conf
+
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!rootPlan.context.session.sessionState.conf.dynamicPartitionPruningEnabled) {
+    if (!conf.dynamicPartitionPruningEnabled) {
       return plan
     }
 
@@ -47,8 +51,8 @@ case class PlanAdaptiveDynamicPruningFilters(
         // plan a broadcast exchange of the build side of the join
         val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
 
-        val canReuseExchange = rootPlan.context.session.sessionState.conf.exchangeReuseEnabled &&
-          buildKeys.nonEmpty && find(rootPlan) {
+        val canReuseExchange = conf.exchangeReuseEnabled && buildKeys.nonEmpty &&
+          find(rootPlan) {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _, _) =>
               left.sameResult(exchange)
             case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right, _) =>
