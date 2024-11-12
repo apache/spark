@@ -1564,8 +1564,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           | INSERT INTO t VALUES (2, 'second', 2.0);
           | FOR x AS SELECT * FROM t ORDER BY intCol DO
           |   SELECT x.intCol;
+          |   SELECT intCol;
           |   SELECT x.stringCol;
+          |   SELECT stringCol;
           |   SELECT x.doubleCol;
+          |   SELECT doubleCol;
           | END FOR;
           |END
           |""".stripMargin
@@ -1574,18 +1577,18 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
         Seq.empty[Row], // insert
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 0
+        Seq(Row(1)), // select x.intCol
         Seq(Row(1)), // select intCol
+        Seq(Row("first")), // select x.stringCol
         Seq(Row("first")), // select stringCol
+        Seq(Row(1.0)), // select x.doubleCol
         Seq(Row(1.0)), // select doubleCol
-        Seq.empty[Row], // drop x
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 1
+        Seq(Row(2)), // select x.intCol
         Seq(Row(2)), // select intCol
+        Seq(Row("second")), // select x.stringCol
         Seq(Row("second")), // select stringCol
-        Seq(Row(2.0)), // select doubleCol
-        Seq.empty[Row] // drop x
+        Seq(Row(2.0)), // select x.doubleCol
+        Seq(Row(2.0)) // select doubleCol
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1602,8 +1605,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  (2, MAP('b', MAP(2, 20)), STRUCT('Jane', 30), ARRAY('apple', 'banana'));
           | FOR row AS SELECT * FROM t ORDER BY int_column DO
           |   SELECT row.map_column;
+          |   SELECT map_column;
           |   SELECT row.struct_column;
+          |   SELECT struct_column;
           |   SELECT row.array_column;
+          |   SELECT array_column;
           | END FOR;
           |END
           |""".stripMargin
@@ -1611,18 +1617,18 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val expected = Seq(
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 0
+        Seq(Row(Map("a" -> Map(1 -> 10)))), // select row.map_column
         Seq(Row(Map("a" -> Map(1 -> 10)))), // select map_column
+        Seq(Row(Row("John", 25))), // select row.struct_column
         Seq(Row(Row("John", 25))), // select struct_column
+        Seq(Row(Array("apple", "banana"))), // select row.array_column
         Seq(Row(Array("apple", "banana"))), // select array_column
-        Seq.empty[Row], // drop x
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 1
+        Seq(Row(Map("b" -> Map(2 -> 20)))), // select row.map_column
         Seq(Row(Map("b" -> Map(2 -> 20)))), // select map_column
+        Seq(Row(Row("Jane", 30))), // select row.struct_column
         Seq(Row(Row("Jane", 30))), // select struct_column
-        Seq(Row(Array("apple", "banana"))), // select array_column
-        Seq.empty[Row] // drop x
+        Seq(Row(Array("apple", "banana"))), // select row.array_column
+        Seq(Row(Array("apple", "banana"))) // select array_column
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1712,21 +1718,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // insert
         Seq.empty[Row], // insert
         Seq.empty[Row], // insert
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 0
         Seq(Row("first")), // select stringCol
-        Seq.empty[Row], // drop x
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 1
-        //        Seq.empty[Row], // drop x - TODO: uncomment when iterate can handle dropping vars
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 2
         Seq(Row("third")), // select stringCol
-        Seq.empty[Row], // drop x
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 3
-        Seq(Row("fourth")), // select stringCol
-        Seq.empty[Row], // drop x
+        Seq(Row("fourth")) // select stringCol
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1758,17 +1752,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // insert
         Seq.empty[Row], // insert
         Seq.empty[Row], // insert
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 0
         Seq(Row("first")), // select stringCol
-        Seq.empty[Row], // drop x
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 1
-        Seq(Row("second")), // select stringCol
-        Seq.empty[Row], // drop x
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 2
-        //        Seq.empty[Row], // drop x
+        Seq(Row("second")) // select stringCol
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1797,22 +1782,13 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
         Seq.empty[Row], // set i
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 0
         Seq(Row(0)), // select intCol
-        Seq.empty[Row], // drop x
         Seq.empty[Row], // insert
         Seq.empty[Row], // set i
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 0
         Seq(Row(0)), // select intCol
-        Seq.empty[Row], // drop x
-        Seq.empty[Row], // declare x
-        Seq.empty[Row], // set x to row 1
         Seq(Row(1)), // select intCol
-        Seq.empty[Row], // drop x
         Seq.empty[Row], // insert
-        Seq.empty[Row], // drop i
+        Seq.empty[Row] // drop i
       )
       verifySqlScriptResult(sqlScript, expected)
     }

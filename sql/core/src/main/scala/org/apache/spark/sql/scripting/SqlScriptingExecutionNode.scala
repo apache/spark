@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateMap, CreateNamedStruct, Expression, GenericRowWithSchema, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateMap, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -667,11 +667,15 @@ class ForStatementExec(
     session: SparkSession) extends NonLeafStatementExec {
 
   private object ForState extends Enumeration {
-    val VariableDeclaration, VariableAssignment, Body = Value
+    val VariableAssignment, Body = Value
   }
-  private var state = ForState.VariableDeclaration
+  private var state = ForState.VariableAssignment
   private var currRow = 0
-  private var currVariable: Expression = null
+  private var areVariablesDeclared = false
+
+  // map of all variables created internally by the for statement
+  // (variableName -> variableExpression)
+  private var variablesMap: Map[String, Expression] = Map()
 
   private var queryResult: Array[Row] = null
   private var isResultCacheValid = false
@@ -694,21 +698,22 @@ class ForStatementExec(
         !interrupted && cachedQueryResult().length > 0 && currRow < cachedQueryResult().length
 
       override def next(): CompoundStatementExec = state match {
-        case ForState.VariableDeclaration =>
-          // when there is no for variable, skip var declaration and iterate only the body
-          if (variableName.isEmpty) {
-            state = ForState.Body
-            body.reset()
-            return next()
-          }
-          currVariable = createExpressionFromValue(cachedQueryResult()(currRow))
-          state = ForState.VariableAssignment
-          createDeclareVarExec(variableName.get, currVariable)
 
         case ForState.VariableAssignment =>
+          variablesMap = createVariablesMapFromRow(currRow)
+
+          if (!areVariablesDeclared) {
+            variablesMap.keys.toSeq
+              .map(colName => createDeclareVarExec(colName, variablesMap(colName)))
+              .foreach(declareVarExec => declareVarExec.buildDataFrame(session).collect())
+            areVariablesDeclared = true
+          }
+          variablesMap.keys.toSeq
+            .map(colName => createSetVarExec(colName, variablesMap(colName)))
+            .foreach(exec => exec.buildDataFrame(session).collect())
           state = ForState.Body
           body.reset()
-          createSetVarExec(variableName.get, currVariable)
+          next()
 
         case ForState.Body =>
           val retStmt = body.getTreeIterator.next()
@@ -720,20 +725,21 @@ class ForStatementExec(
                 leaveStatementExec.hasBeenMatched = true
               }
               interrupted = true
+              // drop vars
               return retStmt
             case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
               if (label.contains(iterStatementExec.label)) {
                 iterStatementExec.hasBeenMatched = true
               }
               currRow += 1
-              state = ForState.VariableDeclaration
+              state = ForState.VariableAssignment
               return retStmt
             case _ =>
           }
 
           if (!body.getTreeIterator.hasNext) {
             currRow += 1
-            state = ForState.VariableDeclaration
+            state = ForState.VariableAssignment
           }
           retStmt
       }
@@ -749,7 +755,7 @@ class ForStatementExec(
         Seq(createExpressionFromValue(key), createExpressionFromValue(m(key)))
       }
       CreateMap(mapArgs, false)
-    case s: GenericRowWithSchema =>
+    case s: Row =>
     // struct types match this case
     // arguments of CreateNamedStruct are in the format: (name1, val1, name2, val2, ...)
     val namedStructArgs = s.schema.names.toSeq.flatMap { colName =>
@@ -758,6 +764,22 @@ class ForStatementExec(
       }
       CreateNamedStruct(namedStructArgs)
     case _ => Literal(value)
+  }
+
+  private def createVariablesMapFromRow(rowIndex: Int): Map[String, Expression] = {
+    val row = cachedQueryResult()(rowIndex)
+    var variablesMap = row.schema.names.toSeq.map { colName =>
+      colName -> createExpressionFromValue(row.getAs(colName))
+    }.toMap
+
+    if (variableName.isDefined) {
+      val namedStructArgs = variablesMap.keys.toSeq.flatMap { colName =>
+        Seq(Literal(colName), variablesMap(colName))
+      }
+      val forVariable = CreateNamedStruct(namedStructArgs)
+      variablesMap = variablesMap + (variableName.get -> forVariable)
+    }
+    variablesMap
   }
 
   private def createDeclareVarExec(varName: String, variable: Expression): SingleStatementExec = {
@@ -776,17 +798,17 @@ class ForStatementExec(
       OneRowRelation()
     )
     val setIdentifierToCurrentRow =
-      SetVariable(Seq(UnresolvedAttribute(variableName.get)), projectNamedStruct)
+      SetVariable(Seq(UnresolvedAttribute(varName)), projectNamedStruct)
     new SingleStatementExec(setIdentifierToCurrentRow, Origin(), isInternal = true)
   }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
   override def reset(): Unit = {
-    state = ForState.VariableDeclaration
+    state = ForState.VariableAssignment
     isResultCacheValid = false
     currRow = 0
-    currVariable = null
+    variablesMap = Map()
     body.reset()
   }
 }
