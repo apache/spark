@@ -545,6 +545,37 @@ case class AdaptiveSparkPlanExec(
     this.inputPlan == obj.asInstanceOf[AdaptiveSparkPlanExec].inputPlan
   }
 
+  private def containsExpandExec(plan: SparkPlan): Boolean = {
+    def traverse(plan: SparkPlan): Boolean = {
+      plan match {
+        case _: ShuffleQueryStageExec =>
+          false
+        case _: ExpandExec =>
+          true
+        case _ =>
+          plan.children.exists(traverse)
+      }
+    }
+
+    traverse(plan)
+  }
+
+  private def findAndApplyToAllShuffleExchanges(plan: SparkPlan): SparkPlan = {
+    def traverseAndModify(plan: SparkPlan): SparkPlan = {
+      plan match {
+        case shuffleExec: ShuffleQueryStageExec =>
+          shuffleExec.setUseCoalesceShufflePartitions(false)
+          shuffleExec
+        case _ =>
+          val modifiedChildren = plan.children.map(traverseAndModify)
+          plan.withNewChildren(modifiedChildren)
+      }
+    }
+
+    traverseAndModify(plan)
+  }
+
+
   /**
    * This method is called recursively to traverse the plan tree bottom-up and create a new query
    * stage or try reusing an existing stage if the current node is an [[Exchange]] node and all of
@@ -569,7 +600,10 @@ case class AdaptiveSparkPlanExec(
 
         case _ =>
           val result = createQueryStages(e.child)
-          val newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
+          var newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
+          if (conf.partialStageNotcoalesceShufflePartitionsEnabled && containsExpandExec(newPlan)) {
+            newPlan = findAndApplyToAllShuffleExchanges(newPlan).asInstanceOf[Exchange]
+          }
           // Create a query stage only when all the child query stages are ready.
           if (result.allChildStagesMaterialized) {
             var newStage = newQueryStage(newPlan).asInstanceOf[ExchangeQueryStageExec]

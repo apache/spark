@@ -712,6 +712,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARTIAL_STAGE_NOT_COALESCE_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.partial.stage.not.coalescePartitions.enabled")
+      .doc(s"Partial stages do not merge partitions. For example, if the stage includes Expand, it will not merge, and merging may cause the stage to run too slowly.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+
   val COALESCE_PARTITIONS_PARALLELISM_FIRST =
     buildConf("spark.sql.adaptive.coalescePartitions.parallelismFirst")
       .doc("When true, Spark does not respect the target size specified by " +
@@ -5532,6 +5540,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
+
+  def partialStageNotcoalesceShufflePartitionsEnabled: Boolean =
+    getConf(PARTIAL_STAGE_NOT_COALESCE_PARTITIONS_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 

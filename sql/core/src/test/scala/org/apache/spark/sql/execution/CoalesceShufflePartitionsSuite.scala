@@ -373,6 +373,19 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper {
     withSparkSession(test, 100, None)
   }
 
+//  test("SPARK-50257 If a stage contains ExpandExec, the CoalesceShufflePartitions rule " +
+//    "will not be adjusted during the AQE phase") {
+//    val test: SparkSession => Unit = { spark: SparkSession =>
+//      withSQLConf(
+//        ("spark.sql.adaptive.partial.stage.not.coalescePartitions.enabled" -> "true"),
+//        ("spark.sql.shuffle.partitions" -> 1000)
+//      ) {
+//
+//
+//      }
+//    }
+//  }
+
   test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
     val test: SparkSession => Unit = { spark: SparkSession =>
       withSQLConf("spark.sql.exchange.reuse" -> "true") {
