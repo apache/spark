@@ -807,4 +807,10 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
   /** @inheritdoc */
   override def active: SparkSession = super.active
+
+  override protected def tryCastToImplementation(
+      session: sql.SparkSession): Option[SparkSession] = session match {
+    case impl: SparkSession => Some(impl)
+    case _ => None
+  }
 }

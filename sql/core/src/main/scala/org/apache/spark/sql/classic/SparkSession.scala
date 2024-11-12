@@ -693,21 +693,6 @@ class SparkSession private(
     }.toImmutableArraySeq
   }
 
-  /**
-   * Execute a block of code with this session set as the active session, and restore the
-   * previous session on completion.
-   */
-  private[sql] def withActive[T](block: => T): T = {
-    // Use the active session thread local directly to make sure we get the session that is actually
-    // set and not the default session. This to prevent that we promote the default session to the
-    // active session once we are done.
-    val old = SparkSession.getActiveSession.orNull
-    SparkSession.setActiveSession(this)
-    try block finally {
-      SparkSession.setActiveSession(old)
-    }
-  }
-
   private[sql] def leafNodeDefaultParallelism: Int = {
     sessionState.conf.getConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM)
       .getOrElse(sparkContext.defaultParallelism)
@@ -881,8 +866,11 @@ object SparkSession extends SparkSessionCompanion with Logging {
   /** @inheritdoc */
   override def active: SparkSession = super.active
 
-  override protected def canUseSession(session: SparkSession): Boolean =
-    session.isUsable && !Utils.isInRunningSparkTask
+  override protected def tryCastToImplementation(
+      session: sql.SparkSession): Option[SparkSession] = session match {
+    case impl: SparkSession if !Utils.isInRunningSparkTask => Some(impl)
+    case _ => None
+  }
 
   /**
    * Apply modifiable settings to an existing [[SparkSession]]. This method are used

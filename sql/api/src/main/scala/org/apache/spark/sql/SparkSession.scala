@@ -782,6 +782,22 @@ abstract class SparkSession extends Serializable with Closeable {
    * means the connection to the server is usable.
    */
   private[sql] def isUsable: Boolean
+
+  /**
+   * Execute a block of code with this session set as the active session, and restore the
+   * previous session on completion.
+   */
+  @DeveloperApi
+  def withActive[T](block: => T): T = {
+    // Use the active session thread local directly to make sure we get the session that is actually
+    // set and not the default session. This to prevent that we promote the default session to the
+    // active session once we are done.
+    val old = SparkSession.getActiveSession.orNull
+    SparkSession.setActiveSession(this)
+    try block finally {
+      SparkSession.setActiveSession(old)
+    }
+  }
 }
 
 object SparkSession extends SparkSessionCompanion {
@@ -824,6 +840,9 @@ object SparkSession extends SparkSessionCompanion {
 
   /** @inheritdoc */
   override def getDefaultSession: Option[SparkSession] = super.getDefaultSession
+
+  override protected def tryCastToImplementation(session: SparkSession): Option[SparkSession] =
+    Some(session)
 
   class Builder extends SparkSessionBuilder {
     private val extensionModifications = mutable.Buffer.empty[SparkSessionExtensions => Unit]
@@ -937,11 +956,7 @@ object SparkSession extends SparkSessionCompanion {
 private[sql] abstract class SparkSessionCompanion {
   private[sql] type Session <: SparkSession
 
-  /** The active SparkSession for the current thread. */
-  private val activeThreadSession = new InheritableThreadLocal[Session]
-
-  /** Reference to the root SparkSession. */
-  private val defaultSession = new AtomicReference[Session]
+  import SparkSessionCompanion._
 
   /**
    * Changes the SparkSession that will be returned in this thread and its children when
@@ -979,7 +994,7 @@ private[sql] abstract class SparkSessionCompanion {
    * @since 2.0.0
    */
   def clearDefaultSession(): Unit = {
-    defaultSession.set(null.asInstanceOf[Session])
+    defaultSession.set(null)
   }
 
   /**
@@ -1014,15 +1029,15 @@ private[sql] abstract class SparkSessionCompanion {
         throw SparkException.internalError("No active or default Spark session found")))
   }
 
-  private def usableSession(session: Session): Option[Session] = {
-    if ((session ne null) && canUseSession(session)) {
-      Some(session)
+  private def usableSession(session: SparkSession): Option[Session] = {
+    if ((session ne null) && session.isUsable) {
+      tryCastToImplementation(session)
     } else {
       None
     }
   }
 
-  protected def canUseSession(session: Session): Boolean = session.isUsable
+  protected def tryCastToImplementation(session: SparkSession): Option[Session]
 
   /**
    * Set the (global) default [[SparkSession]], and (thread-local) active [[SparkSession]] when
@@ -1046,7 +1061,7 @@ private[sql] abstract class SparkSessionCompanion {
    * When the session is closed remove it from active and default.
    */
   private[sql] def onSessionClose(session: Session): Unit = {
-    defaultSession.compareAndSet(session, null.asInstanceOf[Session])
+    defaultSession.compareAndSet(session, null)
     if (getActiveSession.contains(session)) {
       clearActiveSession()
     }
@@ -1058,6 +1073,17 @@ private[sql] abstract class SparkSessionCompanion {
    * @since 2.0.0
    */
   def builder(): SparkSessionBuilder
+}
+
+/**
+ * This object keeps track of the global (default) and the thread-local SparkSession.
+ */
+object SparkSessionCompanion {
+  /** The active SparkSession for the current thread. */
+  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
+
+  /** Reference to the root SparkSession. */
+  private val defaultSession = new AtomicReference[SparkSession]
 }
 
 /**
