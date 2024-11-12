@@ -2515,20 +2515,14 @@ table windowTestData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "windowName" : "`w`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 131,
-    "fragment" : "select cate, val, sum(val) over w, first_value(val) over w\n   window w1 as (partition by cate order by val)"
-  } ]
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
 }
 
 
@@ -2582,48 +2576,37 @@ b	6
 
 -- !query
 table windowTestData
-|> select cate, sum(val) over w
+|> select cate, val, first_value(cate) over w as first_val
+|> select cate, val, sum(val) over w as sum_val
+   window w as (order by val)
 -- !query schema
-struct<>
+struct<cate:string,val:int,sum_val:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.WINDOW_REFERENCE_NOT_FOUND",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "windowName" : "`w`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 52,
-    "fragment" : "select cate, sum(val) over w"
-  } ]
-}
+NULL	3	13
+NULL	NULL	NULL
+a	1	3
+a	1	3
+a	2	7
+a	NULL	NULL
+b	1	3
+b	2	7
+b	3	13
 
 
 -- !query
 table windowTestData
 |> select cate, sum(val) over w
-   window w1 as (partition by cate)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "windowName" : "`w`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 88,
-    "fragment" : "select cate, sum(val) over w\n   window w1 as (partition by cate)"
-  } ]
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
 }
 
 
@@ -2635,20 +2618,14 @@ table windowTestData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.UNRESOLVED_WINDOW_REFERENCE",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "windowName" : "`w2`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 121,
-    "fragment" : "select cate, val, sum(val) over w1, first_value(cate) over w2\n   window w1 as (partition by cate)"
-  } ]
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w2"
+  }
 }
 
 
@@ -2660,45 +2637,14 @@ table windowTestData
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.WINDOW_REFERENCE_NOT_FOUND",
-  "sqlState" : "42000",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
-    "windowName" : "`w`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 121,
-    "stopIndex" : 171,
-    "fragment" : "select cate, val, sum_val, first_value(cate) over w"
-  } ]
-}
-
-
--- !query
-table windowTestData
-|> select cate, val, first_value(cate) over w as first_val
-|> select cate, val, sum(val) over w as sum_val
-   window w as (order by val)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.WINDOW_REFERENCE_NOT_FOUND",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "windowName" : "`w`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 79,
-    "fragment" : "select cate, val, first_value(cate) over w as first_val"
-  } ]
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
 }
 
 

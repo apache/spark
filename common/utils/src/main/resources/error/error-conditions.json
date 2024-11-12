@@ -3139,11 +3139,6 @@
           "Cannot resolve window reference <windowName>."
         ]
       },
-      "WINDOW_REFERENCE_NOT_FOUND" : {
-        "message" : [
-          "Window reference <windowName> not found."
-        ]
-      },
       "UNSUPPORTED_FUNC_NAME" : {
         "message" : [
           "Unsupported function name <funcName>."

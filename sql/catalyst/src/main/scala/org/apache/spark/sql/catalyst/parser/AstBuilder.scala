@@ -1175,7 +1175,6 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val plan = visitCommonSelectQueryClausePlan(
-      ctx,
       relation,
       visitExpressionSeq(transformClause.expressionSeq),
       lateralView,
@@ -1224,7 +1223,6 @@ class AstBuilder extends DataTypeAstBuilder
       selectClause.setQuantifier().DISTINCT() != null
 
     val plan = visitCommonSelectQueryClausePlan(
-      ctx,
       relation,
       visitNamedExpressionSeq(selectClause.namedExpressionSeq),
       lateralView,
@@ -1240,7 +1238,6 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   def visitCommonSelectQueryClausePlan(
-      ctx: ParserRuleContext,
       relation: LogicalPlan,
       expressions: Seq[(Expression, Option[Expression => String])],
       lateralView: java.util.List[LateralViewContext],
@@ -1264,32 +1261,8 @@ class AstBuilder extends DataTypeAstBuilder
 
     def createProject() = if (namedExpressions.nonEmpty) {
       val newProjectList: Seq[NamedExpression] = if (isPipeOperatorSelect) {
-        // If this is a pipe operator |> SELECT clause,
-        // (1) validate all the window references after OVER are valid, and
-        val windowDefs = Option(windowClause)
-          .map(_.namedWindow.asScala.map(_.name.getText).toSet)
-          .getOrElse(collection.immutable.Set.empty[String])
-        // Collect all window names from UnresolvedWindowExpressions
-        val unresolvedWindowNames = namedExpressions.collect {
-          case Alias(wExpr: UnresolvedWindowExpression, _) => wExpr.windowSpec.name
-          case UnresolvedAlias(wExpr: UnresolvedWindowExpression, _) => wExpr.windowSpec.name
-        }
-        if (unresolvedWindowNames.nonEmpty) {
-          if (windowDefs.isEmpty) {
-            // No window definitions provided, throw error for the first unresolved window
-            throw QueryParsingErrors.cannotFindWindowReferenceError(unresolvedWindowNames.head, ctx)
-          } else {
-            // Find any unresolved window names not defined in windowDefs
-            unresolvedWindowNames.find(!windowDefs.contains(_)) match {
-              case Some(windowName) =>
-                throw QueryParsingErrors.cannotResolveWindowReferenceError(windowName, windowClause)
-              case None =>
-              // All window names are defined, no action needed
-            }
-          }
-        }
-        // (2) add a [[PipeSelect]] expression wrapping each alias in the project list,
-        // so the analyzer can check invariants later.
+        // If this is a pipe operator |> SELECT clause, add a [[PipeSelect]] expression wrapping
+        // each alias in the project list, so the analyzer can check invariants later.
         namedExpressions.map {
           case a: Alias =>
             a.withNewChildren(Seq(PipeSelect(a.child)))
@@ -5927,7 +5900,7 @@ class AstBuilder extends DataTypeAstBuilder
         isPipeOperatorSelect = true)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
-        throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
+        throw QueryParsingErrors.windowClauseInOperatorPipeWhereClauseNotAllowedError(ctx)
       }
       withWhereClause(c, withSubqueryAlias())
     }.getOrElse(Option(ctx.pivotClause()).map { c =>
