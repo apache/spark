@@ -382,42 +382,20 @@ private case class PostgresDialect()
       case Types.ARRAY =>
         val tableName = rsmd.getTableName(columnIdx)
         val columnName = rsmd.getColumnName(columnIdx)
-
-        /*
-         Spark does not support different dimensionality per row, therefore we retrieve the
-         dimensionality of any row from Postgres. This might fail later on as Postgres allows
-         different dimensions per row for arrays.
-         */
-        val query = s"SELECT array_ndims($columnName) FROM $tableName LIMIT 1"
-
+        val query =
+          s"""
+             |SELECT pg_attribute.attndims
+             |FROM pg_attribute
+             |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
+             |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
+             |WHERE pg_class.relname = '$tableName' and pg_attribute.attname = '$columnName'
+             |""".stripMargin
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
-              if (rs.next()) {
-                metadata.putLong("arrayDimension", rs.getLong(1))
-              } else {
-                /*
-                If previous query doesn't return any rows, we should fallback to querying the
-                Postgres metadata table.
-                 */
-                val fallbackQuery =
-                  s"""
-                     |SELECT pg_attribute.attndims
-                     |FROM pg_attribute
-                     |  JOIN pg_class ON pg_attribute.attrelid = pg_class.oid
-                     |  JOIN pg_namespace ON pg_class.relnamespace = pg_namespace.oid
-                     |WHERE pg_class.relname = '$tableName'
-                     |AND pg_attribute.attname = '$columnName'
-                     |""".stripMargin
-
-                Using.resource(conn.createStatement()) { stmt2 =>
-                  Using.resource(stmt2.executeQuery(fallbackQuery)) { rs2 =>
-                    if (rs2.next()) {
-                      metadata.putLong("arrayDimension", rs2.getLong(1))
-                    }
-                  }
-                }
-              }
+              // Metadata can return 0 for CTAS tables. For such tables, we are always reading
+              // them as 1D array
+              if (rs.next()) metadata.putLong("arrayDimension", Math.max(1L, rs.getLong(1)))
             }
           }
         } catch {
