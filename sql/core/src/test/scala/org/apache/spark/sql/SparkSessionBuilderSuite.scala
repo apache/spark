@@ -286,7 +286,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
         .setAppName(s"test-SPARK-32062-$i")
       val context = new SparkContext(conf)
       val beforeListenerSize = context.listenerBus.listeners.size()
-      classic.SparkSession
+      SparkSession
         .builder()
         .sparkContext(context)
         .getOrCreate()

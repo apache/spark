@@ -141,7 +141,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
   def toTable(tableName: String): StreamingQuery = {
     import ds.sparkSession.sessionState.analyzer.CatalogAndIdentifier
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-
     val parser = ds.sparkSession.sessionState.sqlParser
     val originalMultipartIdentifier = parser.parseMultipartIdentifier(tableName)
     val CatalogAndIdentifier(catalog, identifier) = originalMultipartIdentifier
