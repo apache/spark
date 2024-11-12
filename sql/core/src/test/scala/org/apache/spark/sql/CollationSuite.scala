@@ -58,6 +58,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     )
   }
 
+  private def checkCollationKeyInQueryPlan(queryPlan: SparkPlan, collationName: String): Unit = {
+    // Only if collation doesn't support binary equality, collation key should be injected.
+    if (!CollationFactory.fetchCollation(collationName).supportsBinaryEquality) {
+      assert(queryPlan.toString().contains("collationkey"))
+    } else {
+      assert(!queryPlan.toString().contains("collationkey"))
+    }
+  }
+
   test("collate returns proper type") {
     Seq(
       "utf8_binary",
@@ -1598,12 +1607,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           checkRightTypeOfJoinUsed(queryPlan)
 
           if (isSortMergeForced) {
-            // Only if collation doesn't support binary equality, collation key should be injected.
-            if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
-              assert(queryPlan.toString().contains("collationkey"))
-            } else {
-              assert(!queryPlan.toString().contains("collationkey"))
-            }
+            // Confirm proper injection of collation key.
+            checkCollationKeyInQueryPlan(queryPlan, t.collation)
           }
           else {
             // Only if collation doesn't support binary equality, collation key should be injected.
@@ -1661,12 +1666,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           checkRightTypeOfJoinUsed(queryPlan)
 
           if (isSortMergeForced) {
-            // Only if collation doesn't support binary equality, collation key should be injected.
-            if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
-              assert(queryPlan.toString().contains("collationkey"))
-            } else {
-              assert(!queryPlan.toString().contains("collationkey"))
-            }
+            // Confirm proper injection of collation key.
+            checkCollationKeyInQueryPlan(queryPlan, t.collation)
           }
           else {
             // Only if collation doesn't support binary equality, collation key should be injected.
@@ -1729,12 +1730,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           checkRightTypeOfJoinUsed(queryPlan)
 
           if (isSortMergeForced) {
-            // Only if collation doesn't support binary equality, collation key should be injected.
-            if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
-              assert(queryPlan.toString().contains("collationkey"))
-            } else {
-              assert(!queryPlan.toString().contains("collationkey"))
-            }
+            // Confirm proper injection of collation key.
+            checkCollationKeyInQueryPlan(queryPlan, t.collation)
           }
           else {
             // Only if collation doesn't support binary equality, collation key should be injected.
@@ -1793,12 +1790,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           // confirm that right kind of join is used.
           checkRightTypeOfJoinUsed(queryPlan)
 
-          // Only if collation doesn't support binary equality, collation key should be injected.
-          if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
-            assert(queryPlan.toString().contains("collationkey"))
-          } else {
-            assert(!queryPlan.toString().contains("collationkey"))
-          }
+          // Confirm proper injection of collation key.
+          checkCollationKeyInQueryPlan(queryPlan, t.collation)
         }
       }
     }
@@ -1850,12 +1843,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           // confirm that right kind of join is used.
           checkRightTypeOfJoinUsed(queryPlan)
 
-          // Only if collation doesn't support binary equality, collation key should be injected.
-          if (!CollationFactory.fetchCollation(t.collation).supportsBinaryEquality) {
-            assert(queryPlan.toString().contains("collationkey"))
-          } else {
-            assert(!queryPlan.toString().contains("collationkey"))
-          }
+          // Confirm proper injection of collation key.
+          checkCollationKeyInQueryPlan(queryPlan, t.collation)
         }
       }
     }
