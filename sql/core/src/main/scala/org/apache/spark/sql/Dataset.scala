@@ -1005,16 +1005,12 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def scalar(): Column = {
-    Column(ExpressionColumnNode(
-      ScalarSubqueryExpr(SubExprUtils.removeLazyOuterReferences(logicalPlan),
-        hasExplicitOuterRefs = true)))
+    Column(ExpressionColumnNode(ScalarSubqueryExpr(logicalPlan)))
   }
 
   /** @inheritdoc */
   def exists(): Column = {
-    Column(ExpressionColumnNode(
-      Exists(SubExprUtils.removeLazyOuterReferences(logicalPlan),
-        hasExplicitOuterRefs = true)))
+    Column(ExpressionColumnNode(Exists(logicalPlan)))
   }
 
   /** @inheritdoc */

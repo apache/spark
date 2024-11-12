@@ -221,33 +221,37 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val outerPlan = AnalysisContext.get.outerPlan
     if (outerPlan.isEmpty) return e
 
-    e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
+    def resolve(nameParts: Seq[String]): Option[Expression] = try {
+      outerPlan.get match {
+        // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
+        // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
+        // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
+        case u @ UnresolvedHaving(_, agg: Aggregate) =>
+          agg.resolveChildren(nameParts, conf.resolver)
+            .orElse(u.resolveChildren(nameParts, conf.resolver))
+            .map(wrapOuterReference)
+        case other =>
+          other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
+      }
+    } catch {
+      case ae: AnalysisException =>
+        logDebug(ae.getMessage)
+        None
+    }
+
+    e.transformWithPruning(
+      _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN, LAZY_OUTER_REFERENCE)) {
       case u: UnresolvedAttribute =>
-        resolveOuterReference(u.nameParts, outerPlan.get).getOrElse(u)
+        resolve(u.nameParts).getOrElse(u)
+      case u: LazyOuterReference =>
+        // If we can't resolve this outer reference, replace it with `UnresolvedOuterReference` so
+        // that we can throw a better error to mention the candidate outer columns.
+        resolve(u.nameParts).getOrElse(UnresolvedOuterReference(u.nameParts))
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
       // Aggregate but failed.
       case t: TempResolvedColumn if t.hasTried =>
-        resolveOuterReference(t.nameParts, outerPlan.get).getOrElse(t)
+        resolve(t.nameParts).getOrElse(t)
     }
-  }
-
-  protected def resolveOuterReference(
-      nameParts: Seq[String], outerPlan: LogicalPlan): Option[Expression] = try {
-    outerPlan match {
-      // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
-      // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
-      // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
-      case u @ UnresolvedHaving(_, agg: Aggregate) =>
-        agg.resolveChildren(nameParts, conf.resolver)
-          .orElse(u.resolveChildren(nameParts, conf.resolver))
-          .map(wrapOuterReference)
-      case other =>
-        other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
-    }
-  } catch {
-    case ae: AnalysisException =>
-      logDebug(ae.getMessage)
-      None
   }
 
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
