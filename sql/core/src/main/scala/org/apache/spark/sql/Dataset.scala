@@ -95,13 +95,11 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame =
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
-      val encoder = if (qe.isLazyAnalysis) {
-        RowEncoder.encoderFor(new StructType())
-      } else {
+      if (!qe.isLazyAnalysis) {
         qe.assertAnalyzed()
-        RowEncoder.encoderFor(qe.analyzed.schema)
       }
-      new Dataset[Row](qe, encoder)
+      val encoder = () => RowEncoder.encoderFor(qe.analyzed.schema)
+      new Dataset[Row](qe, encoder())
     }
 
   def ofRows(
@@ -111,13 +109,11 @@ private[sql] object Dataset {
     sparkSession.withActive {
       val qe = new QueryExecution(
         sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
-      val encoder = if (qe.isLazyAnalysis) {
-        RowEncoder.encoderFor(new StructType())
-      } else {
+      if (!qe.isLazyAnalysis) {
         qe.assertAnalyzed()
-        RowEncoder.encoderFor(qe.analyzed.schema)
       }
-      new Dataset[Row](qe, encoder)
+      val encoder = () => RowEncoder.encoderFor(qe.analyzed.schema)
+      new Dataset[Row](qe, encoder())
     }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
@@ -129,13 +125,11 @@ private[sql] object Dataset {
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(
       sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
-    val encoder = if (qe.isLazyAnalysis) {
-      RowEncoder.encoderFor(new StructType())
-    } else {
+    if (!qe.isLazyAnalysis) {
       qe.assertAnalyzed()
-      RowEncoder.encoderFor(qe.analyzed.schema)
     }
-    new Dataset[Row](qe, encoder)
+    val encoder = () => RowEncoder.encoderFor(qe.analyzed.schema)
+    new Dataset[Row](qe, encoder())
   }
 }
 
@@ -229,7 +223,7 @@ private[sql] object Dataset {
 @Stable
 class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
-    @DeveloperApi @Unstable @transient val encoder: Encoder[T])
+    @transient lazyEncoder: => Encoder[T])
   extends api.Dataset[T] {
   type DS[U] = Dataset[U]
 
@@ -273,6 +267,8 @@ class Dataset[T] private[sql](
       plan
     }
   }
+
+  @DeveloperApi @Unstable @transient lazy val encoder: Encoder[T] = lazyEncoder
 
   /**
    * Expose the encoder as implicit so it can be used to construct new Dataset objects that have
