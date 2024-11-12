@@ -1003,3 +1003,43 @@ case class UnresolvedTranspose(
   override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedTranspose =
     copy(child = newChild)
 }
+
+case class UnresolvedOuterReference(
+    nameParts: Seq[String])
+  extends LeafExpression with NamedExpression with Unevaluable {
+
+  def name: String =
+    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+
+  override def exprId: ExprId = throw new UnresolvedException("exprId")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override lazy val resolved = false
+
+  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
+  override def newInstance(): UnresolvedOuterReference = this
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_OUTER_REFERENCE)
+}
+
+case class LazyOuterReference(
+     nameParts: Seq[String])
+  extends LeafExpression with NamedExpression with Unevaluable with LazyAnalysisExpression {
+
+  def name: String =
+    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+
+  override def exprId: ExprId = throw new UnresolvedException("exprId")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+
+  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
+  override def newInstance(): NamedExpression = LazyOuterReference(nameParts)
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(LAZY_OUTER_REFERENCE)
+
+  override def prettyName: String = "outer"
+  override def sql: String = s"$prettyName($name)"
+}
