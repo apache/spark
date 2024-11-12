@@ -20,10 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -122,10 +121,6 @@ case class PythonUDAF(
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
 
-  if (VariantExpressionEvalUtils.typeContainsVariant(dataType)) {
-    throw QueryCompilationErrors.unsupportedUDFOuptutType(this, dataType)
-  }
-
   override def evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
   override def sql(isDistinct: Boolean): String = {
@@ -148,23 +143,6 @@ case class PythonUDAF(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDAF =
     copy(children = newChildren)
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val check = super.checkInputDataTypes()
-    if (check.isFailure) {
-      check
-    } else {
-      val exprReturningVariant = children.collectFirst {
-        case e: Expression if VariantExpressionEvalUtils.typeContainsVariant(e.dataType) => e
-      }
-      exprReturningVariant match {
-        case Some(e) => TypeCheckResult.DataTypeMismatch(
-          errorSubClass = "UNSUPPORTED_UDF_INPUT_TYPE",
-          messageParameters = Map("dataType" -> s"${e.dataType.sql}"))
-        case None => TypeCheckResult.TypeCheckSuccess
-      }
-    }
-  }
 }
 
 abstract class UnevaluableGenerator extends Generator {

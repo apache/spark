@@ -27,7 +27,18 @@ from typing import cast
 from pyspark import TaskContext
 from pyspark.util import PythonEvalType
 from pyspark.sql import Column
-from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
+from pyspark.sql.functions import (
+    array,
+    col,
+    expr,
+    lit,
+    sum,
+    struct,
+    udf,
+    pandas_udf,
+    to_json,
+    PandasUDFType,
+)
 from pyspark.sql.types import (
     IntegerType,
     ByteType,
@@ -828,7 +839,7 @@ class ScalarPandasUDFTestsMixin:
             result = df.select(f(col("map_of_v")).alias("udf")).collect()
             self.assertEqual(result, expected)
 
-    def test_udf_with_variant_output(self):
+    def test_udf_with_variant_nested_output(self):
         # struct<variant>
         # Variants representing the int8 value i.
         # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
@@ -946,6 +957,77 @@ class ScalarPandasUDFTestsMixin:
             for s in [scalar_second, iter_second]:
                 result = self.spark.range(10).select(s(f(col("id"))).alias("udf")).collect()
                 self.assertEqual(result, expected)
+
+    def test_udafs_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        @pandas_udf("double")
+        def f(u: pd.Series) -> float:
+            return u.apply(lambda v: len(str(v))).mean()
+        expected = [Row(udf=1)]
+        result = df.select(f(col("v")).alias("udf")).collect()
+        self.assertEqual(result, expected)
+
+    def test_udafs_with_complex_variant_input(self):
+        # struct<v variant>
+        df = self.spark.range(0, 10).selectExpr(
+            "named_struct('v', parse_json(id::string)) s"
+        )
+        @pandas_udf("double")
+        def f(u: pd.Series) -> float:
+            return u.apply(lambda s: len(str(s['v']))).mean()
+        expected = [Row(udf=1)]
+        result = df.select(f(col("s")).alias("udf")).collect()
+        self.assertEqual(result, expected)
+
+        # array<variant>
+        df = self.spark.range(0, 10).selectExpr(
+            "array(parse_json(id::string)) a"
+        )
+        @pandas_udf("double")
+        def f(u: pd.Series) -> float:
+            return u.apply(lambda s: len(str(s[0]))).mean() + 1
+        expected = [Row(udf=2)]
+        result = df.select(f(col("a")).alias("udf")).collect()
+        self.assertEqual(result, expected)
+
+        # map<string, variant>
+        df = self.spark.range(0, 10).selectExpr(
+            "map('v', parse_json(id::string)) m"
+        )
+        @pandas_udf("double")
+        def f(u: pd.Series) -> float:
+            return u.apply(lambda s: len(str(s['v']))).mean() + 2
+        expected = [Row(udf=3)]
+        result = df.select(f(col("m")).alias("udf")).collect()
+        self.assertEqual(result, expected)
+
+    def test_udafs_with_variant_output(self):
+        @pandas_udf("variant")
+        def f(u: pd.Series) -> VariantVal:
+            return VariantVal(bytes([12, int(u.mean())]), bytes([1, 0, 0]))
+        result = self.spark.range(0, 10).select(to_json(f(col("id"))).alias("udf")).collect()
+        expected = [Row(udf="4")]
+        self.assertEqual(result, expected)
+
+    def test_udafs_with_complex_variant_output(self):
+        # struct is not support as the return type for PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+        # UDFs yet.
+
+        # array<variant>
+        @pandas_udf("array<variant>")
+        def f(u: pd.Series) -> list:
+            return [VariantVal(bytes([12, int(u.mean())]), bytes([1, 0, 0]))]
+        result = self.spark.range(0, 10).select(to_json(f(col("id"))).alias("udf")).collect()
+        expected = [Row(udf="[4]")]
+        self.assertEqual(result, expected)
+
+        # map<string, variant>
+        @pandas_udf("map<string, variant>")
+        def f(u: pd.Series) -> dict:
+            return {"v": VariantVal(bytes([12, int(u.mean())]), bytes([1, 0, 0]))}
+        result = self.spark.range(0, 10).select(to_json(f(col("id"))).alias("udf")).collect()
+        expected = [Row(udf="{\"v\":4}")]
+        self.assertEqual(result, expected)
 
     def test_vectorized_udf_decorator(self):
         df = self.spark.range(10)
