@@ -193,7 +193,7 @@ private[ml] abstract class LogFacBase[T](
 
         cached += emb
 
-        if (shouldCheckpoint(checkpointIter)) {
+        if (shouldCheckpoint(checkpointIter + 1)) {
           emb.count()
           emb.checkpoint()
           emb.cleanShuffleDependencies()
