@@ -168,6 +168,24 @@ private[sql] object UnresolvedAttribute {
 }
 
 /**
+ * Reference to an attribute in the outer context, used for Subqueries.
+ *
+ * @param nameParts
+ *   name of the attribute.
+ * @param planId
+ *   id of the plan (Dataframe) that produces the attribute.
+ */
+private[sql] case class LazyOuterReference(
+    nameParts: Seq[String],
+    planId: Option[Long] = None,
+    override val origin: Origin = CurrentOrigin.get)
+    extends ColumnNode {
+  override private[internal] def normalize(): LazyOuterReference =
+    copy(planId = None, origin = NO_ORIGIN)
+  override def sql: String = nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+}
+
+/**
  * Reference to all columns in a namespace (global, a Dataframe, or a nested struct).
  *
  * @param unparsedTarget
