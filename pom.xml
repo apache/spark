@@ -216,7 +216,7 @@
     <tink.version>1.15.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
     <netty.version>4.1.114.Final</netty.version>
-    <netty-tcnative.version>2.0.66.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.69.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.0</junit-jupiter.version>
     <junit-platform.version>1.11.0</junit-platform.version>
@@ -331,7 +331,7 @@
     <postgresql.version>42.7.4</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
-    <ojdbc11.version>23.5.0.24.07</ojdbc11.version>
+    <ojdbc11.version>23.6.0.24.10</ojdbc11.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
   </properties>
@@ -1344,7 +1344,7 @@
       </dependency>
       <dependency>
         <groupId>com.oracle.database.jdbc</groupId>
-        <artifactId>ojdbc11</artifactId>
+        <artifactId>ojdbc17</artifactId>
         <version>${ojdbc11.version}</version>
         <scope>test</scope>
       </dependency>

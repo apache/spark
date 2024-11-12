@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAg
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
-import org.apache.spark.sql.types.{ArrayType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, Metadata, MetadataBuilder, StringType, StructField, StructType}
 
 class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
   protected val v2Source = classOf[FakeV2ProviderWithCustomSchema].getName
@@ -529,12 +529,52 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
            |""".stripMargin)
       sql(s"INSERT INTO $tableName VALUES ('a', array('b'), map(1, 'c'), struct('d'))")
       sql(s"ALTER TABLE $tableName ALTER COLUMN c1 TYPE STRING COLLATE UTF8_LCASE")
-      sql(s"ALTER TABLE $tableName ALTER COLUMN c2 TYPE ARRAY<STRING COLLATE UNICODE_CI>")
-      sql(s"ALTER TABLE $tableName ALTER COLUMN c3 TYPE MAP<INT, STRING COLLATE UTF8_BINARY>")
-      sql(s"ALTER TABLE $tableName ALTER COLUMN c4 TYPE STRUCT<t: STRING COLLATE UNICODE>")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c2.element TYPE STRING COLLATE UNICODE_CI")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c3.value TYPE STRING COLLATE UTF8_BINARY")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c4.t TYPE STRING COLLATE UNICODE")
       checkAnswer(sql(s"SELECT collation(c1), collation(c2[0]), " +
         s"collation(c3[1]), collation(c4.t) FROM $tableName"),
         Seq(Row("UTF8_LCASE", "UNICODE_CI", "UTF8_BINARY", "UNICODE")))
+    }
+  }
+
+  test("SPARK-50262: Alter column with collation preserve metadata") {
+    def createMetadata(column: String): Metadata =
+      new MetadataBuilder().putString("key", column).build()
+
+    val tableName = "testcat.alter_column_tbl"
+    withTable(tableName) {
+      val df = spark.createDataFrame(
+        java.util.List.of[Row](),
+        StructType(Seq(
+          StructField("c1", StringType, metadata = createMetadata("c1")),
+          StructField("c2", ArrayType(StringType), metadata = createMetadata("c2")),
+          StructField("c3", MapType(IntegerType, StringType), metadata = createMetadata("c3")),
+          StructField("c4",
+            StructType(Seq(StructField("t", StringType, metadata = createMetadata("c4t")))),
+            metadata = createMetadata("c4"))
+        ))
+      )
+      df.write.format("parquet").saveAsTable(tableName)
+
+      sql(s"INSERT INTO $tableName VALUES ('a', array('b'), map(1, 'c'), struct('d'))")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c1 TYPE STRING COLLATE UTF8_LCASE")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c2.element TYPE STRING COLLATE UNICODE_CI")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c3.value TYPE STRING COLLATE UTF8_BINARY")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN c4.t TYPE STRING COLLATE UNICODE")
+      val testCatalog = catalog("testcat").asTableCatalog
+      val tableSchema = testCatalog.loadTable(Identifier.of(Array(), "alter_column_tbl")).schema()
+      val c1Metadata = tableSchema.find(_.name == "c1").get.metadata
+      assert(c1Metadata === createMetadata("c1"))
+      val c2Metadata = tableSchema.find(_.name == "c2").get.metadata
+      assert(c2Metadata === createMetadata("c2"))
+      val c3Metadata = tableSchema.find(_.name == "c3").get.metadata
+      assert(c3Metadata === createMetadata("c3"))
+      val c4Metadata = tableSchema.find(_.name == "c4").get.metadata
+      assert(c4Metadata === createMetadata("c4"))
+      val c4tMetadata = tableSchema.find(_.name == "c4").get.dataType
+        .asInstanceOf[StructType].find(_.name == "t").get.metadata
+      assert(c4tMetadata === createMetadata("c4t"))
     }
   }
 

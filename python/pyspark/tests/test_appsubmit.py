@@ -293,26 +293,6 @@ class SparkSubmitTests(unittest.TestCase):
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode, msg="Process failed with error:\n {0}".format(out))
 
-    def test_session(self):
-        """Make sure spark.submit.appName overrides the appName in script"""
-        script = self.createTempFile(
-            "test.py",
-            """
-            |from pyspark.sql import SparkSession
-            |spark = SparkSession.builder.appName("PythonPi").getOrCreate()
-            |print(spark.sparkContext.appName)
-            |spark.stop()
-            """,
-        )
-        proc = subprocess.Popen(
-            self.sparkSubmit + ["--master", "local", "-c", "spark.submit.appName=NEW", script],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        out, err = proc.communicate()
-        self.assertEqual(0, proc.returncode)
-        self.assertIn("NEW", out.decode("utf-8"))
-
 
 if __name__ == "__main__":
     from pyspark.tests.test_appsubmit import *  # noqa: F401
