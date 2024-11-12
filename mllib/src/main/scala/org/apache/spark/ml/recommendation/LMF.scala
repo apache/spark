@@ -196,17 +196,6 @@ private[recommendation] trait LMFParams extends LMFModelParams with HasMaxIter
   def getNumPartitions: Int = $(numPartitions)
 
   /**
-   * Param for path where the intermediate state will be saved.
-   * Default: None
-   * @group param
-   */
-  val checkpointPath: Param[String] = new Param[String](this, "checkpointPath",
-    "path where the intermediate state will be saved")
-
-  /** @group getParam */
-  def getCheckpointPath: String = $(checkpointPath)
-
-  /**
    * Param for user factors regularization parameter (&gt;= 0).
    * Default: 0
    * @group expertParam
@@ -621,10 +610,6 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
 
   /** @group setParam */
   @Since("4.0.0")
-  def setCheckpointPath(value: String): this.type = set(checkpointPath, value)
-
-  /** @group setParam */
-  @Since("4.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group expertSetParam */
@@ -685,9 +670,10 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     val validatedWeights = get(weightCol).fold(lit(LongPair.EMPTY))(
       checkNonNegativeWeights).cast(FloatType)
 
-    if (get(checkpointInterval).isDefined ^ get(checkpointPath).isDefined) {
-      throw new IllegalArgumentException(s"checkpointPath and checkpointInterval" +
-        s"must be set together.")
+    if (get(checkpointInterval).isDefined &&
+      dataset.sparkSession.sparkContext.checkpointDir.isEmpty) {
+      throw new IllegalArgumentException(s"checkpointDir must be defined when " +
+        s"checkpointInterval is given.")
     }
 
     val numExecutors = Try(dataset.sparkSession.sparkContext
@@ -707,15 +693,14 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     instr.logParams(this, rank, negative, maxIter, stepSize, parallelism,
       numPartitions, pow, minUserCount, minItemCount, regParamU, regParamI,
       fitIntercept, implicitPrefs, intermediateStorageLevel, finalStorageLevel,
-      checkpointPath, checkpointInterval, blockSize)
+      checkpointInterval, blockSize)
 
     val result = new LMF.Backend($(rank), $(negative), $(maxIter), $(stepSize),
       $(parallelism), $(numPartitions), $(pow),
       $(minUserCount), $(minItemCount), $(regParamU), $(regParamI), $(fitIntercept),
       $(implicitPrefs), get(labelCol).isDefined, get(weightCol).isDefined,
       $(seed), StorageLevel.fromString($(intermediateStorageLevel)),
-      StorageLevel.fromString($(finalStorageLevel)),
-      get(checkpointPath), get(checkpointInterval).getOrElse(-1))
+      StorageLevel.fromString($(finalStorageLevel)), get(checkpointInterval).getOrElse(-1))
       .train(ratings)(dataset.sqlContext)
 
     ratings.unpersist()
@@ -771,7 +756,6 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           seed: Long,
                           intermediateRDDStorageLevel: StorageLevel,
                           finalRDDStorageLevel: StorageLevel,
-                          checkpointPath: Option[String],
                           checkpointInterval: Int
                 ) extends LogFacBase[(Long, Long, Float, Float)](
                           dotVectorSize,
@@ -788,7 +772,6 @@ object LMF extends DefaultParamsReadable[LMF] with Logging {
                           seed,
                           intermediateRDDStorageLevel,
                           finalRDDStorageLevel,
-                          checkpointPath,
                           checkpointInterval
   ) {
 

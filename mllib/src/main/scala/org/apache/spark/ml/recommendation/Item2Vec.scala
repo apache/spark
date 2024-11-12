@@ -202,17 +202,6 @@ private[recommendation] trait Item2VecParams extends Item2VecModelParams
   final def getSamplingMode: String = $(samplingMode)
 
   /**
-   * Param for path where the intermediate state will be saved.
-   * Default: None
-   * @group param
-   */
-  val checkpointPath: Param[String] = new Param[String](this, "checkpointPath",
-    "path where the intermediate state will be saved")
-
-  /** @group getParam */
-  def getCheckpointPath: String = $(checkpointPath)
-
-  /**
    * Param for StorageLevel for intermediate datasets. Pass in a string representation of
    * `StorageLevel`. Cannot be "NONE".
    * Default: "MEMORY_AND_DISK".
@@ -501,10 +490,6 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
 
   /** @group setParam */
   @Since("4.0.0")
-  def setCheckpointPath(value: String): this.type = set(checkpointPath, value)
-
-  /** @group setParam */
-  @Since("4.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group expertSetParam */
@@ -520,9 +505,10 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
     import dataset.sparkSession.implicits._
 
     val validatedInputs = checkArrayLongs(dataset, $(inputCol))
-    if (get(checkpointInterval).isDefined ^ get(checkpointPath).isDefined) {
-      throw new IllegalArgumentException(s"checkpointPath and checkpointInterval" +
-        s"must be set together.")
+    if (get(checkpointInterval).isDefined &&
+      dataset.sparkSession.sparkContext.checkpointDir.isEmpty) {
+      throw new IllegalArgumentException(s"checkpointDir must be defined when " +
+        s"checkpointInterval is given.")
     }
 
     val numExecutors = Try(dataset.sparkSession.sparkContext
@@ -542,14 +528,13 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
     instr.logDataset(dataset)
     instr.logParams(this, rank, negative, maxIter, stepSize, parallelism,
       numPartitions, pow, minCount, regParam, fitIntercept, intermediateStorageLevel,
-      finalStorageLevel, checkpointPath, checkpointInterval)
+      finalStorageLevel, checkpointInterval)
 
     val result = new Item2Vec.Backend($(rank), $(windowSize), $(negative), $(maxIter),
       $(stepSize), $(parallelism), $(numPartitions), $(pow), $(minCount), $(regParam),
       SamplingMode.withName($(samplingMode)), $(fitIntercept), $(seed),
       StorageLevel.fromString($(intermediateStorageLevel)),
-      StorageLevel.fromString($(finalStorageLevel)),
-      get(checkpointPath), get(checkpointInterval).getOrElse(-1))
+      StorageLevel.fromString($(finalStorageLevel)), get(checkpointInterval).getOrElse(-1))
       .train(sequences)(dataset.sqlContext)
 
     sequences.unpersist()
@@ -601,7 +586,6 @@ object Item2Vec extends DefaultParamsReadable[Item2Vec] with Logging {
                                          seed: Long,
                                          intermediateRDDStorageLevel: StorageLevel,
                                          finalRDDStorageLevel: StorageLevel,
-                                         checkpointPath: Option[String],
                                          checkpointInterval: Int
                                ) extends LogFacBase[Array[Long]](
                                          dotVectorSize,
@@ -618,7 +602,6 @@ object Item2Vec extends DefaultParamsReadable[Item2Vec] with Logging {
                                          seed,
                                          intermediateRDDStorageLevel,
                                          finalRDDStorageLevel,
-                                         checkpointPath,
                                          checkpointInterval
                                        ) {
 

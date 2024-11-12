@@ -16,6 +16,7 @@
  */
 package org.apache.spark.ml.recommendation.logfac
 
+import java.io.IOException
 import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
@@ -25,11 +26,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.ml.recommendation.logfac.local.{ItemData, Optimizer, Opts}
 import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SaveMode, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
 
 private[ml] object LogFacBase {
@@ -86,7 +88,6 @@ private[ml] abstract class LogFacBase[T](
              seed: Long = 0,
              intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
              finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK,
-             checkpointPath: Option[String] = None,
              checkpointInterval: Int = -1)
   extends Serializable with Logging {
 
@@ -96,23 +97,6 @@ private[ml] abstract class LogFacBase[T](
     val r = rdd.persist(intermediateRDDStorageLevel)
     r.count()
     r
-  }
-
-  private def checkpoint(emb: RDD[ItemData],
-                         path: String
-                        )(implicit sqlc: SQLContext): RDD[ItemData] = {
-    import sqlc.implicits._
-    if (emb != null) {
-      emb.map(itemData => (itemData.t, itemData.id, itemData.cn, itemData.f))
-        .toDF("t", "id", "cn", "f")
-        .write.mode(SaveMode.Overwrite).parquet(path)
-    }
-
-    cacheAndCount(sqlc.read.parquet(path)
-      .as[(Boolean, Long, Long, Array[Float])]
-      .rdd
-      .map{case (t: Boolean, id: Long, cn: Long, f: Array[Float]) =>
-        new ItemData(t, id, cn, f)})
   }
 
   private def listFiles(path: String): Array[String] = {
@@ -127,33 +111,36 @@ private[ml] abstract class LogFacBase[T](
 
   protected def initialize(data: RDD[T]): RDD[ItemData]
 
-  private[recommendation] def train(data: RDD[T])(implicit sqlc: SQLContext): RDD[ItemData] = {
-    val sparkContext = data.sparkContext
-
-    val latest = if (checkpointPath.isDefined) {
-      listFiles(checkpointPath.get)
-        .filter(file => listFiles(checkpointPath.get + "/" + file).contains("_SUCCESS"))
-        .map(_.split("_").map(_.toInt)).map{case Array(a, b) => (a, b)}
-        .sorted.lastOption
-    } else {
-      None
+  private def deletePreviousCheckpointFile(previousCheckpointFile: Option[String])(
+    implicit sqlc: SQLContext): Unit =
+    previousCheckpointFile.foreach { file =>
+      try {
+        val checkpointFile = new Path(file)
+        checkpointFile.getFileSystem(sqlc.sparkContext.hadoopConfiguration)
+          .delete(checkpointFile, true)
+      } catch {
+        case e: IOException =>
+          logWarning(log"Cannot delete checkpoint file ${MDC(PATH, file)}:", e)
+      }
     }
 
-    latest.foreach(x => log.info(s"Continue training from epoch = ${x._1}, iteration = ${x._2}"))
-    val cached = ArrayBuffer.empty[RDD[ItemData]]
+  private def shouldCheckpoint(iter: Int)(
+    implicit sqlc: SQLContext): Boolean =
+    sqlc.sparkContext.checkpointDir.isDefined &&
+      checkpointInterval != -1 && (iter % checkpointInterval == 0)
 
-    var emb = latest
-      .map(x => checkpoint(null, checkpointPath.get + "/" + x._1 + "_" + x._2))
-      .getOrElse{cacheAndCount(initialize(data))}
+  private[recommendation] def train(data: RDD[T])(implicit sqlc: SQLContext): RDD[ItemData] = {
+    val cached = ArrayBuffer.empty[RDD[ItemData]]
+    var emb = cacheAndCount(initialize(data))
     cached += emb
 
-    val (startEpoch, startIter) = latest.getOrElse((0, 0))
-    var checkpointIter = startEpoch * numPartitions + startIter
-
+    var checkpointIter = 0
     val partitionTable = LogFacBase
       .createPartitionTable(numPartitions, new Random(seed))
 
-    (startEpoch until numIterations).foreach {curEpoch =>
+    var previousCheckpointFile: Option[String] = None
+
+    (0 until numIterations).foreach {curEpoch =>
 
       val partitioner1 = new HashPartitioner(numPartitions) {
         override def getPartition(item: Any): Int = {
@@ -161,7 +148,7 @@ private[ml] abstract class LogFacBase[T](
         }
       }
 
-      ((if (curEpoch == startEpoch) startIter else 0) until numPartitions).foreach { pI =>
+      (0 until numPartitions).foreach { pI =>
         val bucket2part = partitionTable(pI)
         val partitioner2 = new HashPartitioner(numPartitions) {
           override def getPartition(item: Any): Int = {
@@ -192,10 +179,10 @@ private[ml] abstract class LogFacBase[T](
           val opts = if (implicitPrefs) {
             Opts.implicitOpts(dotVectorSize, useBias, negative, pow.toFloat,
               learningRate.toFloat, lambdaU.toFloat, lambdaI.toFloat,
-              gamma.toFloat, false)
+              gamma.toFloat, verbose = false)
           } else {
             Opts.explicitOpts(dotVectorSize, useBias, learningRate.toFloat,
-              lambdaU.toFloat, lambdaI.toFloat, false)
+              lambdaU.toFloat, lambdaI.toFloat, verbose = false)
           }
           val sg = Optimizer(opts, eItLR)
 
@@ -206,12 +193,14 @@ private[ml] abstract class LogFacBase[T](
 
         cached += emb
 
-        if (checkpointInterval > 0 && (checkpointIter + 1) % checkpointInterval == 0) {
-          emb = checkpoint(emb, checkpointPath.get + "/" + curEpoch + "_" + (pI + 1))
-
+        if (shouldCheckpoint(checkpointIter)) {
+          emb.checkpoint()
+          emb = cacheAndCount(emb)
+          emb.cleanShuffleDependencies()
+          deletePreviousCheckpointFile(previousCheckpointFile)
+          previousCheckpointFile = emb.getCheckpointFile
           cached.foreach(_.unpersist())
           cached.clear()
-
           cached += emb
         }
         checkpointIter += 1
