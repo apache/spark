@@ -673,7 +673,9 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
                   UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false),
                   WindowSpecReference("w")), None)
             ),
-            UnresolvedRelation(TableIdentifier("testData")))),
+            UnresolvedRelation(TableIdentifier("testData"))),
+          forPipeSQL = false
+        ),
         ioSchema))
 
     assertEqual(

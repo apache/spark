@@ -872,12 +872,6 @@ table windowTestData
 |> select cate, sum(val) over val
    window val as (partition by cate order by val);
 
--- WINDOW definition can be referred in the downstream SELECT clause.
-table windowTestData
-|> select cate, val, first_value(cate) over w as first_val
-|> select cate, val, sum(val) over w as sum_val
-   window w as (order by val);
-
 -- WINDOW operators (within SELECT): negative tests.
 ---------------------------------------------------
 
@@ -891,11 +885,16 @@ table windowTestData
    window w1 as (partition by cate)
    window w2 as (order by val);
 
--- WINDOW definition cannot be referred in the upstream SELECT clause.
+-- WINDOW definition cannot be referred across different pipe operator SELECT clauses.
 table windowTestData
 |> select cate, val, sum(val) over w as sum_val
    window w as (partition by cate order by val)
 |> select cate, val, sum_val, first_value(cate) over w;
+
+table windowTestData
+|> select cate, val, first_value(cate) over w as first_val
+|> select cate, val, sum(val) over w as sum_val
+   window w as (order by val);
 
 -- Cleanup.
 -----------

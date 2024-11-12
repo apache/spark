@@ -428,12 +428,22 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(WITH_WINDOW_DEFINITION, UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
-      case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
-        case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
-          val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
-            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
-          WindowExpression(c, windowSpecDefinition)
-      }
+      case WithWindowDefinition(windowDefinitions, child, forPipeSQL) =>
+        if (forPipeSQL) {
+          child.transformExpressions {
+            case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
+              val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
+                throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
+              WindowExpression(c, windowSpecDefinition)
+          }
+        } else {
+          child.resolveExpressions {
+            case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
+              val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
+                throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
+              WindowExpression(c, windowSpecDefinition)
+          }
+        }
     }
   }
 

@@ -1024,7 +1024,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // WINDOWS
     val withWindow = withOrder.optionalMap(windowClause) {
-      withWindowClause
+      withWindowClause(_, _, forPipeOperators)
     }
     if (forPipeOperators && windowClause != null) {
       throw QueryParsingErrors.clausesWithPipeOperatorsUnsupportedError(
@@ -1307,7 +1307,9 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // Window
-    val withWindow = withDistinct.optionalMap(windowClause)(withWindowClause)
+    val withWindow = withDistinct.optionalMap(windowClause) {
+      withWindowClause(_, _, isPipeOperatorSelect)
+    }
 
     withWindow
   }
@@ -1464,7 +1466,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def withWindowClause(
       ctx: WindowClauseContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      forPipeSQL: Boolean): LogicalPlan = withOrigin(ctx) {
     // Collect all window specifications defined in the WINDOW clause.
     val baseWindowTuples = ctx.namedWindow.asScala.map {
       wCtx =>
@@ -1496,7 +1499,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Note that mapValues creates a view instead of materialized map. We force materialization by
     // mapping over identity.
-    WithWindowDefinition(windowMapView.map(identity), query)
+    WithWindowDefinition(windowMapView.map(identity), query, forPipeSQL)
   }
 
   /**
