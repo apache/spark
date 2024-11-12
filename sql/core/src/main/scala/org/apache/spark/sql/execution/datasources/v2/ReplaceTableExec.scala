@@ -23,9 +23,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.TableSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagedTableWithCommitMetrics, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.Utils
 
 case class ReplaceTableExec(
@@ -65,6 +67,11 @@ case class AtomicReplaceTableExec(
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 
+  override val metrics: Map[String, SQLMetric] = Map(
+    "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "written output"))
+
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(identifier)) {
       val table = catalog.loadTable(identifier)
@@ -92,7 +99,19 @@ case class AtomicReplaceTableExec(
 
   private def commitOrAbortStagedChanges(staged: StagedTable): Unit = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
-      staged.commitStagedChanges()
+      staged match {
+        case st: StagedTableWithCommitMetrics =>
+          st.commitStagedChanges()
+
+          st.getCommitMetrics.forEach {
+            case (name: String, value: java.lang.Long) =>
+              metrics.get(name).foreach(_.set(value))
+          }
+
+          val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+        case st: StagedTable => st.commitStagedChanges()
+      }
     })(catchBlock = {
       staged.abortStagedChanges()
     })
