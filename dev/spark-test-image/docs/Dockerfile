@@ -1,3 +1,5 @@
+# syntax = edrevo/dockerfile-plus
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,8 +19,6 @@
 
 # Image for building and testing Spark branches. Based on Ubuntu 22.04.
 # See also in https://hub.docker.com/_/ubuntu
-
-# syntax = edrevo/dockerfile-plus
 
 FROM ubuntu:jammy-20240911.1
 
