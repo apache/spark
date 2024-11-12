@@ -173,6 +173,9 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       OptimizerSuite.genData(4096, 32, 16, 5, useBias, implicitPrefs = true, rnd)
     val trainDf = sc.parallelize(trainData.toSeq)
       .toDF("user", "item", "label", "weight")
+    spark.sparkContext.setCheckpointDir(
+      tempDir.getAbsolutePath + "/_lmf_implicit_" + rnd.nextLong()
+    )
 
     val result = new LMF()
       .setUserCol("user")
@@ -183,7 +186,6 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       .setSeed(239)
       .setNumPartitions(10)
       .setCheckpointInterval(25)
-      .setCheckpointPath(tempDir.getAbsolutePath + "/_lmf_implicit_" + rnd.nextLong())
       .setParallelism(5)
       .setMaxIter(100)
       .setMinItemCount(1)
@@ -218,6 +220,9 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
     val trainDf = sc.parallelize(trainData.toSeq)
       .toDF("user", "item", "label", "weight")
 
+    spark.sparkContext.setCheckpointDir(
+      tempDir.getAbsolutePath + "/_lmf_explicit_" + rnd.nextLong()
+    )
     val result = new LMF()
       .setUserCol("user")
       .setItemCol("item")
@@ -228,7 +233,6 @@ class LMFSuite extends MLTest with DefaultReadWriteTest with Logging {
       .setSeed(239)
       .setNumPartitions(10)
       .setCheckpointInterval(25)
-      .setCheckpointPath(tempDir.getAbsolutePath + "/_lmf_explicit_" + rnd.nextLong())
       .setParallelism(5)
       .setMaxIter(100)
       .setMinItemCount(1)
