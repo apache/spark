@@ -118,7 +118,6 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case leaveStmt: LeaveStatementExec => leaveStmt.label
       case iterateStmt: IterateStatementExec => iterateStmt.label
       case forStmt: ForStatementExec => forStmt.label.get
-      case _: SingleStatementExec => "SingleStatementExec"
       case _ => fail("Unexpected statement type")
     }
 
@@ -718,8 +717,6 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "SingleStatementExec", // declare var
-      "SingleStatementExec", // set var
       "body"
     ))
   }
@@ -738,12 +735,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "SingleStatementExec", // declare var
-      "SingleStatementExec", // set var
       "statement1",
       "statement2",
-      "SingleStatementExec", // declare var
-      "SingleStatementExec", // set var
       "statement1",
       "statement2"
     ))
@@ -783,21 +776,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "SingleStatementExec", // declare x
-      "SingleStatementExec", // set x
-      "SingleStatementExec", // declare y
-      "SingleStatementExec", // set y
       "body",
-      "SingleStatementExec", // declare y
-      "SingleStatementExec", // set y
       "body",
-      "SingleStatementExec", // declare x
-      "SingleStatementExec", // set x
-      "SingleStatementExec", // declare y
-      "SingleStatementExec", // set y
       "body",
-      "SingleStatementExec", // declare y
-      "SingleStatementExec", // set y
       "body"
     ))
   }
@@ -883,12 +864,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "SingleStatementExec", // declare var
-      "SingleStatementExec", // set var
       "statement1",
       "lbl1",
-      "SingleStatementExec", // declare var
-      "SingleStatementExec", // set var
       "statement1",
       "lbl1"
     ))
@@ -909,8 +886,6 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "SingleStatementExec", // declare var
-      "SingleStatementExec", // set var
       "statement1",
       "lbl1"
     ))
@@ -939,16 +914,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "SingleStatementExec", // declare x
-      "SingleStatementExec", // set x
-      "SingleStatementExec", // declare y
-      "SingleStatementExec", // set y
       "body1",
       "lbl1",
-      "SingleStatementExec", // declare x
-      "SingleStatementExec", // set x
-      "SingleStatementExec", // declare y
-      "SingleStatementExec", // set y
       "body1",
       "lbl1"
     ))
@@ -977,10 +944,6 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "SingleStatementExec", // declare x
-      "SingleStatementExec", // set x
-      "SingleStatementExec", // declare y
-      "SingleStatementExec", // set y
       "body1",
       "lbl1"
     ))

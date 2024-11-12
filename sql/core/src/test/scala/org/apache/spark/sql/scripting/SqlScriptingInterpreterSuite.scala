@@ -1803,7 +1803,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           | INSERT INTO t VALUES (1, 'first', 1.0);
           | INSERT INTO t VALUES (2, 'second', 2.0);
           | FOR SELECT * FROM t ORDER BY intCol DO
-          |   SELECT 1;
+          |   SELECT intCol;
+          |   SELECT stringCol;
+          |   SELECT doubleCol;
           | END FOR;
           |END
           |""".stripMargin
