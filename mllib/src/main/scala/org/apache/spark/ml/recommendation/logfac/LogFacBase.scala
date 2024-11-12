@@ -194,14 +194,13 @@ private[ml] abstract class LogFacBase[T](
         cached += emb
 
         if (shouldCheckpoint(checkpointIter)) {
+          emb.count()
           emb.checkpoint()
-          emb = cacheAndCount(emb)
           emb.cleanShuffleDependencies()
           deletePreviousCheckpointFile(previousCheckpointFile)
           previousCheckpointFile = emb.getCheckpointFile
           cached.foreach(_.unpersist())
           cached.clear()
-          cached += emb
         }
         checkpointIter += 1
       }
