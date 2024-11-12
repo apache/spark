@@ -687,6 +687,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       .map { case Row(u: Long, i: Long, l: Float, w: Float) => (u, i, l, w) }
       .repartition(numExecutors * numCores / $(parallelism))
       .persist(StorageLevel.fromString($(intermediateStorageLevel)))
+    ratings.count()
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)

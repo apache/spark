@@ -523,6 +523,7 @@ class Item2Vec(@Since("4.0.0") override val uid: String)
       .map{case (seq: Array[Long]) => seq}
       .repartition(numExecutors * numCores / $(parallelism))
       .persist(StorageLevel.fromString($(intermediateStorageLevel)))
+    sequences.count()
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
