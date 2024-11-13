@@ -149,29 +149,14 @@ class SparkSession private(
    |  Session-related state  |
    * ----------------------- */
 
-  /**
-   * State shared across sessions, including the `SparkContext`, cached data, listener,
-   * and a catalog that interacts with external systems.
-   *
-   * This is internal to Spark and there is no guarantee on interface stability.
-   *
-   * @since 2.2.0
-   */
+  /** @inheritdoc */
   @Unstable
   @transient
   lazy val sharedState: SharedState = {
     existingSharedState.getOrElse(new SharedState(sparkContext, initialSessionOptions))
   }
 
-  /**
-   * State isolated across sessions, including SQL configurations, temporary tables, registered
-   * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
-   * If `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
-   *
-   * This is internal to Spark and there is no guarantee on interface stability.
-   *
-   * @since 2.2.0
-   */
+  /** @inheritdoc */
   @Unstable
   @transient
   lazy val sessionState: SessionState = {
@@ -185,32 +170,17 @@ class SparkSession private(
       }
   }
 
-  /**
-   * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @transient
   val sqlContext: SQLContext = new SQLContext(this)
 
   /** @inheritdoc */
   @transient lazy val conf: RuntimeConfig = new RuntimeConfigImpl(sessionState.conf)
 
-  /**
-   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
-   * that listen for execution metrics.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
-  /**
-   * :: Experimental ::
-   * A collection of methods that are considered experimental, but can be used to hook into
-   * the query planner for advanced functionality.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @Experimental
   @Unstable
   def experimental: ExperimentalMethods = sessionState.experimentalMethods
@@ -227,7 +197,7 @@ class SparkSession private(
    */
   @Experimental
   @Unstable
-  def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
+  private[sql] def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
   /** @inheritdoc */
   @Unstable
@@ -357,11 +327,7 @@ class SparkSession private(
     Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
-  /**
-   * Convert a `BaseRelation` created for external data sources into a `DataFrame`.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
     Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
@@ -527,19 +493,7 @@ class SparkSession private(
   override def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
 
   /**
-   * Execute an arbitrary string command inside an external execution engine rather than Spark.
-   * This could be useful when user wants to execute some commands out of Spark. For
-   * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
-   * creating cores for Solr and so on.
-   *
-   * The command will be eagerly executed after this method is called and the returned
-   * DataFrame will contain the output of the command(if any).
-   *
-   * @param runner The class name of the runner that implements `ExternalCommandRunner`.
-   * @param command The target command to be executed
-   * @param options The options for the runner.
-   *
-   * @since 3.0.0
+   * @inheritdoc
    */
   @Unstable
   def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame = {
@@ -826,15 +780,8 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
     /** @inheritdoc */
     override def config(map: java.util.Map[String, Any]): this.type = super.config(map)
 
-    /**
-     * Sets a list of config options based on the given `SparkConf`.
-     *
-     * @since 2.0.0
-     */
-    def config(conf: SparkConf): this.type = synchronized {
-      conf.getAll.foreach { case (k, v) => options += k -> v }
-      this
-    }
+    /** @inheritdoc */
+    override def config(conf: SparkConf): this.type = super.config(conf)
 
     /** @inheritdoc */
     override def master(master: String): this.type = super.master(master)
@@ -842,7 +789,11 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
     /** @inheritdoc */
     override def enableHiveSupport(): this.type = synchronized {
       if (hiveClassesArePresent) {
+        // TODO(SPARK-50244): We now isolate artifacts added by the `ADD JAR` command. This will
+        //  break an existing Hive use case (one session adds JARs and another session uses them).
+        //  We need to decide whether/how to enable isolation for Hive.
         super.enableHiveSupport()
+          .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, false)
       } else {
         throw new IllegalArgumentException(
           "Unable to instantiate SparkSession with Hive support because " +
@@ -850,13 +801,8 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
       }
     }
 
-    /**
-     * Inject extensions into the [[SparkSession]]. This allows a user to add Analyzer rules,
-     * Optimizer rules, Planning Strategies or a customized parser.
-     *
-     * @since 2.2.0
-     */
-    def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
+    /** @inheritdoc */
+    override def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
       f(extensions)
       this
     }

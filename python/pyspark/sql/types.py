@@ -1571,11 +1571,9 @@ class VariantType(AtomicType):
             return None
         return VariantVal(obj["value"], obj["metadata"])
 
-    def toInternal(self, obj: Any) -> Any:
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "VariantType.toInternal"},
-        )
+    def toInternal(self, variant: Any) -> Any:
+        assert isinstance(variant, VariantVal)
+        return {"value": variant.value, "metadata": variant.metadata}
 
 
 class UserDefinedType(DataType):

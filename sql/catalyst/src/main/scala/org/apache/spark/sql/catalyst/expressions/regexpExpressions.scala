@@ -43,8 +43,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class StringRegexExpression extends BinaryExpression
-  with ImplicitCastInputTypes with NullIntolerant with Predicate {
-
+  with ImplicitCastInputTypes with Predicate {
+  override def nullIntolerant: Boolean = true
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
 
@@ -290,7 +290,8 @@ case class ILike(
 }
 
 sealed abstract class MultiLikeBase
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate {
+  extends UnaryExpression with ImplicitCastInputTypes with Predicate {
+  override def nullIntolerant: Boolean = true
 
   protected def patterns: Seq[UTF8String]
 
@@ -566,8 +567,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   since = "1.5.0",
   group = "string_funcs")
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeBinaryLcase, StringTypeWithCollation, IntegerType)
@@ -638,7 +639,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression, pos: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(subject: Expression, regexp: Expression, rep: Expression) =
     this(subject, regexp, rep, Literal(1))
@@ -805,7 +807,8 @@ object RegExpExtractBase {
 }
 
 abstract class RegExpExtractBase
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   def subject: Expression
   def regexp: Expression
   def idx: Expression

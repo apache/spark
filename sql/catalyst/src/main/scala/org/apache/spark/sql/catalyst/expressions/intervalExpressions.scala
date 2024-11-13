@@ -37,7 +37,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
 abstract class ExtractIntervalPart[T](
     val dataType: DataType,
     func: T => Any,
-    funcName: String) extends UnaryExpression with NullIntolerant with Serializable {
+    funcName: String) extends UnaryExpression with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.$funcName($c)")
@@ -168,7 +170,9 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -341,7 +345,8 @@ case class MakeInterval(
     mins: Expression,
     secs: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends SeptenaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(
       years: Expression,
@@ -476,7 +481,8 @@ case class MakeDTInterval(
     hours: Expression,
     mins: Expression,
     secs: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
 
   def this(
       days: Expression,
@@ -508,13 +514,15 @@ case class MakeDTInterval(
       day.asInstanceOf[Int],
       hour.asInstanceOf[Int],
       min.asInstanceOf[Int],
-      sec.asInstanceOf[Decimal])
+      sec.asInstanceOf[Decimal],
+      origin.context)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (day, hour, min, sec) => {
+      val errorContext = getContextOrNullCode(ctx)
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec)"
+      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec, $errorContext)"
     })
   }
 
@@ -526,6 +534,8 @@ case class MakeDTInterval(
       mins: Expression,
       secs: Expression): MakeDTInterval =
     copy(days, hours, mins, secs)
+
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
 }
 
 @ExpressionDescription(
@@ -550,7 +560,8 @@ case class MakeDTInterval(
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeYMInterval(years: Expression, months: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
 
   def this(years: Expression) = this(years, Literal(0))
   def this() = this(Literal(0))
@@ -561,17 +572,28 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def dataType: DataType = YearMonthIntervalType()
 
   override def nullSafeEval(year: Any, month: Any): Any = {
-    Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
-      Math.multiplyExact(year.asInstanceOf[Number].longValue(), MONTHS_PER_YEAR)))
+    try {
+      Math.toIntExact(
+        Math.addExact(month.asInstanceOf[Int],
+          Math.multiplyExact(year.asInstanceOf[Int], MONTHS_PER_YEAR)))
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(origin.context)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (years, months) => {
+    nullSafeCodeGen(ctx, ev, (years, months) => {
       val math = classOf[Math].getName.stripSuffix("$")
+      val errorContext = getContextOrNullCode(ctx)
+      // scalastyle:off line.size.limit
       s"""
-         |$math.toIntExact(java.lang.Math.addExact($months,
-         |  $math.multiplyExact($years, $MONTHS_PER_YEAR)))
-         |""".stripMargin
+         |try {
+         |  ${ev.value} = $math.toIntExact($math.addExact($months, $math.multiplyExact($years, $MONTHS_PER_YEAR)));
+         |} catch (java.lang.ArithmeticException e) {
+         |  throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError($errorContext);
+         |}""".stripMargin
+      // scalastyle:on line.size.limit
     })
   }
 
@@ -580,13 +602,18 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression =
     copy(years = newLeft, months = newRight)
+
+  override def initQueryContext(): Option[QueryContext] = {
+    Some(origin.context)
+  }
 }
 
 // Multiply an year-month interval by a numeric
 case class MultiplyYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -638,7 +665,8 @@ case class MultiplyYMInterval(
 case class MultiplyDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -690,8 +718,8 @@ trait IntervalDivide {
       context: QueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
-        throw QueryExecutionErrors.intervalArithmeticOverflowError(
-          "Interval value overflows after being divided by -1", "try_divide", context)
+        throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+          "try_divide", context)
       }
     }
   }
@@ -724,8 +752,8 @@ trait IntervalDivide {
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
-    with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -806,8 +834,9 @@ case class DivideYMInterval(
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
-    with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override def left: Expression = interval
   override def right: Expression = num
 
