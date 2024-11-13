@@ -167,11 +167,11 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
 
     withSessionCollationAndTable("UTF8_LCASE", tableName) {
       sql(s"""
-             |CREATE TABLE $tableName USING $dataSource AS
-             |SELECT 'a' = 'A' AS c1
-             |UNION ALL
-             |SELECT 'b' = 'B' AS c1
-             |""".stripMargin)
+           |CREATE TABLE $tableName USING $dataSource AS
+           |SELECT 'a' = 'A' AS c1
+           |UNION ALL
+           |SELECT 'b' = 'B' AS c1
+           |""".stripMargin)
 
       checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(false), Row(false)))
     }
@@ -375,10 +375,10 @@ class DefaultCollationTestSuite extends DatasourceV2SQLBase {
 
       checkAnswer(
         sql(s"""
-               |SELECT 'a' = 'A'
-               |UNION ALL
-               |SELECT 'b' = 'B'
-               |""".stripMargin),
+             |SELECT 'a' = 'A'
+             |UNION ALL
+             |SELECT 'b' = 'B'
+             |""".stripMargin),
         Seq(Row(true), Row(true)))
     }
   }

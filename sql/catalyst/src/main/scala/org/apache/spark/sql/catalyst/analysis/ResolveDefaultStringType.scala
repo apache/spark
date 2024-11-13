@@ -57,6 +57,10 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
 
   private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType
 
+  /**
+   * Returns the default string type that should be used in a given DDL command
+   * (for now always UTF8_BINARY).
+   */
   private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
     StringType
 
@@ -65,14 +69,21 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
     case _ => false
   }
 
+  /**
+   * Transforms the given plan, by transforming all expressions in its operators to use the given
+   * new type instead of the default string type.
+   */
   private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
     plan resolveOperators { operator =>
-      operator.transformExpressionsUp { expression =>
+      operator resolveExpressionsUp { expression =>
         transformExpression(expression, newType)
       }
     }
   }
 
+  /**
+   * Transforms the given expression, by changing all default string types to the given new type.
+   */
   private def transformExpression(expression: Expression, newType: StringType): Expression = {
     expression match {
       case columnDef: ColumnDefinition if hasDefaultStringType(columnDef.dataType) =>
