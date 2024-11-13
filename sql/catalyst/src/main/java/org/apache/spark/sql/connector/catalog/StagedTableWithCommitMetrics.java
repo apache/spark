@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector.catalog;
 import java.util.Map;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.types.DataType;
 
 /**
  * An extension of the {@link StagedTable} interface that provides metrics after a commit.
