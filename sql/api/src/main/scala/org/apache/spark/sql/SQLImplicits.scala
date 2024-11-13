@@ -289,7 +289,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits with Serializable {
 
 /**
  * Lower priority implicit methods for converting Scala objects into
- * [[org.apache.spark.sql.api.Dataset]]s. Conflicting implicits are placed here to disambiguate
+ * [[org.apache.spark.sql.Dataset]]s. Conflicting implicits are placed here to disambiguate
  * resolution.
  *
  * Reasons for including specific implicits: newProductEncoder - to disambiguate for `List`s which

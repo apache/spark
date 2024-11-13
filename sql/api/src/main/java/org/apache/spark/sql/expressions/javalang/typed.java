@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.TypedSumDouble;
 import org.apache.spark.sql.internal.TypedSumLong;
 
 /**
- * Type-safe functions available for {@link org.apache.spark.sql.api.Dataset} operations in Java.
+ * Type-safe functions available for {@link org.apache.spark.sql.Dataset} operations in Java.
  *
  * Scala users should use {@link org.apache.spark.sql.expressions.scalalang.typed}.
  *
