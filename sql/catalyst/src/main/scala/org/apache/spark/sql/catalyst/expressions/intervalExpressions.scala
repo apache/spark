@@ -476,7 +476,8 @@ case class MakeDTInterval(
     hours: Expression,
     mins: Expression,
     secs: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant
+    with SupportQueryContext {
 
   def this(
       days: Expression,
@@ -508,13 +509,15 @@ case class MakeDTInterval(
       day.asInstanceOf[Int],
       hour.asInstanceOf[Int],
       min.asInstanceOf[Int],
-      sec.asInstanceOf[Decimal])
+      sec.asInstanceOf[Decimal],
+      origin.context)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (day, hour, min, sec) => {
+      val errorContext = getContextOrNullCode(ctx)
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec)"
+      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec, $errorContext)"
     })
   }
 
@@ -526,6 +529,8 @@ case class MakeDTInterval(
       mins: Expression,
       secs: Expression): MakeDTInterval =
     copy(days, hours, mins, secs)
+
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
 }
 
 @ExpressionDescription(

@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
+import org.apache.spark.{QueryContext, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -782,7 +782,8 @@ object IntervalUtils extends SparkIntervalUtils {
       days: Int,
       hours: Int,
       mins: Int,
-      secs: Decimal): Long = {
+      secs: Decimal,
+      context: QueryContext): Long = {
     assert(secs.scale == 6, "Seconds fractional must have 6 digits for microseconds")
     var micros = secs.toUnscaledLong
     try {
@@ -792,7 +793,7 @@ object IntervalUtils extends SparkIntervalUtils {
       micros
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context = null)
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context)
     }
   }
 
