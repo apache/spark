@@ -21,7 +21,6 @@ import org.apache.spark.sql
 import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 
-
 /**
  * Functions for registering user-defined functions. Use `SparkSession.udf` to access this:
  *
