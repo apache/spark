@@ -2645,6 +2645,12 @@
     ],
     "sqlState" : "2203G"
   },
+  "INVALID_JSON_RECORD_TYPE" : {
+    "message" : [
+      "Detected an invalid type of a JSON record while inferring a common schema in the mode <failFastMode>. Expected a STRUCT type, but found <invalidType>."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -7352,11 +7358,6 @@
   "_LEGACY_ERROR_TEMP_2166" : {
     "message" : [
       "Malformed JSON."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2167" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>. Reasons: Failed to infer a common schema. Struct types are expected, but `<dataType>` was found."
     ]
   },
   "_LEGACY_ERROR_TEMP_2168" : {
