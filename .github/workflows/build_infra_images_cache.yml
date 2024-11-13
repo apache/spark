@@ -80,7 +80,7 @@ jobs:
         id: docker_build_lint
         uses: docker/build-push-action@v6
         with:
-          context: ./dev/spark-test-image/docs/
+          context: ./dev/spark-test-image/lint/
           push: true
           tags: ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ github.ref_name }}-static
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ github.ref_name }}
