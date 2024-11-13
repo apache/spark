@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util
 import java.util.Locale
 
-import scala.collection.mutable
+import scala.collection.mutable.Set
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -140,7 +140,10 @@ object ParserUtils extends SparkParserUtils {
   }
 }
 
-object LabelUtils {
+class ScriptingLabelContext {
+  /** Set to keep track of labels seen so far */
+  private val seenLabels = Set[String]()
+
   /**
    * Check if the beginLabelCtx and endLabelCtx match.
    * If the labels are defined, they must follow rules:
@@ -181,11 +184,12 @@ object LabelUtils {
    */
   def enterLabeledScope(
       beginLabelCtx: Option[BeginLabelContext],
-      endLabelCtx: Option[EndLabelContext],
-      seenLabels: mutable.Set[String]): String = {
+      endLabelCtx: Option[EndLabelContext]): String = {
 
+    // Check if this label already exists in parent scopes.
     checkLabels(beginLabelCtx, endLabelCtx)
 
+    // Get label text and add it to seenLabels.
     val labelText = if (isLabelDefined(beginLabelCtx)) {
       val txt = beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
       if (seenLabels.contains(txt)) {
@@ -199,7 +203,6 @@ object LabelUtils {
       // Do not add the label to the seenLabels set if it is not defined.
       java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
     }
-
     labelText
   }
 
@@ -207,9 +210,7 @@ object LabelUtils {
    * Exit a labeled scope.
    * If the label is defined, it will be removed from seenLabels.
    */
-  def exitLabeledScope(
-      beginLabelCtx: Option[BeginLabelContext],
-      seenLabels: mutable.Set[String]): Unit = {
+  def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
     if (isLabelDefined(beginLabelCtx)) {
       seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
     }

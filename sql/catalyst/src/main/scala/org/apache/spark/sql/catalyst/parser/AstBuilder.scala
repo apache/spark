@@ -142,18 +142,18 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
-    val seenLabels = Set[String]()
-    visitBeginEndCompoundBlockImpl(ctx.beginEndCompoundBlock(), seenLabels)
+    val labelCtx = new ScriptingLabelContext()
+    visitBeginEndCompoundBlockImpl(ctx.beginEndCompoundBlock(), labelCtx)
   }
 
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
       label: Option[String],
       allowVarDeclare: Boolean,
-      seenLabels: Set[String]): CompoundBody = {
+      labelCtx: ScriptingLabelContext): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(
-      compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, seenLabels))
+      compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, labelCtx))
 
     val compoundStatements = buff.toList
 
@@ -187,22 +187,22 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitBeginEndCompoundBlockImpl(
       ctx: BeginEndCompoundBlockContext,
-      seenLabels: Set[String]): CompoundBody = {
+      labelCtx: ScriptingLabelContext): CompoundBody = {
     val labelText =
-      LabelUtils.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()), seenLabels)
+      labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val body = visitCompoundBodyImpl(
       ctx.compoundBody(),
       Some(labelText),
       allowVarDeclare = true,
-      seenLabels
+      labelCtx
     )
-    LabelUtils.exitLabeledScope(Option(ctx.beginLabel()), seenLabels)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
     body
   }
 
   private def visitCompoundStatementImpl(
       ctx: CompoundStatementContext,
-      seenLabels: Set[String]): CompoundPlanStatement =
+      labelCtx: ScriptingLabelContext): CompoundPlanStatement =
     withOrigin(ctx) {
       Option(ctx.statement().asInstanceOf[ParserRuleContext])
         .orElse(Option(ctx.setStatementWithOptionalVarKeyword().asInstanceOf[ParserRuleContext]))
@@ -212,19 +212,19 @@ class AstBuilder extends DataTypeAstBuilder
           if (ctx.getChildCount == 1) {
             ctx.getChild(0) match {
               case compoundBodyContext: BeginEndCompoundBlockContext =>
-                visitBeginEndCompoundBlockImpl(compoundBodyContext, seenLabels)
+                visitBeginEndCompoundBlockImpl(compoundBodyContext, labelCtx)
               case whileStmtContext: WhileStatementContext =>
-                visitWhileStatementImpl(whileStmtContext, seenLabels)
+                visitWhileStatementImpl(whileStmtContext, labelCtx)
               case repeatStmtContext: RepeatStatementContext =>
-                visitRepeatStatementImpl(repeatStmtContext, seenLabels)
+                visitRepeatStatementImpl(repeatStmtContext, labelCtx)
               case loopStatementContext: LoopStatementContext =>
-                visitLoopStatementImpl(loopStatementContext, seenLabels)
+                visitLoopStatementImpl(loopStatementContext, labelCtx)
               case ifElseStmtContext: IfElseStatementContext =>
-                visitIfElseStatementImpl(ifElseStmtContext, seenLabels)
+                visitIfElseStatementImpl(ifElseStmtContext, labelCtx)
               case searchedCaseContext: SearchedCaseStatementContext =>
-                visitSearchedCaseStatementImpl(searchedCaseContext, seenLabels)
+                visitSearchedCaseStatementImpl(searchedCaseContext, labelCtx)
               case simpleCaseContext: SimpleCaseStatementContext =>
-                visitSimpleCaseStatementImpl(simpleCaseContext, seenLabels)
+                visitSimpleCaseStatementImpl(simpleCaseContext, labelCtx)
               case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
             }
           } else {
@@ -235,7 +235,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitIfElseStatementImpl(
       ctx: IfElseStatementContext,
-      seenLabels: Set[String]): IfElseStatement = {
+      labelCtx: ScriptingLabelContext): IfElseStatement = {
     IfElseStatement(
       conditions = ctx.booleanExpression().asScala.toList.map(boolExpr => withOrigin(boolExpr) {
         SingleStatement(
@@ -244,19 +244,19 @@ class AstBuilder extends DataTypeAstBuilder
             OneRowRelation()))
       }),
       conditionalBodies = ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, seenLabels)
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
       ),
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, seenLabels)
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
       )
     )
   }
 
   private def visitWhileStatementImpl(
       ctx: WhileStatementContext,
-      seenLabels: Set[String]): WhileStatement = {
+      labelCtx: ScriptingLabelContext): WhileStatement = {
     val labelText =
-      LabelUtils.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()), seenLabels)
+      labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
 
     val condition = withOrigin(boolExpr) {
@@ -264,15 +264,15 @@ class AstBuilder extends DataTypeAstBuilder
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, seenLabels)
-    LabelUtils.exitLabeledScope(Option(ctx.beginLabel()), seenLabels)
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     WhileStatement(condition, body, Some(labelText))
   }
 
   private def visitSearchedCaseStatementImpl(
       ctx: SearchedCaseStatementContext,
-      seenLabels: Set[String]): CaseStatement = {
+      labelCtx: ScriptingLabelContext): CaseStatement = {
     val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
       SingleStatement(
         Project(
@@ -281,7 +281,7 @@ class AstBuilder extends DataTypeAstBuilder
     })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, seenLabels)
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
       )
 
     if (conditions.length != conditionalBodies.length) {
@@ -294,13 +294,13 @@ class AstBuilder extends DataTypeAstBuilder
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, seenLabels)
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
       ))
   }
 
   private def visitSimpleCaseStatementImpl(
       ctx: SimpleCaseStatementContext,
-      seenLabels: Set[String]): CaseStatement = {
+      labelCtx: ScriptingLabelContext): CaseStatement = {
     // uses EqualTo to compare the case variable(the main case expression)
     // to the WHEN clause expressions
     val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
@@ -311,7 +311,7 @@ class AstBuilder extends DataTypeAstBuilder
     })
     val conditionalBodies =
       ctx.conditionalBodies.asScala.toList.map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, seenLabels)
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
       )
 
     if (conditions.length != conditionalBodies.length) {
@@ -324,15 +324,15 @@ class AstBuilder extends DataTypeAstBuilder
       conditions = conditions,
       conditionalBodies = conditionalBodies,
       elseBody = Option(ctx.elseBody).map(
-        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, seenLabels)
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
       ))
   }
 
   private def visitRepeatStatementImpl(
       ctx: RepeatStatementContext,
-      seenLabels: Set[String]): RepeatStatement = {
+      labelCtx: ScriptingLabelContext): RepeatStatement = {
     val labelText =
-      LabelUtils.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()), seenLabels)
+      labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
 
     val condition = withOrigin(boolExpr) {
@@ -340,8 +340,8 @@ class AstBuilder extends DataTypeAstBuilder
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, seenLabels)
-    LabelUtils.exitLabeledScope(Option(ctx.beginLabel()), seenLabels)
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     RepeatStatement(condition, body, Some(labelText))
   }
@@ -406,11 +406,11 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitLoopStatementImpl(
       ctx: LoopStatementContext,
-      seenLabels: Set[String]): LoopStatement = {
+      labelCtx: ScriptingLabelContext): LoopStatement = {
     val labelText =
-      LabelUtils.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()), seenLabels)
-    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, seenLabels)
-    LabelUtils.exitLabeledScope(Option(ctx.beginLabel()), seenLabels)
+      labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     LoopStatement(body, Some(labelText))
   }
