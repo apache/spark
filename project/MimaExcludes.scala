@@ -201,6 +201,25 @@ object MimaExcludes {
 
     // SPARK-50112: Moving avro files from connector to sql/core
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
+
+    // SPARK-49700: Unified Scala SQL Interface.
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameNaFunctions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameReader"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataFrameStatFunctions"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.KeyValueGroupedDataset"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLImplicits"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$Builder"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$implicits$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.package"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.package$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.catalog.Catalog"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.DataStreamReader"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.DataStreamWriter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.DataStreamWriter$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQueryManager"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.StreamingQuery"),
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")
