@@ -256,6 +256,16 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("correlated scalar subquery in select (without .outer())") {
+    checkAnswer(
+      spark.table("l").select(
+        $"a",
+        spark.table("r").where($"b" === $"a".outer()).select(sum($"d")).as("sum_d").scalar()
+      ),
+      sql("select a, (select sum(d) from r where b = l.a) sum_d from l")
+    )
+  }
+
   test("correlated scalar subquery in select (null safe)") {
     checkAnswer(
       spark.table("l").select(
@@ -362,21 +372,6 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
       queryContext =
         Array(ExpectedContext(fragment = "outer", callSitePattern = getCurrentClassCallSitePattern))
-    )
-
-    // Missing `outer()` for another outer
-    val exception3 = intercept[AnalysisException] {
-      spark.table("l").select(
-        $"a",
-        spark.table("r").where($"b" === $"a".outer()).select(sum($"d")).scalar()
-      ).collect()
-    }
-    checkError(
-      exception3,
-      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`b`", "proposal" -> "`c`, `d`"),
-      queryContext =
-        Array(ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
     )
   }
 }

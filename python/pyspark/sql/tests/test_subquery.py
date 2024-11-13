@@ -237,6 +237,23 @@ class SubqueryTestsMixin:
                     ),
                 )
 
+            with self.subTest("without .outer()"):
+                assertDataFrameEqual(
+                    self.spark.table("l").select(
+                        "a",
+                        (
+                            self.spark.table("r")
+                            .where(sf.col("b") == sf.col("a").outer())
+                            .select(sf.sum("d"))
+                            .scalar()
+                            .alias("sum_d")
+                        ),
+                    ),
+                    self.spark.sql(
+                        """select a, (select sum(d) from r where b = l.a) sum_d from l"""
+                    ),
+                )
+
             with self.subTest("in select (null safe)"):
                 assertDataFrameEqual(
                     self.spark.table("l").select(
@@ -468,26 +485,6 @@ class SubqueryTestsMixin:
                     messageParameters={"objectName": "`c`", "proposal": "`a`, `b`"},
                     query_context_type=QueryContextType.DataFrame,
                     fragment="outer",
-                )
-
-            with self.subTest("missing `outer()` for another outer"):
-                with self.assertRaises(AnalysisException) as pe:
-                    self.spark.table("l").select(
-                        "a",
-                        (
-                            self.spark.table("r")
-                            .where(sf.col("b") == sf.col("a").outer())
-                            .select(sf.sum("d"))
-                            .scalar()
-                        ),
-                    ).collect()
-
-                self.check_error(
-                    exception=pe.exception,
-                    errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
-                    messageParameters={"objectName": "`b`", "proposal": "`c`, `d`"},
-                    query_context_type=QueryContextType.DataFrame,
-                    fragment="col",
                 )
 
 
