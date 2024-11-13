@@ -161,7 +161,7 @@ jobs:
     needs: precondition
     if: fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
