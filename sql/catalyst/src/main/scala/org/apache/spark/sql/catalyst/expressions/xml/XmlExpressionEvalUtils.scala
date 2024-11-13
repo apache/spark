@@ -14,29 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.expressions.xml
 
-import org.apache.spark.sql.catalyst.util.DropMalformedMode
-import org.apache.spark.sql.catalyst.xml.{XmlInferSchema, XmlOptions}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.catalyst.xml.XmlInferSchema
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
-case class SchemaOfXmlEvaluator(options: Map[String, String]) {
+object XmlExpressionEvalUtils {
 
-  @transient
-  private lazy val xmlOptions = new XmlOptions(options, "UTC")
-
-  @transient
-  private lazy val xmlInferSchema = {
-    if (xmlOptions.parseMode == DropMalformedMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
-    }
-    new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
-  }
-
-  final def evaluate(xml: UTF8String): Any = {
+  def schemaOfXml(xmlInferSchema: XmlInferSchema, xml: UTF8String): UTF8String = {
     val dataType = xmlInferSchema.infer(xml.toString).get match {
       case st: StructType =>
         xmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))

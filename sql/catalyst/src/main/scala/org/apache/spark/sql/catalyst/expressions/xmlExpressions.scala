@@ -22,11 +22,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.catalyst.expressions.xml.SchemaOfXmlEvaluator
-import org.apache.spark.sql.catalyst.util.{FailFastMode, FailureSafeParser, PermissiveMode}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.expressions.xml.XmlExpressionEvalUtils
+import org.apache.spark.sql.catalyst.util.{DropMalformedMode, FailFastMode, FailureSafeParser, PermissiveMode}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, ValidatorUtil, XmlInferSchema, XmlOptions}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -191,14 +191,24 @@ case class SchemaOfXml(
     copy(child = newChild)
 
   @transient
-  private lazy val evaluator: SchemaOfXmlEvaluator = SchemaOfXmlEvaluator(options)
+  private lazy val xmlOptions = new XmlOptions(options, "UTC")
 
-  override def replacement: Expression = Invoke(
-    Literal.create(evaluator, ObjectType(classOf[SchemaOfXmlEvaluator])),
-    "evaluate",
+  @transient
+  private lazy val xmlInferSchema = {
+    if (xmlOptions.parseMode == DropMalformedMode) {
+      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
+    }
+    new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
+  }
+
+  @transient private lazy val xmlInferSchemaObjectType = ObjectType(classOf[XmlInferSchema])
+
+  override def replacement: Expression = StaticInvoke(
+    XmlExpressionEvalUtils.getClass,
     dataType,
-    Seq(child),
-    Seq(child.dataType)
+    "schemaOfXml",
+    Seq(Literal(xmlInferSchema, xmlInferSchemaObjectType), child),
+    Seq(xmlInferSchemaObjectType, child.dataType)
   )
 }
 
