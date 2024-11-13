@@ -166,6 +166,17 @@ case class SchemaOfXml(
   override def nullable: Boolean = false
 
   @transient
+  private lazy val xmlOptions = new XmlOptions(options, "UTC")
+
+  @transient
+  private lazy val xmlInferSchema = {
+    if (xmlOptions.parseMode == DropMalformedMode) {
+      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
+    }
+    new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
+  }
+
+  @transient
   private lazy val xml = child.eval().asInstanceOf[UTF8String]
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -189,17 +200,6 @@ case class SchemaOfXml(
 
   override protected def withNewChildInternal(newChild: Expression): SchemaOfXml =
     copy(child = newChild)
-
-  @transient
-  private lazy val xmlOptions = new XmlOptions(options, "UTC")
-
-  @transient
-  private lazy val xmlInferSchema = {
-    if (xmlOptions.parseMode == DropMalformedMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("schema_of_xml", xmlOptions.parseMode)
-    }
-    new XmlInferSchema(xmlOptions, caseSensitive = SQLConf.get.caseSensitiveAnalysis)
-  }
 
   @transient private lazy val xmlInferSchemaObjectType = ObjectType(classOf[XmlInferSchema])
 
