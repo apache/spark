@@ -37,7 +37,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
 abstract class ExtractIntervalPart[T](
     val dataType: DataType,
     func: T => Any,
-    funcName: String) extends UnaryExpression with NullIntolerant with Serializable {
+    funcName: String) extends UnaryExpression with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.$funcName($c)")
@@ -168,7 +170,9 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -341,7 +345,8 @@ case class MakeInterval(
     mins: Expression,
     secs: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends SeptenaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(
       years: Expression,
@@ -476,7 +481,8 @@ case class MakeDTInterval(
     hours: Expression,
     mins: Expression,
     secs: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(
       days: Expression,
@@ -550,7 +556,8 @@ case class MakeDTInterval(
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeYMInterval(years: Expression, months: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
 
   def this(years: Expression) = this(years, Literal(0))
   def this() = this(Literal(0))
@@ -586,7 +593,8 @@ case class MakeYMInterval(years: Expression, months: Expression)
 case class MultiplyYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -638,7 +646,8 @@ case class MultiplyYMInterval(
 case class MultiplyDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -724,8 +733,8 @@ trait IntervalDivide {
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
-    with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -806,8 +815,9 @@ case class DivideYMInterval(
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
-    with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override def left: Expression = interval
   override def right: Expression = num
 
