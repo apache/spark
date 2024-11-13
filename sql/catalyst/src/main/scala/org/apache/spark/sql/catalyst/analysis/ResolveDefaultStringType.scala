@@ -31,9 +31,9 @@ import org.apache.spark.sql.types.{DataType, DefaultStringType, StringType}
  */
 object ResolveDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-//    if (isDefaultSessionCollationUsed) {
-//      return plan
-//    }
+    if (isDefaultSessionCollationUsed) {
+      return plan
+    }
 
     plan resolveOperators {
       case p if isCreateOrAlterPlan(p) =>
@@ -58,8 +58,8 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
   private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType
 
   /**
-   * Returns the default string type that should be used in a given DDL command
-   * (for now always UTF8_BINARY).
+   * Returns the default string type that should be used in a given DDL command (for now always
+   * UTF8_BINARY).
    */
   private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
     StringType

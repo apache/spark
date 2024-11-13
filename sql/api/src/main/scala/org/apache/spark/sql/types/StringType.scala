@@ -115,15 +115,14 @@ case object StringType extends StringType(0) {
 }
 
 /**
- * Data type representing string with default collation (what is default
- * collation depends on whether it is a dml or ddl statement).
+ * Data type representing string with default collation (what is default collation depends on
+ * whether it is a dml or ddl statement).
  *
- * In dml statements the default collation is determined by the session collation,
- * while in ddl statements the default collation is determined by collation of the object
- * (table, view, etc.).
+ * In dml statements the default collation is determined by the session collation, while in ddl
+ * statements the default collation is determined by collation of the object (table, view, etc.).
  */
 private[spark] case class DefaultStringType(override val collationId: Int)
-  extends StringType(collationId)
+    extends StringType(collationId)
 
 private[spark] object DefaultStringType {
   def apply(collationName: String): DefaultStringType = {
