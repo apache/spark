@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateMap, CreateNamedStruct, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, LogicalPlan, OneRowRelation, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
@@ -710,7 +710,7 @@ class ForStatementExec(
           }
           variablesMap.keys.toSeq
             .map(colName => createSetVarExec(colName, variablesMap(colName)))
-            .foreach(exec => exec.buildDataFrame(session).collect())
+            .foreach(setVarExec => setVarExec.buildDataFrame(session).collect())
           state = ForState.Body
           body.reset()
           next()
@@ -725,7 +725,7 @@ class ForStatementExec(
                 leaveStatementExec.hasBeenMatched = true
               }
               interrupted = true
-              // drop vars
+              dropVars()
               return retStmt
             case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
               if (label.contains(iterStatementExec.label)) {
@@ -740,6 +740,11 @@ class ForStatementExec(
           if (!body.getTreeIterator.hasNext) {
             currRow += 1
             state = ForState.VariableAssignment
+
+            // on final iteration, drop variables
+            if (currRow == cachedQueryResult().length) {
+              dropVars()
+            }
           }
           retStmt
       }
@@ -782,6 +787,13 @@ class ForStatementExec(
     variablesMap
   }
 
+  private def dropVars() = {
+    variablesMap.keys.toSeq
+      .map(colName => createDropVarExec(colName))
+      .foreach(dropVarExec => dropVarExec.buildDataFrame(session).collect())
+    areVariablesDeclared = false
+  }
+
   private def createDeclareVarExec(varName: String, variable: Expression): SingleStatementExec = {
     val defaultExpression = DefaultValueExpression(Literal(null, variable.dataType), "null")
     val declareVariable = CreateVariable(
@@ -802,6 +814,11 @@ class ForStatementExec(
     new SingleStatementExec(setIdentifierToCurrentRow, Origin(), isInternal = true)
   }
 
+  private def createDropVarExec(varName: String): SingleStatementExec = {
+    val dropVar = DropVariable(UnresolvedIdentifier(Seq(varName)), ifExists = true)
+    new SingleStatementExec(dropVar, Origin(), isInternal = true)
+  }
+
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
   override def reset(): Unit = {
@@ -809,6 +826,7 @@ class ForStatementExec(
     isResultCacheValid = false
     currRow = 0
     variablesMap = Map()
+    areVariablesDeclared = false
     body.reset()
   }
 }
