@@ -26,8 +26,8 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Documentat
 
 ENV FULL_REFRESH_DATE 20241029
 
-RUN pwd
-INCLUDE+ ../../infra/Dockerfile.common
+# INCLUDE+ ../../infra/Dockerfile.common
+INCLUDE+ infra/Dockerfile.common
 
 RUN rm -rf /var/lib/apt/lists/*
 
