@@ -655,7 +655,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = getSummary(context))
   }
 
-
   def failedToCompileMsg(e: Exception): String = {
     s"Failed to compile: $e"
   }

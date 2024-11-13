@@ -39,11 +39,9 @@ object IntervalMathUtils {
     try {
       f
     } catch {
+      case _: ArithmeticException if suggestedFunc.isEmpty =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context = null)
       case _: ArithmeticException =>
-        if (suggestedFunc.isEmpty) {
-          throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(
-            context = null)
-        }
         throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
           suggestedFunc, context = null)
     }
