@@ -345,6 +345,19 @@ class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSpar
     }
   }
 
+  test("functions that contain both string and non string params") {
+    checkAnswer(
+      sql(s"SELECT COLLATION(LPAD('a', 2, 'b'))"),
+      Row("UTF8_BINARY"))
+
+    checkAnswer(
+      sql(s"SELECT COLLATION(LPAD('a' collate UTF8_LCASE, 2, 'b'))"),
+      Row("UTF8_LCASE"))
+
+    assertExplicitMismatch(
+      sql(s"SELECT COLLATION(LPAD('a' collate UTF8_LCASE, 2, 'b' collate UNICODE))"))
+  }
+
   test("access collated map via literal") {
     val tableName = "map_with_lit"
 

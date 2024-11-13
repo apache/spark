@@ -72,7 +72,7 @@ object CollationTypeCoercion {
     case substringIndex: SubstringIndex =>
       substringIndex.withNewChildren(
         collateToSingleType(Seq(substringIndex.first, substringIndex.second)) :+
-          substringIndex.third
+        substringIndex.third
       )
 
     case eltExpr: Elt =>
@@ -81,7 +81,7 @@ object CollationTypeCoercion {
     case overlayExpr: Overlay =>
       overlayExpr.withNewChildren(
         collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
-          ++ Seq(overlayExpr.pos, overlayExpr.len)
+        ++ Seq(overlayExpr.pos, overlayExpr.len)
       )
 
     case regExpReplace: RegExpReplace =>
@@ -209,6 +209,9 @@ object CollationTypeCoercion {
     }
   }
 
+  /**
+   * Tries to find the least common StringType among the given expressions.
+   */
   private def findLeastCommonStringType(expressions: Seq[Expression]): Option[StringType] = {
     if (!expressions.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
       return None
@@ -227,6 +230,11 @@ object CollationTypeCoercion {
     }
   }
 
+  /**
+   * Tries to find the collation context for the given expression.
+   * If found, it will also set the [[COLLATION_CONTEXT_TAG]] on the expression,
+   * so that the context can be reused later.
+   */
   private def findCollationContext(expr: Expression): Option[CollationContext] = {
     val contextOpt = expr match {
       case _ if hasCollationContextTag(expr) =>
@@ -266,20 +274,23 @@ object CollationTypeCoercion {
     contextOpt
   }
 
+  /**
+   * Returns the collation context that wins in precedence between left and right.
+   */
   private def collationPrecedenceWinner(
       left: CollationContext,
       right: CollationContext): Option[CollationContext] = {
 
     val (leftStringType, rightStringType) =
       (extractStringType(left.dataType), extractStringType(right.dataType)) match {
+        case (Some(l), Some(r)) =>
+          (l, r)
         case (None, None) =>
           return None
         case (Some(_), None) =>
           return Some(left)
         case (None, Some(_)) =>
           return Some(right)
-        case (Some(l), Some(r)) =>
-          (l, r)
       }
 
     (left.strength, right.strength) match {
