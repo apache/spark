@@ -109,8 +109,7 @@ class ExpiredTimerInfo:
     .. versionadded:: 4.0.0
     """
 
-    def __init__(self, is_valid: bool, expiry_time_in_ms: int = -1) -> None:
-        self._is_valid = is_valid
+    def __init__(self, expiry_time_in_ms: int = -1) -> None:
         self._expiry_time_in_ms = expiry_time_in_ms
 
     def get_expiry_time_in_ms(self) -> int:

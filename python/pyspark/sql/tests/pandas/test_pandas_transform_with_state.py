@@ -103,6 +103,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
+    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -560,8 +561,10 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results
         )
+    """
 
-    def _test_transform_with_state_init_state_in_pandas(self, stateful_processor, check_results):
+    def _test_transform_with_state_init_state_in_pandas(
+            self, stateful_processor, check_results, time_mode="None"):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         time.sleep(2)
@@ -589,7 +592,7 @@ class TransformWithStateInPandasTestsMixin:
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
                 outputMode="Update",
-                timeMode="None",
+                timeMode=time_mode,
                 initialState=initial_state,
             )
             .writeStream.queryName("this_query")
@@ -604,6 +607,7 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
+    """
     def test_transform_with_state_init_state_in_pandas(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -700,6 +704,25 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_non_contiguous_grouping_cols(
             SimpleStatefulProcessorWithInitialState(), check_results, initial_state
         )
+    """
+
+    def test_transform_with_state_init_state_with_timers(self):
+        def check_results(batch_df, batch_id):
+            if batch_id == 0:
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", value=str(789 + 123 + 46)),
+                    Row(id="1", value=str(146 + 346)),
+                }
+            else:
+                raise Exception(f"i am in batch id {batch_id}, batchdf: ${batch_df.collect()}")
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="0", value=str(789 + 123 + 46 + 67)),
+                    Row(id="3", value=str(987 + 12)),
+                }
+
+        self._test_transform_with_state_init_state_in_pandas(
+            StatefulProcessorWithInitialStateTimers(), check_results, "processingTime"
+        )
 
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
@@ -709,6 +732,7 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.value_state = handle.getValueState("value_state", state_schema)
+        self.handle = handle
 
     def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         exists = self.value_state.exists()
@@ -741,6 +765,20 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
+
+class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitialState):
+
+    def handleExpiredTimer(self, key, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
+        self.handle.deleteTimer(expired_timer_info.get_expiry_time_in_ms())
+        str_key = f"{str(key[0])}-expired"
+        yield pd.DataFrame(
+            {"id": (str_key,), "timestamp": str(expired_timer_info.get_expiry_time_in_ms())}
+        )
+
+    def handleInitialState(self, key, initialState, timer_values) -> None:
+        super().handleInitialState(key, initialState, timer_values)
+        self.handle.registerTimer(timer_values.get_current_processing_time_in_ms())
 
 
 # A stateful processor that output the max event time it has seen. Register timer for
