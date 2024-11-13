@@ -79,7 +79,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         """
         with cls._lock:
             if cls._release_thread_pool_instance is not None:
-                cls._release_thread_pool.shutdown()  # type: ignore[attr-defined]
+                cls._get_or_create_release_thread_pool().shutdown()
                 cls._release_thread_pool_instance = None
 
     def __init__(
