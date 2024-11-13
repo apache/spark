@@ -137,7 +137,7 @@ class FileIndexSuite extends SharedSparkSession {
           exception = intercept[SparkRuntimeException] {
             fileIndex.partitionSpec()
           },
-          condition = "INVALID_PARTITION_COLUMN_CAST",
+          condition = "INVALID_PARTITION_VALUE",
           parameters = Map("value" -> "'foo'", "dataType" -> "\"INT\"", "columnName" -> "`a`")
         )
       }

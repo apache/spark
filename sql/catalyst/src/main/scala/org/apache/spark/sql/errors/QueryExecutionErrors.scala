@@ -795,7 +795,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def failedToCastValueToDataTypeForPartitionColumnError(
       value: String, dataType: DataType, columnName: String): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARTITION_COLUMN_CAST",
+      errorClass = "INVALID_PARTITION_VALUE",
       messageParameters = Map(
         "value" -> toSQLValue(value),
         "dataType" -> toSQLType(dataType),

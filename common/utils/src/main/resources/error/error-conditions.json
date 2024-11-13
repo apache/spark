@@ -2936,12 +2936,6 @@
     },
     "sqlState" : "22023"
   },
-  "INVALID_PARTITION_COLUMN_CAST" : {
-    "message" : [
-      "Failed to cast value <value> to data type <dataType> for partition column <columnName>. Ensure the value matches the expected data type for this partition column."
-    ],
-    "sqlState" : "42846"
-  },
   "INVALID_PARTITION_COLUMN_DATA_TYPE" : {
     "message" : [
       "Cannot use <type> for partition column."
@@ -2965,6 +2959,12 @@
       }
     },
     "sqlState" : "42601"
+  },
+  "INVALID_PARTITION_VALUE" : {
+    "message" : [
+      "Failed to cast value <value> to data type <dataType> for partition column <columnName>. Ensure the value matches the expected data type for this partition column."
+    ],
+    "sqlState" : "42846"
   },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
