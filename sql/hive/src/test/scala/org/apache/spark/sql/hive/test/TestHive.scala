@@ -630,7 +630,11 @@ private[hive] object TestHiveContext {
   val overrideConfs: Map[String, String] =
     Map(
       // Fewer shuffle partitions to speed up testing.
-      SQLConf.SHUFFLE_PARTITIONS.key -> "5"
+      SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+      // TODO(SPARK-50244): We now isolate artifacts added by the `ADD JAR` command. This will break
+      //  an existing Hive use case (one session adds JARs and another session uses them). We need
+      //  to decide whether/how to enable isolation for Hive.
+      SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key -> "false"
     )
 
   def makeWarehouseDir(): File = {

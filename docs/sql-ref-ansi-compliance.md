@@ -383,7 +383,7 @@ When ANSI mode is on, it throws exceptions for invalid operations. You can use t
   - `try_make_timestamp`: identical to the function `make_timestamp`, except that it returns `NULL` result instead of throwing an exception on error.
   - `try_make_timestamp_ltz`: identical to the function `make_timestamp_ltz`, except that it returns `NULL` result instead of throwing an exception on error.
   - `try_make_timestamp_ntz`: identical to the function `make_timestamp_ntz`, except that it returns `NULL` result instead of throwing an exception on error.
-
+  - `try_make_interval`: identical to the function `make_interval`, except that it returns `NULL` result instead of throwing an exception on invalid interval.
 
 ### SQL Keywords (optional, disabled by default)
 

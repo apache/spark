@@ -257,7 +257,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def invalidFractionOfSecondError(secAndMicros: Decimal): DateTimeException = {
+  def invalidFractionOfSecondError(secAndMicros: Double): DateTimeException = {
     new SparkDateTimeException(
       errorClass = "INVALID_FRACTION_OF_SECOND",
       messageParameters = Map(
@@ -1155,15 +1155,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def cannotParseStatisticAsPercentileError(
       stats: String, e: NumberFormatException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2113",
-      messageParameters = Map("stats" -> stats),
+      errorClass = "UNRECOGNIZED_STATISTIC",
+      messageParameters = Map("stats" -> toSQLValue(stats)),
       cause = e)
   }
 
   def statisticNotRecognizedError(stats: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "UNRECOGNIZED_STATISTIC",
-      messageParameters = Map("stats" -> toSQLId(stats)))
+      messageParameters = Map("stats" -> toSQLValue(stats)))
   }
 
   def unknownColumnError(unknownColumn: String): SparkIllegalArgumentException = {

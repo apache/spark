@@ -458,7 +458,8 @@ trait String2StringExpression extends ImplicitCastInputTypes {
   since = "1.0.1",
   group = "string_funcs")
 case class Upper(child: Expression)
-  extends UnaryExpression with String2StringExpression with NullIntolerant {
+  extends UnaryExpression with String2StringExpression {
+  override def nullIntolerant: Boolean = true
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
@@ -490,7 +491,8 @@ case class Upper(child: Expression)
   since = "1.0.1",
   group = "string_funcs")
 case class Lower(child: Expression)
-  extends UnaryExpression with String2StringExpression with NullIntolerant {
+  extends UnaryExpression with String2StringExpression {
+  override def nullIntolerant: Boolean = true
 
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
@@ -514,7 +516,8 @@ case class Lower(child: Expression)
 
 /** A base trait for functions that compare two strings, returning a boolean. */
 abstract class StringPredicate extends BinaryExpression
-  with Predicate with ImplicitCastInputTypes with NullIntolerant {
+  with Predicate with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
@@ -745,10 +748,10 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   since = "4.0.0",
   group = "string_funcs")
 case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] with NullIntolerant {
+  with UnaryLike[Expression] {
+  override def nullIntolerant: Boolean = true
 
-  override lazy val replacement: Expression =
-    Invoke.withNullIntolerant(input, "isValid", BooleanType)
+  override lazy val replacement: Expression = Invoke(input, "isValid", BooleanType)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -794,10 +797,10 @@ case class IsValidUTF8(input: Expression) extends RuntimeReplaceable with Implic
   group = "string_funcs")
 // scalastyle:on
 case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] with NullIntolerant {
+  with UnaryLike[Expression] {
+  override def nullIntolerant: Boolean = true
 
-  override lazy val replacement: Expression =
-    Invoke.withNullIntolerant(input, "makeValid", input.dataType)
+  override lazy val replacement: Expression = Invoke(input, "makeValid", input.dataType)
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -836,10 +839,11 @@ case class MakeValidUTF8(input: Expression) extends RuntimeReplaceable with Impl
   group = "string_funcs")
 // scalastyle:on
 case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] with NullIntolerant {
+  with UnaryLike[Expression] {
+  override def nullIntolerant: Boolean = true
 
   override lazy val replacement: Expression =
-    StaticInvoke.withNullIntolerant(
+    StaticInvoke(
       classOf[ExpressionImplUtils],
       input.dataType,
       "validateUTF8String",
@@ -887,10 +891,11 @@ case class ValidateUTF8(input: Expression) extends RuntimeReplaceable with Impli
   group = "string_funcs")
 // scalastyle:on
 case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes
-  with UnaryLike[Expression] with NullIntolerant {
+  with UnaryLike[Expression] {
+  override def nullIntolerant: Boolean = true
 
   override lazy val replacement: Expression =
-    StaticInvoke.withNullIntolerant(
+    StaticInvoke(
       classOf[ExpressionImplUtils],
       input.dataType,
       "tryValidateUTF8String",
@@ -934,7 +939,8 @@ case class TryValidateUTF8(input: Expression) extends RuntimeReplaceable with Im
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
@@ -1028,7 +1034,8 @@ object Overlay {
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(str: Expression, replace: Expression, pos: Expression) = {
     this(str, replace, pos, Literal.create(-1, IntegerType))
@@ -1167,7 +1174,8 @@ object StringTranslate {
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replaceExpr: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
@@ -1246,8 +1254,8 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
-    with ImplicitCastInputTypes with NullIntolerant {
-
+    with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -1657,8 +1665,8 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
 
   override def left: Expression = str
@@ -1710,8 +1718,8 @@ case class StringInstr(str: Expression, substr: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr: Expression)
- extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+ extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
   override def dataType: DataType = strExpr.dataType
@@ -1900,7 +1908,8 @@ object LPadExpressionBuilder extends PadExpressionBuilderBase {
 }
 
 case class StringLPad(str: Expression, len: Expression, pad: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def first: Expression = str
   override def second: Expression = len
@@ -1984,8 +1993,8 @@ object RPadExpressionBuilder extends PadExpressionBuilderBase {
 }
 
 case class StringRPad(str: Expression, len: Expression, pad: Expression = Literal(" "))
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def first: Expression = str
   override def second: Expression = len
   override def third: Expression = pad
@@ -2146,8 +2155,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   since = "1.5.0",
   group = "string_funcs")
 case class InitCap(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = child.dataType.asInstanceOf[StringType].collationId
 
   // Flag to indicate whether to use ICU instead of JVM case mappings for UTF8_BINARY collation.
@@ -2181,8 +2190,8 @@ case class InitCap(child: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class StringRepeat(str: Expression, times: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = str
   override def right: Expression = times
   override def dataType: DataType = str.dataType
@@ -2219,8 +2228,8 @@ case class StringRepeat(str: Expression, times: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class StringSpace(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
@@ -2274,7 +2283,8 @@ case class StringSpace(child: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Substring(str: Expression, pos: Expression, len: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(str: Expression, pos: Expression) = {
     this(str, pos, Literal(Integer.MAX_VALUE))
@@ -2418,7 +2428,8 @@ case class Left(str: Expression, len: Expression) extends RuntimeReplaceable
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Length(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -2458,7 +2469,8 @@ case class Length(child: Expression)
   since = "2.3.0",
   group = "string_funcs")
 case class BitLength(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -2501,7 +2513,8 @@ case class BitLength(child: Expression)
   since = "2.3.0",
   group = "string_funcs")
 case class OctetLength(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -2551,8 +2564,7 @@ case class Levenshtein(
     right: Expression,
     threshold: Option[Expression] = None)
   extends Expression
-  with ImplicitCastInputTypes
-  with NullIntolerant{
+  with ImplicitCastInputTypes {
 
   def this(left: Expression, right: Expression, threshold: Expression) =
     this(left, right, Option(threshold))
@@ -2599,6 +2611,7 @@ case class Levenshtein(
   }
 
   override def nullable: Boolean = children.exists(_.nullable)
+  override def nullIntolerant: Boolean = true
 
   override def foldable: Boolean = children.forall(_.foldable)
 
@@ -2700,7 +2713,8 @@ case class Levenshtein(
   since = "1.5.0",
   group = "string_funcs")
 case class SoundEx(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = SQLConf.get.defaultStringType
 
@@ -2732,8 +2746,8 @@ case class SoundEx(child: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class Ascii(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
@@ -2780,7 +2794,8 @@ case class Ascii(child: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Chr(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
@@ -2878,7 +2893,8 @@ object Base64 {
   since = "1.5.0",
   group = "string_funcs")
 case class UnBase64(child: Expression, failOnError: Boolean = false)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = BinaryType
   override def inputTypes: Seq[AbstractDataType] =
@@ -3317,12 +3333,14 @@ case class ToBinary(
   since = "1.5.0",
   group = "string_funcs")
 case class FormatNumber(x: Expression, d: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = x
   override def right: Expression = d
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       NumericType,
@@ -3566,11 +3584,12 @@ case class Sentences(
  */
 case class StringSplitSQL(
     str: Expression,
-    delimiter: Expression) extends BinaryExpression with NullIntolerant {
+    delimiter: Expression) extends BinaryExpression {
   override def dataType: DataType = ArrayType(str.dataType, containsNull = false)
   final lazy val collationId: Int = left.dataType.asInstanceOf[StringType].collationId
   override def left: Expression = str
   override def right: Expression = delimiter
+  override def nullIntolerant: Boolean = true
 
   override def nullSafeEval(string: Any, delimiter: Any): Any = {
     val strings = CollationSupport.StringSplitSQL.exec(string.asInstanceOf[UTF8String],

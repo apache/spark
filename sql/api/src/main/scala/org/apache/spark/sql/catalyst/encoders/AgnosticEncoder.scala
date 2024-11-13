@@ -139,7 +139,9 @@ object AgnosticEncoders {
         encoders: Seq[AgnosticEncoder[_]],
         elementsCanBeNull: Boolean = false): AgnosticEncoder[_] = {
       val numElements = encoders.size
-      if (numElements < 1 || numElements > MAX_TUPLE_ELEMENTS) {
+      if (numElements < 1) {
+        throw ExecutionErrors.emptyTupleNotSupportedError()
+      } else if (numElements > MAX_TUPLE_ELEMENTS) {
         throw ExecutionErrors.elementsOfTupleExceedLimitError()
       }
       val fields = encoders.zipWithIndex.map { case (e, id) =>

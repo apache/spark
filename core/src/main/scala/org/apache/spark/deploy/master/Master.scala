@@ -128,7 +128,7 @@ private[deploy] class Master(
   val reverseProxy = conf.get(UI_REVERSE_PROXY)
   val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
   val useAppNameAsAppId = conf.get(MASTER_USE_APP_NAME_AS_APP_ID)
-  val useDriverIdAsAppId = conf.get(MASTER_USE_DRIVER_ID_AS_APP_NAME)
+  val useDriverIdAsAppName = conf.get(MASTER_USE_DRIVER_ID_AS_APP_NAME)
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
@@ -1335,7 +1335,7 @@ private[deploy] class Master(
    * Update and add `spark.app.name` configurations to DriverDescription.
    */
   private def maybeUpdateAppName(desc: DriverDescription, appName: String): DriverDescription = {
-    if (!useDriverIdAsAppId) return desc
+    if (!useDriverIdAsAppName) return desc
 
     val config = s"spark.app.name=$appName"
     val javaOpts = desc.command.javaOpts

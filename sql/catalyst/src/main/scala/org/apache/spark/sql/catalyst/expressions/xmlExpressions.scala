@@ -59,7 +59,6 @@ case class XmlToStructs(
   extends UnaryExpression
   with TimeZoneAwareExpression
   with ExpectsInputTypes
-  with NullIntolerant
   with QueryErrorsBase {
 
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -70,6 +69,7 @@ case class XmlToStructs(
       timeZoneId = None)
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   // The XML input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.
@@ -241,9 +241,9 @@ case class StructsToXml(
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
-  with ExpectsInputTypes
-  with NullIntolerant {
+  with ExpectsInputTypes {
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)
 

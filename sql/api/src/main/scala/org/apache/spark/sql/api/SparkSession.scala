@@ -26,12 +26,15 @@ import _root_.java.net.URI
 import _root_.java.util
 import _root_.java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, Row, RuntimeConfig}
+import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row, RuntimeConfig, SparkSessionExtensions, SQLContext}
+import org.apache.spark.sql.internal.{SessionState, SharedState}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.SparkClassUtils
 
 /**
@@ -71,6 +74,49 @@ abstract class SparkSession extends Serializable with Closeable {
    */
   def version: String
 
+  /* ----------------------- *
+   |  Session-related state  |
+   * ----------------------- */
+
+  /**
+   * State shared across sessions, including the `SparkContext`, cached data, listener, and a
+   * catalog that interacts with external systems.
+   *
+   * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.2.0
+   */
+  @Unstable
+  @transient
+  def sharedState: SharedState
+
+  /**
+   * State isolated across sessions, including SQL configurations, temporary tables, registered
+   * functions, and everything else that accepts a `org.apache.spark.sql.internal.SQLConf`. If
+   * `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
+   *
+   * This is internal to Spark and there is no guarantee on interface stability.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.2.0
+   */
+  @Unstable
+  @transient
+  def sessionState: SessionState
+
+  /**
+   * A wrapped version of this session in the form of a `SQLContext`, for backward compatibility.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.0.0
+   */
+  @transient
+  def sqlContext: SQLContext
+
   /**
    * Runtime configuration interface for Spark.
    *
@@ -81,6 +127,28 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   def conf: RuntimeConfig
+
+  /**
+   * An interface to register custom `org.apache.spark.sql.util.QueryExecutionListeners` that
+   * listen for execution metrics.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.0.0
+   */
+  def listenerManager: ExecutionListenerManager
+
+  /**
+   * :: Experimental :: A collection of methods that are considered experimental, but can be used
+   * to hook into the query planner for advanced functionality.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.0.0
+   */
+  @Experimental
+  @Unstable
+  def experimental: ExperimentalMethods
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
@@ -245,6 +313,15 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): Dataset[Row]
+
+  /**
+   * Convert a `BaseRelation` created for external data sources into a `DataFrame`.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.0.0
+   */
+  def baseRelationToDataFrame(baseRelation: BaseRelation): Dataset[Row]
 
   /* ------------------------------- *
    |  Methods for creating DataSets  |
@@ -441,6 +518,29 @@ abstract class SparkSession extends Serializable with Closeable {
    * @since 2.0.0
    */
   def sql(sqlText: String): Dataset[Row] = sql(sqlText, Map.empty[String, Any])
+
+  /**
+   * Execute an arbitrary string command inside an external execution engine rather than Spark.
+   * This could be useful when user wants to execute some commands out of Spark. For example,
+   * executing custom DDL/DML command for JDBC, creating index for ElasticSearch, creating cores
+   * for Solr and so on.
+   *
+   * The command will be eagerly executed after this method is called and the returned DataFrame
+   * will contain the output of the command(if any).
+   *
+   * @param runner
+   *   The class name of the runner that implements `ExternalCommandRunner`.
+   * @param command
+   *   The target command to be executed
+   * @param options
+   *   The options for the runner.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 3.0.0
+   */
+  @Unstable
+  def executeCommand(runner: String, command: String, options: Map[String, String]): Dataset[Row]
 
   /**
    * Add a single artifact to the current session.
@@ -984,6 +1084,26 @@ abstract class SparkSessionBuilder {
   def config(map: util.Map[String, Any]): this.type = synchronized {
     config(map.asScala.toMap)
   }
+
+  /**
+   * Sets a list of config options based on the given `SparkConf`.
+   *
+   * @since 2.0.0
+   */
+  def config(conf: SparkConf): this.type = synchronized {
+    conf.getAll.foreach { case (k, v) => options += k -> v }
+    this
+  }
+
+  /**
+   * Inject extensions into the [[SparkSession]]. This allows a user to add Analyzer rules,
+   * Optimizer rules, Planning Strategies or a customized parser.
+   *
+   * @note
+   *   this method is not supported in Spark Connect.
+   * @since 2.2.0
+   */
+  def withExtensions(f: SparkSessionExtensions => Unit): this.type
 
   /**
    * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new one based on
