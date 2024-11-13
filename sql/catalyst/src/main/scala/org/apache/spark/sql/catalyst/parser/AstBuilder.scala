@@ -142,7 +142,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
-    val labelCtx = new ScriptingLabelContext()
+    val labelCtx = new SqlScriptingLabelContext()
     visitBeginEndCompoundBlockImpl(ctx.beginEndCompoundBlock(), labelCtx)
   }
 
@@ -150,7 +150,7 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: CompoundBodyContext,
       label: Option[String],
       allowVarDeclare: Boolean,
-      labelCtx: ScriptingLabelContext): CompoundBody = {
+      labelCtx: SqlScriptingLabelContext): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
     ctx.compoundStatements.forEach(
       compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, labelCtx))
@@ -187,7 +187,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitBeginEndCompoundBlockImpl(
       ctx: BeginEndCompoundBlockContext,
-      labelCtx: ScriptingLabelContext): CompoundBody = {
+      labelCtx: SqlScriptingLabelContext): CompoundBody = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val body = visitCompoundBodyImpl(
@@ -202,7 +202,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitCompoundStatementImpl(
       ctx: CompoundStatementContext,
-      labelCtx: ScriptingLabelContext): CompoundPlanStatement =
+      labelCtx: SqlScriptingLabelContext): CompoundPlanStatement =
     withOrigin(ctx) {
       Option(ctx.statement().asInstanceOf[ParserRuleContext])
         .orElse(Option(ctx.setStatementWithOptionalVarKeyword().asInstanceOf[ParserRuleContext]))
@@ -235,7 +235,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitIfElseStatementImpl(
       ctx: IfElseStatementContext,
-      labelCtx: ScriptingLabelContext): IfElseStatement = {
+      labelCtx: SqlScriptingLabelContext): IfElseStatement = {
     IfElseStatement(
       conditions = ctx.booleanExpression().asScala.toList.map(boolExpr => withOrigin(boolExpr) {
         SingleStatement(
@@ -254,7 +254,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitWhileStatementImpl(
       ctx: WhileStatementContext,
-      labelCtx: ScriptingLabelContext): WhileStatement = {
+      labelCtx: SqlScriptingLabelContext): WhileStatement = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
@@ -272,7 +272,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitSearchedCaseStatementImpl(
       ctx: SearchedCaseStatementContext,
-      labelCtx: ScriptingLabelContext): CaseStatement = {
+      labelCtx: SqlScriptingLabelContext): CaseStatement = {
     val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
       SingleStatement(
         Project(
@@ -300,7 +300,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitSimpleCaseStatementImpl(
       ctx: SimpleCaseStatementContext,
-      labelCtx: ScriptingLabelContext): CaseStatement = {
+      labelCtx: SqlScriptingLabelContext): CaseStatement = {
     // uses EqualTo to compare the case variable(the main case expression)
     // to the WHEN clause expressions
     val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
@@ -330,7 +330,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitRepeatStatementImpl(
       ctx: RepeatStatementContext,
-      labelCtx: ScriptingLabelContext): RepeatStatement = {
+      labelCtx: SqlScriptingLabelContext): RepeatStatement = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
@@ -406,7 +406,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def visitLoopStatementImpl(
       ctx: LoopStatementContext,
-      labelCtx: ScriptingLabelContext): LoopStatement = {
+      labelCtx: SqlScriptingLabelContext): LoopStatement = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)

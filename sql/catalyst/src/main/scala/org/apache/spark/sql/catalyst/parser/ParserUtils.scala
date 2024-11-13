@@ -140,7 +140,7 @@ object ParserUtils extends SparkParserUtils {
   }
 }
 
-class ScriptingLabelContext {
+class SqlScriptingLabelContext {
   /** Set to keep track of labels seen so far */
   private val seenLabels = Set[String]()
 
