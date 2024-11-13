@@ -532,7 +532,7 @@ class ArrowTestsMixin:
         df_pandas = self.spark.createDataFrame(pdf)
         self.assertEqual(df_arrow.collect(), df_pandas.collect())
 
-    def test_createDataFrame_arrow_safe_cast(self):
+    def test_createDataFrame_verifySchema(self):
         data = {"id": [1, 2, 3], "value": [100000000000, 200000000000, 300000000000]}
         table = pa.table(data)
         schema = StructType(
