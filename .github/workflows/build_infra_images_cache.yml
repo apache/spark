@@ -28,6 +28,7 @@ on:
     paths:
     - 'dev/infra/Dockerfile'
     - 'dev/spark-test-image/docs/Dockerfile'
+    - 'dev/spark-test-image/lint/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
   # Create infra image when cutting down branches/tags
   create:
@@ -74,3 +75,16 @@ jobs:
       - name: Image digest (Documentation)
         if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
         run: echo ${{ steps.docker_build_docs.outputs.digest }}
+      - name: Build and push (Linter)
+        if: hashFiles('dev/spark-test-image/lint/Dockerfile') != ''
+        id: docker_build_lint
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/spark-test-image/lint/
+          push: true
+          tags: ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ github.ref_name }}-static
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ github.ref_name }}
+          cache-to: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ github.ref_name }},mode=max
+      - name: Image digest (Linter)
+        if: hashFiles('dev/spark-test-image/lint/Dockerfile') != ''
+        run: echo ${{ steps.docker_build_lint.outputs.digest }}

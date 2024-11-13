@@ -1041,7 +1041,7 @@ class DataFrameTestsMixin:
         self.check_error(
             exception=pe.exception,
             errorClass="TRANSPOSE_NO_LEAST_COMMON_TYPE",
-            messageParameters={"dt1": "STRING", "dt2": "BIGINT"},
+            messageParameters={"dt1": '"STRING"', "dt2": '"BIGINT"'},
         )
 
 
