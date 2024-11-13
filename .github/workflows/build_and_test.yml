@@ -671,8 +671,12 @@ jobs:
       run: |
         python3.11 -m pip install 'black==23.9.1' 'protobuf==5.28.3' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
-    - name: Python CodeGen check
+    - name: Python CodeGen check for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: ./dev/connect-check-protos.py
+    - name: Python CodeGen check
+      if: inputs.branch != 'branch-3.5'
+      run: ./dev/check-protos.py
 
   # Static analysis
   lint:
