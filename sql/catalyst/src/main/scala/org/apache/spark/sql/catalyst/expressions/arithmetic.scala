@@ -46,7 +46,8 @@ import org.apache.spark.unsafe.types.CalendarInterval
 case class UnaryMinus(
     child: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
 
@@ -114,7 +115,8 @@ case class UnaryMinus(
   since = "1.5.0",
   group = "math_funcs")
 case class UnaryPositive(child: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes with NullIntolerant {
+  extends RuntimeReplaceable with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def prettyName: String = "positive"
 
@@ -148,7 +150,8 @@ case class UnaryPositive(child: Expression)
   since = "1.2.0",
   group = "math_funcs")
 case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
 
@@ -185,8 +188,8 @@ case class Abs(child: Expression, failOnError: Boolean = SQLConf.get.ansiEnabled
   override protected def withNewChildInternal(newChild: Expression): Abs = copy(child = newChild)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator
-  with NullIntolerant with SupportQueryContext {
+abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
 
   protected val evalMode: EvalMode.Value
 

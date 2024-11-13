@@ -139,15 +139,6 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
-# In Python 3.9, the @property decorator has been made compatible with the
-# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-#
-# @classmethod + @property is also affected by a bug in Python's docstring which was backported
-# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-#
-# Python 3.9 with MyPy complains about @classmethod + @property combination. We should fix
-# it together with MyPy.
 class classproperty(property):
     """Same as Python's @property decorator, but for class attributes.
 
@@ -597,15 +588,6 @@ class SparkSession(SparkConversionMixin):
                     messageParameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # TODO(SPARK-38912): Replace classproperty with @classmethod + @property once support for
-    # Python 3.8 is dropped.
-    #
-    # In Python 3.9, the @property decorator has been made compatible with the
-    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-    #
-    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
-    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-    #
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
     builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
