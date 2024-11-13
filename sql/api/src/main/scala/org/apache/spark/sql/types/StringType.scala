@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private (val collationId: Int) extends AtomicType with Serializable {
+class StringType private[spark] (val collationId: Int, val maxLength: Option[Int] = None)
+  extends AtomicType with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -82,8 +83,13 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
   // the collation information is written to struct field metadata
   override def jsonValue: JValue = JString("string")
 
-  override def equals(obj: Any): Boolean =
-    obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case CharType(_) | VarcharType(_) => false
+      case s: StringType => s.collationId == collationId
+      case _ => false
+    }
+  }
 
   override def hashCode(): Int = collationId.hashCode()
 
@@ -101,7 +107,7 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(0) {
+case object StringType extends StringType(0, None) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {

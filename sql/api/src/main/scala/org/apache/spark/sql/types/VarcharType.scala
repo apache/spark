@@ -16,14 +16,25 @@
  */
 package org.apache.spark.sql.types
 
+import org.json4s.JsonAST.{JString, JValue}
+
 import org.apache.spark.annotation.Experimental
 
 @Experimental
-case class VarcharType(length: Int) extends AtomicType {
+case class VarcharType(length: Int)
+  extends StringType(0, Some(length)) {
   require(length >= 0, "The length of varchar type cannot be negative.")
+
+  override def equals(o: Any): Boolean = o match {
+    case VarcharType(l) => l == length
+    case _ => false
+  }
+
+  override def hashCode(): Int = super.hashCode()
 
   override def defaultSize: Int = length
   override def typeName: String = s"varchar($length)"
+  override def jsonValue: JValue = JString(typeName)
   override def toString: String = s"VarcharType($length)"
   private[spark] override def asNullable: VarcharType = this
 }
