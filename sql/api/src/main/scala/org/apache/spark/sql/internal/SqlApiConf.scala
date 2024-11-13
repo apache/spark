@@ -45,7 +45,9 @@ private[sql] trait SqlApiConf {
   def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value
   def defaultStringType: StringType
   def stackTracesInDataFrameContext: Int
+  def dataFrameQueryContextEnabled: Boolean
   def legacyAllowUntypedScalaUDFs: Boolean
+  def allowReadingUnknownCollations: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -58,6 +60,7 @@ private[sql] object SqlApiConf {
     SqlApiConfHelper.LOCAL_RELATION_CACHE_THRESHOLD_KEY
   }
   val DEFAULT_COLLATION: String = SqlApiConfHelper.DEFAULT_COLLATION
+  val ALLOW_READING_UNKNOWN_COLLATIONS: String = SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS
 
   def get: SqlApiConf = SqlApiConfHelper.getConfGetter.get()()
 
@@ -84,5 +87,7 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def legacyTimeParserPolicy: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
   override def defaultStringType: StringType = StringType
   override def stackTracesInDataFrameContext: Int = 1
+  override def dataFrameQueryContextEnabled: Boolean = true
   override def legacyAllowUntypedScalaUDFs: Boolean = false
+  override def allowReadingUnknownCollations: Boolean = false
 }

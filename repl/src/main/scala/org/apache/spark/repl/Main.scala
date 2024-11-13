@@ -25,6 +25,7 @@ import scala.tools.nsc.GenericRunnerSettings
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.Utils
 
@@ -95,6 +96,9 @@ object Main extends Logging {
       // initialization in certain cases, there's an initialization order issue that prevents
       // this from being set after SparkContext is instantiated.
       conf.set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
+      // Disable isolation for REPL, to avoid having in-line classes stored in a isolated directory,
+      // prevent the REPL classloader from finding it.
+      conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, false)
       if (execUri != null) {
         conf.set("spark.executor.uri", execUri)
       }

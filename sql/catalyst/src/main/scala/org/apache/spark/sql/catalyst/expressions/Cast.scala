@@ -481,9 +481,9 @@ case class Cast(
   extends UnaryExpression
   with TimeZoneAwareExpression
   with ToStringBase
-  with NullIntolerant
   with SupportQueryContext
   with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
     this(child, dataType, timeZoneId, evalMode = EvalMode.fromSQLConf(SQLConf.get))

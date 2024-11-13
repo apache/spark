@@ -58,12 +58,13 @@ class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
     assertResult(DoubleType)(transposedDf.schema("x").dataType)
     assertResult(DoubleType)(transposedDf.schema("y").dataType)
 
-    val exception = intercept[AnalysisException] {
-      person.transpose()
-    }
-    assert(exception.getMessage.contains(
-      "[TRANSPOSE_NO_LEAST_COMMON_TYPE] Transpose requires non-index columns " +
-        "to share a least common type"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        person.transpose()
+      },
+      condition = "TRANSPOSE_NO_LEAST_COMMON_TYPE",
+      parameters = Map("dt1" -> "\"STRING\"", "dt2" -> "\"INT\"")
+    )
   }
 
   test("enforce ascending order based on index column values for transposed columns") {

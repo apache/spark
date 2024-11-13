@@ -413,7 +413,7 @@ public class VariantUtil {
 
   // Get a decimal value from variant value `value[pos...]`.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
-  public static BigDecimal getDecimal(byte[] value, int pos) {
+  public static BigDecimal getDecimalWithOriginalScale(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
     int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
@@ -445,7 +445,11 @@ public class VariantUtil {
       default:
         throw unexpectedType(Type.DECIMAL);
     }
-    return result.stripTrailingZeros();
+    return result;
+  }
+
+  public static BigDecimal getDecimal(byte[] value, int pos) {
+    return getDecimalWithOriginalScale(value, pos).stripTrailingZeros();
   }
 
   // Get a float value from variant value `value[pos...]`.
