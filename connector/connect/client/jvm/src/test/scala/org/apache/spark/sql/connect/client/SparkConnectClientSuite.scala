@@ -636,11 +636,12 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     plan
   }
 
-  private[sql] def getAndClearLatestAddArtifactRequests(): Seq[AddArtifactsRequest] = synchronized {
-    val requests = inputArtifactRequests.toSeq
-    inputArtifactRequests.clear()
-    requests
-  }
+  private[sql] def getAndClearLatestAddArtifactRequests(): Seq[AddArtifactsRequest] =
+    synchronized {
+      val requests = inputArtifactRequests.toSeq
+      inputArtifactRequests.clear()
+      requests
+    }
 
   override def executePlan(
       request: ExecutePlanRequest,

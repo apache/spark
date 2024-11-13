@@ -784,8 +784,8 @@ abstract class SparkSession extends Serializable with Closeable {
   private[sql] def isUsable: Boolean
 
   /**
-   * Execute a block of code with this session set as the active session, and restore the
-   * previous session on completion.
+   * Execute a block of code with this session set as the active session, and restore the previous
+   * session on completion.
    */
   @DeveloperApi
   def withActive[T](block: => T): T = {
@@ -794,7 +794,8 @@ abstract class SparkSession extends Serializable with Closeable {
     // active session once we are done.
     val old = SparkSession.getActiveSession.orNull
     SparkSession.setActiveSession(this)
-    try block finally {
+    try block
+    finally {
       SparkSession.setActiveSession(old)
     }
   }
@@ -1071,6 +1072,7 @@ private[sql] abstract class SparkSessionCompanion {
  * This object keeps track of the global (default) and the thread-local SparkSession.
  */
 object SparkSessionCompanion {
+
   /** The active SparkSession for the current thread. */
   private val activeThreadSession = new InheritableThreadLocal[SparkSession]
 
