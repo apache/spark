@@ -536,12 +536,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("date add interval with day precision") {
     val input = days(1997, 2, 28)
-    assert(dateAddInterval(input, new CalendarInterval(36, 0, 0), "") === days(2000, 2, 28))
-    assert(dateAddInterval(input, new CalendarInterval(36, 47, 0), "") === days(2000, 4, 15))
-    assert(dateAddInterval(input, new CalendarInterval(-13, 0, 0), "") === days(1996, 1, 28))
+    assert(dateAddInterval(input, new CalendarInterval(36, 0, 0)) === days(2000, 2, 28))
+    assert(dateAddInterval(input, new CalendarInterval(36, 47, 0)) === days(2000, 4, 15))
+    assert(dateAddInterval(input, new CalendarInterval(-13, 0, 0)) === days(1996, 1, 28))
     checkError(
       exception = intercept[SparkIllegalArgumentException](
-        dateAddInterval(input, new CalendarInterval(36, 47, 1), "test")),
+        dateAddInterval(input, new CalendarInterval(36, 47, 1))),
       condition = "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION",
       parameters = Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
   }

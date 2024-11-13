@@ -287,8 +287,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def invalidIntervalWithMicrosecondsAdditionError(
-      funcName: String): SparkIllegalArgumentException = {
+  def invalidIntervalWithMicrosecondsAdditionError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION",
       messageParameters = Map("ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
