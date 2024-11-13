@@ -361,16 +361,6 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v6
-        with:
-          context: ./dev/infra/
-          push: true
-          tags: |
-            ${{ needs.precondition.outputs.image_url }}
-          # Use the infra image cache to speed up
-          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
       - name: Build and push (Documentation)
         if: hashFiles('dev/spark-test-image/docs/Dockerfile') != ''
         id: docker_build_docs
@@ -382,7 +372,16 @@ jobs:
             ${{ needs.precondition.outputs.image_docs_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-docs-cache:${{ inputs.branch }}
-
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/infra/
+          push: true
+          tags: |
+            ${{ needs.precondition.outputs.image_url }}
+          # Use the infra image cache to speed up
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-cache:${{ inputs.branch }}
 
   pyspark:
     needs: [precondition, infra-image]
