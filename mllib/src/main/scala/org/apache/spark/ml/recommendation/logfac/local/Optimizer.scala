@@ -19,7 +19,7 @@ package org.apache.spark.ml.recommendation.logfac.local
 import java.util
 import java.util.concurrent.ThreadLocalRandom
 
-import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 import com.google.common.util.concurrent.AtomicDouble
 import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS}
@@ -27,6 +27,7 @@ import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS}
 import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.ml.recommendation.logfac.pair.LongPairMulti
 import org.apache.spark.util.collection.OpenHashMap
+
 
 private[ml] object Optimizer {
   private val UNIGRAM_TABLE_SIZE = 100000000
@@ -153,17 +154,28 @@ private[ml] object Optimizer {
     }
   }
 
+  private def growIfNeeded[@specialized(Long, Float) T: ClassTag](
+    syn: Array[T], n: Int): Array[T] = {
+    if (syn.length < n) {
+      val synNew = new Array[T](syn.length + (syn.length >> 1))
+      System.arraycopy(syn, 0, synNew, 0, syn.length)
+      synNew
+    } else {
+      syn
+    }
+  }
 
   def apply(opts: Opts, dataIter: Iterator[ItemData]): Optimizer = {
 
     val vocabL = new OpenHashMap[Long, Int]()
     val vocabR = new OpenHashMap[Long, Int]()
 
-    var rawCnL = ArrayBuffer.empty[Long]
-    var rawCnR = ArrayBuffer.empty[Long]
+    var cnL = new Array[Long](100000)
+    var cnR = new Array[Long](100000)
 
-    var rawSyn0 = ArrayBuffer.empty[Float]
-    var rawSyn1neg = ArrayBuffer.empty[Float]
+    var syn0 = new Array[Float](100000)
+    var syn1neg = new Array[Float](100000)
+    val dim = opts.vectorSize
 
     while (dataIter.hasNext) {
       val itemData = dataIter.next()
@@ -171,21 +183,21 @@ private[ml] object Optimizer {
       if (itemData.t == ItemData.TYPE_LEFT) {
         val i = vocabL.size
         vocabL.update(itemData.id, i)
-        rawCnL += itemData.cn
-        rawSyn0 ++= itemData.f
+        syn0 = growIfNeeded(syn0, (i + 1) * dim)
+        cnL = growIfNeeded(cnL, i + 1)
+
+        cnL(i) = itemData.cn
+        System.arraycopy(itemData.f, 0, syn0, i * dim, dim)
       } else {
         val i = vocabR.size
         vocabR.update(itemData.id, i)
-        rawCnR += itemData.cn
-        rawSyn1neg ++= itemData.f
+        syn1neg = growIfNeeded(syn1neg, (i + 1) * dim)
+        cnR = growIfNeeded(cnR, i + 1)
+
+        cnR(i) = itemData.cn
+        System.arraycopy(itemData.f, 0, syn1neg, i * dim, dim)
       }
     }
-
-    val cnL = rawCnL.toArray
-    rawCnL = null
-
-    val cnR = rawCnR.toArray
-    rawCnR = null
 
     var i2R = null.asInstanceOf[Array[Long]]
     var unigramTable = null.asInstanceOf[Array[Int]]
@@ -198,11 +210,6 @@ private[ml] object Optimizer {
         unigramTable = initUnigramTable(cnR, opts.pow)
       }
     }
-
-    val syn0 = rawSyn0.toArray
-    rawSyn0 = null
-    val syn1neg = rawSyn1neg.toArray
-    rawSyn1neg = null
 
     new Optimizer(opts, vocabL, vocabR, i2R, cnL, cnR, syn0, syn1neg, unigramTable)
   }
