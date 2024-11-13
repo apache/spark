@@ -1101,6 +1101,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "DATETIME_FIELD_OUT_OF_BOUNDS" : {
+    "message" : [
+      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22023"
+  },
   "DATETIME_OVERFLOW" : {
     "message" : [
       "Datetime operation overflow: <operation>."
@@ -2607,6 +2613,12 @@
         ]
       }
     },
+    "sqlState" : "22006"
+  },
+  "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
+    "message" : [
+      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
     "sqlState" : "22006"
   },
   "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
@@ -6903,11 +6915,6 @@
   "_LEGACY_ERROR_TEMP_1338" : {
     "message" : [
       "Sinks cannot request distribution and ordering in continuous execution mode."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2000" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2003" : {

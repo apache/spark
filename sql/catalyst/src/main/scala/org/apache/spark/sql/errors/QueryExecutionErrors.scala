@@ -277,22 +277,20 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def ansiDateTimeError(e: Exception): SparkDateTimeException = {
+  def ansiDateTimeArgumentOutOfRange(e: Exception): SparkDateTimeException = {
     new SparkDateTimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
+      errorClass = "DATETIME_FIELD_OUT_OF_BOUNDS",
       messageParameters = Map(
-        "message" -> e.getMessage,
+        "rangeMessage" -> e.getMessage,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
       context = Array.empty,
       summary = "")
   }
 
-  def ansiIllegalArgumentError(message: String): SparkIllegalArgumentException = {
+  def invalidIntervalWithMicrosecondsAdditionError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2000",
-      messageParameters = Map(
-        "message" -> message,
-        "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
+      errorClass = "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION",
+      messageParameters = Map("ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)))
   }
 
   def overflowInSumOfDecimalError(
