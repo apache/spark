@@ -259,6 +259,8 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   // txnId can be 0 unless isAcid == true
   protected lazy val txnIdInLoadDynamicPartitions: JLong = 0L
 
+  protected lazy val wildcard: String = ".*"
+
   override def getMSC(hive: Hive): IMetaStoreClient = hive.getMSC
 
   private lazy val loadPartitionMethod =
@@ -820,13 +822,13 @@ private[client] class Shim_v2_0 extends Shim with Logging {
         Some(s"$value ${op.symbol} $name")
 
       case Contains(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
-        Some(s"$name like " + (("\".*" + value.drop(1)).dropRight(1) + ".*\""))
+        Some(s"$name like " + (("\"" + wildcard + value.drop(1)).dropRight(1) + wildcard + "\""))
 
       case StartsWith(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
-        Some(s"$name like " + (value.dropRight(1) + ".*\""))
+        Some(s"$name like " + (value.dropRight(1) + wildcard + "\""))
 
       case EndsWith(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
-        Some(s"$name like " + ("\".*" + value.drop(1)))
+        Some(s"$name like " + ("\"" + wildcard + value.drop(1)))
 
       case And(expr1, expr2) if useAdvanced =>
         val converted = convert(expr1) ++ convert(expr2)
@@ -1288,6 +1290,9 @@ private[client] class Shim_v4_0 extends Shim_v3_1 {
     "org.apache.hadoop.hive.ql.plan.LoadTableDesc")
   private lazy val clazzPartitionDetails =
     Utils.classForName("org.apache.hadoop.hive.ql.exec.Utilities$PartitionDesc")
+
+  override protected lazy val wildcard: String = "%"
+
   private lazy val alterTableMethod =
     findMethod(
       classOf[Hive],
