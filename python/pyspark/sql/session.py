@@ -1376,11 +1376,11 @@ class SparkSession(SparkConversionMixin):
             :class:`RDD`.
         verifySchema : bool, optional
             verify data types of every row against schema.
-            If not provided,
-            - createDataFrame with :class:`pyarrow.Table`, verifySchema = False
-            - (With Arrow optimization) createDataFrame with :class:`pandas.DataFrame`, verifySchema = False
-            - (Without Arrow optimization) createDataFrame with :class:`pandas.DataFrame`, verifySchema = True
-            - createDataFrame with regular Python instances, verifySchema = True
+            If not provided, createDataFrame with
+            - pyarrow.Table, verifySchema=False
+            - pandas.DataFrame with Arrow optimization, verifySchema=False
+            - pandas.DataFrame without Arrow optimization, verifySchema=True
+            - regular Python instances, verifySchema=True
             Arrow optimization is enabled/disabled via `spark.sql.execution.arrow.pyspark.enabled`.
 
             .. versionadded:: 2.1.0
