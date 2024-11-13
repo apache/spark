@@ -63,7 +63,8 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(val f: Double => Double, name: String)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+    extends UnaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
@@ -117,7 +118,8 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+    extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
 
@@ -443,8 +445,8 @@ case class Conv(
     ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression
     with ImplicitCastInputTypes
-    with NullIntolerant
     with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
 
   def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
     this(numExpr, fromBaseExpr, toBaseExpr, ansiEnabled = SQLConf.get.ansiEnabled)
@@ -629,7 +631,8 @@ object Factorial {
   since = "1.5.0",
   group = "math_funcs")
 case class Factorial(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
@@ -1002,8 +1005,8 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Bin(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
-
+  extends UnaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(LongType)
   override def dataType: DataType = SQLConf.get.defaultStringType
 
@@ -1111,7 +1114,8 @@ object Hex {
   since = "1.5.0",
   group = "math_funcs")
 case class Hex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation))
@@ -1154,7 +1158,8 @@ case class Hex(child: Expression)
   since = "1.5.0",
   group = "math_funcs")
 case class Unhex(child: Expression, failOnError: Boolean = false)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(expr: Expression) = this(expr, false)
 
@@ -1251,7 +1256,8 @@ case class Pow(left: Expression, right: Expression)
 }
 
 sealed trait BitShiftOperation
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def symbol: String
   def shiftInt: (Int, Int) => Int
@@ -1832,7 +1838,8 @@ case class WidthBucket(
     minValue: Expression,
     maxValue: Expression,
     numBucket: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),
