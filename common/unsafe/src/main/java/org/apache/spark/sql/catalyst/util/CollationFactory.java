@@ -514,16 +514,9 @@ public final class CollationFactory {
         String collationNamePrefix;
 
         if (collationName.startsWith(UTF8_BINARY_COLLATION.collationName)) {
-          // Have a check for UTF8_BINARY collation to early-out and not introduce any regression.
-          if (collationName.length() == UTF8_BINARY_COLLATION.collationName.length()) {
-            return UTF8_BINARY_COLLATION_ID;
-          }
           baseId = UTF8_BINARY_COLLATION_ID;
           collationNamePrefix = UTF8_BINARY_COLLATION.collationName;
         } else if (collationName.startsWith(UTF8_LCASE_COLLATION.collationName)) {
-          if (collationName.length() == UTF8_LCASE_COLLATION.collationName.length()) {
-            return UTF8_LCASE_COLLATION_ID;
-          }
           baseId = UTF8_LCASE_COLLATION_ID;
           collationNamePrefix = UTF8_LCASE_COLLATION.collationName;
         } else {
