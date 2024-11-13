@@ -330,10 +330,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .set(wh, "./data1")
       .set(td, "bob")
 
-    // This creates an active SparkContext, which will be picked up the session.
+    // This creates an active SparkContext, which will be picked up by the session below.
     new SparkContext(conf)
-
-    // The only way this could have ever worked if this is effectively a no-op.
     val spark = SparkSession.builder()
       .config(wh, "./data2")
       .config(td, "alice")
