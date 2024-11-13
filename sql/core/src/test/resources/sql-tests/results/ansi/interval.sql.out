@@ -939,7 +939,14 @@ struct<>
 org.apache.spark.SparkArithmeticException
 {
   "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
-  "sqlState" : "22015"
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "make_dt_interval(2147483647)"
+  } ]
 }
 
 
