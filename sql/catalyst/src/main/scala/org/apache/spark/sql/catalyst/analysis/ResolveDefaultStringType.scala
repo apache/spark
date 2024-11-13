@@ -103,7 +103,7 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
 
   private def replaceDefaultStringType(dataType: DataType, newType: StringType): DataType = {
     dataType.transformRecursively {
-      case _ if isDefaultStringType(dataType) =>
+      case currentType if isDefaultStringType(currentType) =>
         newType
     }
   }
