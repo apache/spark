@@ -2078,8 +2078,8 @@ abstract class JsonSuite
             .option("mode", "FAILFAST")
             .json(path)
         },
-        condition = "MALFORMED_RECORD_IN_SCHEMA_INFERENCE",
-        parameters = Map("failFastMode" -> "FAILFAST", "dataType" -> "\"STRING\"|\"BIGINT\""))
+        condition = "INVALID_JSON_RECORD_TYPE",
+        parameters = Map("failFastMode" -> "FAILFAST", "invalidType" -> "\"STRING\"|\"BIGINT\""))
 
       val ex = intercept[SparkException] {
         spark.read
