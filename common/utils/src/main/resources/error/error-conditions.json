@@ -5318,7 +5318,7 @@
       },
       "WRITE_FOR_BINARY_SOURCE" : {
         "message" : [
-          "Write is not supported for binary file data source."
+          "Write for the binary file data source."
         ]
       }
     },
