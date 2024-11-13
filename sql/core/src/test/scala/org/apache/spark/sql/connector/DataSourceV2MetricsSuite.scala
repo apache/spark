@@ -28,6 +28,8 @@ import org.apache.spark.sql.execution.CommandResultExec
 
 class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog {
 
+  override def supportsCommitMetrics(): Boolean = true
+
   private class TestStagedTableWithMetric(
       ident: Identifier,
       delegateTable: InMemoryTable
@@ -74,8 +76,7 @@ object StagingInMemoryTableCatalogWithMetrics {
   val testMetrics: Map[String, Long] = Map(
     "numFiles" -> 1337,
     "numOutputRows" -> 1338,
-    "numOutputBytes" -> 1339,
-  )
+    "numOutputBytes" -> 1339)
 }
 
 class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
@@ -89,8 +90,7 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
     s"CREATE TABLE $catalogName.$nonExistingTable AS SELECT * FROM $existingTable",
     s"CREATE OR REPLACE TABLE $catalogName.$nonExistingTable AS SELECT * FROM $existingTable",
     s"REPLACE TABLE $catalogName.$existingTable AS SELECT * FROM $existingTable",
-    s"REPLACE TABLE $catalogName.$existingTable (id bigint, data string)",
-  )
+    s"REPLACE TABLE $catalogName.$existingTable (id bigint, data string)")
 
   private def catalogCommitMetricsTest(
       testName: String, catalogName: String)(testFunction: String => Unit): Unit = {
@@ -109,13 +109,13 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
   }
 
   catalogCommitMetricsTest(
-      "Plan metrics are 0 if the catalog does not support them", testCatalog) { command =>
+      "No metrics in the plan if the catalog does not support them", testCatalog) { command =>
     val df = sql(command)
     val metrics = df.queryExecution.executedPlan match {
       case c: CommandResultExec => c.commandPhysicalPlan.metrics
     }
 
-    assert(metrics.forall(_._2.value == 0))
+    assert(metrics.isEmpty)
   }
 
   catalogCommitMetricsTest(

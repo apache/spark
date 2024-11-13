@@ -75,6 +75,8 @@ case class CreateTableAsSelectExec(
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
+  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
+
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       if (ifNotExists) {
@@ -109,6 +111,8 @@ case class AtomicCreateTableAsSelectExec(
     ifNotExists: Boolean) extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
+
+  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -147,6 +151,8 @@ case class ReplaceTableAsSelectExec(
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
+
+  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
 
   override protected def run(): Seq[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
@@ -196,6 +202,8 @@ case class AtomicReplaceTableAsSelectExec(
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
+
+  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
 
   override protected def run(): Seq[InternalRow] = {
     val columns = getV2Columns(query.schema, catalog.useNullableQuerySchema)
@@ -599,10 +607,15 @@ case class DeltaWithMetadataWritingSparkTask(
 private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   override def output: Seq[Attribute] = Nil
 
-  override val metrics: Map[String, SQLMetric] = Map(
-    "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "written output"))
+  protected def commitMetrics(tableCatalog: TableCatalog): Map[String, SQLMetric] = {
+    tableCatalog match {
+      case st: StagingTableCatalog if st.supportsCommitMetrics() =>
+        Map("numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+            "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+            "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "written output"))
+      case _ => Map.empty
+    }
+  }
 
   protected def getV2Columns(schema: StructType, forceNullable: Boolean): Array[Column] = {
     val rawSchema = CharVarcharUtils.getRawSchema(removeInternalMetadata(schema), conf)

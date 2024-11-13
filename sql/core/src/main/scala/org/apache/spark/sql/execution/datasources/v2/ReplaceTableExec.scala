@@ -67,10 +67,13 @@ case class AtomicReplaceTableExec(
 
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 
-  override val metrics: Map[String, SQLMetric] = Map(
-    "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "written output"))
+  override val metrics: Map[String, SQLMetric] = if (catalog.supportsCommitMetrics()) {
+    Map("numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
+        "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+        "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "written output"))
+  } else {
+    Map.empty
+  }
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(identifier)) {

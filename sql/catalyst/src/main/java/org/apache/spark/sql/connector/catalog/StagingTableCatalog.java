@@ -200,4 +200,10 @@ public interface StagingTableCatalog extends TableCatalog {
     return stageCreateOrReplace(
       ident, CatalogV2Util.v2ColumnsToStructType(columns), partitions, properties);
   }
+
+  /**
+   * @return True if the catalog returns instances of type {@link StagedTableWithCommitMetrics}
+   *         which support to retrieve commit metrics after a successful commit.
+   */
+  default boolean supportsCommitMetrics() { return false; }
 }
