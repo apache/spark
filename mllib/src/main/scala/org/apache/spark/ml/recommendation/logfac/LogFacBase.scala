@@ -99,11 +99,6 @@ private[ml] abstract class LogFacBase[T](
     r
   }
 
-  private def listFiles(path: String): Array[String] = {
-    val hdfs = FileSystem.get(new Configuration())
-    Try(hdfs.listStatus(new Path(path)).map(_.getPath.getName)).getOrElse(Array.empty)
-  }
-
   protected def pairs(data: RDD[T],
                       partitioner1: Partitioner,
                       partitioner2: Partitioner,
