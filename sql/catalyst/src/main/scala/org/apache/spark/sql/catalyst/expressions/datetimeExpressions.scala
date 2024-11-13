@@ -1735,14 +1735,14 @@ case class DateAddInterval(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     nullSafeCodeGen(ctx, ev, (sd, i) => if (ansiEnabled) {
-      s"""${ev.value} = $dtu.dateAddInterval($sd, $i, "$prettyName");"""
+      s"""${ev.value} = $dtu.dateAddInterval($sd, $i);"""
     } else {
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
       val startTs = ctx.freshName("startTs")
       val resultTs = ctx.freshName("resultTs")
       s"""
          |if ($i.microseconds == 0) {
-         |  ${ev.value} = $dtu.dateAddInterval($sd, $i, "$prettyName");
+         |  ${ev.value} = $dtu.dateAddInterval($sd, $i);
          |} else {
          |  long $startTs = $dtu.daysToMicros($sd, $zid);
          |  long $resultTs =
