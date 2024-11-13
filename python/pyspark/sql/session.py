@@ -1384,9 +1384,6 @@ class SparkSession(SparkConversionMixin):
             Arrow optimization is enabled/disabled via `spark.sql.execution.arrow.pyspark.enabled`.
 
             .. versionadded:: 2.1.0
-            .. versionchanged:: 4.0.0
-                Adjusts default value to pyspark._NoValue.
-
 
         Returns
         -------
