@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1DDLCommand, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StringType, StronglyTypedStringType}
+import org.apache.spark.sql.types.{DataType, DefaultStringType, StringType}
 
 /**
  * Resolves default string types in DDL commands. For DML commands, the default string type is
@@ -31,21 +31,34 @@ import org.apache.spark.sql.types.{DataType, StringType, StronglyTypedStringType
  */
 object ResolveDefaultStringType extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
+//    if (isDefaultSessionCollationUsed) {
+//      return plan
+//    }
+
     plan resolveOperators {
       case p if isCreateOrAlterPlan(p) =>
-        transformPlan(p, StringType)
+        val newType = stringTypeForDDLCommand(p)
+        transformPlan(p, newType)
 
       case addCols: AddColumns =>
-        addCols.copy(columnsToAdd = replaceColumnTypes(addCols.columnsToAdd, StringType))
+        val newType = stringTypeForDDLCommand(addCols.table)
+        addCols.copy(columnsToAdd = replaceColumnTypes(addCols.columnsToAdd, newType))
 
       case replaceCols: ReplaceColumns =>
-        replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, StringType))
+        val newType = stringTypeForDDLCommand(replaceCols.table)
+        replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, newType))
 
       case alter: AlterColumn
           if alter.dataType.isDefined && hasDefaultStringType(alter.dataType.get) =>
-        alter.copy(dataType = Some(replaceDefaultStringType(alter.dataType.get, StringType)))
+        val newType = stringTypeForDDLCommand(alter.table)
+        alter.copy(dataType = Some(replaceDefaultStringType(alter.dataType.get, newType)))
     }
   }
+
+  private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType
+
+  private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
+    StringType
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
     case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs | _: V1DDLCommand => true
@@ -80,9 +93,10 @@ object ResolveDefaultStringType extends Rule[LogicalPlan] {
 
   private def isDefaultStringType(dataType: DataType): Boolean = {
     dataType match {
+      case _: DefaultStringType => true
       case st: StringType =>
-        val sessionCollation = SQLConf.get.defaultStringType
-        st == sessionCollation && !st.isInstanceOf[StronglyTypedStringType]
+        // should only return true for StringType object and not StringType("UTF8_BINARY")
+        st.eq(StringType)
       case _ => false
     }
   }

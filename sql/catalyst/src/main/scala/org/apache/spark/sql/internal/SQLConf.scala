@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.{CollationFactory, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{AtomicType, StringType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{AtomicType, DefaultStringType, StringType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.{Utils, VersionUtils}
@@ -5508,7 +5508,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     if (getConf(DEFAULT_COLLATION).toUpperCase(Locale.ROOT) == "UTF8_BINARY") {
       StringType
     } else {
-      StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
+      DefaultStringType(getConf(DEFAULT_COLLATION))
     }
   }
 

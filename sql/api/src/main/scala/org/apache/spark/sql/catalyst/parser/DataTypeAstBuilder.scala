@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.SparkParserUtils.{string, withOrigin}
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StronglyTypedStringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, MetadataBuilder, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, VariantType, YearMonthIntervalType}
 
 class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
   protected def typedVisit[T](ctx: ParseTree): T = {
@@ -80,7 +80,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] {
           case Seq(_, ctx: CollateClauseContext) =>
             val collationName = visitCollateClause(ctx)
             val collationId = CollationFactory.collationNameToId(collationName)
-            StronglyTypedStringType(collationId)
+            StringType(collationId)
         }
       case (CHARACTER | CHAR, length :: Nil) => CharType(length.getText.toInt)
       case (VARCHAR, length :: Nil) => VarcharType(length.getText.toInt)

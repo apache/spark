@@ -115,14 +115,19 @@ case object StringType extends StringType(0) {
 }
 
 /**
- * String type which result from a strongly typed string declaration `STRING COLLATE ...`, and not
- * just implicit `STRING`.
+ * Data type representing string with default collation (what is default
+ * collation depends on whether it is a dml or ddl statement).
+ *
+ * In dml statements the default collation is determined by the session collation,
+ * while in ddl statements the default collation is determined by collation of the object
+ * (table, view, etc.).
  */
-private[spark] class StronglyTypedStringType private (collationId: Int)
-    extends StringType(collationId) {}
+private[spark] case class DefaultStringType(override val collationId: Int)
+  extends StringType(collationId)
 
-private[spark] object StronglyTypedStringType {
-  def apply(id: Int): StronglyTypedStringType = {
-    new StronglyTypedStringType(id)
+private[spark] object DefaultStringType {
+  def apply(collationName: String): DefaultStringType = {
+    val collationId = CollationFactory.collationNameToId(collationName)
+    new DefaultStringType(collationId)
   }
 }
