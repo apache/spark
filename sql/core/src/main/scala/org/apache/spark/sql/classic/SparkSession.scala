@@ -731,6 +731,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
    */
   @Stable
   class Builder extends SparkSessionBuilder {
+    import SparkSessionBuilder._
 
     private[this] val extensions = new SparkSessionExtensions
 
@@ -772,18 +773,26 @@ object SparkSession extends SparkSessionCompanion with Logging {
     override def master(master: String): this.type = super.master(master)
 
     /** @inheritdoc */
-    override def enableHiveSupport(): this.type = synchronized {
-      if (hiveClassesArePresent) {
-        // TODO(SPARK-50244): We now isolate artifacts added by the `ADD JAR` command. This will
-        //  break an existing Hive use case (one session adds JARs and another session uses them).
-        //  We need to decide whether/how to enable isolation for Hive.
-        super.enableHiveSupport()
-          .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, false)
-      } else {
-        throw new IllegalArgumentException(
-          "Unable to instantiate SparkSession with Hive support because " +
-            "Hive classes are not found.")
-      }
+    override def enableHiveSupport(): this.type = super.enableHiveSupport()
+
+    override protected def handleBuilderConfig(key: String, value: String): Boolean = key match {
+      case CONNECT_REMOTE_KEY | API_MODE_KEY =>
+        logWarning(s"$key configuration is not supported in Classic mode.")
+        true
+      case CATALOG_IMPL_KEY =>
+        if (hiveClassesArePresent) {
+          // TODO(SPARK-50244): We now isolate artifacts added by the `ADD JAR` command. This will
+          //  break an existing Hive use case (one session adds JARs and another session uses
+          //  them). We need to decide whether/how to enable isolation for Hive.
+          config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, false)
+        } else {
+          throw new IllegalArgumentException(
+            "Unable to instantiate SparkSession with Hive support because " +
+              "Hive classes are not found.")
+        }
+        false
+      case _ =>
+        false
     }
 
     /** @inheritdoc */

@@ -648,6 +648,8 @@ object SparkSession extends SparkSessionCompanion with Logging {
   def builder(): Builder = new Builder()
 
   class Builder() extends SparkSessionBuilder {
+    import SparkSessionBuilder._
+
     // Initialize the connection string of the Spark Connect client builder from SPARK_REMOTE
     // by default, if it exists. The connection string can be overridden using
     // the remote() function, as it takes precedence over the SPARK_REMOTE environment variable.
@@ -657,12 +659,6 @@ object SparkSession extends SparkSessionCompanion with Logging {
     /** @inheritdoc */
     @deprecated("sparkContext does not work in Spark Connect")
     override private[spark] def sparkContext(sparkContext: SparkContext): this.type = {
-      this
-    }
-
-    /** @inheritdoc */
-    override def remote(connectionString: String): this.type = {
-      builder.connectionString(connectionString)
       this
     }
 
@@ -706,15 +702,30 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
     /** @inheritdoc */
     @deprecated("enableHiveSupport does not work in Spark Connect")
-    override def enableHiveSupport(): this.type = this
+    override def enableHiveSupport(): this.type = super.enableHiveSupport()
 
     /** @inheritdoc */
     @deprecated("master does not work in Spark Connect, please use remote instead")
-    override def master(master: String): this.type = this
+    override def master(master: String): this.type = super.master(master)
 
     /** @inheritdoc */
     @deprecated("appName does not work in Spark Connect")
-    override def appName(name: String): this.type = this
+    override def appName(name: String): this.type = super.appName(name)
+
+    /** @inheritdoc */
+    override def remote(connectionString: String): Builder.this.type =
+      super.remote(connectionString)
+
+    override protected def handleBuilderConfig(key: String, value: String): Boolean = key match {
+      case CONNECT_REMOTE_KEY =>
+        builder.connectionString(value)
+        true
+      case APP_NAME_KEY | MASTER_KEY | CATALOG_IMPL_KEY | API_MODE_KEY =>
+        logWarning(s"$key configuration is not supported in Connect mode.")
+        true
+      case _ =>
+        false
+    }
 
     /** @inheritdoc */
     @deprecated("withExtensions does not work in Spark Connect")

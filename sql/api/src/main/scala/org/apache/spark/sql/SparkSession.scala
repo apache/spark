@@ -804,11 +804,6 @@ abstract class SparkSession extends Serializable with Closeable {
 object SparkSession extends SparkSessionCompanion {
   type Session = SparkSession
 
-  // Config key/values used to set the SparkSession API mode.
-  val API_MODE_KEY: String = "spark.api.mode"
-  val API_MODE_CLASSIC: String = "classic"
-  val API_MODE_CONNECT: String = "connect"
-
   // Implementation specific companions
   private lazy val CLASSIC_COMPANION = lookupCompanion(
     "org.apache.spark.sql.classic.SparkSession")
@@ -846,9 +841,10 @@ object SparkSession extends SparkSessionCompanion {
     Some(session)
 
   class Builder extends SparkSessionBuilder {
+    import SparkSessionBuilder._
     private val extensionModifications = mutable.Buffer.empty[SparkSessionExtensions => Unit]
     private var sc: Option[SparkContext] = None
-    private var connectionString: Option[String] = None
+    private var companion: SparkSessionCompanion = DEFAULT_COMPANION
 
     /** @inheritdoc */
     override def appName(name: String): this.type = super.appName(name)
@@ -881,10 +877,7 @@ object SparkSession extends SparkSessionCompanion {
     override def config(conf: SparkConf): this.type = super.config(conf)
 
     /** @inheritdoc */
-    override def remote(connectionString: String): this.type = synchronized {
-      this.connectionString = Option(connectionString)
-      this
-    }
+    override def remote(connectionString: String): this.type = super.remote(connectionString)
 
     /** @inheritdoc */
     override def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
@@ -902,12 +895,17 @@ object SparkSession extends SparkSessionCompanion {
     /**
      * Make the builder create a Classic SparkSession.
      */
-    def classic(): this.type = super.config(API_MODE_KEY, API_MODE_CLASSIC)
+    def classic(): this.type = mode(CONNECT_COMPANION)
 
     /**
      * Make the builder create a Connect SparkSession.
      */
-    def connect(): this.type = super.config(API_MODE_KEY, API_MODE_CONNECT)
+    def connect(): this.type = mode(CONNECT_COMPANION)
+
+    private def mode(companion: SparkSessionCompanion): this.type = synchronized {
+      this.companion = companion
+      this
+    }
 
     /** @inheritdoc */
     override def getOrCreate(): SparkSession = builder().getOrCreate()
@@ -915,28 +913,27 @@ object SparkSession extends SparkSessionCompanion {
     /** @inheritdoc */
     override def create(): SparkSession = builder().create()
 
+    override protected def handleBuilderConfig(key: String, value: String): Boolean = key match {
+      case API_MODE_KEY =>
+        companion = value.toLowerCase(Locale.ROOT).trim match {
+          case API_MODE_CLASSIC => CLASSIC_COMPANION
+          case API_MODE_CONNECT => CONNECT_COMPANION
+          case other =>
+            throw new IllegalArgumentException(s"Unknown API mode: $other")
+        }
+        true
+      case _ =>
+        false
+    }
+
     /**
      * Create an API mode implementation specific builder.
      */
     private def builder(): SparkSessionBuilder = synchronized {
-      val companion = options.get(API_MODE_KEY).map(_.toLowerCase(Locale.ROOT)) match {
-        case None => DEFAULT_COMPANION
-        case Some(API_MODE_CLASSIC) => CLASSIC_COMPANION
-        case Some(API_MODE_CONNECT) => CONNECT_COMPANION
-        case Some(other) =>
-          throw new IllegalArgumentException(s"Unknown API mode: $other")
-      }
-
       val builder = companion.builder()
       sc.foreach(builder.sparkContext)
-      connectionString.foreach(builder.remote)
-      options.foreach {
-        case (k, v) if k != API_MODE_KEY => builder.config(k, v)
-        case _ =>
-      }
-      extensionModifications.foreach { f =>
-        builder.withExtensions(f)
-      }
+      options.foreach(kv => builder.config(kv._1, kv._2))
+      extensionModifications.foreach(builder.withExtensions)
       builder
     }
   }
@@ -1085,6 +1082,7 @@ object SparkSessionCompanion {
  */
 @Stable
 abstract class SparkSessionBuilder {
+  import SparkSessionBuilder._
   protected val options = new scala.collection.mutable.HashMap[String, String]
 
   /**
@@ -1093,7 +1091,7 @@ abstract class SparkSessionBuilder {
    *
    * @since 2.0.0
    */
-  def appName(name: String): this.type = config("spark.app.name", name)
+  def appName(name: String): this.type = config(APP_NAME_KEY, name)
 
   /**
    * Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]" to run
@@ -1103,7 +1101,7 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Classic.
    * @since 2.0.0
    */
-  def master(master: String): this.type = config("spark.master", master)
+  def master(master: String): this.type = config(MASTER_KEY, master)
 
   /**
    * Enables Hive support, including connectivity to a persistent Hive metastore, support for Hive
@@ -1113,7 +1111,7 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Classic.
    * @since 2.0.0
    */
-  def enableHiveSupport(): this.type = config("spark.sql.catalogImplementation", "hive")
+  def enableHiveSupport(): this.type = config(CATALOG_IMPL_KEY, "hive")
 
   /**
    * Sets the Spark Connect remote URL.
@@ -1122,7 +1120,25 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Connect.
    * @since 3.5.0
    */
-  def remote(connectionString: String): this.type
+  def remote(connectionString: String): this.type = config(CONNECT_REMOTE_KEY, connectionString)
+
+  private def putConfig(key: String, value: String): this.type = {
+    if (!handleBuilderConfig(key, value)) {
+      options += key -> value
+    }
+    this
+  }
+
+  private def safePutConfig(key: String, value: String): this.type =
+    synchronized(putConfig(key, value))
+
+  /**
+   * Handle a configuration change that is only relevant to the builder.
+   *
+   * @return
+   *   `true` when the change if builder only, otherwise it will be added to the configurations.
+   */
+  protected def handleBuilderConfig(key: String, value: String): Boolean
 
   /**
    * Sets a config option. Options set using this method are automatically propagated to both
@@ -1132,10 +1148,7 @@ abstract class SparkSessionBuilder {
    *   this is only supported in Connect mode.
    * @since 2.0.0
    */
-  def config(key: String, value: String): this.type = synchronized {
-    options += key -> value
-    this
-  }
+  def config(key: String, value: String): this.type = safePutConfig(key, value)
 
   /**
    * Sets a config option. Options set using this method are automatically propagated to both
@@ -1143,10 +1156,7 @@ abstract class SparkSessionBuilder {
    *
    * @since 2.0.0
    */
-  def config(key: String, value: Long): this.type = synchronized {
-    options += key -> value.toString
-    this
-  }
+  def config(key: String, value: Long): this.type = safePutConfig(key, value.toString)
 
   /**
    * Sets a config option. Options set using this method are automatically propagated to both
@@ -1154,10 +1164,7 @@ abstract class SparkSessionBuilder {
    *
    * @since 2.0.0
    */
-  def config(key: String, value: Double): this.type = synchronized {
-    options += key -> value.toString
-    this
-  }
+  def config(key: String, value: Double): this.type = safePutConfig(key, value.toString)
 
   /**
    * Sets a config option. Options set using this method are automatically propagated to both
@@ -1165,10 +1172,7 @@ abstract class SparkSessionBuilder {
    *
    * @since 2.0.0
    */
-  def config(key: String, value: Boolean): this.type = synchronized {
-    options += key -> value.toString
-    this
-  }
+  def config(key: String, value: Boolean): this.type = safePutConfig(key, value.toString)
 
   /**
    * Sets a config option. Options set using this method are automatically propagated to both
@@ -1177,11 +1181,7 @@ abstract class SparkSessionBuilder {
    * @since 3.4.0
    */
   def config(map: Map[String, Any]): this.type = synchronized {
-    map.foreach { kv: (String, Any) =>
-      {
-        options += kv._1 -> kv._2.toString
-      }
-    }
+    map.foreach(kv => putConfig(kv._1, kv._2.toString))
     this
   }
 
@@ -1201,7 +1201,7 @@ abstract class SparkSessionBuilder {
    * @since 2.0.0
    */
   def config(conf: SparkConf): this.type = synchronized {
-    conf.getAll.foreach { case (k, v) => options += k -> v }
+    conf.getAll.foreach(kv => putConfig(kv._1, kv._2))
     this
   }
 
@@ -1249,4 +1249,15 @@ abstract class SparkSessionBuilder {
    * @since 3.5.0
    */
   def create(): SparkSession
+}
+
+object SparkSessionBuilder {
+  val MASTER_KEY = "spark.master"
+  val APP_NAME_KEY = "spark.app.name"
+  val CATALOG_IMPL_KEY = "spark.sql.catalogImplementation"
+  val CONNECT_REMOTE_KEY = "spark.connect.remote"
+  // Config key/values used to set the SparkSession API mode.
+  val API_MODE_KEY: String = "spark.api.mode"
+  val API_MODE_CLASSIC: String = "classic"
+  val API_MODE_CONNECT: String = "connect"
 }
