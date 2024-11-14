@@ -25,7 +25,9 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
-import org.apache.spark.sql.execution.CommandResultExec
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.datasources.v2.{AtomicCreateTableAsSelectExec, AtomicReplaceTableAsSelectExec, AtomicReplaceTableExec, CreateTableAsSelectExec, ReplaceTableAsSelectExec, ReplaceTableExec}
+import org.apache.spark.sql.util.QueryExecutionListener
 
 class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog {
 
@@ -107,15 +109,55 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
   private val nonExistingTable = "non_existing_table"
   private val existingTable = "existing_table"
 
-  private def commands(catalogName: String) = Seq(
-    s"CREATE TABLE $catalogName.$nonExistingTable AS SELECT * FROM $existingTable",
-    s"CREATE OR REPLACE TABLE $catalogName.$nonExistingTable AS SELECT * FROM $existingTable",
-    s"REPLACE TABLE $catalogName.$existingTable AS SELECT * FROM $existingTable",
-    s"REPLACE TABLE $catalogName.$existingTable (id bigint, data string)")
+  private def captureExecutedPlan(command: => Unit): SparkPlan = {
+    var commandPlan: Option[SparkPlan] = None
+    var otherPlans = Seq.empty[SparkPlan]
+
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        qe.executedPlan match {
+          case _: CreateTableAsSelectExec | _: AtomicCreateTableAsSelectExec
+               | _: ReplaceTableAsSelectExec | _: AtomicReplaceTableAsSelectExec
+               | _: ReplaceTableExec | _: AtomicReplaceTableExec =>
+            assert(commandPlan.isEmpty)
+            commandPlan = Some(qe.executedPlan)
+          case _ =>
+            otherPlans :+= qe.executedPlan
+        }
+      }
+
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+
+    spark.listenerManager.register(listener)
+
+    command
+
+    sparkContext.listenerBus.waitUntilEmpty()
+
+    assert(commandPlan.nonEmpty, s"No command plan found, but saw $otherPlans")
+    commandPlan.get
+  }
+
+  private def commands: Seq[String => Unit] = Seq(
+    { catalogName =>
+      sql(s"CREATE TABLE $catalogName.$nonExistingTable AS SELECT * FROM $existingTable") },
+    { catalogName =>
+      spark.table(existingTable).write.saveAsTable(s"$catalogName.$nonExistingTable") },
+    { catalogName =>
+      sql(s"CREATE OR REPLACE TABLE $catalogName.$nonExistingTable " +
+          s"AS SELECT * FROM $existingTable") },
+    { catalogName =>
+      sql(s"REPLACE TABLE $catalogName.$existingTable AS SELECT * FROM $existingTable") },
+    { catalogName =>
+        spark.table(existingTable)
+          .write.mode("overwrite").saveAsTable(s"$catalogName.$existingTable") },
+    { catalogName =>
+      sql(s"REPLACE TABLE $catalogName.$existingTable (id bigint, data string)") })
 
   private def catalogCommitMetricsTest(
-      testName: String, catalogName: String)(testFunction: String => Unit): Unit = {
-    commands(catalogName).foreach { command =>
+      testName: String, catalogName: String)(testFunction: SparkPlan => Unit): Unit = {
+    commands.foreach { command =>
       test(s"$testName - $command") {
         registerCatalog(testCatalog, classOf[InMemoryTableCatalog])
         registerCatalog(atomicTestCatalog, classOf[StagingInMemoryTableCatalogWithMetrics])
@@ -123,32 +165,25 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
           sql(s"CREATE TABLE $existingTable (id bigint, data string)")
           sql(s"CREATE TABLE $catalogName.$existingTable (id bigint, data string)")
 
-          testFunction(command)
+          testFunction(captureExecutedPlan(command(catalogName)))
         }
       }
     }
   }
 
   catalogCommitMetricsTest(
-      "No metrics in the plan if the catalog does not support them", testCatalog) { command =>
-    val df = sql(command)
-    val metrics = df.queryExecution.executedPlan match {
-      case c: CommandResultExec => c.commandPhysicalPlan.metrics
-    }
+      "No metrics in the plan if the catalog does not support them", testCatalog) { sparkPlan =>
+    val metrics = sparkPlan.metrics
 
     assert(metrics.isEmpty)
   }
 
   catalogCommitMetricsTest(
-      "Plan metrics values are the values from the catalog", atomicTestCatalog) { command =>
-    val df = sql(command)
-    val metrics = df.queryExecution.executedPlan match {
-      case c: CommandResultExec => c.commandPhysicalPlan.metrics
-    }
+      "Plan metrics values are the values from the catalog", atomicTestCatalog) { sparkPlan =>
+    val metrics = sparkPlan.metrics
 
     assert(metrics.size === StagingInMemoryTableCatalogWithMetrics.testMetrics.size)
-    StagingInMemoryTableCatalogWithMetrics.testMetrics.foreach { case customTaskMetric =>
-      assert(metrics(customTaskMetric.name()).value === customTaskMetric.value())
-    }
+    StagingInMemoryTableCatalogWithMetrics.testMetrics.foreach(customTaskMetric =>
+      assert(metrics(customTaskMetric.name()).value === customTaskMetric.value()))
   }
 }
