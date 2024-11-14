@@ -178,17 +178,49 @@ struct<size(boolean_array):int,size(tinyint_array):int,size(smallint_array):int,
 -- !query
 select element_at(array(1, 2, 3), 5)
 -- !query schema
-struct<element_at(array(1, 2, 3), 5):int>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "arraySize" : "3",
+    "indexValue" : "5"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "element_at(array(1, 2, 3), 5)"
+  } ]
+}
 
 
 -- !query
 select element_at(array(1, 2, 3), -5)
 -- !query schema
-struct<element_at(array(1, 2, 3), -5):int>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "arraySize" : "3",
+    "indexValue" : "-5"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "element_at(array(1, 2, 3), -5)"
+  } ]
+}
 
 
 -- !query
@@ -199,32 +231,87 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "INVALID_INDEX_OF_ZERO",
-  "sqlState" : "22003"
+  "sqlState" : "22003",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "element_at(array(1, 2, 3), 0)"
+  } ]
 }
 
 
 -- !query
 select elt(4, '123', '456')
 -- !query schema
-struct<elt(4, 123, 456):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "arraySize" : "2",
+    "indexValue" : "4"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "elt(4, '123', '456')"
+  } ]
+}
 
 
 -- !query
 select elt(0, '123', '456')
 -- !query schema
-struct<elt(0, 123, 456):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "arraySize" : "2",
+    "indexValue" : "0"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "elt(0, '123', '456')"
+  } ]
+}
 
 
 -- !query
 select elt(-1, '123', '456')
 -- !query schema
-struct<elt(-1, 123, 456):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "arraySize" : "2",
+    "indexValue" : "-1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "elt(-1, '123', '456')"
+  } ]
+}
 
 
 -- !query
@@ -262,17 +349,49 @@ NULL
 -- !query
 select array(1, 2, 3)[5]
 -- !query schema
-struct<array(1, 2, 3)[5]:int>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "arraySize" : "3",
+    "indexValue" : "5"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "array(1, 2, 3)[5]"
+  } ]
+}
 
 
 -- !query
 select array(1, 2, 3)[-1]
 -- !query schema
-struct<array(1, 2, 3)[-1]:int>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkArrayIndexOutOfBoundsException
+{
+  "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "arraySize" : "3",
+    "indexValue" : "-1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "array(1, 2, 3)[-1]"
+  } ]
+}
 
 
 -- !query
@@ -354,7 +473,7 @@ select size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10)))
 -- !query schema
 struct<size(arrays_zip(array(1, 2, 3), array(4), NULL, array(7, 8, 9, 10))):int>
 -- !query output
--1
+NULL
 
 
 -- !query

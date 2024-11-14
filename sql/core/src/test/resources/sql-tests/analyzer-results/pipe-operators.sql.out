@@ -1933,11 +1933,12 @@ values (0, 1) tab(x, y)
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [x#x, cast(y#x as string) AS y#x]
+   :- Project [x#x, cast(y#x as bigint) AS y#xL]
    :  +- SubqueryAlias tab
    :     +- LocalRelation [x#x, y#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- Project [x#x, cast(y#x as bigint) AS y#xL]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
