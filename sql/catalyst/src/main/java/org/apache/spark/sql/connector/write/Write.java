@@ -83,7 +83,7 @@ public interface Write {
    * Note that these metrics must be included in the supported custom metrics reported by
    * `supportedCustomMetrics`.
    */
-  default CustomTaskMetric [] reportDriverMetrics() {
+  default CustomTaskMetric[] reportDriverMetrics() {
     return new CustomTaskMetric[]{};
   }
 
