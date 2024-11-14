@@ -1030,7 +1030,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
     val metaStoreParts = partsWithLocation
       .map(p => p.copy(spec = toMetaStorePartitionSpec(p.spec)))
-    client.createPartitions(db, table, metaStoreParts, ignoreIfExists)
+    client.createPartitions(tableMeta, metaStoreParts, ignoreIfExists)
   }
 
   override def dropPartitions(
