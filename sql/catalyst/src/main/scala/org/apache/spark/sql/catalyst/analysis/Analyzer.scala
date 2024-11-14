@@ -251,6 +251,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
+   * Override to provide additional rules for the "Hints" resolution batch.
+   */
+  val hintResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Override to provide rules to do post-hoc resolution. Note that these rules will be executed
    * in an individual batch. This batch is to run right after the normal resolution batch and
    * execute its rules in one pass.
@@ -263,7 +268,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     TypeCoercion.typeCoercionRules
   }
 
-  private def earlyBatches: Seq[Batch] = Seq(
+  override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       new SubstituteExecuteImmediate(catalogManager),
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
@@ -278,21 +283,19 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
-      ResolveHints.ResolveJoinStrategyHints,
-      ResolveHints.ResolveCoalesceHints),
+      Seq(ResolveHints.ResolveJoinStrategyHints,
+        ResolveHints.ResolveCoalesceHints) ++
+        hintResolutionRules: _*),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
     Batch("Keep Legacy Outputs", Once,
-      KeepLegacyOutputs)
-  )
-
-  override def batches: Seq[Batch] = earlyBatches ++ Seq(
+      KeepLegacyOutputs),
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
-      new ResolveIdentifierClause(earlyBatches) ::
+      ResolveIdentifierClause ::
       ResolveRelations ::
       ResolvePartitionSpec ::
       ResolveFieldNameAndPosition ::
@@ -422,12 +425,18 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(WITH_WINDOW_DEFINITION, UNRESOLVED_WINDOW_EXPRESSION), ruleId) {
       // Lookup WindowSpecDefinitions. This rule works with unresolved children.
-      case WithWindowDefinition(windowDefinitions, child) => child.resolveExpressions {
-        case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
-          val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
-            throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
-          WindowExpression(c, windowSpecDefinition)
-      }
+      case WithWindowDefinition(windowDefinitions, child, forPipeSQL) =>
+        val resolveWindowExpression: PartialFunction[Expression, Expression] = {
+          case UnresolvedWindowExpression(c, WindowSpecReference(windowName)) =>
+            val windowSpecDefinition = windowDefinitions.getOrElse(windowName,
+              throw QueryCompilationErrors.windowSpecificationNotDefinedError(windowName))
+            WindowExpression(c, windowSpecDefinition)
+        }
+        if (forPipeSQL) {
+          child.transformExpressions(resolveWindowExpression)
+        } else {
+          child.resolveExpressions(resolveWindowExpression)
+        }
     }
   }
 
@@ -474,7 +483,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_ALIAS), ruleId) {
-      case Aggregate(groups, aggs, child) if child.resolved && hasUnresolvedAlias(aggs) =>
+      case Aggregate(groups, aggs, child, _) if child.resolved && hasUnresolvedAlias(aggs) =>
         Aggregate(groups, assignAliases(aggs), child)
 
       case Pivot(groupByOpt, pivotColumn, pivotValues, aggregates, child)
@@ -689,7 +698,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       _.containsPattern(GROUPING_ANALYTICS), ruleId) {
       case h @ UnresolvedHaving(_, agg @ Aggregate(
-        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, _))
+        GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, _, _))
         if agg.childrenResolved && aggExprs.forall(_.resolved) =>
         tryResolveHavingCondition(h, agg, selectedGroupByExprs, groupByExprs)
 
@@ -699,7 +708,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case a if !a.childrenResolved => a
 
       // Ensure group by expressions and aggregate expressions have been resolved.
-      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child)
+      case Aggregate(GroupingAnalytics(selectedGroupByExprs, groupByExprs), aggExprs, child, _)
         if aggExprs.forall(_.resolved) =>
         constructAggregate(selectedGroupByExprs, groupByExprs, aggExprs, child)
 
@@ -1841,7 +1850,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // Replace the index with the corresponding expression in aggregateExpressions. The index is
       // a 1-base position of aggregateExpressions, which is output columns (select expression)
-      case Aggregate(groups, aggs, child) if aggs.forall(_.resolved) &&
+      case Aggregate(groups, aggs, child, _) if aggs.forall(_.resolved) &&
         groups.exists(containUnresolvedOrdinal) =>
         val newGroups = groups.map(resolveGroupByExpressionOrdinal(_, aggs))
         Aggregate(newGroups, aggs, child)
@@ -2473,12 +2482,23 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      * can resolve outer references.
      *
      * Outer references of the subquery are updated as children of Subquery expression.
+     *
+     * If hasExplicitOuterRefs is true, the subquery should have an explicit outer reference,
+     * instead of common `UnresolvedAttribute`s. In this case, tries to resolve inner and outer
+     * references separately.
      */
     private def resolveSubQuery(
         e: SubqueryExpression,
-        outer: LogicalPlan)(
+        outer: LogicalPlan,
+        hasExplicitOuterRefs: Boolean = false)(
         f: (LogicalPlan, Seq[Expression]) => SubqueryExpression): SubqueryExpression = {
-      val newSubqueryPlan = AnalysisContext.withOuterPlan(outer) {
+      val newSubqueryPlan = if (hasExplicitOuterRefs) {
+        executeSameContext(e.plan).transformAllExpressionsWithPruning(
+          _.containsPattern(UNRESOLVED_OUTER_REFERENCE)) {
+          case u: UnresolvedOuterReference =>
+            resolveOuterReference(u.nameParts, outer).getOrElse(u)
+        }
+      } else AnalysisContext.withOuterPlan(outer) {
         executeSameContext(e.plan)
       }
 
@@ -2503,10 +2523,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _) if !sub.resolved =>
-          resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
-          resolveSubQuery(e, outer)(Exists(_, _, exprId))
+        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _, hasExplicitOuterRefs)
+            if !sub.resolved =>
+          resolveSubQuery(s, outer, hasExplicitOuterRefs)(ScalarSubquery(_, _, exprId))
+        case e @ Exists(sub, _, exprId, _, _, hasExplicitOuterRefs) if !sub.resolved =>
+          resolveSubQuery(e, outer, hasExplicitOuterRefs)(Exists(_, _, exprId))
         case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
             if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
@@ -2827,15 +2848,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val nestedGenerator = projectList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
-      case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
+      case Aggregate(_, aggList, _, _) if aggList.exists(hasNestedGenerator) =>
         val nestedGenerator = aggList.find(hasNestedGenerator).get
         throw QueryCompilationErrors.nestedGeneratorError(trimAlias(nestedGenerator))
 
-      case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
+      case Aggregate(_, aggList, _, _) if aggList.count(hasGenerator) > 1 =>
         val generators = aggList.filter(hasGenerator).map(trimAlias)
         throw QueryCompilationErrors.moreThanOneGeneratorError(generators)
 
-      case Aggregate(groupList, aggList, child) if canRewriteGenerator(aggList) &&
+      case Aggregate(groupList, aggList, child, _) if canRewriteGenerator(aggList) &&
           aggList.exists(hasGenerator) =>
         // If generator in the aggregate list was visited, set the boolean flag true.
         var generatorVisited = false
@@ -3201,7 +3222,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // Aggregate with Having clause. This rule works with an unresolved Aggregate because
       // a resolved Aggregate will not have Window Functions.
-      case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child))
+      case f @ UnresolvedHaving(condition, a @ Aggregate(groupingExprs, aggregateExprs, child, _))
         if child.resolved &&
           hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) =>
@@ -3226,7 +3247,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       // Aggregate without Having clause.
       // Make sure the lateral column aliases are properly handled first.
-      case a @ Aggregate(groupingExprs, aggregateExprs, child)
+      case a @ Aggregate(groupingExprs, aggregateExprs, child, _)
         if hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) &&
           !aggregateExprs.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
@@ -3885,9 +3906,9 @@ object CleanupAliases extends Rule[LogicalPlan] with AliasHelper {
       val cleanedProjectList = projectList.map(trimNonTopLevelAliases)
       Project(cleanedProjectList, child)
 
-    case Aggregate(grouping, aggs, child) =>
+    case Aggregate(grouping, aggs, child, hint) =>
       val cleanedAggs = aggs.map(trimNonTopLevelAliases)
-      Aggregate(grouping.map(trimAliases), cleanedAggs, child)
+      Aggregate(grouping.map(trimAliases), cleanedAggs, child, hint)
 
     case Window(windowExprs, partitionSpec, orderSpec, child) =>
       val cleanedWindowExprs = windowExprs.map(trimNonTopLevelAliases)

@@ -77,6 +77,7 @@ message Relation {
     CommonInlineUserDefinedDataSource common_inline_user_defined_data_source = 40;
     WithRelations with_relations = 41;
     Transpose transpose = 42;
+    UnresolvedTableValuedFunction unresolved_table_valued_function = 43;
 
     // NA functions
     NAFill fill_na = 90;
@@ -900,6 +901,14 @@ message Transpose {
   // (Optional) A list of columns that will be treated as the indices.
   // Only single column is supported now.
   repeated Expression index_columns = 2;
+}
+
+message UnresolvedTableValuedFunction {
+  // (Required) name (or unparsed name for user defined function) for the unresolved function.
+  string function_name = 1;
+
+  // (Optional) Function arguments. Empty arguments are allowed.
+  repeated Expression arguments = 2;
 }
 
 message ToSchema {

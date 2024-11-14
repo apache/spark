@@ -154,6 +154,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
   val UNRESOLVED_IDENTIFIER_WITH_CTE: Value = Value
+  val UNRESOLVED_OUTER_REFERENCE: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_FUNC: Value = Value
@@ -168,4 +169,8 @@ object TreePattern extends Enumeration  {
 
   // Execution Plan patterns (alphabetically ordered)
   val EXCHANGE: Value = Value
+
+  // Lazy analysis expression patterns (alphabetically ordered)
+  val LAZY_ANALYSIS_EXPRESSION: Value = Value
+  val LAZY_OUTER_REFERENCE: Value = Value
 }

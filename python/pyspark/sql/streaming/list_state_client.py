@@ -35,7 +35,7 @@ class ListStateClient:
         self.pandas_df_dict: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
 
     def exists(self, state_name: str) -> bool:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         exists_call = stateMessage.Exists()
         list_state_call = stateMessage.ListStateCall(stateName=state_name, exists=exists_call)
@@ -57,7 +57,7 @@ class ListStateClient:
             )
 
     def get(self, state_name: str, iterator_id: str) -> Tuple:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.pandas_df_dict:
             # If the state is already in the dictionary, return the next row.
@@ -106,7 +106,7 @@ class ListStateClient:
         return tuple(pandas_row)
 
     def append_value(self, state_name: str, schema: Union[StructType, str], value: Tuple) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
@@ -128,7 +128,7 @@ class ListStateClient:
     def append_list(
         self, state_name: str, schema: Union[StructType, str], values: List[Tuple]
     ) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
@@ -149,7 +149,7 @@ class ListStateClient:
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
     def put(self, state_name: str, schema: Union[StructType, str], values: List[Tuple]) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if isinstance(schema, str):
             schema = cast(StructType, _parse_datatype_string(schema))
@@ -168,7 +168,7 @@ class ListStateClient:
             raise PySparkRuntimeError(f"Error updating value state: " f"{response_message[1]}")
 
     def clear(self, state_name: str) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         clear_call = stateMessage.Clear()
         list_state_call = stateMessage.ListStateCall(stateName=state_name, clear=clear_call)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.execution
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -41,7 +41,8 @@ import org.apache.spark.util.Utils
 private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends Logging {
 
   /** The thread state. */
-  private val state: AtomicInteger = new AtomicInteger(ThreadState.notStarted)
+  private val state: AtomicReference[ThreadStateInfo] = new AtomicReference(
+    ThreadState.notStarted)
 
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
   // e.g. SparkContext.localProperties. If considering implementing a thread-pool,
@@ -349,17 +350,20 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 private object ThreadState {
 
   /** The thread has not started: transition to interrupted or started. */
-  val notStarted: Int = 0
+  val notStarted: ThreadStateInfo = ThreadStateInfo(0)
 
   /** Execution was interrupted: terminal state. */
-  val interrupted: Int = 1
+  val interrupted: ThreadStateInfo = ThreadStateInfo(1)
 
   /** The thread has started: transition to startedInterrupted or completed. */
-  val started: Int = 2
+  val started: ThreadStateInfo = ThreadStateInfo(2)
 
-  /** The thread has started and execution was interrupted: transition to completed. */
-  val startedInterrupted: Int = 3
+  /** The thread was started and execution has been interrupted: transition to completed. */
+  val startedInterrupted: ThreadStateInfo = ThreadStateInfo(3)
 
-  /** Execution was completed: terminal state. */
-  val completed: Int = 4
+  /** Execution has been completed: terminal state. */
+  val completed: ThreadStateInfo = ThreadStateInfo(4)
 }
+
+/** Represents the state of an execution thread. */
+case class ThreadStateInfo(val transitionState: Int)
