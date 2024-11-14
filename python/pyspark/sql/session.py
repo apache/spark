@@ -1378,7 +1378,8 @@ class SparkSession(SparkConversionMixin):
             verify data types of every row against schema.
             If not provided, createDataFrame with
             - pyarrow.Table, verifySchema=False
-            - pandas.DataFrame with Arrow optimization, verifySchema=False
+            - pandas.DataFrame with Arrow optimization, verifySchema defaults to
+            `spark.sql.execution.pandas.convertToArrowArraySafely`
             - pandas.DataFrame without Arrow optimization, verifySchema=True
             - regular Python instances, verifySchema=True
             Arrow optimization is enabled/disabled via `spark.sql.execution.arrow.pyspark.enabled`.

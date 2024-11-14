@@ -664,7 +664,7 @@ class SparkConversionMixin:
 
         if verifySchema is _NoValue:
             # (With Arrow optimization) createDataFrame with `pandas.DataFrame`
-            verifySchema = False
+            verifySchema = self._jconf.arrowSafeTypeConversion()
 
         infer_pandas_dict_as_map = (
             str(self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower() == "true"
