@@ -214,7 +214,6 @@ class TransformWithStateInPandasStateServer(
         // this implementation is safe
         val expiryRequest = message.getExpiryTimerRequest()
         val expiryTimestamp = expiryRequest.getExpiryTimestampMs
-        println(s"I am getting expired timer on server, timestamp: ${expiryTimestamp}")
         if (!expiryTimestampIter.isDefined) {
           expiryTimestampIter =
             Option(statefulProcessorHandle.getExpiredTimers(expiryTimestamp))
@@ -252,7 +251,7 @@ class TransformWithStateInPandasStateServer(
         sendResponse(0)
       case ImplicitGroupingKeyRequest.MethodCase.REMOVEIMPLICITKEY =>
         ImplicitGroupingKeyTracker.removeImplicitKey()
-        // Reset the list/map state iterators for a new grouping sey.
+        // Reset the list/map state iterators for a new grouping key.
         iterators = new mutable.HashMap[String, Iterator[Row]]()
         listTimerIters = new mutable.HashMap[String, Iterator[Long]]()
         sendResponse(0)
@@ -314,7 +313,6 @@ class TransformWithStateInPandasStateServer(
           case TimerStateCallCommand.MethodCase.REGISTER =>
             val expiryTimestamp =
               message.getTimerStateCall.getRegister.getExpiryTimestampMs
-            println(s"I am inside timer register, timestamp: $expiryTimestamp")
             statefulProcessorHandle.registerTimer(expiryTimestamp)
             sendResponse(0)
           case TimerStateCallCommand.MethodCase.DELETE =>

@@ -442,10 +442,8 @@ class StatefulProcessor(ABC):
         ...
 
     def handleInitialState(
-        self,
-        key: Any,
-        initialState: "PandasDataFrameLike",
-        timer_values: TimerValues) -> None:
+        self, key: Any, initialState: "PandasDataFrameLike", timer_values: TimerValues
+    ) -> None:
         """
         Optional to implement. Will act as no-op if not defined or no initial state input.
          Function that will be invoked only in the first batch for users to process initial states.
