@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
@@ -5901,6 +5902,61 @@ class AstBuilder extends DataTypeAstBuilder
         windowClause = ctx.windowClause,
         relation = left,
         isPipeOperatorSelect = true)
+    }.getOrElse(Option(ctx.EXTEND).map { _ =>
+      val extendExpressions: Seq[NamedExpression] =
+        Option(ctx.extendList).map { n: NamedExpressionSeqContext =>
+          val visited = visitNamedExpressionSeq(n)
+          visited.map {
+            case (a: Alias, _) =>
+              a.copy(child = PipeSelect(a.child, PipeOperators.extendClause))(
+                a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+            case (e: Expression, aliasFunc) =>
+              UnresolvedAlias(PipeSelect(e, PipeOperators.extendClause), aliasFunc)
+          }
+        }.get
+      val projectList: Seq[NamedExpression] = Seq(UnresolvedStar(None)) ++ extendExpressions
+      Project(projectList, left)
+    }.getOrElse(Option(ctx.SET).map { _ =>
+      val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
+        visitOperatorPipeSetAssignmentSeq(ctx.operatorPipeSetAssignmentSeq())
+      var plan = left
+      val visitedSetIdentifiers = mutable.Set.empty[String]
+      setIdentifiers.zip(setTargets).foreach {
+        case (_, _: Alias) =>
+          operationNotAllowed(
+            "SQL pipe syntax |> SET operator with an alias assigned with [AS] aliasName", ctx)
+        case (ident, target) =>
+          // Check uniqueness of the assignment keys.
+          val checkKey = if (SQLConf.get.caseSensitiveAnalysis) {
+            ident.toLowerCase(Locale.ROOT)
+          } else {
+            ident
+          }
+          if (visitedSetIdentifiers(checkKey)) {
+            operationNotAllowed(
+              s"SQL pipe syntax |> SET operator with duplicate assignment key $ident", ctx)
+          }
+          visitedSetIdentifiers += checkKey
+          // Add an UnresolvedStarExcept to exclude the SET expression name from the relation and
+          // add the new SET expression to the projection list.
+          // Use a PipeSelect expression to make sure it does not contain any aggregate functions.
+          plan = Project(
+            Seq(UnresolvedStarExcept(None, Seq(Seq(ident))),
+              Alias(PipeSelect(target, PipeOperators.setClause), ident)()), plan)
+      }
+      plan
+    }.getOrElse(Option(ctx.DROP).map { _ =>
+      var plan = left
+      visitIdentifierSeq(ctx.identifierSeq()).foreach { ident: String =>
+        plan = Project(Seq(UnresolvedStarExcept(None, Seq(Seq(ident)))), plan)
+      }
+      plan
+    }.getOrElse(Option(ctx.AS).map { _ =>
+      val child = left match {
+        case s: SubqueryAlias => s.child
+        case _ => left
+      }
+      SubqueryAlias(ctx.errorCapturingIdentifier().getText, child)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
         throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
@@ -5927,8 +5983,16 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    ))))))))
+    ))))))))))))
   }
+
+  override def visitOperatorPipeSetAssignmentSeq(
+      ctx: OperatorPipeSetAssignmentSeqContext): (Seq[String], Seq[Expression]) =
+    withOrigin(ctx) {
+      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
+      val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
+      (setIdentifiers, setTargets)
+    }
 
   private def visitOperatorPipeAggregate(
       ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
@@ -5941,8 +6005,11 @@ class AstBuilder extends DataTypeAstBuilder
     val aggregateExpressions: Seq[NamedExpression] =
       Option(ctx.namedExpressionSeq()).map { n: NamedExpressionSeqContext =>
         visitNamedExpressionSeq(n).map {
-          case (e: NamedExpression, _) => e
-          case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+          case (a: Alias, _) =>
+            a.copy(child = PipeAggregate(a.child))(
+              a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+          case (e: Expression, aliasFunc) =>
+            UnresolvedAlias(PipeAggregate(e), aliasFunc)
         }
       }.getOrElse(Seq.empty)
     Option(ctx.aggregationClause()).map { c: AggregationClauseContext =>
