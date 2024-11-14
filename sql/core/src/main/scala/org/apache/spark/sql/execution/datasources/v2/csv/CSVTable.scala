@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.csv.CSVOptions
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, Write, WriteBuilder}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
@@ -50,14 +50,9 @@ case class CSVTable(
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
-    val writeInfo = LogicalWriteInfoImpl(
-      info.queryId(),
-      info.schema(),
-      mergedOptions(info.options()),
-      info.rowIdSchema(),
-      info.metadataSchema())
     new WriteBuilder {
-      override def build(): Write = CSVWrite(paths, formatName, supportsDataType, writeInfo)
+      override def build(): Write =
+        CSVWrite(paths, formatName, supportsDataType, mergedWriteInfo(info))
     }
   }
 
