@@ -33,8 +33,12 @@ case class TemporaryStringType(
  * determined by the session's default string type. For DDL, the default string type is the
  * default type of the object (table -> schema -> catalog). However, this is not implemented yet.
  * So, we will just use UTF8_BINARY for now.
+ *
+ * `replaceWithTempType` is a flag that determines whether to replace the default string type with a
+ * [[TemporaryStringType]] object in cases where the old type and new are equal and thus would
+ * not change the plan after transformation.
  */
-class ResolveDefaultStringType(replaceWithTemp: Boolean) extends Rule[LogicalPlan] {
+class ResolveDefaultStringType(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (isDefaultSessionCollationUsed) {
       plan
@@ -52,7 +56,7 @@ class ResolveDefaultStringType(replaceWithTemp: Boolean) extends Rule[LogicalPla
    * UTF8_BINARY).
    */
   private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
-    new StringType(0)
+    StringType(0)
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan match {
     case _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
@@ -121,7 +125,7 @@ class ResolveDefaultStringType(replaceWithTemp: Boolean) extends Rule[LogicalPla
   private def isDefaultStringType(dataType: DataType): Boolean = {
     dataType match {
       case _: TemporaryStringType =>
-        !replaceWithTemp
+        !replaceWithTempType
       case st: StringType =>
         // should only return true for StringType object and not StringType("UTF8_BINARY")
         st.eq(StringType)
@@ -132,7 +136,7 @@ class ResolveDefaultStringType(replaceWithTemp: Boolean) extends Rule[LogicalPla
   private def replaceDefaultStringType(dataType: DataType, newType: StringType): DataType = {
     dataType.transformRecursively {
       case currentType if isDefaultStringType(currentType) =>
-        if (replaceWithTemp && currentType == newType) TemporaryStringType() else newType
+        if (replaceWithTempType && currentType == newType) TemporaryStringType() else newType
     }
   }
 

@@ -83,7 +83,6 @@ import org.apache.spark.sql.catalyst.expressions.{
   TryToNumber
 }
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 
 /**
@@ -273,7 +272,7 @@ object CollationTypeCoercion {
           )
         }
         else {
-          implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
+          implicitTypes.headOption.map(StringType(_)).getOrElse(StringType)
         }
     }
   }
