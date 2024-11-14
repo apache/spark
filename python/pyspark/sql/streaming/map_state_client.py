@@ -49,7 +49,7 @@ class MapStateClient:
         self.user_key_or_value_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
 
     def exists(self, state_name: str) -> bool:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         exists_call = stateMessage.Exists()
         map_state_call = stateMessage.MapStateCall(stateName=state_name, exists=exists_call)
@@ -69,7 +69,7 @@ class MapStateClient:
             raise PySparkRuntimeError(f"Error checking map state exists: {response_message[1]}")
 
     def get_value(self, state_name: str, user_key: Tuple) -> Optional[Tuple]:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         bytes = self._stateful_processor_api_client._serialize_to_bytes(
             self.user_key_schema, user_key
@@ -92,7 +92,7 @@ class MapStateClient:
             raise PySparkRuntimeError(f"Error getting value: {response_message[1]}")
 
     def contains_key(self, state_name: str, user_key: Tuple) -> bool:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         bytes = self._stateful_processor_api_client._serialize_to_bytes(
             self.user_key_schema, user_key
@@ -124,7 +124,7 @@ class MapStateClient:
         user_key: Tuple,
         value: Tuple,
     ) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         key_bytes = self._stateful_processor_api_client._serialize_to_bytes(
             self.user_key_schema, user_key
@@ -147,7 +147,7 @@ class MapStateClient:
             raise PySparkRuntimeError(f"Error updating map state value: {response_message[1]}")
 
     def get_key_value_pair(self, state_name: str, iterator_id: str) -> Tuple[Tuple, Tuple]:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.user_key_value_pair_iterator_cursors:
             # If the state is already in the dictionary, return the next row.
@@ -195,7 +195,7 @@ class MapStateClient:
         return tuple(key_row), tuple(value_row)
 
     def get_row(self, state_name: str, iterator_id: str, is_key: bool) -> Tuple:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         if iterator_id in self.user_key_or_value_iterator_cursors:
             # If the state is already in the dictionary, return the next row.
@@ -247,7 +247,7 @@ class MapStateClient:
         return tuple(pandas_row)
 
     def remove_key(self, state_name: str, key: Tuple) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         bytes = self._stateful_processor_api_client._serialize_to_bytes(self.user_key_schema, key)
         remove_key_call = stateMessage.RemoveKey(userKey=bytes)
@@ -263,7 +263,7 @@ class MapStateClient:
             raise PySparkRuntimeError(f"Error removing key from map state: {response_message[1]}")
 
     def clear(self, state_name: str) -> None:
-        import pyspark.sql.streaming.StateMessage_pb2 as stateMessage
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
 
         clear_call = stateMessage.Clear()
         map_state_call = stateMessage.MapStateCall(stateName=state_name, clear=clear_call)

@@ -411,6 +411,9 @@ object SparkBuild extends PomBuild {
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
 
+  /* Spark SQL Core settings */
+  enable(SQL.settings)(sql)
+
   /* Hive console settings */
   enable(Hive.settings)(hive)
 
@@ -1144,6 +1147,34 @@ object SqlApi {
   )
 }
 
+object SQL {
+  import BuildCommons.protoVersion
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value
+    )
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
+}
+
 object Hive {
 
   lazy val settings = Seq(
@@ -1342,6 +1373,7 @@ trait SharedUnidocSettings {
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka-clients-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka_2\..*-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.contains("apache-rat")))
+      .map(_.filterNot(_.data.getCanonicalPath.contains("connect-shims")))
   }
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
@@ -1682,7 +1714,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "net.aichler" % "jupiter-interface" % "0.11.1" % "test",
+    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.13.1" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

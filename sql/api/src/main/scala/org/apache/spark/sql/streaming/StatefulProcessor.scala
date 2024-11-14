@@ -121,6 +121,9 @@ private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
 
   /**
    * Function that will be invoked only in the first batch for users to process initial states.
+   * The provided initial state can be arbitrary dataframe with the same grouping key schema with
+   * the input rows, e.g. dataframe from data source reader of existing streaming query
+   * checkpoint.
    *
    * @param key
    *   \- grouping key

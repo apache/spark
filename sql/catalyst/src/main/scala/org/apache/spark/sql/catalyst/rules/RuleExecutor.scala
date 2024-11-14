@@ -153,7 +153,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     override val maxIterationsSetting: String = null) extends Strategy
 
   /** A batch of rules. */
-  protected[catalyst] case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
+  protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
   protected def batches: Seq[Batch]
@@ -168,6 +168,15 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    * turn the plan into unresolved.
    */
   protected def validatePlanChanges(
+      previousPlan: TreeType,
+      currentPlan: TreeType): Option[String] = None
+
+  /**
+   * Defines a validate function that validates the plan changes after the execution of each rule,
+   * to make sure these rules make valid changes to the plan. Since this is enabled by default,
+   * this should only consist of very lightweight checks.
+   */
+  protected def validatePlanChangesLightweight(
       previousPlan: TreeType,
       currentPlan: TreeType): Option[String] = None
 
@@ -204,9 +213,10 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
     val beforeMetrics = RuleExecutor.getCurrentMetrics()
 
-    val enableValidation = SQLConf.get.getConf(SQLConf.PLAN_CHANGE_VALIDATION)
+    val fullValidation = SQLConf.get.getConf(SQLConf.PLAN_CHANGE_VALIDATION)
+    lazy val lightweightValidation = SQLConf.get.getConf(SQLConf.LIGHTWEIGHT_PLAN_CHANGE_VALIDATION)
     // Validate the initial input.
-    if (Utils.isTesting || enableValidation) {
+    if (fullValidation) {
       validatePlanChanges(plan, plan) match {
         case Some(msg) =>
           val ruleExecutorName = this.getClass.getName.stripSuffix("$")
@@ -224,7 +234,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       var lastPlan = curPlan
       var continue = true
 
-      // Run until fix point (or the max number of iterations as specified in the strategy.
+      // Run until fix point or the max number of iterations as specified in the strategy.
       while (continue) {
         curPlan = batch.rules.foldLeft(curPlan) {
           case (plan, rule) =>
@@ -238,8 +248,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
               planChangeLogger.logRule(rule.ruleName, plan, result)
               // Run the plan changes validation after each rule.
-              if (Utils.isTesting || enableValidation) {
-                validatePlanChanges(plan, result) match {
+              if (fullValidation || lightweightValidation) {
+                // Only run the lightweight version of validation if full validation is disabled.
+                val validationResult = if (fullValidation) {
+                  validatePlanChanges(plan, result)
+                } else {
+                  validatePlanChangesLightweight(plan, result)
+                }
+                validationResult match {
                   case Some(msg) =>
                     throw new SparkException(
                       errorClass = "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",

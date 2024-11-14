@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
@@ -39,7 +38,7 @@ class ListStateImpl[S](
      store: StateStore,
      stateName: String,
      keyExprEnc: ExpressionEncoder[Any],
-     valEncoder: Encoder[S],
+     valEncoder: ExpressionEncoder[Any],
      metrics: Map[String, SQLMetric] = Map.empty)
   extends ListStateMetricsImpl
   with ListState[S]
@@ -75,7 +74,7 @@ class ListStateImpl[S](
 
        override def next(): S = {
          val valueUnsafeRow = unsafeRowValuesIterator.next()
-         stateTypesEncoder.decodeValue(valueUnsafeRow)
+         stateTypesEncoder.decodeValue(valueUnsafeRow).asInstanceOf[S]
        }
      }
    }

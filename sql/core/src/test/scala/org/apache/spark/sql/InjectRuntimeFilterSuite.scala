@@ -255,7 +255,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       case Filter(condition, _) => condition.collect {
         case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
         => subquery.plan.collect {
-          case Aggregate(_, aggregateExpressions, _) =>
+          case Aggregate(_, aggregateExpressions, _, _) =>
             aggregateExpressions.map {
               case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
               _) =>

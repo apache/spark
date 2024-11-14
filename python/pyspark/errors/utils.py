@@ -33,6 +33,7 @@ from typing import (
     Union,
     TYPE_CHECKING,
     overload,
+    cast,
 )
 import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from pyspark.sql import SparkSession
 
 T = TypeVar("T")
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 _current_origin = threading.local()
 
@@ -225,7 +227,7 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
     return call_sites_str
 
 
-def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
+def _with_origin(func: FuncT) -> FuncT:
     """
     A decorator to capture and provide the call site information to the server side
     when PySpark API functions are invoked.
@@ -269,7 +271,7 @@ def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
         else:
             return func(*args, **kwargs)
 
-    return wrapper
+    return cast(FuncT, wrapper)
 
 
 @overload

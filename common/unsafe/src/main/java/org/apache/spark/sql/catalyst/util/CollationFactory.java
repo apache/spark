@@ -1023,12 +1023,14 @@ public final class CollationFactory {
 
       @Override
       protected CollationMeta buildCollationMeta() {
+        String language = ICULocaleMap.get(locale).getDisplayLanguage();
+        String country = ICULocaleMap.get(locale).getDisplayCountry();
         return new CollationMeta(
           CATALOG,
           SCHEMA,
           normalizedCollationName(),
-          ICULocaleMap.get(locale).getDisplayLanguage(),
-          ICULocaleMap.get(locale).getDisplayCountry(),
+          language.isEmpty() ? null : language,
+          country.isEmpty() ? null : country,
           VersionInfo.ICU_VERSION.toString(),
           COLLATION_PAD_ATTRIBUTE,
           accentSensitivity == AccentSensitivity.AS,
@@ -1278,19 +1280,26 @@ public final class CollationFactory {
         Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION.collationName,
         Collation.CollationSpecUTF8.UTF8_LCASE_COLLATION.collationName
       };
-      validModifiers = new String[0];
+      validModifiers = new String[]{"_RTRIM"};
     } else {
       validRootNames = getICULocaleNames();
-      validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS"};
+      validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS", "_RTRIM"};
     }
 
     // Split modifiers and locale name.
-    final int MODIFIER_LENGTH = 3;
+    boolean foundModifier = true;
     String localeName = collationName.toUpperCase();
     List<String> modifiers = new ArrayList<>();
-    while (Arrays.stream(validModifiers).anyMatch(localeName::endsWith)) {
-      modifiers.add(localeName.substring(localeName.length() - MODIFIER_LENGTH));
-      localeName = localeName.substring(0, localeName.length() - MODIFIER_LENGTH);
+    while (foundModifier) {
+      foundModifier = false;
+      for (String modifier : validModifiers) {
+        if (localeName.endsWith(modifier)) {
+          modifiers.add(modifier);
+          localeName = localeName.substring(0, localeName.length() - modifier.length());
+          foundModifier = true;
+          break;
+        }
+      }
     }
 
     // Suggest version with unique modifiers.

@@ -25,6 +25,7 @@ import scala.sys.exit
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A simple main class method to start the spark connect server as a service for client tests
@@ -40,6 +41,8 @@ private[sql] object SimpleSparkConnectService {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf()
       .set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+      .set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, true)
+      .set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER, true)
     val sparkSession = SparkSession.builder().config(conf).getOrCreate()
     val sparkContext = sparkSession.sparkContext // init spark context
     // scalastyle:off println

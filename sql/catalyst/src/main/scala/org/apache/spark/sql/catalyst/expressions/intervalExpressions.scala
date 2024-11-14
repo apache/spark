@@ -37,7 +37,9 @@ import org.apache.spark.unsafe.types.CalendarInterval
 abstract class ExtractIntervalPart[T](
     val dataType: DataType,
     func: T => Any,
-    funcName: String) extends UnaryExpression with NullIntolerant with Serializable {
+    funcName: String) extends UnaryExpression with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val iu = IntervalUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$iu.$funcName($c)")
@@ -168,7 +170,9 @@ object ExtractIntervalPart {
 abstract class IntervalNumOperation(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -226,6 +230,89 @@ case class DivideInterval(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
+  usage = "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - This is a special version of `make_interval` that performs the same operation, but returns NULL when an overflow occurs.",
+  arguments = """
+    Arguments:
+      * years - the number of years, positive or negative
+      * months - the number of months, positive or negative
+      * weeks - the number of weeks, positive or negative
+      * days - the number of days, positive or negative
+      * hours - the number of hours, positive or negative
+      * mins - the number of minutes, positive or negative
+      * secs - the number of seconds with the fractional part in microsecond precision.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(100, 11, 1, 1, 12, 30, 01.001001);
+       100 years 11 months 8 days 12 hours 30 minutes 1.001001 seconds
+      > SELECT _FUNC_(100, null, 3);
+       NULL
+      > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
+       1 months 1 days 1 minutes 40.000001 seconds
+      > SELECT _FUNC_(2147483647);
+       NULL
+  """,
+  since = "4.0.0",
+  group = "datetime_funcs")
+// scalastyle:on line.size.limit
+case class TryMakeInterval(
+    years: Expression,
+    months: Expression,
+    weeks: Expression,
+    days: Expression,
+    hours: Expression,
+    mins: Expression,
+    secs: Expression,
+    replacement: Expression)
+  extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression,
+      mins: Expression,
+      secs: Expression) =
+    this(years, months, weeks, days, hours, mins, secs,
+      MakeInterval(years, months, weeks, days, hours, mins, secs, failOnError = false))
+
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression,
+      mins: Expression) =
+    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
+
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression) = {
+    this(years, months, weeks, days, hours, Literal(0))
+  }
+  def this(years: Expression, months: Expression, weeks: Expression, days: Expression) =
+    this(years, months, weeks, days, Literal(0))
+  def this(years: Expression, months: Expression, weeks: Expression) =
+    this(years, months, weeks, Literal(0))
+  def this(years: Expression, months: Expression) = this(years, months, Literal(0))
+  def this(years: Expression) = this(years, Literal(0))
+  // We do not support this() in try version of the function, as it will never return overflow
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(replacement = newChild)
+  }
+
+  override def parameters: Seq[Expression] = Seq(years, months, weeks, days, hours, mins, secs)
+
+  override def prettyName: String = "try_make_interval"
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
   usage = "_FUNC_([years[, months[, weeks[, days[, hours[, mins[, secs]]]]]]]) - Make interval from years, months, weeks, days, hours, mins and secs.",
   arguments = """
     Arguments:
@@ -258,7 +345,8 @@ case class MakeInterval(
     mins: Expression,
     secs: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends SeptenaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   def this(
       years: Expression,
@@ -393,7 +481,8 @@ case class MakeDTInterval(
     hours: Expression,
     mins: Expression,
     secs: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
 
   def this(
       days: Expression,
@@ -425,13 +514,15 @@ case class MakeDTInterval(
       day.asInstanceOf[Int],
       hour.asInstanceOf[Int],
       min.asInstanceOf[Int],
-      sec.asInstanceOf[Decimal])
+      sec.asInstanceOf[Decimal],
+      origin.context)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (day, hour, min, sec) => {
+      val errorContext = getContextOrNullCode(ctx)
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec)"
+      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec, $errorContext)"
     })
   }
 
@@ -443,6 +534,8 @@ case class MakeDTInterval(
       mins: Expression,
       secs: Expression): MakeDTInterval =
     copy(days, hours, mins, secs)
+
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
 }
 
 @ExpressionDescription(
@@ -467,7 +560,8 @@ case class MakeDTInterval(
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeYMInterval(years: Expression, months: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
 
   def this(years: Expression) = this(years, Literal(0))
   def this() = this(Literal(0))
@@ -478,17 +572,28 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def dataType: DataType = YearMonthIntervalType()
 
   override def nullSafeEval(year: Any, month: Any): Any = {
-    Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
-      Math.multiplyExact(year.asInstanceOf[Number].longValue(), MONTHS_PER_YEAR)))
+    try {
+      Math.toIntExact(
+        Math.addExact(month.asInstanceOf[Int],
+          Math.multiplyExact(year.asInstanceOf[Int], MONTHS_PER_YEAR)))
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(origin.context)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (years, months) => {
+    nullSafeCodeGen(ctx, ev, (years, months) => {
       val math = classOf[Math].getName.stripSuffix("$")
+      val errorContext = getContextOrNullCode(ctx)
+      // scalastyle:off line.size.limit
       s"""
-         |$math.toIntExact(java.lang.Math.addExact($months,
-         |  $math.multiplyExact($years, $MONTHS_PER_YEAR)))
-         |""".stripMargin
+         |try {
+         |  ${ev.value} = $math.toIntExact($math.addExact($months, $math.multiplyExact($years, $MONTHS_PER_YEAR)));
+         |} catch (java.lang.ArithmeticException e) {
+         |  throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError($errorContext);
+         |}""".stripMargin
+      // scalastyle:on line.size.limit
     })
   }
 
@@ -497,13 +602,18 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression =
     copy(years = newLeft, months = newRight)
+
+  override def initQueryContext(): Option[QueryContext] = {
+    Some(origin.context)
+  }
 }
 
 // Multiply an year-month interval by a numeric
 case class MultiplyYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -555,7 +665,8 @@ case class MultiplyYMInterval(
 case class MultiplyDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -607,8 +718,8 @@ trait IntervalDivide {
       context: QueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
-        throw QueryExecutionErrors.intervalArithmeticOverflowError(
-          "Interval value overflows after being divided by -1", "try_divide", context)
+        throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+          "try_divide", context)
       }
     }
   }
@@ -641,8 +752,8 @@ trait IntervalDivide {
 case class DivideYMInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
-    with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+  override def nullIntolerant: Boolean = true
   override def left: Expression = interval
   override def right: Expression = num
 
@@ -723,8 +834,9 @@ case class DivideYMInterval(
 case class DivideDTInterval(
     interval: Expression,
     num: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide
-    with NullIntolerant with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with IntervalDivide with Serializable {
+  override def nullIntolerant: Boolean = true
+
   override def left: Expression = interval
   override def right: Expression = num
 
