@@ -119,7 +119,7 @@ class PlanChangeLogger[TreeType <: TreeNode[_]] extends Logging {
 abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
   /** Name for this rule executor, automatically inferred based on class name. */
-  val name: String = {
+  protected def name: String = {
     val className = getClass.getName
     if (className endsWith "$") className.dropRight(1) else className
   }
