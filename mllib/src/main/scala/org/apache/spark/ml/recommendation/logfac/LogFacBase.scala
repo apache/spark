@@ -20,10 +20,8 @@ import java.io.IOException
 import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.internal.{Logging, MDC}
