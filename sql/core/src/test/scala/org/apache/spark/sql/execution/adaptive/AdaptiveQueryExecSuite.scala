@@ -3087,7 +3087,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-50258: Keep the output order after AQE optimization") {
+  test("SPARK-50258: Keep the output column order after AQE optimization") {
     withTable("t") {
       sql("SELECT course, year, earnings FROM courseSales").write.saveAsTable("t")
       val df = sql(
