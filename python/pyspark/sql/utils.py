@@ -449,3 +449,12 @@ def get_lit_sql_str(val: str) -> str:
     # See `sql` definition in `sql/catalyst/src/main/scala/org/apache/spark/
     # sql/catalyst/expressions/literals.scala`
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+class NumpyHelper:
+    @staticmethod
+    def linspace(start: float, stop: float, num: int) -> Sequence[float]:
+        if num == 1:
+            return [float(start)]
+        step = (float(stop) - float(start)) / (num - 1)
+        return [start + step * i for i in range(num)]

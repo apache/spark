@@ -20,7 +20,7 @@
           }
         }, {
           "literal": {
-            "string": "STRUCT\u003cid: BIGINT, a: INT, b: DOUBLE\u003e"
+            "string": "{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"a\",\"type\":\"integer\",\"nullable\":true,\"metadata\":{}},{\"name\":\"b\",\"type\":\"double\",\"nullable\":true,\"metadata\":{}}]}"
           }
         }]
       }

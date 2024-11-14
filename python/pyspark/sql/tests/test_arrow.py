@@ -532,6 +532,45 @@ class ArrowTestsMixin:
         df_pandas = self.spark.createDataFrame(pdf)
         self.assertEqual(df_arrow.collect(), df_pandas.collect())
 
+    def test_createDataFrame_verifySchema(self):
+        data = {"id": [1, 2, 3], "value": [100000000000, 200000000000, 300000000000]}
+        # data.value should fail schema validation when verifySchema is True
+        schema = StructType(
+            [StructField("id", IntegerType(), True), StructField("value", IntegerType(), True)]
+        )
+        expected = [
+            Row(id=1, value=1215752192),
+            Row(id=2, value=-1863462912),
+            Row(id=3, value=-647710720),
+        ]
+        # Arrow table
+        table = pa.table(data)
+        df = self.spark.createDataFrame(table, schema=schema)
+        self.assertEqual(df.collect(), expected)
+
+        with self.assertRaises(Exception):
+            self.spark.createDataFrame(table, schema=schema, verifySchema=True)
+
+        # pandas DataFrame with Arrow optimization
+        pdf = pd.DataFrame(data)
+        df = self.spark.createDataFrame(pdf, schema=schema)
+        # verifySchema defaults to `spark.sql.execution.pandas.convertToArrowArraySafely`,
+        # which is false by default
+        self.assertEqual(df.collect(), expected)
+        with self.assertRaises(Exception):
+            with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": True}):
+                df = self.spark.createDataFrame(pdf, schema=schema)
+        with self.assertRaises(Exception):
+            df = self.spark.createDataFrame(pdf, schema=schema, verifySchema=True)
+
+        # pandas DataFrame without Arrow optimization
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+            pdf = pd.DataFrame(data)
+            with self.assertRaises(Exception):
+                df = self.spark.createDataFrame(pdf, schema=schema)  # verifySchema defaults to True
+            df = self.spark.createDataFrame(pdf, schema=schema, verifySchema=False)
+            self.assertEqual(df.collect(), expected)
+
     def _createDataFrame_toggle(self, data, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
             df_no_arrow = self.spark.createDataFrame(data, schema=schema)

@@ -100,7 +100,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assume(TestUtils.testCommandAvailable("/bin/bash"))
       assume(TestUtils.testCommandAvailable("echo"))
       assume(TestUtils.testCommandAvailable("sed"))
-      val scriptFilePath = getTestResourcePath("test_script.sh")
+      val scriptFilePath = getTestResourcePath("test-script.sh")
       val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
       df.createOrReplaceTempView("script_table")
       val query1 = sql(

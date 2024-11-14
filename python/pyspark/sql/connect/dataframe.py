@@ -86,10 +86,6 @@ from pyspark.sql.connect.functions import builtin as F
 from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.pandas.functions import _validate_pandas_udf  # type: ignore[attr-defined]
 
-try:
-    from pyspark.sql.plot import PySparkPlotAccessor
-except ImportError:
-    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -1788,6 +1784,20 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def scalar(self) -> Column:
+        # TODO(SPARK-50134): Implement this method
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "scalar()"},
+        )
+
+    def exists(self) -> Column:
+        # TODO(SPARK-50134): Implement this method
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "exists()"},
+        )
+
     @property
     def schema(self) -> StructType:
         # Schema caching is correct in most cases. Connect is lazy by nature. This means that
@@ -2166,7 +2176,9 @@ class DataFrame(ParentDataFrame):
         return self._execution_info
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+        from pyspark.sql.plot import PySparkPlotAccessor
+
         return PySparkPlotAccessor(self)
 
 
@@ -2249,6 +2261,10 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+
+    # TODO(SPARK-50134): Support subquery in connect
+    del pyspark.sql.dataframe.DataFrame.scalar.__doc__
+    del pyspark.sql.dataframe.DataFrame.exists.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
