@@ -2217,7 +2217,7 @@ class SparkSession(SparkConversionMixin):
         """
         raise PySparkRuntimeError(
             errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
+            messageParameters={"feature": "SparkSession.interruptAll"},
         )
 
     def interruptTag(self, tag: str) -> List[str]:
@@ -2237,7 +2237,7 @@ class SparkSession(SparkConversionMixin):
         """
         raise PySparkRuntimeError(
             errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
+            messageParameters={"feature": "SparkSession.interruptTag"},
         )
 
     def interruptOperation(self, op_id: str) -> List[str]:
@@ -2257,7 +2257,7 @@ class SparkSession(SparkConversionMixin):
         """
         raise PySparkRuntimeError(
             errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
+            messageParameters={"feature": "SparkSession.interruptOperation"},
         )
 
     def _initialize_tags(self):
