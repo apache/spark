@@ -1548,13 +1548,34 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
-  test("testetst") {
-    val sqlScript = "DECLARE my_map DEFAULT MAP(1,1);"
-    verifySqlScriptResult(sqlScript, Seq.empty[Seq[Row]])
+  // todo: duplicate for non var tests, negative tests
+  test("for statement - enters body once") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (intCol INT, stringCol STRING, doubleCol DOUBLE) using parquet;
+          | INSERT INTO t VALUES (1, 'first', 1.0);
+          | FOR row AS SELECT * FROM t DO
+          |   SELECT row.intCol;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq(Row(1)), // select row.intCol
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
   }
 
-  // todo: complex types in for, better var names in tests
-  test("for test") {
+  test("for statement - enters body with multiple statements multiple times") {
     withTable("t") {
       val sqlScript =
         """
@@ -1562,12 +1583,12 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           | CREATE TABLE t (intCol INT, stringCol STRING, doubleCol DOUBLE) using parquet;
           | INSERT INTO t VALUES (1, 'first', 1.0);
           | INSERT INTO t VALUES (2, 'second', 2.0);
-          | FOR x AS SELECT * FROM t ORDER BY intCol DO
-          |   SELECT x.intCol;
+          | FOR row AS SELECT * FROM t ORDER BY intCol DO
+          |   SELECT row.intCol;
           |   SELECT intCol;
-          |   SELECT x.stringCol;
+          |   SELECT row.stringCol;
           |   SELECT stringCol;
-          |   SELECT x.doubleCol;
+          |   SELECT row.doubleCol;
           |   SELECT doubleCol;
           | END FOR;
           |END
@@ -1577,32 +1598,36 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
         Seq.empty[Row], // insert
-        Seq(Row(1)), // select x.intCol
+        Seq(Row(1)), // select row.intCol
         Seq(Row(1)), // select intCol
-        Seq(Row("first")), // select x.stringCol
+        Seq(Row("first")), // select row.stringCol
         Seq(Row("first")), // select stringCol
-        Seq(Row(1.0)), // select x.doubleCol
+        Seq(Row(1.0)), // select row.doubleCol
         Seq(Row(1.0)), // select doubleCol
-        Seq(Row(2)), // select x.intCol
+        Seq(Row(2)), // select row.intCol
         Seq(Row(2)), // select intCol
-        Seq(Row("second")), // select x.stringCol
+        Seq(Row("second")), // select row.stringCol
         Seq(Row("second")), // select stringCol
-        Seq(Row(2.0)), // select x.doubleCol
-        Seq(Row(2.0)) // select doubleCol
+        Seq(Row(2.0)), // select row.doubleCol
+        Seq(Row(2.0)), // select doubleCol
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
   }
 
-  test("for test complex types") {
+  test("for test - map, struct, array") {
     withTable("t") {
       val sqlScript =
         """
           |BEGIN
-          | CREATE TABLE t (int_column INT, map_column MAP<STRING, MAP<INT, INT>>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
+          | CREATE TABLE t (int_column INT, map_column MAP<STRING, INT>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
           | INSERT INTO t VALUES
-          |  (1, MAP('a', MAP(1, 10)), STRUCT('John', 25), ARRAY('apple', 'banana')),
-          |  (2, MAP('b', MAP(2, 20)), STRUCT('Jane', 30), ARRAY('apple', 'banana'));
+          |  (1, MAP('a', 1), STRUCT('John', 25), ARRAY('apricot', 'quince')),
+          |  (2, MAP('b', 2), STRUCT('Jane', 30), ARRAY('plum', 'pear'));
           | FOR row AS SELECT * FROM t ORDER BY int_column DO
           |   SELECT row.map_column;
           |   SELECT map_column;
@@ -1617,61 +1642,122 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val expected = Seq(
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
-        Seq(Row(Map("a" -> Map(1 -> 10)))), // select row.map_column
-        Seq(Row(Map("a" -> Map(1 -> 10)))), // select map_column
+        Seq(Row(Map("a" -> 1))), // select row.map_column
+        Seq(Row(Map("a" -> 1))), // select map_column
         Seq(Row(Row("John", 25))), // select row.struct_column
         Seq(Row(Row("John", 25))), // select struct_column
-        Seq(Row(Array("apple", "banana"))), // select row.array_column
-        Seq(Row(Array("apple", "banana"))), // select array_column
-        Seq(Row(Map("b" -> Map(2 -> 20)))), // select row.map_column
-        Seq(Row(Map("b" -> Map(2 -> 20)))), // select map_column
+        Seq(Row(Array("apricot", "quince"))), // select row.array_column
+        Seq(Row(Array("apricot", "quince"))), // select array_column
+        Seq(Row(Map("b" -> 2))), // select row.map_column
+        Seq(Row(Map("b" -> 2))), // select map_column
         Seq(Row(Row("Jane", 30))), // select row.struct_column
         Seq(Row(Row("Jane", 30))), // select struct_column
-        Seq(Row(Array("apple", "banana"))), // select row.array_column
-        Seq(Row(Array("apple", "banana"))) // select array_column
+        Seq(Row(Array("plum", "pear"))), // select row.array_column
+        Seq(Row(Array("plum", "pear"))), // select array_column
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
   }
 
-  //  test("for test complex types") {
-  //    withTable("t") {
-  //      val sqlScript =
-  //        """
-  //          |BEGIN
-  //          | CREATE TABLE t (int_column INT, map_column MAP<STRING, INT>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
-  //          | INSERT INTO t VALUES
-  //          |  (1, MAP('a', 1, 'b', 2), STRUCT('John', 25), ARRAY('apple', 'banana')),
-  //          |  (2, MAP('c', 3, 'd', 4), STRUCT('Jane', 30), ARRAY('orange', 'grape')),
-  //          |  (3, MAP('e', 5, 'f', 6), STRUCT('Bob', 35), ARRAY('pear', 'peach'));
-  //          | FOR row AS SELECT * FROM t ORDER BY int_column DO
-  //          |   SELECT row.map_column;
-  //          |   SELECT row.struct_column;
-  //          |   SELECT row.array_column;
-  //          | END FOR;
-  //          |END
-  //          |""".stripMargin
-  //
-  //      val expected = Seq(
-  //        Seq.empty[Row], // create table
-  //        Seq.empty[Row], // insert
-  //        Seq.empty[Row], // insert
-  //        Seq.empty[Row], // declare x
-  //        Seq.empty[Row], // set x to row 0
-  //        Seq(Row(1)), // select intCol
-  //        Seq(Row("first")), // select stringCol
-  //        Seq(Row(1.0)), // select doubleCol
-  //        Seq.empty[Row], // drop x
-  //        Seq.empty[Row], // declare x
-  //        Seq.empty[Row], // set x to row 1
-  //        Seq(Row(2)), // select intCol
-  //        Seq(Row("second")), // select stringCol
-  //        Seq(Row(2.0)), // select doubleCol
-  //        Seq.empty[Row] // drop x
-  //      )
-  //      verifySqlScriptResult(sqlScript, expected)
-  //    }
-  //  }
+  test("for test - nested struct") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t
+          | (int_column INT, struct_column STRUCT<num: INT, struct2: STRUCT<struct3: STRUCT<name: STRING>>>);
+          | INSERT INTO t VALUES
+          |  (1, STRUCT(1, STRUCT(STRUCT("one")))),
+          |  (2, STRUCT(2, STRUCT(STRUCT("two"))));
+          | FOR row AS SELECT * FROM t ORDER BY int_column DO
+          |   SELECT row.struct_column;
+          |   SELECT struct_column;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq(Row(Row(1, Row(Row("one"))))), // select row.struct_column
+        Seq(Row(Row(1, Row(Row("one"))))), // select struct_column
+        Seq(Row(Row(2, Row(Row("two"))))), // select row.struct_column
+        Seq(Row(Row(2, Row(Row("two"))))), // select struct_column
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("for test - nested map") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t (int_column INT, map_column MAP<STRING, MAP<INT, MAP<BOOLEAN, INT>>>);
+          | INSERT INTO t VALUES
+          |  (1, MAP('a', MAP(1, MAP(false, 10)))),
+          |  (2, MAP('b', MAP(2, MAP(true, 20))));
+          | FOR row AS SELECT * FROM t ORDER BY int_column DO
+          |   SELECT row.map_column;
+          |   SELECT map_column;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq(Row(Map("a" -> Map(1 -> Map(false -> 10))))), // select row.map_column
+        Seq(Row(Map("a" -> Map(1 -> Map(false -> 10))))), // select map_column
+        Seq(Row(Map("b" -> Map(2 -> Map(true -> 20))))), // select row.map_column
+        Seq(Row(Map("b" -> Map(2 -> Map(true -> 20))))), // select map_column
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("for test - nested array") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | CREATE TABLE t
+          | (int_column INT, array_column ARRAY<ARRAY<ARRAY<INT>>>);
+          | INSERT INTO t VALUES
+          |  (1, ARRAY(ARRAY(ARRAY(1, 2), ARRAY(3, 4)), ARRAY(ARRAY(5, 6)))),
+          |  (2, ARRAY(ARRAY(ARRAY(7, 8), ARRAY(9, 10)), ARRAY(ARRAY(11, 12))));
+          | FOR row AS SELECT * FROM t ORDER BY int_column DO
+          |   SELECT row.array_column;
+          |   SELECT array_column;
+          | END FOR;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq(Row(Seq(Seq(Seq(1, 2), Seq(3, 4)), Seq(Seq(5, 6))))), // row.array_column
+        Seq(Row(Seq(Seq(Seq(1, 2), Seq(3, 4)), Seq(Seq(5, 6))))), // array_column
+        Seq(Row(Array(Seq(Seq(7, 8), Seq(9, 10)), Seq(Seq(11, 12))))), // row.array_column
+        Seq(Row(Array(Seq(Seq(7, 8), Seq(9, 10)), Seq(Seq(11, 12))))), // array_column
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
 
   test("for test empty result") {
     withTable("t") {
@@ -1679,8 +1765,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         """
           |BEGIN
           | CREATE TABLE t (intCol INT) using parquet;
-          | FOR x AS SELECT * FROM t ORDER BY intCol DO
-          |   SELECT x.intCol;
+          | FOR row AS SELECT * FROM t ORDER BY intCol DO
+          |   SELECT row.intCol;
           | END FOR;
           |END
           |""".stripMargin
@@ -1698,15 +1784,13 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         """
           |BEGIN
           | CREATE TABLE t (intCol INT, stringCol STRING) using parquet;
-          | INSERT INTO t VALUES (1, 'first');
-          | INSERT INTO t VALUES (2, 'second');
-          | INSERT INTO t VALUES (3, 'third');
-          | INSERT INTO t VALUES (4, 'fourth');
+          | INSERT INTO t VALUES (1, 'first'), (2, 'second'), (3, 'third'), (4, 'fourth');
           |
           | lbl: FOR x AS SELECT * FROM t ORDER BY intCol DO
           |   IF x.intCol = 2 THEN
           |     ITERATE lbl;
           |   END IF;
+          |   SELECT stringCol;
           |   SELECT x.stringCol;
           | END FOR;
           |END
@@ -1715,12 +1799,15 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val expected = Seq(
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // insert
         Seq(Row("first")), // select stringCol
+        Seq(Row("first")), // select x.stringCol
         Seq(Row("third")), // select stringCol
-        Seq(Row("fourth")) // select stringCol
+        Seq(Row("third")), // select x.stringCol
+        Seq(Row("fourth")), // select stringCol
+        Seq(Row("fourth")), // select x.stringCol
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1732,15 +1819,13 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         """
           |BEGIN
           | CREATE TABLE t (intCol INT, stringCol STRING) using parquet;
-          | INSERT INTO t VALUES (1, 'first');
-          | INSERT INTO t VALUES (2, 'second');
-          | INSERT INTO t VALUES (3, 'third');
-          | INSERT INTO t VALUES (4, 'fourth');
+          | INSERT INTO t VALUES (1, 'first'), (2, 'second'), (3, 'third'), (4, 'fourth');
           |
           | lbl: FOR x AS SELECT * FROM t ORDER BY intCol DO
           |   IF x.intCol = 3 THEN
           |     LEAVE lbl;
           |   END IF;
+          |   SELECT stringCol;
           |   SELECT x.stringCol;
           | END FOR;
           |END
@@ -1749,11 +1834,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val expected = Seq(
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // insert
         Seq(Row("first")), // select stringCol
-        Seq(Row("second")) // select stringCol
+        Seq(Row("first")), // select x.stringCol
+        Seq(Row("second")), // select stringCol
+        Seq(Row("second")) // select x.stringCol
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1764,58 +1848,35 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | DECLARE i = 0;
+          | DECLARE cnt = 0;
           | CREATE TABLE t (intCol INT) using parquet;
           | INSERT INTO t VALUES (0);
-          | WHILE i < 2 DO
-          |   SET i = i + 1;
+          | WHILE cnt < 2 DO
+          |   SET cnt = cnt + 1;
           |   FOR x AS SELECT * FROM t ORDER BY intCol DO
           |     SELECT x.intCol;
           |   END FOR;
-          |   INSERT INTO t VALUES (i);
+          |   INSERT INTO t VALUES (cnt);
           | END WHILE;
           |END
           |""".stripMargin
 
       val expected = Seq(
-        Seq.empty[Row], // declare i
+        Seq.empty[Row], // declare cnt
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
-        Seq.empty[Row], // set i
+        Seq.empty[Row], // set cnt
         Seq(Row(0)), // select intCol
         Seq.empty[Row], // insert
-        Seq.empty[Row], // set i
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // set cnt
         Seq(Row(0)), // select intCol
         Seq(Row(1)), // select intCol
         Seq.empty[Row], // insert
-        Seq.empty[Row] // drop i
-      )
-      verifySqlScriptResult(sqlScript, expected)
-    }
-  }
-
-  test("for test no variable") {
-    withTable("t") {
-      val sqlScript =
-        """
-          |BEGIN
-          | CREATE TABLE t (intCol INT, stringCol STRING, doubleCol DOUBLE) using parquet;
-          | INSERT INTO t VALUES (1, 'first', 1.0);
-          | INSERT INTO t VALUES (2, 'second', 2.0);
-          | FOR SELECT * FROM t ORDER BY intCol DO
-          |   SELECT intCol;
-          |   SELECT stringCol;
-          |   SELECT doubleCol;
-          | END FOR;
-          |END
-          |""".stripMargin
-
-      val expected = Seq(
-        Seq.empty[Row], // create table
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // insert
-        Seq(Row(1)), // select 1
-        Seq(Row(1)), // select 1
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop cnt
       )
       verifySqlScriptResult(sqlScript, expected)
     }

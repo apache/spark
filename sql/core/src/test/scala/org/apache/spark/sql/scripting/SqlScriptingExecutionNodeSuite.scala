@@ -118,6 +118,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case leaveStmt: LeaveStatementExec => leaveStmt.label
       case iterateStmt: IterateStatementExec => iterateStmt.label
       case forStmt: ForStatementExec => forStmt.label.get
+      case _: SingleStatementExec => "SingleStatementExec"
       case _ => fail("Unexpected statement type")
     }
 
@@ -717,7 +718,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
-      "body"
+      "body",
+      "SingleStatementExec", // drop local var
+      "SingleStatementExec" // drop local var
     ))
   }
 
@@ -738,7 +741,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "statement1",
       "statement2",
       "statement1",
-      "statement2"
+      "statement2",
+      "SingleStatementExec", // drop local var
+      "SingleStatementExec", // drop local var
     ))
   }
 
@@ -778,8 +783,14 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     assert(statements === Seq(
       "body",
       "body",
+      "SingleStatementExec", // drop inner local var
+      "SingleStatementExec", // drop inner local var
       "body",
-      "body"
+      "body",
+      "SingleStatementExec", // drop inner local var
+      "SingleStatementExec", // drop inner local var
+      "SingleStatementExec", // drop outer local var
+      "SingleStatementExec", // drop outer local var
     ))
   }
 
@@ -794,7 +805,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("body"))
+    assert(statements === Seq(
+      "body",
+      "SingleStatementExec", // drop local var
+    ))
   }
 
   test("for statement no variable - enters body with multiple statements multiple times") {
@@ -810,7 +824,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("statement1", "statement2", "statement1", "statement2"))
+    assert(statements === Seq(
+      "statement1", "statement2", "statement1", "statement2",
+      "SingleStatementExec", // drop local var
+    ))
   }
 
   test("for statement no variable - empty result") {
@@ -846,7 +863,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("body", "body", "body", "body"))
+    assert(statements === Seq(
+      "body", "body",
+      "SingleStatementExec", // drop inner local var
+      "body", "body",
+      "SingleStatementExec", // drop inner local var
+      "SingleStatementExec", // drop outer local var
+    ))
   }
 
   test("for statement - iterate") {
@@ -867,7 +890,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "statement1",
       "lbl1",
       "statement1",
-      "lbl1"
+      "lbl1",
+      "SingleStatementExec", // drop local var
+      "SingleStatementExec", // drop local var
     ))
   }
 
@@ -897,6 +922,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         query = TestForStatementQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(
+          TestLeafStatement("outer_body"),
           new ForStatementExec(
             query = TestForStatementQuery(2, "intCol1", "query2"),
             variableName = Some("y"),
@@ -914,10 +940,14 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
+      "outer_body",
       "body1",
       "lbl1",
+      "outer_body",
       "body1",
-      "lbl1"
+      "lbl1",
+      "SingleStatementExec", // drop local var
+      "SingleStatementExec", // drop local var
     ))
   }
 
@@ -963,7 +993,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("statement1", "lbl1", "statement1", "lbl1"))
+    assert(statements === Seq(
+      "statement1", "lbl1", "statement1", "lbl1",
+      "SingleStatementExec", // drop local var
+    ))
   }
 
   test("for statement no variable - leave") {
@@ -989,6 +1022,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         query = TestForStatementQuery(2, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(
+          TestLeafStatement("outer_body"),
           new ForStatementExec(
             query = TestForStatementQuery(2, "intCol1", "query2"),
             variableName = None,
@@ -1005,7 +1039,10 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq("body1", "lbl1", "body1", "lbl1"))
+    assert(statements === Seq(
+      "outer_body", "body1", "lbl1", "outer_body", "body1", "lbl1",
+      "SingleStatementExec", // drop local var
+    ))
   }
 
   test("for statement no variable - nested - leave outer loop") {
