@@ -1522,6 +1522,20 @@ class Column:
         ...
 
     @dispatch_col_method
+    def outer(self) -> "Column":
+        """
+        Mark this column reference as an outer reference for subqueries.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        pyspark.sql.dataframe.DataFrame.scalar
+        pyspark.sql.dataframe.DataFrame.exists
+        """
+        ...
+
+    @dispatch_col_method
     def __nonzero__(self) -> None:
         ...
 

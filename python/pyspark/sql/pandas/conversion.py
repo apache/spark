@@ -27,6 +27,7 @@ from typing import (
 )
 from warnings import warn
 
+from pyspark._globals import _NoValue, _NoValueType
 from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.loose_version import LooseVersion
 from pyspark.util import _load_from_socket
@@ -352,7 +353,7 @@ class SparkConversionMixin:
         self,
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> "DataFrame":
         ...
 
@@ -361,7 +362,7 @@ class SparkConversionMixin:
         self,
         data: "pa.Table",
         schema: Union[StructType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> "DataFrame":
         ...
 
@@ -370,7 +371,7 @@ class SparkConversionMixin:
         data: Union["PandasDataFrameLike", "pa.Table"],
         schema: Optional[Union[StructType, List[str]]] = None,
         samplingRatio: Optional[float] = None,
-        verifySchema: bool = True,
+        verifySchema: Union[_NoValueType, bool] = _NoValue,
     ) -> "DataFrame":
         from pyspark.sql import SparkSession
 
@@ -392,7 +393,7 @@ class SparkConversionMixin:
             if schema is None:
                 schema = data.schema.names
 
-            return self._create_from_arrow_table(data, schema, timezone)
+            return self._create_from_arrow_table(data, schema, timezone, verifySchema)
 
         # `data` is a PandasDataFrameLike object
         from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -405,7 +406,7 @@ class SparkConversionMixin:
 
         if self._jconf.arrowPySparkEnabled() and len(data) > 0:
             try:
-                return self._create_from_pandas_with_arrow(data, schema, timezone)
+                return self._create_from_pandas_with_arrow(data, schema, timezone, verifySchema)
             except Exception as e:
                 if self._jconf.arrowPySparkFallbackEnabled():
                     msg = (
@@ -520,7 +521,7 @@ class SparkConversionMixin:
                                 else:
                                     return (
                                         pd.Timestamp(value)
-                                        .tz_localize(timezone, ambiguous=False)  # type: ignore
+                                        .tz_localize(timezone, ambiguous=False)
                                         .tz_convert(_get_local_timezone())
                                         .tz_localize(None)
                                         .to_pydatetime()
@@ -624,7 +625,11 @@ class SparkConversionMixin:
         return np.dtype(record_type_list) if has_rec_fix else None
 
     def _create_from_pandas_with_arrow(
-        self, pdf: "PandasDataFrameLike", schema: Union[StructType, List[str]], timezone: str
+        self,
+        pdf: "PandasDataFrameLike",
+        schema: Union[StructType, List[str]],
+        timezone: str,
+        verifySchema: Union[_NoValueType, bool],
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
@@ -656,6 +661,10 @@ class SparkConversionMixin:
             is_datetime64_dtype,
         )
         import pyarrow as pa
+
+        if verifySchema is _NoValue:
+            # (With Arrow optimization) createDataFrame with `pandas.DataFrame`
+            verifySchema = self._jconf.arrowSafeTypeConversion()
 
         infer_pandas_dict_as_map = (
             str(self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower() == "true"
@@ -725,8 +734,7 @@ class SparkConversionMixin:
 
         jsparkSession = self._jsparkSession
 
-        safecheck = self._jconf.arrowSafeTypeConversion()
-        ser = ArrowStreamPandasSerializer(timezone, safecheck)
+        ser = ArrowStreamPandasSerializer(timezone, verifySchema)
 
         @no_type_check
         def reader_func(temp_filename):
@@ -745,7 +753,11 @@ class SparkConversionMixin:
         return df
 
     def _create_from_arrow_table(
-        self, table: "pa.Table", schema: Union[StructType, List[str]], timezone: str
+        self,
+        table: "pa.Table",
+        schema: Union[StructType, List[str]],
+        timezone: str,
+        verifySchema: Union[_NoValueType, bool],
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pyarrow.Table by slicing it into partitions then
@@ -767,6 +779,10 @@ class SparkConversionMixin:
 
         require_minimum_pyarrow_version()
 
+        if verifySchema is _NoValue:
+            # createDataFrame with `pyarrow.Table`
+            verifySchema = False
+
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
         # Create the Spark schema from list of names passed in with Arrow types
@@ -786,7 +802,8 @@ class SparkConversionMixin:
             schema = from_arrow_schema(table.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
         table = _check_arrow_table_timestamps_localize(table, schema, True, timezone).cast(
-            to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True)
+            to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True),
+            safe=verifySchema,
         )
 
         # Chunk the Arrow Table into RecordBatches

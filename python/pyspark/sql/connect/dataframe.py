@@ -1784,6 +1784,20 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def scalar(self) -> Column:
+        # TODO(SPARK-50134): Implement this method
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "scalar()"},
+        )
+
+    def exists(self) -> Column:
+        # TODO(SPARK-50134): Implement this method
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "exists()"},
+        )
+
     @property
     def schema(self) -> StructType:
         # Schema caching is correct in most cases. Connect is lazy by nature. This means that
@@ -2247,6 +2261,10 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+
+    # TODO(SPARK-50134): Support subquery in connect
+    del pyspark.sql.dataframe.DataFrame.scalar.__doc__
+    del pyspark.sql.dataframe.DataFrame.exists.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")
