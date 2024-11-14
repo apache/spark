@@ -69,7 +69,7 @@ case class AtomicReplaceTableExec(
 
   override val metrics: Map[String, SQLMetric] =
     catalog.supportedCommitMetrics().asScala.map { metric =>
-      metric.name() -> SQLMetrics.createMetric(sparkContext, metric.name())
+      metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
     }.toMap
 
   override protected def run(): Seq[InternalRow] = {
