@@ -2216,16 +2216,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         numArgs: Int,
         u: UnresolvedFunction): Expression = {
       func match {
-        case owg: InverseDistributionFunction if u.isDistinct =>
-          throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
-            owg.prettyName)
-        case owg: InverseDistributionFunction
-          if !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
-          throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
-            owg.prettyName)
-        case owg: InverseDistributionFunction
-          if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
-          throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+        case owg: SupportsOrderingWithinGroup if !owg.isDistinctSupported && u.isDistinct =>
+            throw QueryCompilationErrors.distinctWithOrderingFunctionUnsupportedError(
+              owg.prettyName)
+        case owg: SupportsOrderingWithinGroup
+          if owg.isOrderingMandatory && !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
+            throw QueryCompilationErrors.functionMissingWithinGroupError(owg.prettyName)
+        case owg: Mode if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
+          // mode(expr1) within group (order by expr2) is not supported
+          throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
             owg.prettyName, 0, u.orderingWithinGroup.length)
         case f
           if !f.isInstanceOf[SupportsOrderingWithinGroup] && u.orderingWithinGroup.nonEmpty =>
@@ -2277,7 +2276,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case agg: AggregateFunction =>
           // Note: PythonUDAF does not support these advanced clauses.
           if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
-          // After parse, the inverse distribution functions not set the ordering within group yet.
+          // After parse, the functions not set the ordering within group yet.
           val newAgg = agg match {
             case owg: SupportsOrderingWithinGroup
               if !owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>

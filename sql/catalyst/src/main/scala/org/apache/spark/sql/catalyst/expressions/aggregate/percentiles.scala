@@ -360,7 +360,7 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   extends AggregateFunction
   with RuntimeReplaceableAggregate
   with ImplicitCastInputTypes
-  with InverseDistributionFunction
+  with SupportsOrderingWithinGroup
   with BinaryLike[Expression] {
   private lazy val percentile = new Percentile(left, right, reverse)
   override lazy val replacement: Expression = percentile
@@ -378,7 +378,7 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
 
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
-      throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+      throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
         nodeName, 1, orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
@@ -390,6 +390,10 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PercentileCont =
     this.copy(left = newLeft, right = newRight)
+
+  override def orderingFilled: Boolean = left != UnresolvedWithinGroup
+  override def isOrderingMandatory: Boolean = true
+  override def isDistinctSupported: Boolean = false
 }
 
 /**
@@ -407,7 +411,7 @@ case class PercentileDisc(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
     legacyCalculation: Boolean = SQLConf.get.getConf(SQLConf.LEGACY_PERCENTILE_DISC_CALCULATION))
-  extends PercentileBase with InverseDistributionFunction with BinaryLike[Expression] {
+  extends PercentileBase with SupportsOrderingWithinGroup with BinaryLike[Expression] {
 
   val frequencyExpression: Expression = Literal(1L)
 
@@ -432,7 +436,7 @@ case class PercentileDisc(
 
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
-      throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+      throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
         nodeName, 1, orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
@@ -467,6 +471,10 @@ case class PercentileDisc(
       toDoubleValue(higherKey)
     }
   }
+
+  override def orderingFilled: Boolean = left != UnresolvedWithinGroup
+  override def isOrderingMandatory: Boolean = true
+  override def isDistinctSupported: Boolean = false
 }
 
 // scalastyle:off line.size.limit

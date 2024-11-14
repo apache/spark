@@ -323,6 +323,8 @@ case class ListAgg(
   with SupportsOrderingWithinGroup
   with ImplicitCastInputTypes {
 
+  override def isOrderingMandatory: Boolean = false
+  override def isDistinctSupported: Boolean = true
   override protected lazy val bufferElementType: DataType = {
     if (noNeedSaveOrderValue) {
       child.dataType

@@ -37,7 +37,7 @@ case class Mode(
     inputAggBufferOffset: Int = 0,
     reverseOpt: Option[Boolean] = None)
   extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
-    with InverseDistributionFunction with UnaryLike[Expression] {
+    with SupportsOrderingWithinGroup with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -183,6 +183,8 @@ case class Mode(
   }
 
   override def orderingFilled: Boolean = child != UnresolvedWithinGroup
+  override def isOrderingMandatory: Boolean = true
+  override def isDistinctSupported: Boolean = false
 
   assert(orderingFilled || (!orderingFilled && reverseOpt.isEmpty))
 
@@ -190,7 +192,7 @@ case class Mode(
     child match {
       case UnresolvedWithinGroup =>
         if (orderingWithinGroup.length != 1) {
-          throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+          throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
             nodeName, 1, orderingWithinGroup.length)
         }
         orderingWithinGroup.head match {

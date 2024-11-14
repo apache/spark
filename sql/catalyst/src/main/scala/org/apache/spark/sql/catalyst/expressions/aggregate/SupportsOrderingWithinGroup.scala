@@ -21,10 +21,27 @@ import org.apache.spark.sql.catalyst.expressions.SortOrder
 
 /**
  * The trait used to set the [[SortOrder]] for supporting functions.
- * By default ordering is optional.
  */
 trait SupportsOrderingWithinGroup {
   def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction
-  /** Indicator that ordering was set */
-  def orderingFilled: Boolean = false
+
+  /** Indicator that ordering was set. */
+  def orderingFilled: Boolean
+
+  /**
+   * Tells Analyzer that WITHIN GROUP (ORDER BY ...) is mandatory for function.
+   *
+   * @see [[QueryCompilationErrors.functionMissingWithinGroupError]]
+   * @see [[org.apache.spark.sql.catalyst.analysis.Analyzer]]
+   */
+  def isOrderingMandatory: Boolean
+
+  /**
+   * Tells Analyzer that DISTINCT is supported.
+   * The DISTINCT can conflict with order so some functions can ban it.
+   *
+   * @see [[QueryCompilationErrors.functionMissingWithinGroupError]]
+   * @see [[org.apache.spark.sql.catalyst.analysis.Analyzer]]
+   */
+  def isDistinctSupported: Boolean
 }
