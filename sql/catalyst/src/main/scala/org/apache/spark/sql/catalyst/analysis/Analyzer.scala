@@ -313,7 +313,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveProcedures ::
       BindProcedures ::
       ResolveTableSpec ::
-      ResolveDefaultStringType ::
+      new ResolveDefaultStringType(replaceWithTemp = true) ::
+      new ResolveDefaultStringType(replaceWithTemp = false) ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::

@@ -3315,7 +3315,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal.create(createString(ctx), conf.defaultStringType)
+    Literal.create(createString(ctx), StringType)
   }
 
   /**
