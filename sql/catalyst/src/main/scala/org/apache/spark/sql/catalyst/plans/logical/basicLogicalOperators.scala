@@ -929,7 +929,8 @@ trait CTEInChildren extends LogicalPlan {
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    forPipeSQL: Boolean) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =

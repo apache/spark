@@ -101,13 +101,16 @@ object CurrentOrigin {
    * invoke other APIs) only the first `withOrigin` is captured because that is closer to the user
    * code.
    *
+   * `withOrigin` has non-trivial performance overhead, since it collects a stack trace. This
+   * feature can be disabled by setting "spark.sql.dataFrameQueryContext.enabled" to "false".
+   *
    * @param f
    *   The function that can use the origin.
    * @return
    *   The result of `f`.
    */
   private[sql] def withOrigin[T](f: => T): T = {
-    if (CurrentOrigin.get.stackTrace.isDefined) {
+    if (CurrentOrigin.get.stackTrace.isDefined || !SqlApiConf.get.dataFrameQueryContextEnabled) {
       f
     } else {
       val st = Thread.currentThread().getStackTrace

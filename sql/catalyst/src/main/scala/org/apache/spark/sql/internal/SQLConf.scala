@@ -5209,6 +5209,15 @@ object SQLConf {
     .checkValue(_ > 0, "The number of stack traces in the DataFrame context must be positive.")
     .createWithDefault(1)
 
+  val DATA_FRAME_QUERY_CONTEXT_ENABLED = buildConf("spark.sql.dataFrameQueryContext.enabled")
+    .internal()
+    .doc(
+      "Enable the DataFrame query context. This feature is enabled by default, but has a " +
+      "non-trivial performance overhead because of the stack trace collection.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val LEGACY_JAVA_CHARSETS = buildConf("spark.sql.legacy.javaCharsets")
     .internal()
     .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
@@ -6231,6 +6240,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def stackTracesInDataFrameContext: Int =
     getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
+
+  def dataFrameQueryContextEnabled: Boolean = getConf(SQLConf.DATA_FRAME_QUERY_CONTEXT_ENABLED)
 
   override def legacyAllowUntypedScalaUDFs: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)

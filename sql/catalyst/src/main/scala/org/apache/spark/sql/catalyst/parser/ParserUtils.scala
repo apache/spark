@@ -19,12 +19,17 @@ package org.apache.spark.sql.catalyst.parser
 import java.util
 import java.util.Locale
 
+import scala.collection.mutable.Set
+
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
 
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser.{BeginLabelContext, EndLabelContext}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.SparkParserUtils
-import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin
+import org.apache.spark.sql.errors.{QueryParsingErrors, SqlScriptingErrors}
 
 /**
  * A collection of utility methods for use during the parsing process.
@@ -132,5 +137,82 @@ object ParserUtils extends SparkParserUtils {
     }
     concatTerms(ctx)
     sb.toString()
+  }
+}
+
+class SqlScriptingLabelContext {
+  /** Set to keep track of labels seen so far */
+  private val seenLabels = Set[String]()
+
+  /**
+   * Check if the beginLabelCtx and endLabelCtx match.
+   * If the labels are defined, they must follow rules:
+   *  - If both labels exist, they must match.
+   *  - Begin label must exist if end label exists.
+   */
+  private def checkLabels(
+      beginLabelCtx: Option[BeginLabelContext],
+      endLabelCtx: Option[EndLabelContext]) : Unit = {
+    (beginLabelCtx, endLabelCtx) match {
+      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
+        if bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
+            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
+        withOrigin(bl) {
+          throw SqlScriptingErrors.labelsMismatch(
+            CurrentOrigin.get,
+            bl.multipartIdentifier().getText,
+            el.multipartIdentifier().getText)
+        }
+      case (None, Some(el: EndLabelContext)) =>
+        withOrigin(el) {
+          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
+            CurrentOrigin.get, el.multipartIdentifier().getText)
+        }
+      case _ =>
+    }
+  }
+
+  /** Check if the label is defined. */
+  private def isLabelDefined(beginLabelCtx: Option[BeginLabelContext]): Boolean = {
+    beginLabelCtx.map(_.multipartIdentifier().getText).isDefined
+  }
+
+  /**
+   * Enter a labeled scope and return the label text.
+   * If the label is defined, it will be returned and added to seenLabels.
+   * If the label is not defined, a random UUID will be returned.
+   */
+  def enterLabeledScope(
+      beginLabelCtx: Option[BeginLabelContext],
+      endLabelCtx: Option[EndLabelContext]): String = {
+
+    // Check if this label already exists in parent scopes.
+    checkLabels(beginLabelCtx, endLabelCtx)
+
+    // Get label text and add it to seenLabels.
+    val labelText = if (isLabelDefined(beginLabelCtx)) {
+      val txt = beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT)
+      if (seenLabels.contains(txt)) {
+        withOrigin(beginLabelCtx.get) {
+          throw SqlScriptingErrors.duplicateLabels(CurrentOrigin.get, txt)
+        }
+      }
+      seenLabels.add(beginLabelCtx.get.multipartIdentifier().getText)
+      txt
+    } else {
+      // Do not add the label to the seenLabels set if it is not defined.
+      java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)
+    }
+    labelText
+  }
+
+  /**
+   * Exit a labeled scope.
+   * If the label is defined, it will be removed from seenLabels.
+   */
+  def exitLabeledScope(beginLabelCtx: Option[BeginLabelContext]): Unit = {
+    if (isLabelDefined(beginLabelCtx)) {
+      seenLabels.remove(beginLabelCtx.get.multipartIdentifier().getText.toLowerCase(Locale.ROOT))
+    }
   }
 }
