@@ -22,8 +22,7 @@ import org.json4s.JsonAST.{JString, JValue}
 import org.apache.spark.annotation.Experimental
 
 @Experimental
-case class CharType(length: Int)
-  extends StringType(0, Some(length)) {
+case class CharType(length: Int) extends StringType(0, Some(length)) {
   require(length >= 0, "The length of char type cannot be negative.")
 
   override def equals(o: Any): Boolean = o match {
