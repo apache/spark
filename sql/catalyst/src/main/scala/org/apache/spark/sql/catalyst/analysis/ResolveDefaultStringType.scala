@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1DDLCommand, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
@@ -60,7 +60,7 @@ class ResolveDefaultStringType(replaceWithTemp: Boolean) extends Rule[LogicalPla
   }
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
-    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs | _: V1DDLCommand => true
+    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
     case _ => false
   }
 
