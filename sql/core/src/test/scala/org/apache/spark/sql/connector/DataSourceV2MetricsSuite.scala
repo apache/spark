@@ -19,16 +19,29 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import scala.jdk.CollectionConverters.MapHasAsJava
+import scala.jdk.CollectionConverters.IterableHasAsJava
 
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagedTableWithCommitMetrics, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.execution.CommandResultExec
 
 class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog {
 
-  override def supportsCommitMetrics(): Boolean = true
+  override def supportedCommitMetrics(): java.lang.Iterable[CustomMetric] = java.util.List.of(
+    new CustomSumMetric {
+      override def name(): String = "numFiles"
+      override def description(): String = "number of written files"
+    },
+    new CustomSumMetric {
+      override def name(): String = "numOutputRows"
+      override def description(): String = "number of output rows"
+    },
+    new CustomSumMetric {
+      override def name(): String = "numOutputBytes"
+      override def description(): String = "written output"
+    })
 
   private class TestStagedTableWithMetric(
       ident: Identifier,
@@ -39,9 +52,8 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
       tables.put(ident, delegateTable)
     }
 
-    override def getCommitMetrics: util.Map[String, java.lang.Long] = {
-      StagingInMemoryTableCatalogWithMetrics.testMetrics
-        .asInstanceOf[Map[String, java.lang.Long]].asJava
+    override def getCommitMetrics: java.lang.Iterable[CustomTaskMetric] = {
+      StagingInMemoryTableCatalogWithMetrics.testMetrics.asJava
     }
   }
 
@@ -73,10 +85,19 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
 
 object StagingInMemoryTableCatalogWithMetrics {
 
-  val testMetrics: Map[String, Long] = Map(
-    "numFiles" -> 1337,
-    "numOutputRows" -> 1338,
-    "numOutputBytes" -> 1339)
+  val testMetrics: Seq[CustomTaskMetric] = Seq(
+    new CustomTaskMetric {
+      override def name(): String = "numFiles"
+      override def value(): Long = 1337
+    },
+    new CustomTaskMetric {
+      override def name(): String = "numOutputRows"
+      override def value(): Long = 1338
+    },
+    new CustomTaskMetric {
+      override def name(): String = "numOutputBytes"
+      override def value(): Long = 1339
+    })
 }
 
 class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
@@ -126,8 +147,8 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
     }
 
     assert(metrics.size === StagingInMemoryTableCatalogWithMetrics.testMetrics.size)
-    StagingInMemoryTableCatalogWithMetrics.testMetrics.foreach { case (k, v) =>
-      assert(metrics(k).value === v)
+    StagingInMemoryTableCatalogWithMetrics.testMetrics.foreach { case customTaskMetric =>
+      assert(metrics(customTaskMetric.name()).value === customTaskMetric.value())
     }
   }
 }

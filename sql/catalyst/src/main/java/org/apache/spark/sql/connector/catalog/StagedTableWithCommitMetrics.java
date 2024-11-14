@@ -17,21 +17,18 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.Map;
-
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 
 /**
- * An extension of the {@link StagedTable} interface that provides metrics after a commit.
+ * An extension of the {@link StagedTable} interface that allows to retrieve metrics after a commit.
  */
 @Evolving
 public interface StagedTableWithCommitMetrics extends StagedTable {
 
     /**
-     * Returns a map of commit metric values after a successful commit. Throws otherwise.
-     *
-     * @return a {@link Map} of commit metric values. The keys are the commit names, the values
-     * are the metrics values of type Long.
+     * @return a {@link java.lang.Iterable} of commit metric values. Throws if the table has not
+     * been committed yet.
      */
-    Map<String, Long> getCommitMetrics() throws AssertionError;
+    Iterable<CustomTaskMetric> getCommitMetrics() throws AssertionError;
 }

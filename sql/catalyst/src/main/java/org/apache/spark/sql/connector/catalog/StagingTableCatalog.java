@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Collections;
 import java.util.Map;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
@@ -202,8 +204,7 @@ public interface StagingTableCatalog extends TableCatalog {
   }
 
   /**
-   * @return True if the catalog returns instances of type {@link StagedTableWithCommitMetrics}
-   *         which support to retrieve commit metrics after a successful commit.
+   * @return A {@link java.lang.Iterable} of commit metrics that are supported by the catalog.
    */
-  default boolean supportsCommitMetrics() { return false; }
+  default Iterable<CustomMetric> supportedCommitMetrics() { return Collections.emptyList(); }
 }

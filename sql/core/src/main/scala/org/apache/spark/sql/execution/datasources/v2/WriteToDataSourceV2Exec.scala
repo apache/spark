@@ -609,10 +609,10 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
 
   protected def commitMetrics(tableCatalog: TableCatalog): Map[String, SQLMetric] = {
     tableCatalog match {
-      case st: StagingTableCatalog if st.supportsCommitMetrics() =>
-        Map("numFiles" -> SQLMetrics.createMetric(sparkContext, "number of written files"),
-            "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-            "numOutputBytes" -> SQLMetrics.createMetric(sparkContext, "written output"))
+      case st: StagingTableCatalog =>
+        st.supportedCommitMetrics().asScala.map {
+          metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
+        }.toMap
       case _ => Map.empty
     }
   }
@@ -639,9 +639,8 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
         case st: StagedTableWithCommitMetrics =>
           st.commitStagedChanges()
 
-          st.getCommitMetrics.forEach {
-            case (name: String, value: java.lang.Long) =>
-              metrics.get(name).foreach(_.set(value))
+          st.getCommitMetrics.forEach { taskMetric =>
+              metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
           }
 
           val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
