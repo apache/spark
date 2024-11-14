@@ -115,7 +115,10 @@ private[ml] object Optimizer {
     table
   }
 
-  def initEmbedding(dim: Int, useBias: Boolean, rnd: java.util.Random): Array[Float] = {
+  private[recommendation] def initEmbedding(dim: Int,
+                                            useBias: Boolean,
+                                            rnd: java.util.Random
+                                           ): Array[Float] = {
     val f = Array.fill(if (useBias) dim + 1 else dim)(0f)
     (0 until dim).foreach{f(_) = (rnd.nextFloat - 0.5f) / dim}
     f
@@ -423,7 +426,10 @@ private[ml] class Optimizer(private val opts: Opts,
     newPair
   }
 
-  def optimize(data: Iterator[LongPairMulti], cpus: Int, remapInplace: Boolean): Unit = {
+  private[recommendation] def optimize(data: Iterator[LongPairMulti],
+                                       cpus: Int,
+                                       remapInplace: Boolean
+                                      ): Unit = {
     if (cpus > 1) {
       ParItr.foreach(data.map(remap(_, remapInplace)), cpus, if (opts.implicitPref) {
         pair: LongPairMulti => optimizeImplicitBatchRemapped(pair)
@@ -441,7 +447,7 @@ private[ml] class Optimizer(private val opts: Opts,
     }
   }
 
-  def flush(): Iterator[ItemData] = {
+  private[recommendation] def flush(): Iterator[ItemData] = {
     vocabL.iterator.map{case (id, i) =>
       new ItemData(ItemData.TYPE_LEFT, id, cnL(i),
         util.Arrays.copyOfRange(syn0, opts.vectorSize * i, opts.vectorSize * (i + 1)))
