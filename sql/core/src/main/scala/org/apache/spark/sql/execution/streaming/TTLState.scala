@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
  * state, via clearExpiredStateForAllKeys and clearAllStateForElementKey,
  * respectively. How classes do this is implementation detail, but the general
  * pattern is to use secondary indexes to make sure cleanup scans
- * Θ(records to evict), not Θ(all records).
+ * theta(records to evict), not theta(all records).
  *
  * There are two broad patterns of implementing stateful variables, and thus
  * there are two broad patterns for implementing TTL. The first is when there
