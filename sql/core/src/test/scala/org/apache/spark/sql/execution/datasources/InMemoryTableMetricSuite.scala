@@ -68,7 +68,7 @@ class InMemoryTableMetricSuite
       }
 
       val exec = statusStore.executionsList().last
-      val execId = statusStore.executionsList().last.executionId
+      val execId = exec.executionId
       val sqlMetrics = exec.metrics.map { metric =>
         metric.accumulatorId -> metric.name
       }.toMap
