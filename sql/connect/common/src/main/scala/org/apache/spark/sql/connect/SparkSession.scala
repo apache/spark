@@ -34,7 +34,8 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SQLContext}
@@ -721,7 +722,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
         builder.connectionString(value)
         true
       case APP_NAME_KEY | MASTER_KEY | CATALOG_IMPL_KEY | API_MODE_KEY =>
-        logWarning(s"$key configuration is not supported in Connect mode.")
+        logWarning(log"${MDC(CONFIG, key)} configuration is not supported in Connect mode.")
         true
       case _ =>
         false

@@ -812,7 +812,7 @@ object SparkSession extends SparkSessionCompanion {
   private def DEFAULT_COMPANION =
     Try(CLASSIC_COMPANION).orElse(Try(CONNECT_COMPANION)).getOrElse {
       throw new IllegalStateException(
-        "Cannot find an SparkSession implementation on the Classpath.")
+        "Cannot find a SparkSession implementation on the Classpath.")
     }
 
   private[this] def lookupCompanion(name: String): SparkSessionCompanion = {

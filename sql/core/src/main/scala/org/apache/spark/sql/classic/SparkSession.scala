@@ -32,7 +32,7 @@ import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException,
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME}
+import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME, CONFIG}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
@@ -777,7 +777,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
     override protected def handleBuilderConfig(key: String, value: String): Boolean = key match {
       case CONNECT_REMOTE_KEY | API_MODE_KEY =>
-        logWarning(s"$key configuration is not supported in Classic mode.")
+        logWarning(log"${MDC(CONFIG, key)} configuration is not supported in Classic mode.")
         true
       case CATALOG_IMPL_KEY =>
         if (hiveClassesArePresent) {
