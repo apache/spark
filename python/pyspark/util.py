@@ -401,28 +401,48 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
         return outer
 
-    # Non Spark Connect
+    # Non Spark Connect with SparkSession or Callable
+    from pyspark.sql import SparkSession
     from pyspark import SparkContext
     from py4j.clientserver import ClientServer
 
     if isinstance(SparkContext._gateway, ClientServer):
         # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
 
-        # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
-        # copies local properties when the thread starts but `inheritable_thread_target`
-        # copies when the function is wrapped.
-        assert SparkContext._active_spark_context is not None
-        properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
-        assert callable(f)
+        if isinstance(f, SparkSession):
+            session = f
+            tags = set(session.getTags())
+            # Local properties are copied when wrapping the function.
+            properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
 
-        @functools.wraps(f)
-        def wrapped(*args: Any, **kwargs: Any) -> Any:
-            # Set local properties in child thread.
+            def outer(ff: Callable) -> Callable:
+                @functools.wraps(ff)
+                def wrapped(*args: Any, **kwargs: Any) -> Any:
+                    # Apply properties and tags in the child thread.
+                    assert SparkContext._active_spark_context is not None
+                    SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
+                    for tag in tags:
+                        session.addTag(tag)
+                    return ff(*args, **kwargs)
+
+                return wrapped
+
+            return outer
+        elif callable(f):
+            # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
+            # copies local properties when the thread starts but `inheritable_thread_target`
+            # copies when the function is wrapped.
             assert SparkContext._active_spark_context is not None
-            SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
-            return f(*args, **kwargs)  # type: ignore[misc, operator]
+            properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
 
-        return wrapped
+            @functools.wraps(f)
+            def wrapped(*args: Any, **kwargs: Any) -> Any:
+                # Set local properties in child thread.
+                assert SparkContext._active_spark_context is not None
+                SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
+                return f(*args, **kwargs)
+
+            return wrapped
     else:
         return f  # type: ignore[return-value]
 
@@ -481,6 +501,8 @@ class InheritableThread(threading.Thread):
     ):
         from pyspark.sql import is_remote
 
+        self._session = session
+
         # Spark Connect
         if is_remote():
             assert session is not None, "Spark Connect must be provided."
@@ -505,8 +527,12 @@ class InheritableThread(threading.Thread):
                 def copy_local_properties(*a: Any, **k: Any) -> Any:
                     # self._props is set before starting the thread to match the behavior with JVM.
                     assert hasattr(self, "_props")
+                    if hasattr(self, "_tags"):
+                        for tag in self._tags:
+                            self._session.addTag(tag)
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
+
                     return target(*a, **k)
 
                 super(InheritableThread, self).__init__(
@@ -539,6 +565,8 @@ class InheritableThread(threading.Thread):
                 self._props = (
                     SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
                 )
+                self._tags = self._session.getTags()
+
         return super(InheritableThread, self).start()
 
 

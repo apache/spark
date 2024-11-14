@@ -19,7 +19,7 @@ import sys
 import warnings
 from collections.abc import Sized
 from functools import reduce
-from threading import RLock
+from threading import RLock, local
 from types import TracebackType
 from typing import (
     Any,
@@ -599,6 +599,7 @@ class SparkSession(SparkConversionMixin):
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
+    _thread_local = local()
 
     def __init__(
         self,
@@ -2216,7 +2217,7 @@ class SparkSession(SparkConversionMixin):
         """
         raise PySparkRuntimeError(
             errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptAll"},
+            messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
 
     def interruptTag(self, tag: str) -> List[str]:
@@ -2236,7 +2237,7 @@ class SparkSession(SparkConversionMixin):
         """
         raise PySparkRuntimeError(
             errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptTag"},
+            messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
 
     def interruptOperation(self, op_id: str) -> List[str]:
@@ -2256,8 +2257,12 @@ class SparkSession(SparkConversionMixin):
         """
         raise PySparkRuntimeError(
             errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.interruptOperation"},
+            messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
+
+    def _initialize_tags(self):
+        if not hasattr(self._thread_local, "tags"):
+            self._thread_local.tags = set()
 
     def addTag(self, tag: str) -> None:
         """
@@ -2273,15 +2278,16 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         tag : str
             The tag to be added. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.addTag"},
-        )
+        self._initialize_tags()
+        self._thread_local.tags.add(tag)
 
     def removeTag(self, tag: str) -> None:
         """
@@ -2290,15 +2296,16 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         tag : list of str
             The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.removeTag"},
-        )
+        self._initialize_tags()
+        self._thread_local.tags.discard(tag)
 
     def getTags(self) -> Set[str]:
         """
@@ -2307,26 +2314,28 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         set of str
             Set of tags of interrupted operations.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.getTags"},
-        )
+        self._initialize_tags()
+        return self._thread_local.tags
 
     def clearTags(self) -> None:
         """
         Clear the current thread's operation tags.
 
         .. versionadded:: 3.5.0
+
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.clearTags"},
-        )
+        self._initialize_tags()
+        self._thread_local.tags.clear()
 
 
 def _test() -> None:
