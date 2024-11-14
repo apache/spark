@@ -2260,7 +2260,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptOperation"},
         )
 
-    def _initialize_tags(self):
+    def _initialize_tags(self) -> None:
         if not hasattr(self._thread_local, "tags"):
             self._thread_local.tags = set()
 

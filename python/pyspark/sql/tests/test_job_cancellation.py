@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import unittest
 import threading
 import time
 
@@ -139,7 +140,6 @@ class JobCancellationTestsMixin:
                 target=inheritable_thread_target(session)(target)
             )
         )
-
 
     def check_inheritable_tags(self, create_thread):
         spark = self.spark

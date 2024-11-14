@@ -14,18 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import threading
-import time
+
 import unittest
 from typing import Optional
 
-from pyspark import InheritableThread, inheritable_thread_target
 from pyspark.sql.connect.client import DefaultChannelBuilder
 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-from pyspark.testing.connectutils import should_test_connect
-
-if should_test_connect:
-    from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class CustomChannelBuilder(DefaultChannelBuilder):
