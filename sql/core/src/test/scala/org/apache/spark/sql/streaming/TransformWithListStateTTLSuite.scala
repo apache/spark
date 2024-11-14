@@ -25,6 +25,34 @@ import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
+// OnlyListAppendTTLProcessor is a StatefulProcessor that only appends values to the
+// end of its (keyed) TTL list state. For each record it processes, it returns the new
+// length of its list state.
+//
+// The pattern of calling appendValue is to simulate the old behavior of appendValue, which
+// used to add a record into the secondary index for every appendList call.
+class OnlyListAppendTTLProcessor(ttlConfig: TTLConfig)
+  extends StatefulProcessor[String, String, (String, Long)]{
+  @transient private var _listState: ListStateImplWithTTL[String] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _listState = getHandle
+      .getListState("listState", Encoders.STRING, ttlConfig)
+      .asInstanceOf[ListStateImplWithTTL[String]]
+  }
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, Long)] = {
+    inputRows.map { row =>
+      _listState.appendValue(row)
+      (key, _listState.get().size)
+    }
+  }
+}
+
 class ListStateTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, InputEvent, OutputEvent] {
 
@@ -84,6 +112,13 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
       ttlValues.foreach { v =>
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v) :: results
       }
+    } else if (row.action == "get_values_in_min_state") {
+      val minValues = listState.getMinValues()
+      minValues.foreach { minExpirationMs =>
+        results = OutputEvent(key, -1, isTTLValue = true, ttlValue = minExpirationMs) :: results
+      }
+    } else if (row.action == "clear") {
+      listState.clear()
     }
 
     results.iterator
@@ -94,7 +129,8 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
  * Test suite for testing list state with TTL.
  * We use the base TTL suite with a list state processor.
  */
-class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
+class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
+  with StateStoreMetricsTest {
 
   import testImplicits._
 
@@ -104,6 +140,54 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
   }
 
   override def getStateTTLMetricName: String = "numListStateWithTTLVars"
+
+
+  test("verify the list state secondary index has at most one record per key") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(10))
+      val inputStream = MemoryStream[String]
+        val result = inputStream.toDS()
+          .groupByKey(x => x)
+          .transformWithState(
+            new OnlyListAppendTTLProcessor(ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Append())
+      val clock = new StreamManualClock
+
+      testStream(result)(
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+
+        // We want all of the inputs to have different timestamps, so that each record
+        // gets its own unique TTL, and thus, its own unique secondary index record.
+        //
+        // While this looks contrived, in the real-world, when non-manual clocks are used,
+        // it's very likely that different records will be processed at different UNIX epoch
+        // times.
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        AddData(inputStream, "k2"),
+        AdvanceManualClock(1 * 1000),
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        AddData(inputStream, "k2"),
+        AdvanceManualClock(1 * 1000),
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        AddData(inputStream, "k2"),
+        AdvanceManualClock(1 * 1000),
+
+        CheckNewAnswer(("k1", 1), ("k1", 2), ("k1", 3), ("k2", 1), ("k2", 2), ("k2", 3)),
+
+        // 2 unique keys, so 2 "data" rows. Then, for each key, we store an entry in the
+        // TTL index, the min index, and the count index.
+        //
+        // Thus, we have 2 + (2 * 3) = 8 rows.
+        assertNumStateRows(total = 8, updated = 6)
+      )
+    }
+  }
 
   test("verify iterator works with expired values in beginning of list") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
@@ -223,6 +307,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+
           // get ttl values
           AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
           AdvanceManualClock(1 * 1000),
@@ -231,6 +316,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
             OutputEvent("k1", 2, isTTLValue = true, 182000),
             OutputEvent("k1", 3, isTTLValue = true, 182000)
           ),
+
           AddData(inputStream, InputEvent("k1", "get", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
@@ -262,6 +348,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+
           // get all elements without enforcing ttl
           AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
           AdvanceManualClock(1 * 1000),
@@ -273,6 +360,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
             OutputEvent("k1", 5, isTTLValue = false, -1),
             OutputEvent("k1", 6, isTTLValue = false, -1)
           ),
+
           AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
@@ -297,15 +385,14 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+
           // advance clock to expire the middle three elements
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
-            OutputEvent("k1", -1, isTTLValue = true, 20000),
-            OutputEvent("k1", -1, isTTLValue = true, 181000),
-            OutputEvent("k1", -1, isTTLValue = true, 182000),
-            OutputEvent("k1", -1, isTTLValue = true, 188000)
+            OutputEvent("k1", -1, isTTLValue = true, 20000)
           ),
+
           // progress batch timestamp from 9000 to 54000, expiring the middle
           // three elements.
           AdvanceManualClock(45 * 1000),
@@ -320,6 +407,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
             OutputEvent("k1", 8, isTTLValue = false, -1),
             OutputEvent("k1", 9, isTTLValue = false, -1)
           ),
+
           AddData(inputStream, InputEvent("k1", "get_without_enforcing_ttl", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
@@ -330,13 +418,110 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
             OutputEvent("k1", 8, isTTLValue = false, -1),
             OutputEvent("k1", 9, isTTLValue = false, -1)
           ),
+
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
-            OutputEvent("k1", -1, isTTLValue = true, 181000),
-            OutputEvent("k1", -1, isTTLValue = true, 182000),
-            OutputEvent("k1", -1, isTTLValue = true, 188000)
+            OutputEvent("k1", -1, isTTLValue = true, 181000)
           ),
+          StopStream
+        )
+      }
+    }
+  }
+
+  // If we have a list for a key k1 -> [v1, v2, v3] and they _all_ expire, then there
+  // should be no remaining records in any primary (or secondary index) for that key.
+  // However, if we have a separate key k2 -> [v1] that hasn't expired yet, then it
+  // should still be present after the clearing for k1.
+  test("verify min-index doesn't insert when the new minimum is None") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      withTempDir { checkpointLocation =>
+        val inputStream = MemoryStream[InputEvent]
+        val ttlConfig1 = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val result1 = inputStream
+          .toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(
+            getProcessor(ttlConfig1),
+            TimeMode.ProcessingTime(),
+            OutputMode.Append()
+          )
+
+        val clock = new StreamManualClock
+        testStream(result1)(
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = checkpointLocation.getAbsolutePath
+          ),
+
+          // Add 3 elements all with different eviction timestamps.
+          AddData(inputStream, InputEvent("k1", "append", 1)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+
+          AddData(inputStream, InputEvent("k1", "append", 2)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+
+          AddData(inputStream, InputEvent("k1", "append", 3)),
+          AdvanceManualClock(1 * 1000), // Time is 3000
+          CheckNewAnswer(),
+
+          // Add a separate key; this should not be affected by k1 expiring.
+          // It will have an expiration of 64000.
+          AddData(inputStream, InputEvent("k2", "put", 1)),
+
+          // Now, we should have: k1 -> [1, 2, 3] with TTLs [61000, 62000, 63000] respectively
+          AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer( // Time is 4000 for this micro-batch
+            OutputEvent("k1", 1, isTTLValue = true, 61000),
+            OutputEvent("k1", 2, isTTLValue = true, 62000),
+            OutputEvent("k1", 3, isTTLValue = true, 63000)
+          ),
+
+          AddData(inputStream, InputEvent("k1", "get_values_in_min_state", -1, null)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer( // Time is 5000 for this micro-batch
+            OutputEvent("k1", -1, isTTLValue = true, 61000)
+          ),
+
+          // The k1 records expire at 63000, and the current time is 5000. So, we advance the
+          // clock by 63 - 5 = 58 seconds to expire those.
+          AdvanceManualClock((63 - 5) * 1000),
+          CheckNewAnswer(),
+
+          // There should be 4 state rows left over: the primary, TTL, min index, and count
+          // indexes for k2.
+          //
+          // It's important to check with assertNumStateRows, since the InputEvents
+          // only return values for the current grouping key, not the entirety of RocksDB.
+          assertNumStateRows(total = 4, updated = 4),
+
+          // The k1 calls should both return no values. However, the k2 calls should return
+          // one record each. We put these into one AddData call since we want them all to
+          // run when the batchTimestampMs is 65000.
+          AddData(inputStream,
+            // These should both return no values, since all of k1 has been expired.
+            InputEvent("k1", "get_values_in_ttl_state", -1, null),
+            InputEvent("k1", "get_values_in_min_state", -1, null),
+
+            // However, k2 still has a record.
+            InputEvent("k2", "get_values_in_ttl_state", -1, null),
+            InputEvent("k2", "get_values_in_min_state", -1, null)
+          ),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer( // Time is 65000 for this micro-batch
+            OutputEvent("k2", -1, isTTLValue = true, 64000),
+            OutputEvent("k2", -1, isTTLValue = true, 64000)
+          ),
+
+          assertNumStateRows(total = 0, updated = 0),
+
           StopStream
         )
       }
@@ -380,14 +565,23 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+
           // get ttl values
-          AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
+          AddData(inputStream,
+            InputEvent("k1", "get_ttl_value_from_state", -1, null),
+            InputEvent("k1", "get_values_in_min_state", -1)
+          ),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
+            // From the get_ttl_value_from_state call
             OutputEvent("k1", 1, isTTLValue = true, 121000),
             OutputEvent("k1", 2, isTTLValue = true, 122000),
-            OutputEvent("k1", 3, isTTLValue = true, 122000)
+            OutputEvent("k1", 3, isTTLValue = true, 122000),
+
+            // From the get_values_in_min_state call
+            OutputEvent("k1", -1, isTTLValue = true, 121000)
           ),
+
           AddData(inputStream, InputEvent("k1", "get", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
@@ -410,6 +604,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           // advance clock to trigger processing
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(),
+
           // get ttl values
           AddData(inputStream, InputEvent("k1", "get_ttl_value_from_state", -1, null)),
           AdvanceManualClock(1 * 1000),
@@ -423,9 +618,8 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           ),
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
           AdvanceManualClock(1 * 1000),
+
           CheckNewAnswer(
-            OutputEvent("k1", -1, isTTLValue = true, 121000),
-            OutputEvent("k1", -1, isTTLValue = true, 122000),
             OutputEvent("k1", -1, isTTLValue = true, 65000)
           ),
           // expire end values, batch timestamp from 7000 to 67000
@@ -447,8 +641,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
           AddData(inputStream, InputEvent("k1", "get_values_in_ttl_state", -1, null)),
           AdvanceManualClock(1 * 1000),
           CheckNewAnswer(
-            OutputEvent("k1", -1, isTTLValue = true, 121000),
-            OutputEvent("k1", -1, isTTLValue = true, 122000)
+            OutputEvent("k1", -1, isTTLValue = true, 121000)
           ),
           StopStream
         )

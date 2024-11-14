@@ -43,19 +43,18 @@ object TransformWithStateKeyValueRowSchemaUtils {
       .add("expirationMs", LongType)
       .add("groupingKey", keySchema)
 
-  def getCompositeKeyTTLRowSchema(
-      groupingKeySchema: StructType,
-      userKeySchema: StructType): StructType =
+  def getExpirationMsRowSchema(): StructType =
     new StructType()
       .add("expirationMs", LongType)
-      .add("groupingKey", new StructType(groupingKeySchema.fields))
-      .add("userKey", new StructType(userKeySchema.fields))
 
   def getValueSchemaWithTTL(schema: StructType, hasTTL: Boolean): StructType = {
     if (hasTTL) {
-      new StructType().add("value", schema)
+      new StructType()
+        .add("value", schema)
         .add("ttlExpirationMs", LongType)
-    } else schema
+    } else {
+      schema
+    }
   }
 }
 
@@ -118,7 +117,9 @@ class StateTypesEncoder[V](
   def decodeValue(row: UnsafeRow): V = {
     if (hasTtl) {
       rowToObjDeserializer.apply(row.getStruct(0, valEncoder.schema.length))
-    } else rowToObjDeserializer.apply(row)
+    } else {
+      rowToObjDeserializer.apply(row)
+    }
   }
 
   /**
@@ -239,37 +240,15 @@ class CompositeKeyStateEncoder[K, V](
 }
 
 /** Class for TTL with single key serialization */
-class SingleKeyTTLEncoder(
-    keyExprEnc: ExpressionEncoder[Any]) {
+class TTLEncoder(schema: StructType) {
 
   private val ttlKeyProjection = UnsafeProjection.create(
-    getSingleKeyTTLRowSchema(keyExprEnc.schema))
+    getSingleKeyTTLRowSchema(schema))
 
-  def encodeTTLRow(expirationMs: Long, groupingKey: UnsafeRow): UnsafeRow = {
+  // Take a groupingKey UnsafeRow and turn it into a (expirationMs, groupingKey) UnsafeRow.
+  def encodeTTLRow(expirationMs: Long, elementKey: UnsafeRow): UnsafeRow = {
     ttlKeyProjection.apply(
-      InternalRow(expirationMs, groupingKey.asInstanceOf[InternalRow]))
-  }
-}
-
-/** Class for TTL with composite key serialization */
-class CompositeKeyTTLEncoder[K](
-    keyExprEnc: ExpressionEncoder[Any],
-    userKeyEnc: ExpressionEncoder[Any]) {
-
-  private val ttlKeyProjection = UnsafeProjection.create(
-    getCompositeKeyTTLRowSchema(keyExprEnc.schema, userKeyEnc.schema))
-
-  def encodeTTLRow(
-      expirationMs: Long,
-      groupingKey: UnsafeRow,
-      userKey: UnsafeRow): UnsafeRow = {
-    ttlKeyProjection.apply(
-      InternalRow(
-        expirationMs,
-        groupingKey.getStruct(0, keyExprEnc.schema.length)
-          .asInstanceOf[InternalRow],
-        userKey.getStruct(0, userKeyEnc.schema.length)
-          .asInstanceOf[InternalRow]))
+      InternalRow(expirationMs, elementKey.asInstanceOf[InternalRow]))
   }
 }
 

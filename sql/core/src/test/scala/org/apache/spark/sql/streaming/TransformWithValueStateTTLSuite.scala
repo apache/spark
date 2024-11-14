@@ -59,6 +59,8 @@ object TTLInputProcessFunction {
       ttlValues.foreach { v =>
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v) :: results
       }
+    } else if (row.action == "clear") {
+      valueState.clear()
     }
 
     results.iterator
@@ -76,6 +78,8 @@ object TTLInputProcessFunction {
       }
     } else if (row.action == "put") {
       valueState.update(row.value)
+    } else if (row.action == "clear") {
+      valueState.clear()
     }
 
     results.iterator
