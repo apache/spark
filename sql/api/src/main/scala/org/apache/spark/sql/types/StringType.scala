@@ -86,8 +86,7 @@ class StringType private[spark] (val collationId: Int, val maxLength: Option[Int
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case CharType(_) | VarcharType(_) => false
-      case s: StringType => s.collationId == collationId
+      case s: StringType => s.collationId == collationId && s.maxLength == maxLength
       case _ => false
     }
   }
