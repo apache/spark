@@ -779,7 +779,7 @@ object SparkSession extends SparkSessionCompanion with Logging {
       case CONNECT_REMOTE_KEY | API_MODE_KEY =>
         logWarning(log"${MDC(CONFIG, key)} configuration is not supported in Classic mode.")
         true
-      case CATALOG_IMPL_KEY =>
+      case CATALOG_IMPL_KEY if value == "hive" =>
         if (hiveClassesArePresent) {
           // TODO(SPARK-50244): We now isolate artifacts added by the `ADD JAR` command. This will
           //  break an existing Hive use case (one session adds JARs and another session uses
