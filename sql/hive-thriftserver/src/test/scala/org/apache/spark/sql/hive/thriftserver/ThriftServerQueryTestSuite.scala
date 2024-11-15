@@ -270,7 +270,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
         Seq.empty
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}nonansi")) {
         NonAnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
         TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil

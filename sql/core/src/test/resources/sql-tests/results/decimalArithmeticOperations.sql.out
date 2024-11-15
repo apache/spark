@@ -407,7 +407,7 @@ org.apache.spark.SparkArithmeticException
     "config" : "\"spark.sql.ansi.enabled\"",
     "precision" : "38",
     "scale" : "36",
-    "value" : "152.358023429667510000000000000000000000"
+    "value" : "99900.0000000000000000000000000000000000"
   },
   "queryContext" : [ {
     "objectType" : "",
