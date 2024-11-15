@@ -614,7 +614,7 @@ class TypesTestsMixin:
 
     def test_string_type_simple_string(self):
         self.assertEqual(StringType().simpleString(), "string")
-        self.assertEqual(StringType("UTF8_BINARY").simpleString(), "string")
+        self.assertEqual(StringType("UTF8_BINARY").simpleString(), "string collate UTF8_BINARY")
         self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
         self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
 

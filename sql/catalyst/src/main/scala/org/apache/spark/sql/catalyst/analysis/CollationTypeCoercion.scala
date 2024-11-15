@@ -214,7 +214,7 @@ object CollationTypeCoercion {
 
   private def castStringType(inType: DataType, castType: StringType): Option[DataType] = {
     @Nullable val ret: DataType = inType match {
-      case st: StringType if st.collationId != castType.collationId => castType
+      case st: StringType if !st.sameType(castType) => castType
       case ArrayType(arrType, nullable) =>
         castStringType(arrType, castType).map(ArrayType(_, nullable)).orNull
       case _ => null

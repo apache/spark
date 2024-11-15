@@ -284,13 +284,13 @@ class StringType(AtomicType):
     providerICU = "icu"
     providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: str = "UTF8_BINARY"):
+    def __init__(self, collation: Optional[str] = None):
         self.collation = collation
 
     @classmethod
     def collationProvider(cls, collationName: str) -> str:
         # TODO: do this properly like on the scala side
-        if collationName.startswith("UTF8"):
+        if collationName is not None and collationName.startswith("UTF8"):
             return StringType.providerSpark
         return StringType.providerICU
 
@@ -308,11 +308,14 @@ class StringType(AtomicType):
 
     def __repr__(self) -> str:
         return (
-            "StringType()" if self.isUTF8BinaryCollation() else "StringType('%s')" % self.collation
+            "StringType()" if not self.isCollationSpecified() else "StringType('%s')" % self.collation
         )
 
     def isUTF8BinaryCollation(self) -> bool:
-        return self.collation == "UTF8_BINARY"
+        return not self.isCollationSpecified() or self.collation == "UTF8_BINARY"
+
+    def isCollationSpecified(self) -> bool:
+        return self.collation is not None
 
 
 class CharType(AtomicType):

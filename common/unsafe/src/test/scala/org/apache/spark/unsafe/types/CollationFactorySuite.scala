@@ -37,14 +37,19 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
+    assert(UNSPECIFIED_COLLATION_ID == 0)
 
-    assert(UTF8_BINARY_COLLATION_ID == 0)
-    val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
-    assert(utf8Binary.collationName == "UTF8_BINARY")
-    assert(utf8Binary.isUtf8BinaryType)
-    assert(utf8Binary.version == currentIcuVersion)
+    Seq(0, 1).foreach { id =>
+      assert(isUTF8BinaryCollation(id))
+      val utf8Binary = fetchCollation(id)
+      assert(utf8Binary.collationName == "UTF8_BINARY")
+      assert(utf8Binary.isUtf8BinaryType)
+      assert(utf8Binary.version == currentIcuVersion)
+    }
 
-    assert(UTF8_LCASE_COLLATION_ID == 1)
+    assert(collationNameToId("UTF8_BINARY") == 1)
+
+    assert(UTF8_LCASE_COLLATION_ID == 2)
     val utf8Lcase = fetchCollation(UTF8_LCASE_COLLATION_ID)
     assert(utf8Lcase.collationName == "UTF8_LCASE")
     assert(!utf8Lcase.isUtf8BinaryType)
@@ -435,7 +440,6 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
       1 << 30, // User-defined collation range.
       (1 << 30) | 1, // User-defined collation range.
       (1 << 30) | (1 << 29), // User-defined collation range.
-      1 << 1, // UTF8_BINARY mandatory zero bit 1 breach.
       1 << 2, // UTF8_BINARY mandatory zero bit 2 breach.
       1 << 3, // UTF8_BINARY mandatory zero bit 3 breach.
       1 << 4, // UTF8_BINARY mandatory zero bit 4 breach.

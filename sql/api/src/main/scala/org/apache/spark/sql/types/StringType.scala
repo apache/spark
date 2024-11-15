@@ -53,8 +53,11 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
   private[sql] def usesTrimCollation: Boolean =
     CollationFactory.fetchCollation(collationId).supportsSpaceTrimming
 
+  private[sql] def isNameSpecified: Boolean =
+    collationId != CollationFactory.UNSPECIFIED_COLLATION_ID
+
   private[sql] def isUTF8BinaryCollation: Boolean =
-    collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
+    CollationFactory.isUTF8BinaryCollation(collationId)
 
   private[sql] def isUTF8LcaseCollation: Boolean =
     collationId == CollationFactory.UTF8_LCASE_COLLATION_ID
@@ -74,8 +77,13 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
    * `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (isUTF8BinaryCollation) "string"
+    if (!isNameSpecified) "string"
     else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
+
+  override def toString: String =
+    if (!isNameSpecified) "StringType"
+    else s"StringType(${CollationFactory.fetchCollation(collationId).collationName})"
+
 
   // Due to backwards compatibility and compatibility with other readers
   // all string types are serialized in json as regular strings and
@@ -84,6 +92,12 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
 
   override def equals(obj: Any): Boolean =
     obj.isInstanceOf[StringType] && obj.asInstanceOf[StringType].collationId == collationId
+
+  def semanticEquals(other: Any): Boolean = other match {
+    case st: StringType =>
+      collationId == st.collationId || (isUTF8BinaryCollation && st.isUTF8BinaryCollation)
+    case _ => false
+  }
 
   override def hashCode(): Int = collationId.hashCode()
 
@@ -101,7 +115,7 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(0) {
+case object StringType extends StringType(CollationFactory.UNSPECIFIED_COLLATION_ID) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {

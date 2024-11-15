@@ -1632,7 +1632,7 @@ class CollationSQLExpressionsSuite
         val testQuery = sql(query)
         val testResult = testQuery.collect().map(_.toString()).mkString("")
         assert(testResult === t.result) // can't use checkAnswer for Variant
-        assert(testQuery.schema.fields.sameElements(t.resultType))
+        assert(testQuery.schema.sameType(StructType(t.resultType)))
       }
     })
   }

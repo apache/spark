@@ -283,7 +283,7 @@ object TypeCoercion extends TypeCoercionBase {
    * If the input types are different besides nullable flags, None is returned.
    */
   def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
-    if (t1 == t2) {
+    if (t1.sameType(t2)) {
       Some(t1)
     } else {
       findTypeForComplex(t1, t2, findCommonTypeDifferentOnlyInNullFlags)

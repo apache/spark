@@ -1109,7 +1109,7 @@ object StringTranslate {
    */
   def buildDict(matchingString: UTF8String, replaceString: UTF8String, collationId: Integer)
     : JMap[String, String] = {
-    val isCollationAware = collationId == CollationFactory.UTF8_BINARY_COLLATION_ID
+    val isCollationAware = CollationFactory.isUTF8BinaryCollation(collationId)
     val matching: String = if (isCollationAware) {
       matchingString.toString
     } else {

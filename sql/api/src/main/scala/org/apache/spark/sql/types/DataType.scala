@@ -367,7 +367,7 @@ object DataType {
             SqlApiConf.get.allowReadingUnknownCollations =>
         // If the collation name is unknown and the config for reading such collations is enabled,
         // return the UTF8_BINARY collation.
-        StringType(CollationFactory.UTF8_BINARY_COLLATION_ID)
+        StringType
     }
   }
 
@@ -431,6 +431,9 @@ object DataType {
       to: DataType,
       ignoreName: Boolean = false): Boolean = {
     (from, to) match {
+      case (left: StringType, right: StringType) =>
+        left.semanticEquals(right)
+
       case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
         (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement, ignoreName)
 
@@ -476,6 +479,9 @@ object DataType {
       to: DataType,
       ignoreNullability: Boolean = false): Boolean = {
     (from, to) match {
+      case (left: StringType, right: StringType) =>
+        left.semanticEquals(right)
+
       case (left: ArrayType, right: ArrayType) =>
         equalsStructurally(left.elementType, right.elementType, ignoreNullability) &&
         (ignoreNullability || left.containsNull == right.containsNull)
@@ -506,6 +512,9 @@ object DataType {
       to: DataType,
       resolver: SqlApiAnalysis.Resolver): Boolean = {
     (from, to) match {
+      case (left: StringType, right: StringType) =>
+        left.semanticEquals(right)
+
       case (left: ArrayType, right: ArrayType) =>
         equalsStructurallyByName(left.elementType, right.elementType, resolver)
 
@@ -530,6 +539,8 @@ object DataType {
    */
   def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
+      case (left: StringType, right: StringType) =>
+        left.semanticEquals(right)
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
       case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
@@ -550,6 +561,9 @@ object DataType {
    */
   def equalsIgnoreCaseAndNullability(from: DataType, to: DataType): Boolean = {
     (from, to) match {
+      case (left: StringType, right: StringType) =>
+        left.semanticEquals(right)
+
       case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
         equalsIgnoreCaseAndNullability(fromElement, toElement)
 
