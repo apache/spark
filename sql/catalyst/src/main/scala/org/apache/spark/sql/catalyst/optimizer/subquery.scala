@@ -289,33 +289,28 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
       // create an Aggregate node without the offending IN-subqueries, just
       // the aggregates themselves and all the other aggregate expressions.
-      val newAggregateExpressions = a.aggregateExpressions.flatMap { ae =>
+      val newAggregateExpressions = a.aggregateExpressions.flatMap {
         // if this expression contains IN-subqueries with aggregates in the left-hand
         // operand, replace with just the aggregates
-        if (inSubqueryMap.contains(ae)) {
+        case ae: Expression if inSubqueryMap.contains(ae) =>
           // replace the expression with an aliased aggregate expression
           inSubqueryMap(ae).map(aggregateExprAliasMap(_))
-        } else {
-          Seq(ae)
-        }
+        case ae @ _ => Seq(ae)
       }
       val newAggregate = a.copy(aggregateExpressions = newAggregateExpressions)
 
       // Create a projection with the IN-subquery expressions that contain aggregates, replacing
       // the aggregate expressions with attribute references to the output of the Aggregate
       // operator. Also include the other output of the Aggregate operator.
-      val projList = a.aggregateExpressions.map { ae =>
+      val projList = a.aggregateExpressions.map {
         // if this expression contains an IN-subquery that uses an aggregate, we
         // need to do something special
-        if (inSubqueryMap.contains(ae)) {
+        case ae: Expression if inSubqueryMap.contains(ae) =>
           ae.transform {
             // patch any aggregate expression with its corresponding attribute
-            case a: AggregateExpression =>
-              aggregateExprAttrMap(a)
+            case a: AggregateExpression => aggregateExprAttrMap(a)
           }.asInstanceOf[NamedExpression]
-        } else {
-          ae.toAttribute
-        }
+        case ae @ _ => ae.toAttribute
       }
 
       // reapply this rule, now with a Project as parent to the Aggregate
