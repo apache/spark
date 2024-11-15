@@ -611,6 +611,7 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
+  val STATE_ROW_SCHEMA_ID_PREFIX_BYTES = 2
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   // Add the cache at companion object level so it persists across provider instances
