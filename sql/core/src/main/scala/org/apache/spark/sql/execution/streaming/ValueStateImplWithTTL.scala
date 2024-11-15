@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -41,7 +40,7 @@ class ValueStateImplWithTTL[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S],
+    valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
     metrics: Map[String, SQLMetric] = Map.empty)
@@ -80,7 +79,7 @@ class ValueStateImplWithTTL[S](
       val resState = stateTypesEncoder.decodeValue(retRow)
 
       if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        resState
+        resState.asInstanceOf[S]
       } else {
         null.asInstanceOf[S]
       }
@@ -136,7 +135,7 @@ class ValueStateImplWithTTL[S](
     val retRow = store.get(encodedGroupingKey, stateName)
 
     if (retRow != null) {
-      val resState = stateTypesEncoder.decodeValue(retRow)
+      val resState = stateTypesEncoder.decodeValue(retRow).asInstanceOf[S]
       Some(resState)
     } else {
       None
@@ -154,7 +153,8 @@ class ValueStateImplWithTTL[S](
     // ttlExpiration
     if (retRow != null) {
       val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(retRow)
-      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(retRow), expiration))
+      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(retRow).asInstanceOf[S],
+        expiration))
     } else {
       None
     }

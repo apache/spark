@@ -36,7 +36,6 @@ import org.apache.spark.util.Utils
  */
 case class ToJavaArray(array: Expression)
   extends UnaryExpression
-  with NullIntolerant
   with RuntimeReplaceable
   with QueryErrorsBase {
 
@@ -55,6 +54,7 @@ case class ToJavaArray(array: Expression)
   }
 
   override def foldable: Boolean = array.foldable
+  override def nullIntolerant: Boolean = true
 
   override def child: Expression = array
   override def prettyName: String = "to_java_array"

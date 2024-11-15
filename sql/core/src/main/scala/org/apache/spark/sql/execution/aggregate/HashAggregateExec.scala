@@ -63,7 +63,7 @@ case class HashAggregateExec(
 
   require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
 
-  override lazy val allAttributes: AttributeSeq =
+  override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 

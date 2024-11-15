@@ -21,8 +21,7 @@ import java.io._
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.{LogicalTypes, Schema}
-import org.apache.avro.LogicalType
+import org.apache.avro.{LogicalType, LogicalTypes, Schema}
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput

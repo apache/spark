@@ -29,6 +29,7 @@ from pyspark.ml.feature import (
     StopWordsRemover,
     StringIndexer,
     StringIndexerModel,
+    TargetEncoder,
     VectorSizeHint,
 )
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
@@ -345,6 +346,171 @@ class FeatureTests(SparkSessionTestCase):
             .collect()
         )
         self.assertEqual(len(transformed_list), 5)
+
+    def test_target_encoder_binary(self):
+        df = self.spark.createDataFrame(
+            [
+                (0, 3, 5.0, 0.0),
+                (1, 4, 5.0, 1.0),
+                (2, 3, 5.0, 0.0),
+                (0, 4, 6.0, 1.0),
+                (1, 3, 6.0, 0.0),
+                (2, 4, 6.0, 1.0),
+                (0, 3, 7.0, 0.0),
+                (1, 4, 8.0, 1.0),
+                (2, 3, 9.0, 0.0),
+            ],
+            schema="input1 short, input2 int, input3 double, label double",
+        )
+        encoder = TargetEncoder(
+            inputCols=["input1", "input2", "input3"],
+            outputCols=["output", "output2", "output3"],
+            labelCol="label",
+            targetType="binary",
+        )
+        model = encoder.fit(df)
+        te = model.transform(df)
+        actual = te.drop("label").collect()
+        expected = [
+            Row(input1=0, input2=3, input3=5.0, output1=1.0 / 3, output2=0.0, output3=1.0 / 3),
+            Row(input1=1, input2=4, input3=5.0, output1=2.0 / 3, output2=1.0, output3=1.0 / 3),
+            Row(input1=2, input2=3, input3=5.0, output1=1.0 / 3, output2=0.0, output3=1.0 / 3),
+            Row(input1=0, input2=4, input3=6.0, output1=1.0 / 3, output2=1.0, output3=2.0 / 3),
+            Row(input1=1, input2=3, input3=6.0, output1=2.0 / 3, output2=0.0, output3=2.0 / 3),
+            Row(input1=2, input2=4, input3=6.0, output1=1.0 / 3, output2=1.0, output3=2.0 / 3),
+            Row(input1=0, input2=3, input3=7.0, output1=1.0 / 3, output2=0.0, output3=0.0),
+            Row(input1=1, input2=4, input3=8.0, output1=2.0 / 3, output2=1.0, output3=1.0),
+            Row(input1=2, input2=3, input3=9.0, output1=1.0 / 3, output2=0.0, output3=0.0),
+        ]
+        self.assertEqual(actual, expected)
+        te = model.setSmoothing(1.0).transform(df)
+        actual = te.drop("label").collect()
+        expected = [
+            Row(
+                input1=0,
+                input2=3,
+                input3=5.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=1,
+                input2=4,
+                input3=5.0,
+                output1=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(4 / 5) * 1 + (1 - 4 / 5) * (4 / 9),
+                output3=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=2,
+                input2=3,
+                input3=5.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=0,
+                input2=4,
+                input3=6.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(4 / 5) * 1 + (1 - 4 / 5) * (4 / 9),
+                output3=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=1,
+                input2=3,
+                input3=6.0,
+                output1=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=2,
+                input2=4,
+                input3=6.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(4 / 5) * 1 + (1 - 4 / 5) * (4 / 9),
+                output3=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+            ),
+            Row(
+                input1=0,
+                input2=3,
+                input3=7.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(1 - 1 / 2) * (4 / 9),
+            ),
+            Row(
+                input1=1,
+                input2=4,
+                input3=8.0,
+                output1=(3 / 4) * (2 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(4 / 5) * 1 + (1 - 4 / 5) * (4 / 9),
+                output3=(1 / 2) + (1 - 1 / 2) * (4 / 9),
+            ),
+            Row(
+                input1=2,
+                input2=3,
+                input3=9.0,
+                output1=(3 / 4) * (1 / 3) + (1 - 3 / 4) * (4 / 9),
+                output2=(1 - 5 / 6) * (4 / 9),
+                output3=(1 - 1 / 2) * (4 / 9),
+            ),
+        ]
+        self.assertEqual(actual, expected)
+
+    def test_target_encoder_continuous(self):
+        df = self.spark.createDataFrame(
+            [
+                (0, 3, 5.0, 10.0),
+                (1, 4, 5.0, 20.0),
+                (2, 3, 5.0, 30.0),
+                (0, 4, 6.0, 40.0),
+                (1, 3, 6.0, 50.0),
+                (2, 4, 6.0, 60.0),
+                (0, 3, 7.0, 70.0),
+                (1, 4, 8.0, 80.0),
+                (2, 3, 9.0, 90.0),
+            ],
+            schema="input1 short, input2 int, input3 double, label double",
+        )
+        encoder = TargetEncoder(
+            inputCols=["input1", "input2", "input3"],
+            outputCols=["output", "output2", "output3"],
+            labelCol="label",
+            targetType="continuous",
+        )
+        model = encoder.fit(df)
+        te = model.transform(df)
+        actual = te.drop("label").collect()
+        expected = [
+            Row(input1=0, input2=3, input3=5.0, output1=40.0, output2=50.0, output3=20.0),
+            Row(input1=1, input2=4, input3=5.0, output1=50.0, output2=50.0, output3=20.0),
+            Row(input1=2, input2=3, input3=5.0, output1=60.0, output2=50.0, output3=20.0),
+            Row(input1=0, input2=4, input3=6.0, output1=40.0, output2=50.0, output3=50.0),
+            Row(input1=1, input2=3, input3=6.0, output1=50.0, output2=50.0, output3=50.0),
+            Row(input1=2, input2=4, input3=6.0, output1=60.0, output2=50.0, output3=50.0),
+            Row(input1=0, input2=3, input3=7.0, output1=40.0, output2=50.0, output3=70.0),
+            Row(input1=1, input2=4, input3=8.0, output1=50.0, output2=50.0, output3=80.0),
+            Row(input1=2, input2=3, input3=9.0, output1=60.0, output2=50.0, output3=90.0),
+        ]
+        self.assertEqual(actual, expected)
+        te = model.setSmoothing(1.0).transform(df)
+        actual = te.drop("label").collect()
+        expected = [
+            Row(input1=0, input2=3, input3=5.0, output1=42.5, output2=50.0, output3=27.5),
+            Row(input1=1, input2=4, input3=5.0, output1=50.0, output2=50.0, output3=27.5),
+            Row(input1=2, input2=3, input3=5.0, output1=57.5, output2=50.0, output3=27.5),
+            Row(input1=0, input2=4, input3=6.0, output1=42.5, output2=50.0, output3=50.0),
+            Row(input1=1, input2=3, input3=6.0, output1=50.0, output2=50.0, output3=50.0),
+            Row(input1=2, input2=4, input3=6.0, output1=57.5, output2=50.0, output3=50.0),
+            Row(input1=0, input2=3, input3=7.0, output1=42.5, output2=50.0, output3=60.0),
+            Row(input1=1, input2=4, input3=8.0, output1=50.0, output2=50.0, output3=65.0),
+            Row(input1=2, input2=3, input3=9.0, output1=57.5, output2=50.0, output3=70.0),
+        ]
+        self.assertEqual(actual, expected)
 
     def test_vector_size_hint(self):
         df = self.spark.createDataFrame(

@@ -338,6 +338,21 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error initializing map state: " f"{response_message[1]}")
 
+    def delete_if_exists(self, state_name: str) -> None:
+        import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
+
+        state_call_command = stateMessage.StateCallCommand()
+        state_call_command.stateName = state_name
+        call = stateMessage.StatefulProcessorCall(deleteIfExists=state_call_command)
+        message = stateMessage.StateRequest(statefulProcessorCall=call)
+
+        self._send_proto_message(message.SerializeToString())
+        response_message = self._receive_proto_message()
+        status = response_message[0]
+        if status != 0:
+            # TODO(SPARK-49233): Classify user facing errors.
+            raise PySparkRuntimeError(f"Error deleting state: " f"{response_message[1]}")
+
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
         # format or even changing the message protocol in the future.

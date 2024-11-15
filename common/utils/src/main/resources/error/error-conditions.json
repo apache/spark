@@ -1045,16 +1045,6 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
-      "UNSUPPORTED_UDF_INPUT_TYPE" : {
-        "message" : [
-          "UDFs do not support '<dataType>' as an input data type."
-        ]
-      },
-      "UNSUPPORTED_UDF_OUTPUT_TYPE" : {
-        "message" : [
-          "UDFs do not support '<dataType>' as an output data type."
-        ]
-      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
@@ -1110,6 +1100,12 @@
       "Expected schema: <expectedSchema>"
     ],
     "sqlState" : "42K03"
+  },
+  "DATETIME_FIELD_OUT_OF_BOUNDS" : {
+    "message" : [
+      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22023"
   },
   "DATETIME_OVERFLOW" : {
     "message" : [
@@ -2028,8 +2024,20 @@
   },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative>"
+      "Integer overflow while operating with intervals."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "Try devising appropriate values for the interval parameters."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Use <functionName> to tolerate overflow and return NULL instead."
+        ]
+      }
+    },
     "sqlState" : "22015"
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
@@ -2613,6 +2621,12 @@
     },
     "sqlState" : "22006"
   },
+  "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
+    "message" : [
+      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22006"
+  },
   "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
     "message" : [
       "<fieldName> is not a valid identifier of Java and cannot be used as field name",
@@ -2637,6 +2651,12 @@
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
+  },
+  "INVALID_JSON_RECORD_TYPE" : {
+    "message" : [
+      "Detected an invalid type of a JSON record while inferring a common schema in the mode <failFastMode>. Expected a STRUCT type, but found <invalidType>."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -2942,6 +2962,12 @@
       }
     },
     "sqlState" : "42601"
+  },
+  "INVALID_PARTITION_VALUE" : {
+    "message" : [
+      "Failed to cast value <value> to data type <dataType> for partition column <columnName>. Ensure the value matches the expected data type for this partition column."
+    ],
+    "sqlState" : "42846"
   },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
@@ -3302,6 +3328,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_SHREDDING_SCHEMA" : {
+    "message" : [
+      "The schema `<schema>` is not a valid variant shredding schema."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -3382,6 +3414,12 @@
   "LABELS_MISMATCH" : {
     "message" : [
       "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
+  },
+  "LABEL_ALREADY_EXISTS" : {
+    "message" : [
+      "The label <label> already exists. Choose another name or rename the existing label."
     ],
     "sqlState" : "42K0L"
   },
@@ -3643,6 +3681,19 @@
       "UNPIVOT_WITH_PIVOT" : {
         "message" : [
           "UNPIVOT together with PIVOT."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
+  "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE" : {
+    "message" : [
+      "Not allowed in the pipe WHERE clause:"
+    ],
+    "subClass" : {
+      "WINDOW_CLAUSE" : {
+        "message" : [
+          "WINDOW clause."
         ]
       }
     },
@@ -4239,12 +4290,6 @@
     ],
     "sqlState" : "42802"
   },
-  "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
-    "message" : [
-      "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
-    ],
-    "sqlState" : "42802"
-  },
   "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
     "message" : [
       "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
@@ -4647,6 +4692,18 @@
     ],
     "sqlState" : "42K09"
   },
+  "TUPLE_IS_EMPTY" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, empty tuple is not supported."
+    ],
+    "sqlState" : "22004"
+  },
+  "TUPLE_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
+    ],
+    "sqlState" : "54011"
+  },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
@@ -4690,6 +4747,12 @@
       "Unable to infer schema for <format>. It must be specified manually."
     ],
     "sqlState" : "42KD9"
+  },
+  "UNANALYZABLE_EXPRESSION" : {
+    "message" : [
+      "The plan contains an unanalyzable expression <expr> that holds the analysis."
+    ],
+    "sqlState" : "03000"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
@@ -4771,7 +4834,7 @@
   },
   "UNRECOGNIZED_STATISTIC" : {
     "message" : [
-      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values."
+      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values. Percentile must be a numeric value followed by '%', within the range 0% to 100%."
     ],
     "sqlState" : "42704"
   },
@@ -4919,6 +4982,64 @@
       "FOR_FUNCTION" : {
         "message" : [
           "function <functionName>. Please try to use a different collation."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_CONNECT_FEATURE" : {
+    "message" : [
+      "Feature is not supported in Spark Connect:"
+    ],
+    "subClass" : {
+      "DATASET_QUERY_EXECUTION" : {
+        "message" : [
+          "Access to the Dataset Query Execution. This is server side developer API."
+        ]
+      },
+      "RDD" : {
+        "message" : [
+          "Resilient Distributed Datasets (RDDs)."
+        ]
+      },
+      "SESSION_BASE_RELATION_TO_DATAFRAME" : {
+        "message" : [
+          "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
+        ]
+      },
+      "SESSION_EXECUTE_COMMAND" : {
+        "message" : [
+          "Invoking SparkSession 'executeCommand'."
+        ]
+      },
+      "SESSION_EXPERIMENTAL_METHODS" : {
+        "message" : [
+          "Access to SparkSession Experimental (methods). This is server side developer API"
+        ]
+      },
+      "SESSION_LISTENER_MANAGER" : {
+        "message" : [
+          "Access to the SparkSession Listener Manager. This is server side developer API"
+        ]
+      },
+      "SESSION_SESSION_STATE" : {
+        "message" : [
+          "Access to the SparkSession Session State. This is server side developer API."
+        ]
+      },
+      "SESSION_SHARED_STATE" : {
+        "message" : [
+          "Access to the SparkSession Shared State. This is server side developer API."
+        ]
+      },
+      "SESSION_SPARK_CONTEXT" : {
+        "message" : [
+          "Access to the SparkContext."
+        ]
+      },
+      "SESSION_SQL_CONTEXT" : {
+        "message" : [
+          "Access to the SparkSession SQL Context."
         ]
       }
     },
@@ -5308,6 +5429,11 @@
       "UPDATE_COLUMN_NULLABILITY" : {
         "message" : [
           "Update column nullability for MySQL and MS SQL Server."
+        ]
+      },
+      "WRITE_FOR_BINARY_SOURCE" : {
+        "message" : [
+          "Write for the binary file data source."
         ]
       }
     },
@@ -6803,11 +6929,6 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2000" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2003" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
@@ -6948,11 +7069,6 @@
       "Unable to clear partition directory <path> prior to writing to it."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2058" : {
-    "message" : [
-      "Failed to cast value `<value>` to `<dataType>` for partition column `<columnName>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2059" : {
     "message" : [
       "End of stream."
@@ -7008,11 +7124,6 @@
   "_LEGACY_ERROR_TEMP_2074" : {
     "message" : [
       "user-specified schema."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2075" : {
-    "message" : [
-      "Write is not supported for binary file data source."
     ]
   },
   "_LEGACY_ERROR_TEMP_2076" : {
@@ -7170,11 +7281,6 @@
       "Unexpected window function frame <frame>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2113" : {
-    "message" : [
-      "Unable to parse <stats> as a percentile."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2115" : {
     "message" : [
       "Unknown column: <unknownColumn>."
@@ -7260,11 +7366,6 @@
       "null value found but field <name> is not nullable."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2150" : {
-    "message" : [
-      "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2154" : {
     "message" : [
       "Failed to get outer pointer for <innerCls>."
@@ -7288,11 +7389,6 @@
   "_LEGACY_ERROR_TEMP_2166" : {
     "message" : [
       "Malformed JSON."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2167" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>. Reasons: Failed to infer a common schema. Struct types are expected, but `<dataType>` was found."
     ]
   },
   "_LEGACY_ERROR_TEMP_2168" : {

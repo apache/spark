@@ -14,6 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.rdd
 
-class RDD[T]
+import org.apache.spark.sql.api.java.UDF2
+
+class IntSumUdf extends UDF2[Long, Long, Long] {
+  override def call(t1: Long, t2: Long): Long = t1 + t2
+}
