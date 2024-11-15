@@ -46,6 +46,16 @@ public class ColumnarBatch implements AutoCloseable {
   }
 
   /**
+   * Called to close all the columns if they are not writable. This is used to clean up memory
+   * allocated during columnar processing.
+   */
+  public void closeIfNotWritable() {
+    for (ColumnVector c: columns) {
+      c.closeIfNotWritable();
+    }
+  }
+
+  /**
    * Returns an iterator over the rows in this batch.
    */
   public Iterator<InternalRow> rowIterator() {

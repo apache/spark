@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, InsertIntoDataSourceDirCommand}
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
@@ -240,9 +240,8 @@ case class RelationConversions(
           query, overwrite, ifPartitionNotExists, byName)
 
       // Read path
-      case relation: HiveTableRelation
-          if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
-        metastoreCatalog.convert(relation, isWrite = false)
+      case relation: HiveTableRelation if doConvertHiveTableRelationForRead(relation) =>
+        convertHiveTableRelationForRead(relation)
 
       // CTAS path
       // This `InsertIntoHiveTable` is derived from `CreateHiveTableAsSelectCommand`,
@@ -286,6 +285,15 @@ case class RelationConversions(
         InsertIntoDataSourceDirCommand(metastoreCatalog.convertStorageFormat(storage),
           convertProvider(storage), query, overwrite)
     }
+  }
+
+  private[hive] def doConvertHiveTableRelationForRead(relation: HiveTableRelation): Boolean = {
+    DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation)
+  }
+
+  private[hive] def convertHiveTableRelationForRead(
+      relation: HiveTableRelation): LogicalRelation = {
+    metastoreCatalog.convert(relation, isWrite = false)
   }
 }
 

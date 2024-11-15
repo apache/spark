@@ -40,6 +40,7 @@ import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 from pyspark.sql import Column, functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
@@ -58,7 +59,6 @@ from pyspark.pandas._typing import (
 )
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,

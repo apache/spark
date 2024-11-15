@@ -28,6 +28,14 @@ import org.apache.spark.sql.exceptions.SqlScriptingException
  */
 private[sql] object SqlScriptingErrors {
 
+  def duplicateLabels(origin: Origin, label: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "LABEL_ALREADY_EXISTS",
+      cause = null,
+      messageParameters = Map("label" -> toSQLId(label)))
+  }
+
   def labelsMismatch(origin: Origin, beginLabel: String, endLabel: String): Throwable = {
     new SqlScriptingException(
       origin = origin,

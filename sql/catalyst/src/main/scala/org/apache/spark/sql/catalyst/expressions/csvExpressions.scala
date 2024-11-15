@@ -60,9 +60,8 @@ case class CsvToStructs(
   extends UnaryExpression
     with TimeZoneAwareExpression
     with CodegenFallback
-    with ExpectsInputTypes
-    with NullIntolerant {
-
+    with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def nullable: Boolean = child.nullable
 
   // The CSV input data might be missing certain fields. We force the nullability
@@ -238,7 +237,8 @@ case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
      timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)

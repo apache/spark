@@ -326,7 +326,15 @@ object SQLConf {
       "catalyst rules, to make sure every rule returns a valid plan")
     .version("3.4.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(Utils.isTesting)
+
+  val LIGHTWEIGHT_PLAN_CHANGE_VALIDATION = buildConf("spark.sql.lightweightPlanChangeValidation")
+    .internal()
+    .doc(s"Similar to ${PLAN_CHANGE_VALIDATION.key}, this validates plan changes and runs after " +
+      s"every rule, however it is enabled by default and so it should be lightweight.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   val ALLOW_NAMED_FUNCTION_ARGUMENTS = buildConf("spark.sql.allowNamedFunctionArguments")
     .doc("If true, Spark will turn on support for named parameters for all functions that has" +
@@ -769,6 +777,15 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(Utils.isTesting)
+
+  val ALLOW_READING_UNKNOWN_COLLATIONS =
+    buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
+      .internal()
+      .doc("Enables spark to read unknown collation name as UTF8_BINARY. If the config is " +
+        "not enabled, when spark encounters an unknown collation name, it will throw an error.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
@@ -3679,6 +3696,9 @@ object SQLConf {
       .internal()
       .doc("When true, skip validation for partition spec in ALTER PARTITION. E.g., " +
         "`ALTER TABLE .. ADD PARTITION(p='a')` would work even the partition type is int. " +
+        "Besides, this config will also be used to skip type validation on partition spec " +
+        "when reading partitioned table. E.g., if the table partition spec is added without " +
+        "type validation, it might not be read correctly with the type validation. " +
         s"When false, the behavior follows ${STORE_ASSIGNMENT_POLICY.key}")
       .version("3.4.0")
       .booleanConf
@@ -3936,6 +3956,28 @@ object SQLConf {
     .version("2.4.0")
     .intConf
     .createWithDefault(20)
+
+  val ARTIFACTS_SESSION_ISOLATION_ENABLED =
+    buildConf("spark.sql.artifact.isolation.enabled")
+      .internal()
+      .doc("When enabled for a Spark Session, artifacts (such as JARs, files, archives) added to " +
+        "this session are isolated from other sessions within the same Spark instance. When " +
+        "disabled for a session, artifacts added to this session are visible to other sessions " +
+        "that have this config disabled. This config can only be set during the creation of a " +
+        "Spark Session and will have no effect when changed in the middle of session usage.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER =
+    buildConf("spark.sql.artifact.isolation.always.apply.classloader")
+      .internal()
+      .doc("When enabled, the classloader holding per-session artifacts will always be applied " +
+        "during SQL executions (useful for Spark Connect). When disabled, the classloader will " +
+        "be applied only when any artifact is added to the session.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT =
     buildConf("spark.sql.codegen.aggregate.fastHashMap.capacityBit")
@@ -5167,6 +5209,15 @@ object SQLConf {
     .checkValue(_ > 0, "The number of stack traces in the DataFrame context must be positive.")
     .createWithDefault(1)
 
+  val DATA_FRAME_QUERY_CONTEXT_ENABLED = buildConf("spark.sql.dataFrameQueryContext.enabled")
+    .internal()
+    .doc(
+      "Enable the DataFrame query context. This feature is enabled by default, but has a " +
+      "non-trivial performance overhead because of the stack trace collection.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val LEGACY_JAVA_CHARSETS = buildConf("spark.sql.legacy.javaCharsets")
     .internal()
     .doc("When set to true, the functions like `encode()` can use charsets from JDK while " +
@@ -5206,6 +5257,16 @@ object SQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(false)
+
+  val ORDERING_AWARE_LIMIT_OFFSET = buildConf("spark.sql.orderingAwareLimitOffset")
+    .internal()
+    .doc("When set to true, a local sort will be inserted between GlobalLimitExec and " +
+      "single-partition ShuffleExchangeExec, if the underlying plan produces sorted data. " +
+      "This is because shuffle reader in Spark fetches shuffle blocks in a random order and " +
+      "can not preserve the data ordering, while LIMIT/OFFSET must preserve ordering.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -5511,6 +5572,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
     }
   }
+
+  override def allowReadingUnknownCollations: Boolean = getConf(ALLOW_READING_UNKNOWN_COLLATIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
@@ -6177,6 +6240,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def stackTracesInDataFrameContext: Int =
     getConf(SQLConf.STACK_TRACES_IN_DATAFRAME_CONTEXT)
+
+  def dataFrameQueryContextEnabled: Boolean = getConf(SQLConf.DATA_FRAME_QUERY_CONTEXT_ENABLED)
 
   override def legacyAllowUntypedScalaUDFs: Boolean =
     getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)

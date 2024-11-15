@@ -109,6 +109,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark.sql.connect.tvf import TableValuedFunction
     from pyspark.sql.connect.shell.progress import ProgressHandler
     from pyspark.sql.connect.datasource import DataSourceRegistration
 
@@ -381,6 +382,14 @@ class SparkSession:
         return DataStreamReader(self)
 
     readStream.__doc__ = PySparkSession.readStream.__doc__
+
+    @property
+    def tvf(self) -> "TableValuedFunction":
+        from pyspark.sql.connect.tvf import TableValuedFunction
+
+        return TableValuedFunction(self)
+
+    tvf.__doc__ = PySparkSession.tvf.__doc__
 
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:
         self._client.register_progress_handler(handler)
@@ -1028,7 +1037,11 @@ class SparkSession:
             os.environ["SPARK_LOCAL_CONNECT"] = "1"
 
             # Configurations to be set if unset.
-            default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
+            default_conf = {
+                "spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin",
+                "spark.sql.artifact.isolation.enabled": "true",
+                "spark.sql.artifact.isolation.always.apply.classloader": "true",
+            }
 
             if "SPARK_TESTING" in os.environ:
                 # For testing, we use 0 to use an ephemeral port to allow parallel testing.
