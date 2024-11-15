@@ -121,7 +121,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
   def f1Measure(label: Double): Double = {
     val p = precision(label)
     val r = recall(label)
-    if((p + r) == 0) 0.0 else 2 * p * r / (p + r)
+    if ((p + r) == 0) 0.0 else 2 * p * r / (p + r)
   }
 
   private lazy val sumTp = summary.tpPerClass.values.sum

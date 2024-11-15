@@ -958,7 +958,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
     val thread = new Thread() {
       override def run(): Unit = {
         logInfo("Receiving started")
-        for(i <- 1 to totalRecords) {
+        for (i <- 1 to totalRecords) {
           Thread.sleep(1000 / recordsPerSecond)
           store(i)
         }
