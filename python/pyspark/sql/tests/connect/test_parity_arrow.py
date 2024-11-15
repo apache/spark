@@ -138,7 +138,7 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
         self.check_create_dataframe_namedtuples(True)
 
     def test_createDataFrame_verifySchema(self):
-        super().test_createDataFrame_verifySchema()
+        self.check_createDataFrame_verifySchema(True)
 
 
 if __name__ == "__main__":
