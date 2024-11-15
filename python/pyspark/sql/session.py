@@ -2072,8 +2072,8 @@ class SparkSession(SparkConversionMixin):
         self.stop()
 
     # SparkConnect-specific API
-    @spark_connect_only
     @property
+    @spark_connect_only
     def client(self) -> "SparkConnectClient":
         """
         Gives access to the Spark Connect client. In normal cases this is not necessary to be used
