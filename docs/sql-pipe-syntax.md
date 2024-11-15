@@ -198,6 +198,12 @@ TABLE t;
 
 Evaluates the provided expressions over each of the rows of the input table.                                                                                                                                                    
 
+It is possible to use `DISTINCT` and `*` as needed.<br>
+This works like the outermost `SELECT` in a table subquery in regular Spark SQL.
+
+Window functions are supported in the `SELECT` list as well. To use them, the `OVER` clause must be
+provided. You may provide the window specification in the `WINDOW` clause.
+
 For example:
 
 ```sql
