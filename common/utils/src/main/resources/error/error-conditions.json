@@ -4748,12 +4748,6 @@
     ],
     "sqlState" : "42KD9"
   },
-  "UNANALYZABLE_EXPRESSION" : {
-    "message" : [
-      "The plan contains an unanalyzable expression <expr> that holds the analysis."
-    ],
-    "sqlState" : "03000"
-  },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
