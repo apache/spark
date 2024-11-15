@@ -460,7 +460,9 @@ object DataType {
       // String types with possibly different collations are compatible.
       case (CharType(l1), CharType(l2)) => l1 == l2
       case (VarcharType(l1), VarcharType(l2)) => l1 == l2
-      case (StringType, StringType) => true
+      case (CharType(_) | VarcharType(_), StringType) => false
+      case (StringType, CharType(_) | VarcharType(_)) => false
+      case (_: StringType, _: StringType) => true
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
