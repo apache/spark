@@ -333,10 +333,13 @@ VALUES (0), (1) tab(col)
 #### LIMIT
 
 ```sql
-|> LIMIT <n> [OFFSET <m>]
+|> [LIMIT <n>] [OFFSET <m>]
 ```
 
 Returns the specified number of input rows, preserving ordering (if any).
+
+`LIMIT` and `OFFSET` are supported together. The `LIMIT` clause can also be used without the
+`OFFSET` clause, and the `OFFSET` clause can be used without the `LIMIT` clause.
 
 For example:
 
