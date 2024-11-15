@@ -132,7 +132,7 @@ jobs:
           python${{matrix.python}} -m pip install --ignore-installed 'six==1.16.0'  # Avoid `python3-six` installation
           python${{matrix.python}} -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
           python${{matrix.python}} -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
-          python${{matrix.python}} -m pip install deepspeed torcheval && \
+          python${{matrix.python}} -m pip install py-cpuinfo deepspeed torcheval && \
           python${{matrix.python}} -m pip cache purge && \
           python${{matrix.python}} -m pip list
       # Run the tests.
