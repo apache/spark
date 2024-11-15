@@ -264,17 +264,17 @@ object CollationTypeCoercion {
           }
           .map(_.dataType)
           .filter(hasStringType)
-          .map(extractStringType(_).collationId)
-          .distinct
+          .map(extractStringType)
 
-        if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError(
-            implicitTypes.map(t => StringType(t))
-          )
+        if (implicitTypes.distinct.size > 1 && !allSameType(implicitTypes)) {
+          throw QueryCompilationErrors.implicitCollationMismatchError(implicitTypes.distinct)
         }
         else {
-          implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
+          implicitTypes.headOption.getOrElse(SQLConf.get.defaultStringType)
         }
     }
   }
+
+  private def allSameType(types: Seq[StringType]): Boolean =
+    types.forall(_.semanticEquals(types.head))
 }

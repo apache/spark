@@ -44,7 +44,7 @@ describe table t1
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
 -- !query output
-utf8_binary         	string              	                    
+utf8_binary         	string collate UTF8_BINARY	                    
 utf8_lcase          	string collate UTF8_LCASE
 
 
@@ -71,7 +71,7 @@ struct<count(1):bigint>
 -- !query
 select * from t1 where utf8_binary = 'aaa'
 -- !query schema
-struct<utf8_binary:string,utf8_lcase:string collate UTF8_LCASE>
+struct<utf8_binary:string collate UTF8_BINARY,utf8_lcase:string collate UTF8_LCASE>
 -- !query output
 aaa	aaa
 
@@ -79,7 +79,7 @@ aaa	aaa
 -- !query
 select * from t1 where utf8_lcase = 'aaa' collate utf8_lcase
 -- !query schema
-struct<utf8_binary:string,utf8_lcase:string collate UTF8_LCASE>
+struct<utf8_binary:string collate UTF8_BINARY,utf8_lcase:string collate UTF8_LCASE>
 -- !query output
 AAA	AAA
 aaa	aaa
@@ -88,7 +88,7 @@ aaa	aaa
 -- !query
 select * from t1 where utf8_binary < 'bbb'
 -- !query schema
-struct<utf8_binary:string,utf8_lcase:string collate UTF8_LCASE>
+struct<utf8_binary:string collate UTF8_BINARY,utf8_lcase:string collate UTF8_LCASE>
 -- !query output
 AAA	AAA
 BBB	BBB
@@ -98,7 +98,7 @@ aaa	aaa
 -- !query
 select * from t1 where utf8_lcase < 'bbb' collate utf8_lcase
 -- !query schema
-struct<utf8_binary:string,utf8_lcase:string collate UTF8_LCASE>
+struct<utf8_binary:string collate UTF8_BINARY,utf8_lcase:string collate UTF8_LCASE>
 -- !query output
 AAA	AAA
 aaa	aaa
@@ -107,7 +107,7 @@ aaa	aaa
 -- !query
 select l.utf8_binary, r.utf8_lcase from t1 l join t1 r on l.utf8_lcase = r.utf8_lcase
 -- !query schema
-struct<utf8_binary:string,utf8_lcase:string collate UTF8_LCASE>
+struct<utf8_binary:string collate UTF8_BINARY,utf8_lcase:string collate UTF8_LCASE>
 -- !query output
 AAA	AAA
 AAA	aaa
@@ -146,7 +146,7 @@ struct<>
 -- !query
 select * from t1 anti join t2 on t1.utf8_lcase = t2.utf8_lcase
 -- !query schema
-struct<utf8_binary:string,utf8_lcase:string collate UTF8_LCASE>
+struct<utf8_binary:string collate UTF8_BINARY,utf8_lcase:string collate UTF8_LCASE>
 -- !query output
 
 
@@ -590,7 +590,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -605,7 +605,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -613,7 +613,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary, keyValueDelim collate utf8_binary) from t4
 -- !query schema
-struct<str_to_map(collate(text, utf8_binary), collate(pairDelim, utf8_binary), collate(keyValueDelim, utf8_binary)):map<string,string>>
+struct<str_to_map(collate(text, utf8_binary), collate(pairDelim, utf8_binary), collate(keyValueDelim, utf8_binary)):map<string collate UTF8_BINARY,string collate UTF8_BINARY>>
 -- !query output
 {"a":"1","b":"2","c":"3"}
 
@@ -924,7 +924,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -939,7 +939,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1042,7 +1042,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\", \"STRING\""
   }
 }
 
@@ -1057,7 +1057,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1065,7 +1065,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select elt(1, utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<elt(1, collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary)):string>
+struct<elt(1, collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.
 Something else. Nothing here.
@@ -1087,7 +1087,7 @@ kitten
 -- !query
 select elt(1, utf8_binary collate utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<elt(1, collate(utf8_binary, utf8_binary), utf8_lcase):string>
+struct<elt(1, collate(utf8_binary, utf8_binary), utf8_lcase):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.
 Something else. Nothing here.
@@ -1109,7 +1109,7 @@ kitten
 -- !query
 select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t5
 -- !query schema
-struct<elt(1, utf8_binary, word):string,elt(1, utf8_lcase, word):string collate UTF8_LCASE>
+struct<elt(1, utf8_binary, word):string collate UTF8_BINARY,elt(1, utf8_lcase, word):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -1131,7 +1131,7 @@ kitten	sitTing
 -- !query
 select elt(1, utf8_binary, 'word' collate utf8_lcase), elt(1, utf8_lcase, 'word' collate utf8_binary) from t5
 -- !query schema
-struct<elt(1, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE,elt(1, utf8_lcase, collate(word, utf8_binary)):string>
+struct<elt(1, utf8_binary, collate(word, utf8_lcase)):string collate UTF8_LCASE,elt(1, utf8_lcase, collate(word, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -1160,7 +1160,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1197,7 +1197,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1205,7 +1205,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select split_part(utf8_binary, utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
-struct<split_part(utf8_binary, collate(utf8_lcase, utf8_binary), 2):string>
+struct<split_part(utf8_binary, collate(utf8_lcase, utf8_binary), 2):string collate UTF8_BINARY>
 -- !query output
 
 
@@ -1261,7 +1261,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select split_part(utf8_binary, 'a', 3), split_part(utf8_lcase, 'a', 3) from t5
 -- !query schema
-struct<split_part(utf8_binary, a, 3):string,split_part(utf8_lcase, a, 3):string collate UTF8_LCASE>
+struct<split_part(utf8_binary, a, 3):string collate UTF8_BINARY,split_part(utf8_lcase, a, 3):string collate UTF8_LCASE>
 -- !query output
 	
 	
@@ -1283,7 +1283,7 @@ A
 -- !query
 select split_part(utf8_binary, 'a' collate utf8_lcase, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t5
 -- !query schema
-struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string collate UTF8_LCASE,split_part(utf8_lcase, collate(a, utf8_binary), 3):string>
+struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string collate UTF8_LCASE,split_part(utf8_lcase, collate(a, utf8_binary), 3):string collate UTF8_BINARY>
 -- !query output
 	
 	
@@ -1305,7 +1305,7 @@ struct<split_part(utf8_binary, collate(a, utf8_lcase), 3):string collate UTF8_LC
 -- !query
 select split_part(utf8_binary, 'a ' collate utf8_lcase_rtrim, 3), split_part(utf8_lcase, 'a' collate utf8_binary, 3) from t5
 -- !query schema
-struct<split_part(utf8_binary, collate(a , utf8_lcase_rtrim), 3):string collate UTF8_LCASE_RTRIM,split_part(utf8_lcase, collate(a, utf8_binary), 3):string>
+struct<split_part(utf8_binary, collate(a , utf8_lcase_rtrim), 3):string collate UTF8_LCASE_RTRIM,split_part(utf8_lcase, collate(a, utf8_binary), 3):string collate UTF8_BINARY>
 -- !query output
 	
 	
@@ -1334,7 +1334,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1371,7 +1371,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1522,7 +1522,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1559,7 +1559,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1567,7 +1567,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select substring_index(utf8_binary, utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
-struct<substring_index(utf8_binary, collate(utf8_lcase, utf8_binary), 2):string>
+struct<substring_index(utf8_binary, collate(utf8_lcase, utf8_binary), 2):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.
 Something else. Nothing here.
@@ -1637,7 +1637,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select substring_index(utf8_binary, 'a', 2), substring_index(utf8_lcase, 'a', 2) from t5
 -- !query schema
-struct<substring_index(utf8_binary, a, 2):string,substring_index(utf8_lcase, a, 2):string collate UTF8_LCASE>
+struct<substring_index(utf8_binary, a, 2):string collate UTF8_BINARY,substring_index(utf8_lcase, a, 2):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -1659,7 +1659,7 @@ kitten	sitTing
 -- !query
 select substring_index(utf8_binary, 'AaAA' collate utf8_lcase, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5
 -- !query schema
-struct<substring_index(utf8_binary, collate(AaAA, utf8_lcase), 2):string collate UTF8_LCASE,substring_index(utf8_lcase, collate(AAa, utf8_binary), 2):string>
+struct<substring_index(utf8_binary, collate(AaAA, utf8_lcase), 2):string collate UTF8_LCASE,substring_index(utf8_lcase, collate(AAa, utf8_binary), 2):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -1681,7 +1681,7 @@ kitten	sitTing
 -- !query
 select substring_index(utf8_binary, 'AaAA ' collate utf8_lcase_rtrim, 2), substring_index(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5
 -- !query schema
-struct<substring_index(utf8_binary, collate(AaAA , utf8_lcase_rtrim), 2):string collate UTF8_LCASE_RTRIM,substring_index(utf8_lcase, collate(AAa, utf8_binary), 2):string>
+struct<substring_index(utf8_binary, collate(AaAA , utf8_lcase_rtrim), 2):string collate UTF8_LCASE_RTRIM,substring_index(utf8_lcase, collate(AAa, utf8_binary), 2):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -1710,7 +1710,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1747,7 +1747,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1876,7 +1876,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -1913,7 +1913,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2038,7 +2038,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2075,7 +2075,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2248,7 +2248,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2263,7 +2263,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -2319,7 +2319,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select translate(utf8_lcase, 'aaAaaAaA', '12345'), translate(utf8_binary, 'aaAaaAaA', '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE,translate(utf8_binary, aaAaaAaA, 12345):string>
+struct<translate(utf8_lcase, aaAaaAaA, 12345):string collate UTF8_LCASE,translate(utf8_binary, aaAaaAaA, 12345):string collate UTF8_BINARY>
 -- !query output
 1	bb3b33b3
 11111111	11313313
@@ -2341,7 +2341,7 @@ sitTing	kitten
 -- !query
 select translate(utf8_lcase, 'aBc' collate utf8_binary, '12345'), translate(utf8_binary, 'aBc' collate utf8_lcase, '12345') from t5
 -- !query schema
-struct<translate(utf8_lcase, collate(aBc, utf8_binary), 12345):string,translate(utf8_binary, collate(aBc, utf8_lcase), 12345):string collate UTF8_LCASE>
+struct<translate(utf8_lcase, collate(aBc, utf8_binary), 12345):string collate UTF8_BINARY,translate(utf8_binary, collate(aBc, utf8_lcase), 12345):string collate UTF8_LCASE>
 -- !query output
 1	22121121
 11A11A1A	11111111
@@ -2392,7 +2392,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2429,7 +2429,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2437,7 +2437,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select replace(utf8_binary, utf8_lcase collate utf8_binary, 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, collate(utf8_lcase, utf8_binary), abc):string>
+struct<replace(utf8_binary, collate(utf8_lcase, utf8_binary), abc):string collate UTF8_BINARY>
 -- !query output
 Spark
 aaAaAAaA
@@ -2507,7 +2507,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select replace(utf8_binary, 'aaAaaAaA', 'abc'), replace(utf8_lcase, 'aaAaaAaA', 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, aaAaaAaA, abc):string,replace(utf8_lcase, aaAaaAaA, abc):string collate UTF8_LCASE>
+struct<replace(utf8_binary, aaAaaAaA, abc):string collate UTF8_BINARY,replace(utf8_lcase, aaAaaAaA, abc):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2529,7 +2529,7 @@ kitten	sitTing
 -- !query
 select replace(utf8_binary, 'aaAaaAaA' collate utf8_lcase, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), abc):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
+struct<replace(utf8_binary, collate(aaAaaAaA, utf8_lcase), abc):string collate UTF8_LCASE,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2551,7 +2551,7 @@ kitten	sitTing
 -- !query
 select replace(utf8_binary, 'aaAaaAaA ' collate utf8_lcase_rtrim, 'abc'), replace(utf8_lcase, 'aaAaaAaA' collate utf8_binary, 'abc') from t5
 -- !query schema
-struct<replace(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim), abc):string collate UTF8_LCASE_RTRIM,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string>
+struct<replace(utf8_binary, collate(aaAaaAaA , utf8_lcase_rtrim), abc):string collate UTF8_LCASE_RTRIM,replace(utf8_lcase, collate(aaAaaAaA, utf8_binary), abc):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2580,7 +2580,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2617,7 +2617,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -2761,7 +2761,7 @@ true	true
 -- !query
 select repeat(utf8_binary, 3), repeat(utf8_lcase, 2) from t5
 -- !query schema
-struct<repeat(utf8_binary, 3):string,repeat(utf8_lcase, 2):string collate UTF8_LCASE>
+struct<repeat(utf8_binary, 3):string collate UTF8_BINARY,repeat(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.Hello, world! Nice day.Hello, world! Nice day.	Hello, world! Nice day.Hello, world! Nice day.
 Something else. Nothing here.Something else. Nothing here.Something else. Nothing here.	Something else. Nothing here.Something else. Nothing here.
@@ -2783,7 +2783,7 @@ kittenkittenkitten	sitTingsitTing
 -- !query
 select repeat(utf8_binary collate utf8_lcase, 3), repeat(utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
-struct<repeat(collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,repeat(collate(utf8_lcase, utf8_binary), 2):string>
+struct<repeat(collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,repeat(collate(utf8_lcase, utf8_binary), 2):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.Hello, world! Nice day.Hello, world! Nice day.	Hello, world! Nice day.Hello, world! Nice day.
 Something else. Nothing here.Something else. Nothing here.Something else. Nothing here.	Something else. Nothing here.Something else. Nothing here.
@@ -3070,7 +3070,7 @@ kitten	sitTing
 -- !query
 select sentences(utf8_binary), sentences(utf8_lcase) from t5
 -- !query schema
-struct<sentences(utf8_binary, , ):array<array<string>>,sentences(utf8_lcase, , ):array<array<string collate UTF8_LCASE>>>
+struct<sentences(utf8_binary, , ):array<array<string collate UTF8_BINARY>>,sentences(utf8_lcase, , ):array<array<string collate UTF8_LCASE>>>
 -- !query output
 [["Hello","world"],["Nice","day"]]	[["Hello","world"],["Nice","day"]]
 [["Something","else"],["Nothing","here"]]	[["Something","else"],["Nothing","here"]]
@@ -3092,7 +3092,7 @@ struct<sentences(utf8_binary, , ):array<array<string>>,sentences(utf8_lcase, , )
 -- !query
 select sentences(utf8_binary collate utf8_lcase), sentences(utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<sentences(collate(utf8_binary, utf8_lcase), , ):array<array<string collate UTF8_LCASE>>,sentences(collate(utf8_lcase, utf8_binary), , ):array<array<string>>>
+struct<sentences(collate(utf8_binary, utf8_lcase), , ):array<array<string collate UTF8_LCASE>>,sentences(collate(utf8_lcase, utf8_binary), , ):array<array<string collate UTF8_BINARY>>>
 -- !query output
 [["Hello","world"],["Nice","day"]]	[["Hello","world"],["Nice","day"]]
 [["Something","else"],["Nothing","here"]]	[["Something","else"],["Nothing","here"]]
@@ -3114,7 +3114,7 @@ struct<sentences(collate(utf8_binary, utf8_lcase), , ):array<array<string collat
 -- !query
 select upper(utf8_binary), upper(utf8_lcase) from t5
 -- !query schema
-struct<upper(utf8_binary):string,upper(utf8_lcase):string collate UTF8_LCASE>
+struct<upper(utf8_binary):string collate UTF8_BINARY,upper(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 AAAAAAAA	AAAAAAAA
 AAAAAAAA	AAAAAAAA
@@ -3136,7 +3136,7 @@ SPARK	SQL
 -- !query
 select upper(utf8_binary collate utf8_lcase), upper(utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<upper(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,upper(collate(utf8_lcase, utf8_binary)):string>
+struct<upper(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,upper(collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 AAAAAAAA	AAAAAAAA
 AAAAAAAA	AAAAAAAA
@@ -3158,7 +3158,7 @@ SPARK	SQL
 -- !query
 select lower(utf8_binary), lower(utf8_lcase) from t5
 -- !query schema
-struct<lower(utf8_binary):string,lower(utf8_lcase):string collate UTF8_LCASE>
+struct<lower(utf8_binary):string collate UTF8_BINARY,lower(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 aaaaaaaa	aaaaaaaa
 aaaaaaaa	aaaaaaaa
@@ -3180,7 +3180,7 @@ spark	sql
 -- !query
 select lower(utf8_binary collate utf8_lcase), lower(utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<lower(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,lower(collate(utf8_lcase, utf8_binary)):string>
+struct<lower(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,lower(collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 aaaaaaaa	aaaaaaaa
 aaaaaaaa	aaaaaaaa
@@ -3202,7 +3202,7 @@ spark	sql
 -- !query
 select initcap(utf8_binary), initcap(utf8_lcase) from t5
 -- !query schema
-struct<initcap(utf8_binary):string,initcap(utf8_lcase):string collate UTF8_LCASE>
+struct<initcap(utf8_binary):string collate UTF8_BINARY,initcap(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Aaaaaaaa	Aaaaaaaa
 Aaaaaaaa	Aaaaaaaa
@@ -3224,7 +3224,7 @@ Spark	Sql
 -- !query
 select initcap(utf8_binary collate utf8_lcase), initcap(utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<initcap(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,initcap(collate(utf8_lcase, utf8_binary)):string>
+struct<initcap(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,initcap(collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Aaaaaaaa	Aaaaaaaa
 Aaaaaaaa	Aaaaaaaa
@@ -3253,7 +3253,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3290,7 +3290,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3298,7 +3298,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select overlay(utf8_binary, utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
-struct<overlay(utf8_binary, collate(utf8_lcase, utf8_binary), 2, -1):string>
+struct<overlay(utf8_binary, collate(utf8_lcase, utf8_binary), 2, -1):string collate UTF8_BINARY>
 -- !query output
 HHello, world! Nice day.
 SSQLk
@@ -3342,7 +3342,7 @@ ksitTing
 -- !query
 select overlay(utf8_binary, 'a', 2), overlay(utf8_lcase, 'a', 2) from t5
 -- !query schema
-struct<overlay(utf8_binary, a, 2, -1):string,overlay(utf8_lcase, a, 2, -1):string collate UTF8_LCASE>
+struct<overlay(utf8_binary, a, 2, -1):string collate UTF8_BINARY,overlay(utf8_lcase, a, 2, -1):string collate UTF8_LCASE>
 -- !query output
 Hallo, world! Nice day.	Hallo, world! Nice day.
 Saark	SaL
@@ -3364,7 +3364,7 @@ katten	satTing
 -- !query
 select overlay(utf8_binary, 'AaAA' collate utf8_lcase, 2), overlay(utf8_lcase, 'AAa' collate utf8_binary, 2) from t5
 -- !query schema
-struct<overlay(utf8_binary, collate(AaAA, utf8_lcase), 2, -1):string collate UTF8_LCASE,overlay(utf8_lcase, collate(AAa, utf8_binary), 2, -1):string>
+struct<overlay(utf8_binary, collate(AaAA, utf8_lcase), 2, -1):string collate UTF8_LCASE,overlay(utf8_lcase, collate(AAa, utf8_binary), 2, -1):string collate UTF8_BINARY>
 -- !query output
 HAaAA, world! Nice day.	HAAao, world! Nice day.
 SAaAA	SAAa
@@ -3386,7 +3386,7 @@ kAaAAn	sAAaing
 -- !query
 select format_string(format, utf8_binary, utf8_lcase) from t8
 -- !query schema
-struct<format_string(format, utf8_binary, utf8_lcase):string>
+struct<format_string(format, utf8_binary, utf8_lcase):string collate UTF8_BINARY>
 -- !query output
 abCdEabCdE
 
@@ -3394,7 +3394,7 @@ abCdEabCdE
 -- !query
 select format_string(format collate utf8_lcase, utf8_lcase, utf8_binary collate utf8_lcase, 3), format_string(format, utf8_lcase collate utf8_binary, utf8_binary) from t8
 -- !query schema
-struct<format_string(collate(format, utf8_lcase), utf8_lcase, collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,format_string(format, collate(utf8_lcase, utf8_binary), utf8_binary):string>
+struct<format_string(collate(format, utf8_lcase), utf8_lcase, collate(utf8_binary, utf8_lcase), 3):string collate UTF8_LCASE,format_string(format, collate(utf8_lcase, utf8_binary), utf8_binary):string collate UTF8_BINARY>
 -- !query output
 abCdEabCdE	abCdEabCdE
 
@@ -3402,7 +3402,7 @@ abCdEabCdE	abCdEabCdE
 -- !query
 select format_string(format, utf8_binary, utf8_lcase) from t8
 -- !query schema
-struct<format_string(format, utf8_binary, utf8_lcase):string>
+struct<format_string(format, utf8_binary, utf8_lcase):string collate UTF8_BINARY>
 -- !query output
 abCdEabCdE
 
@@ -3602,7 +3602,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3639,7 +3639,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -3779,7 +3779,7 @@ true	true
 -- !query
 select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t5
 -- !query schema
-struct<make_valid_utf8(utf8_binary):string,make_valid_utf8(utf8_lcase):string collate UTF8_LCASE>
+struct<make_valid_utf8(utf8_binary):string collate UTF8_BINARY,make_valid_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3801,7 +3801,7 @@ kitten	sitTing
 -- !query
 select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<make_valid_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,make_valid_utf8(collate(utf8_lcase, utf8_binary)):string>
+struct<make_valid_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,make_valid_utf8(collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3823,7 +3823,7 @@ kitten	sitTing
 -- !query
 select validate_utf8(utf8_binary), validate_utf8(utf8_lcase) from t5
 -- !query schema
-struct<validate_utf8(utf8_binary):string,validate_utf8(utf8_lcase):string collate UTF8_LCASE>
+struct<validate_utf8(utf8_binary):string collate UTF8_BINARY,validate_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3845,7 +3845,7 @@ kitten	sitTing
 -- !query
 select validate_utf8(utf8_binary collate utf8_lcase), validate_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,validate_utf8(collate(utf8_lcase, utf8_binary)):string>
+struct<validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,validate_utf8(collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3867,7 +3867,7 @@ kitten	sitTing
 -- !query
 select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t5
 -- !query schema
-struct<try_validate_utf8(utf8_binary):string,try_validate_utf8(utf8_lcase):string collate UTF8_LCASE>
+struct<try_validate_utf8(utf8_binary):string collate UTF8_BINARY,try_validate_utf8(utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3889,7 +3889,7 @@ kitten	sitTing
 -- !query
 select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<try_validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,try_validate_utf8(collate(utf8_lcase, utf8_binary)):string>
+struct<try_validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,try_validate_utf8(collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3911,7 +3911,7 @@ kitten	sitTing
 -- !query
 select substr(utf8_binary, 2, 2), substr(utf8_lcase, 2, 2) from t5
 -- !query schema
-struct<substr(utf8_binary, 2, 2):string,substr(utf8_lcase, 2, 2):string collate UTF8_LCASE>
+struct<substr(utf8_binary, 2, 2):string collate UTF8_BINARY,substr(utf8_lcase, 2, 2):string collate UTF8_LCASE>
 -- !query output
 aA	aA
 aA	aA
@@ -3933,7 +3933,7 @@ pa	QL
 -- !query
 select substr(utf8_binary collate utf8_lcase, 2, 2), substr(utf8_lcase collate utf8_binary, 2, 2) from t5
 -- !query schema
-struct<substr(collate(utf8_binary, utf8_lcase), 2, 2):string collate UTF8_LCASE,substr(collate(utf8_lcase, utf8_binary), 2, 2):string>
+struct<substr(collate(utf8_binary, utf8_lcase), 2, 2):string collate UTF8_LCASE,substr(collate(utf8_lcase, utf8_binary), 2, 2):string collate UTF8_BINARY>
 -- !query output
 aA	aA
 aA	aA
@@ -3955,7 +3955,7 @@ pa	QL
 -- !query
 select right(utf8_binary, 2), right(utf8_lcase, 2) from t5
 -- !query schema
-struct<right(utf8_binary, 2):string,right(utf8_lcase, 2):string collate UTF8_LCASE>
+struct<right(utf8_binary, 2):string collate UTF8_BINARY,right(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
 aA	aA
 aA	aA
@@ -3977,7 +3977,7 @@ y.	y.
 -- !query
 select right(utf8_binary collate utf8_lcase, 2), right(utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
-struct<right(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,right(collate(utf8_lcase, utf8_binary), 2):string>
+struct<right(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,right(collate(utf8_lcase, utf8_binary), 2):string collate UTF8_BINARY>
 -- !query output
 aA	aA
 aA	aA
@@ -3999,7 +3999,7 @@ y.	y.
 -- !query
 select left(utf8_binary, '2' collate utf8_lcase), left(utf8_lcase, 2) from t5
 -- !query schema
-struct<left(utf8_binary, collate(2, utf8_lcase)):string,left(utf8_lcase, 2):string collate UTF8_LCASE>
+struct<left(utf8_binary, collate(2, utf8_lcase)):string collate UTF8_BINARY,left(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
 He	He
 So	So
@@ -4021,7 +4021,7 @@ ki	si
 -- !query
 select left(utf8_binary collate utf8_lcase, 2), left(utf8_lcase collate utf8_binary, 2) from t5
 -- !query schema
-struct<left(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,left(collate(utf8_lcase, utf8_binary), 2):string>
+struct<left(collate(utf8_binary, utf8_lcase), 2):string collate UTF8_LCASE,left(collate(utf8_lcase, utf8_binary), 2):string collate UTF8_BINARY>
 -- !query output
 He	He
 So	So
@@ -4050,7 +4050,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4087,7 +4087,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4095,7 +4095,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select rpad(utf8_binary, 8, utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<rpad(utf8_binary, 8, collate(utf8_lcase, utf8_binary)):string>
+struct<rpad(utf8_binary, 8, collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Hello, w
 Somethin
@@ -4161,7 +4161,7 @@ sikitten
 -- !query
 select rpad(utf8_binary, 8, 'a'), rpad(utf8_lcase, 8, 'a') from t5
 -- !query schema
-struct<rpad(utf8_binary, 8, a):string,rpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
+struct<rpad(utf8_binary, 8, a):string collate UTF8_BINARY,rpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
 -- !query output
 Hello, w	Hello, w
 Somethin	Somethin
@@ -4183,7 +4183,7 @@ kittenaa	sitTinga
 -- !query
 select rpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), rpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t5
 -- !query schema
-struct<rpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE,rpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string>
+struct<rpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE,rpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Hello, w	Hello, w
 Somethin	Somethin
@@ -4212,7 +4212,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4249,7 +4249,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4257,7 +4257,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select lpad(utf8_binary, 8, utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<lpad(utf8_binary, 8, collate(utf8_lcase, utf8_binary)):string>
+struct<lpad(utf8_binary, 8, collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 Hello, w
 SQLSpark
@@ -4323,7 +4323,7 @@ sikitten
 -- !query
 select lpad(utf8_binary, 8, 'a'), lpad(utf8_lcase, 8, 'a') from t5
 -- !query schema
-struct<lpad(utf8_binary, 8, a):string,lpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
+struct<lpad(utf8_binary, 8, a):string collate UTF8_BINARY,lpad(utf8_lcase, 8, a):string collate UTF8_LCASE>
 -- !query output
 Hello, w	Hello, w
 Somethin	Somethin
@@ -4345,7 +4345,7 @@ bbAbAAbA	aaaaaaaa
 -- !query
 select lpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), lpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t5
 -- !query schema
-struct<lpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE,lpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string>
+struct<lpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE,lpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 AaAAAabc	AAaAAabc
 AaAAAaİo	AAaAAaİo
@@ -4374,7 +4374,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4411,7 +4411,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4562,7 +4562,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -4570,7 +4570,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select TRIM(s, utf8_binary) from t5
 -- !query schema
-struct<TRIM(BOTH s FROM utf8_binary):string>
+struct<TRIM(BOTH s FROM utf8_binary):string collate UTF8_BINARY>
 -- !query output
 
 
@@ -4585,7 +4585,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -4593,7 +4593,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select TRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<TRIM(BOTH utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
+struct<TRIM(BOTH utf8_binary FROM collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 
 
@@ -4685,7 +4685,7 @@ sitTing
 -- !query
 select TRIM('ABc', utf8_binary), TRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(BOTH ABc FROM utf8_binary):string,TRIM(BOTH ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(BOTH ABc FROM utf8_binary):string collate UTF8_BINARY,TRIM(BOTH ABc FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -4707,7 +4707,7 @@ kitten	sitTing
 -- !query
 select TRIM('ABc' collate utf8_lcase, utf8_binary), TRIM('AAa' collate utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<TRIM(BOTH collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(BOTH collate(AAa, utf8_binary) FROM utf8_lcase):string>
+struct<TRIM(BOTH collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(BOTH collate(AAa, utf8_binary) FROM utf8_lcase):string collate UTF8_BINARY>
 -- !query output
 	
 	
@@ -4736,7 +4736,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4773,7 +4773,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UTF8_LCASE\""
   }
 }
 
@@ -4781,7 +4781,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select BTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<btrim(utf8_binary, collate(utf8_lcase, utf8_binary)):string>
+struct<btrim(utf8_binary, collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 
 
@@ -4895,7 +4895,7 @@ Bc	Bc
 -- !query
 select BTRIM('ABc' collate utf8_lcase, utf8_binary), BTRIM('AAa' collate utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<btrim(collate(ABc, utf8_lcase), utf8_binary):string collate UTF8_LCASE,btrim(collate(AAa, utf8_binary), utf8_lcase):string>
+struct<btrim(collate(ABc, utf8_lcase), utf8_binary):string collate UTF8_LCASE,btrim(collate(AAa, utf8_binary), utf8_lcase):string collate UTF8_BINARY>
 -- !query output
 	
 	AA
@@ -4924,7 +4924,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -4932,7 +4932,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select LTRIM(s, utf8_binary) from t5
 -- !query schema
-struct<TRIM(LEADING s FROM utf8_binary):string>
+struct<TRIM(LEADING s FROM utf8_binary):string collate UTF8_BINARY>
 -- !query output
 
 
@@ -4947,7 +4947,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -4955,7 +4955,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select LTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<TRIM(LEADING utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
+struct<TRIM(LEADING utf8_binary FROM collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 
 
@@ -5047,7 +5047,7 @@ sitTing
 -- !query
 select LTRIM('ABc', utf8_binary), LTRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(LEADING ABc FROM utf8_binary):string,TRIM(LEADING ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(LEADING ABc FROM utf8_binary):string collate UTF8_BINARY,TRIM(LEADING ABc FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -5069,7 +5069,7 @@ kitten	sitTing
 -- !query
 select LTRIM('ABc' collate utf8_lcase, utf8_binary), LTRIM('AAa' collate utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<TRIM(LEADING collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(LEADING collate(AAa, utf8_binary) FROM utf8_lcase):string>
+struct<TRIM(LEADING collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(LEADING collate(AAa, utf8_binary) FROM utf8_lcase):string collate UTF8_BINARY>
 -- !query output
 	
 	
@@ -5098,7 +5098,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -5106,7 +5106,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select RTRIM(s, utf8_binary) from t5
 -- !query schema
-struct<TRIM(TRAILING s FROM utf8_binary):string>
+struct<TRIM(TRAILING s FROM utf8_binary):string collate UTF8_BINARY>
 -- !query output
 
 
@@ -5135,7 +5135,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
-    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UTF8_BINARY\""
   }
 }
 
@@ -5143,7 +5143,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select RTRIM(utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query schema
-struct<TRIM(TRAILING utf8_binary FROM collate(utf8_lcase, utf8_binary)):string>
+struct<TRIM(TRAILING utf8_binary FROM collate(utf8_lcase, utf8_binary)):string collate UTF8_BINARY>
 -- !query output
 
 
@@ -5235,7 +5235,7 @@ sitTing
 -- !query
 select RTRIM('ABc', utf8_binary), RTRIM('ABc', utf8_lcase) from t5
 -- !query schema
-struct<TRIM(TRAILING ABc FROM utf8_binary):string,TRIM(TRAILING ABc FROM utf8_lcase):string collate UTF8_LCASE>
+struct<TRIM(TRAILING ABc FROM utf8_binary):string collate UTF8_BINARY,TRIM(TRAILING ABc FROM utf8_lcase):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -5257,7 +5257,7 @@ kitten	sitTing
 -- !query
 select RTRIM('ABc' collate utf8_lcase, utf8_binary), RTRIM('AAa' collate utf8_binary, utf8_lcase) from t5
 -- !query schema
-struct<TRIM(TRAILING collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(TRAILING collate(AAa, utf8_binary) FROM utf8_lcase):string>
+struct<TRIM(TRAILING collate(ABc, utf8_lcase) FROM utf8_binary):string collate UTF8_LCASE,TRIM(TRAILING collate(AAa, utf8_binary) FROM utf8_lcase):string collate UTF8_BINARY>
 -- !query output
 	
 	

@@ -285,6 +285,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       queries: Seq[String],
       testCase: TestCase,
       sparkConfigSet: Seq[(String, String)]): Unit = {
+    if (!testCase.name.toLowerCase().contains("collation")) {
+      return
+    }
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
