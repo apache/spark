@@ -175,8 +175,8 @@ private[sql] trait ExecutionErrors extends DataTypeErrorsBase {
   def cannotHaveCircularReferencesInBeanClassError(
       clazz: Class[_]): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2138",
-      messageParameters = Map("clazz" -> clazz.toString))
+      errorClass = "CIRCULAR_CLASS_REFERENCE",
+      messageParameters = Map("t" -> toSQLValue(clazz.toString)))
   }
 
   def cannotFindConstructorForTypeError(tpe: String): SparkUnsupportedOperationException = {

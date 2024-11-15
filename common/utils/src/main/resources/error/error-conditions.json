@@ -7331,11 +7331,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2138" : {
-    "message" : [
-      "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
