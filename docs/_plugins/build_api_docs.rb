@@ -34,7 +34,7 @@ def print_header(text)
 end
 
 def build_spark_if_necessary
-  if $spark_package_is_built
+  if $spark_package_is_built || (ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1')
     return
   end
 
@@ -123,9 +123,11 @@ def build_scala_and_java_docs
   print_header "Building Scala and Java API docs."
   cd(SPARK_PROJECT_ROOT)
 
-  command = "build/sbt -Pkinesis-asl unidoc"
-  puts "Running '#{command}'..."
-  system(command) || raise("Unidoc generation failed")
+  if not (ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1')
+    command = "build/sbt -Pkinesis-asl unidoc"
+    puts "Running '#{command}'..."
+    system(command) || raise("Unidoc generation failed")
+  end
 
   puts "Moving back into docs dir."
   cd("docs")
@@ -217,7 +219,7 @@ if not (ENV['SKIP_API'] == '1')
     build_python_docs
   end
 
-  if not (ENV['SKIP_RDOC'] == '1')
+  if (not (ENV['SKIP_RDOC'] == '1')) && (not (ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'))
     build_r_docs
   end
 
