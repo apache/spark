@@ -102,6 +102,7 @@ message DataType {
   message String {
     uint32 type_variation_reference = 1;
     string collation = 2;
+    optional uint32 max_length = 3;
   }
 
   message Binary {
