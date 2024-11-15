@@ -75,7 +75,7 @@ class BitSet(numBits: Int) extends Serializable {
     assert(newBS.numWords >= numWords)
     assert(newBS.numWords >= other.numWords)
     var ind = 0
-    while( ind < smaller ) {
+    while (ind < smaller) {
       newBS.words(ind) = words(ind) & other.words(ind)
       ind += 1
     }
@@ -92,15 +92,15 @@ class BitSet(numBits: Int) extends Serializable {
     assert(newBS.numWords >= other.numWords)
     val smaller = math.min(numWords, other.numWords)
     var ind = 0
-    while( ind < smaller ) {
+    while (ind < smaller) {
       newBS.words(ind) = words(ind) | other.words(ind)
       ind += 1
     }
-    while( ind < numWords ) {
+    while (ind < numWords) {
       newBS.words(ind) = words(ind)
       ind += 1
     }
-    while( ind < other.numWords ) {
+    while (ind < other.numWords) {
       newBS.words(ind) = other.words(ind)
       ind += 1
     }
@@ -242,7 +242,7 @@ class BitSet(numBits: Int) extends Serializable {
   def union(other: BitSet): Unit = {
     require(this.numWords <= other.numWords)
     var ind = 0
-    while( ind < this.numWords ) {
+    while (ind < this.numWords) {
       this.words(ind) = this.words(ind) | other.words(ind)
       ind += 1
     }

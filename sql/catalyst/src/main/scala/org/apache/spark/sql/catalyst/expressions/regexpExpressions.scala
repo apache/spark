@@ -984,7 +984,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     val m = getLastMatcher(s, p)
     val matchResults = new ArrayBuffer[UTF8String]()
-    while(m.find) {
+    while (m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
       RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
