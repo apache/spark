@@ -261,16 +261,26 @@ Aggregate [listagg(cast(a#x as string), null, 0, 0) AS listagg(a, NULL)#x, lista
 
 
 -- !query
-SELECT listagg(c1) FROM (VALUES (ARRAY['a', 'b'])) AS t(c1)
+SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1)
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "error" : "','",
-    "hint" : ""
-  }
+    "inputSql" : "\"c1\"",
+    "inputType" : "\"ARRAY<STRING>\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"STRING\" or \"BINARY\")",
+    "sqlExpr" : "\"listagg(c1, NULL)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 18,
+    "fragment" : "listagg(c1)"
+  } ]
 }
 
 

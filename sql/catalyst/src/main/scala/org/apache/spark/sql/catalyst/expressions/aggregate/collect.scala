@@ -323,8 +323,15 @@ case class ListAgg(
   with SupportsOrderingWithinGroup
   with ImplicitCastInputTypes {
 
+  override def orderingFilled: Boolean = orderExpressions.nonEmpty
+
   override def isOrderingMandatory: Boolean = false
+
   override def isDistinctSupported: Boolean = true
+
+  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction =
+    copy(orderExpressions = orderingWithinGroup)
+
   override protected lazy val bufferElementType: DataType = {
     if (noNeedSaveOrderValue) {
       child.dataType
@@ -439,9 +446,6 @@ case class ListAgg(
     }
     new InterpretedOrdering(bufferSortOrder)
   }
-
-  override def orderingFilled: Boolean = orderExpressions.nonEmpty
-
   private[this] def concatSkippingNulls(buffer: mutable.ArrayBuffer[Any]): Any = {
     val delimiterValue = getDelimiterValue
     dataType match {
@@ -487,9 +491,6 @@ case class ListAgg(
   }
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
-
-  override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction =
-    copy(orderExpressions = orderingWithinGroup)
 
   override def children: Seq[Expression] = child +: delimiter +: orderExpressions.map(_.child)
 

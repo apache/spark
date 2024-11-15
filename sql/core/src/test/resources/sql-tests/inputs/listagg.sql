@@ -27,7 +27,7 @@ SELECT listagg(c1, X'42') FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1);
 SELECT listagg(a), listagg(b, ',') FROM df2;
 
 -- Error cases
-SELECT listagg(c1) FROM (VALUES (ARRAY['a', 'b'])) AS t(c1);
+SELECT listagg(c1) FROM (VALUES (ARRAY('a', 'b'))) AS t(c1);
 SELECT listagg(c1, ', ') FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1);
 SELECT listagg(b, a) FROM df GROUP BY a;
 SELECT listagg(a) OVER (ORDER BY a) FROM df;
