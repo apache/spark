@@ -14,11 +14,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.expressions.xml
 
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.xml.XmlInferSchema
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+
+object XmlExpressionEvalUtils {
+
+  def schemaOfXml(xmlInferSchema: XmlInferSchema, xml: UTF8String): UTF8String = {
+    val dataType = xmlInferSchema.infer(xml.toString).get match {
+      case st: StructType =>
+        xmlInferSchema.canonicalizeType(st).getOrElse(StructType(Nil))
+      case at: ArrayType if at.elementType.isInstanceOf[StructType] =>
+        xmlInferSchema
+          .canonicalizeType(at.elementType)
+          .map(ArrayType(_, containsNull = at.containsNull))
+          .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
+      case other: DataType =>
+        xmlInferSchema.canonicalizeType(other).getOrElse(SQLConf.get.defaultStringType)
+    }
+
+    UTF8String.fromString(dataType.sql)
+  }
+}
 
 object XPathEvaluatorFactory {
   def create(dataType: DataType, path: UTF8String): XPathEvaluator = {

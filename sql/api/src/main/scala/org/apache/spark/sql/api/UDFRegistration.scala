@@ -36,6 +36,23 @@ import org.apache.spark.sql.types.DataType
 abstract class UDFRegistration {
 
   /**
+   * Register a Java UDF class using it's class name. The class must implement one of the UDF
+   * interfaces in the [[org.apache.spark.sql.api.java]] package, and discoverable by the current
+   * session's class loader.
+   *
+   * @param name
+   *   Name of the UDF.
+   * @param className
+   *   Fully qualified class name of the UDF.
+   * @param returnDataType
+   *   Return type of UDF. If it is `null`, Spark would try to infer via reflection.
+   * @note
+   *   this method is currently not supported in Spark Connect.
+   * @since 4.0.0
+   */
+  def registerJava(name: String, className: String, returnDataType: DataType): Unit
+
+  /**
    * Registers a user-defined function (UDF), for a UDF that's already defined using the Dataset
    * API (i.e. of type UserDefinedFunction). To change a UDF to nondeterministic, call the API
    * `UserDefinedFunction.asNondeterministic()`. To change a UDF to nonNullable, call the API

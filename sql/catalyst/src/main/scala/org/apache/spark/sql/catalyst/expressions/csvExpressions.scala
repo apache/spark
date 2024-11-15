@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
 
-import com.univocity.parsers.csv.CsvParser
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.csv.SchemaOfCsvEvaluator
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -60,9 +60,8 @@ case class CsvToStructs(
   extends UnaryExpression
     with TimeZoneAwareExpression
     with CodegenFallback
-    with ExpectsInputTypes
-    with NullIntolerant {
-
+    with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def nullable: Boolean = child.nullable
 
   // The CSV input data might be missing certain fields. We force the nullability
@@ -170,7 +169,7 @@ case class CsvToStructs(
 case class SchemaOfCsv(
     child: Expression,
     options: Map[String, String])
-  extends UnaryExpression with CodegenFallback with QueryErrorsBase {
+  extends UnaryExpression with RuntimeReplaceable with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
 
@@ -202,30 +201,20 @@ case class SchemaOfCsv(
     }
   }
 
-  override def eval(v: InternalRow): Any = {
-    // 'lineSep' is a plan-wise option so we set a noncharacter, according to
-    // the unicode specification, which should not appear in Java's strings.
-    // See also SPARK-38955 and https://www.unicode.org/charts/PDF/UFFF0.pdf.
-    // scalastyle:off nonascii
-    val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
-    // scalastyle:on nonascii
-    val parsedOptions = new CSVOptions(exprOptions, true, "UTC")
-    val parser = new CsvParser(parsedOptions.asParserSettings)
-    val row = parser.parseLine(csv.toString)
-    assert(row != null, "Parsed CSV record should not be null.")
-
-    val header = row.zipWithIndex.map { case (_, index) => s"_c$index" }
-    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val inferSchema = new CSVInferSchema(parsedOptions)
-    val fieldTypes = inferSchema.inferRowType(startType, row)
-    val st = StructType(inferSchema.toStructFields(fieldTypes, header))
-    UTF8String.fromString(st.sql)
-  }
-
   override def prettyName: String = "schema_of_csv"
 
   override protected def withNewChildInternal(newChild: Expression): SchemaOfCsv =
     copy(child = newChild)
+
+  @transient
+  private lazy val evaluator: SchemaOfCsvEvaluator = SchemaOfCsvEvaluator(options)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[SchemaOfCsvEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType))
 }
 
 /**
@@ -248,7 +237,8 @@ case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
      timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with TimeZoneAwareExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)

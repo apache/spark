@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkIllegalArgumentException
-import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -77,10 +76,7 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
           sql(s"SELECT parse_url('$url', 'HOST')").collect()
         },
         condition = "INVALID_URL",
-        parameters = Map(
-          "url" -> url,
-          "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)
-        ))
+        parameters = Map("url" -> url))
     }
   }
 

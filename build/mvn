@@ -56,7 +56,7 @@ install_app() {
   local binary="${_DIR}/$6"
   local remote_tarball="${mirror_host}/${url_path}${url_query}"
   local local_checksum="${local_tarball}.${checksum_suffix}"
-  local remote_checksum="https://archive.apache.org/dist/${url_path}.${checksum_suffix}"
+  local remote_checksum="${mirror_host}/${url_path}.${checksum_suffix}${url_query}"
 
   local curl_opts="--retry 3 --silent --show-error -L"
   local wget_opts="--no-verbose"

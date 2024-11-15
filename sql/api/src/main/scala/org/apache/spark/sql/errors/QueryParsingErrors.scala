@@ -105,6 +105,19 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES", ctx)
   }
 
+  def pipeOperatorAggregateUnsupportedCaseError(
+      caseArgument: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+      messageParameters = Map("case" -> caseArgument),
+      ctx)
+  }
+
+  def windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE", ctx)
+  }
+
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
   }
@@ -284,9 +297,16 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       from: String,
       to: String,
       ctx: ParserRuleContext): Throwable = {
+    val intervalInput = ctx.getText()
+    val pattern = "'([^']*)'".r
+    val input = pattern.findFirstMatchIn(intervalInput) match {
+      case Some(m) => m.group(1)
+      case None => ""
+    }
+
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0028",
-      messageParameters = Map("from" -> from, "to" -> to),
+      errorClass = "INVALID_INTERVAL_FORMAT.UNSUPPORTED_FROM_TO_EXPRESSION",
+      messageParameters = Map("input" -> input, "from" -> from, "to" -> to),
       ctx)
   }
 
@@ -471,7 +491,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
 
   def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0038",
+      errorClass = "DUPLICATED_CTE_NAMES",
       messageParameters = Map("duplicateNames" -> duplicateNames),
       ctx)
   }
@@ -532,7 +552,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0043", ctx)
+    new ParseException(errorClass = "INVALID_RESET_COMMAND_FORMAT", ctx)
   }
 
   def intervalValueOutOfRangeError(input: String, ctx: IntervalContext): Throwable = {
