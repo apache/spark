@@ -44,7 +44,7 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "expression" : "'b'",
+    "expression" : "'a'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"BIGINT\""
   },
