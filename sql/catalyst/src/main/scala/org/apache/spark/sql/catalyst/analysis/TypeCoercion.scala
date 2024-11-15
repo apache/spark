@@ -102,7 +102,12 @@ object TypeCoercion extends TypeCoercionBase {
   private def stringPromotion(dt1: DataType, dt2: DataType): Option[DataType] = (dt1, dt2) match {
     // [SPARK-50060] If a binary operation contains two collated string types with different
     // collation IDs, we can't decide which collation ID the result should have.
-    case (st1: StringType, st2: StringType) if st1.collationId != st2.collationId => None
+    case (st1: StringType, st2: StringType) if st1 != st2 =>
+      if (st1.semanticEquals(st2) && st1.isUTF8BinaryCollation) {
+        Some(StringType)
+      } else {
+        None
+      }
     case (st: StringType, t2: AtomicType) if t2 != BinaryType && t2 != BooleanType => Some(st)
     case (t1: AtomicType, st: StringType) if t1 != BinaryType && t1 != BooleanType => Some(st)
     case _ => None
@@ -283,6 +288,13 @@ object TypeCoercion extends TypeCoercionBase {
    * If the input types are different besides nullable flags, None is returned.
    */
   def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
+    if (t1 != t2 && t1.isInstanceOf[StringType] && t2.isInstanceOf[StringType]) {
+      val stringType = t1.asInstanceOf[StringType]
+      if (stringType.semanticEquals(t2) && stringType.isUTF8BinaryCollation) {
+        return Some(StringType)
+      }
+    }
+
     if (t1 == t2) {
       Some(t1)
     } else {

@@ -694,10 +694,9 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
 
 
   test("StringType is not the same as StringType(UTF8_BINARY)") {
-    assert(StringType != StringType(0))
+    assert(StringType == StringType(0))
     assert(StringType != StringType("UTF8_BINARY"))
-    assert(StringType("UTF8_BINARY") == StringType(0))
-    assert(StringType.sameType(StringType(0)))
+    assert(StringType.sameType(StringType("UTF8_BINARY")))
   }
 
   def checkEqualsIgnoreCompatibleCollation(
@@ -966,7 +965,7 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     withSQLConf(SQLConf.ALLOW_READING_UNKNOWN_COLLATIONS.key -> "true") {
       val dataType = DataType.fromJson(json)
       assert(dataType === StructType(
-        StructField("c1", StringType, false) :: Nil))
+        StructField("c1", StringType("UTF8_BINARY"), false) :: Nil))
     }
   }
 

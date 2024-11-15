@@ -39,7 +39,6 @@ class CollationSQLFunctionsSuite extends QueryTest with SharedSparkSession {
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE_CI_AI") {
       Seq(
         StringType,
-        StringType("UTF8_BINARY"),
         StringType("UNICODE"),
         StringType("UNICODE_CI_AI")).foreach { stringType =>
         val dataSchema = StructType(Seq(StructField("fieldName", stringType)))
