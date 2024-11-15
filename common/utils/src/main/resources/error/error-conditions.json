@@ -630,12 +630,6 @@
     ],
     "sqlState" : "42703"
   },
-  "COLUMN_NOT_FOUND_IN_SCHEMA" : {
-    "message" : [
-      "Column <colName> not found in schema <tableSchema>."
-    ],
-    "sqlState" : "42703"
-  },
   "COLUMN_ORDINAL_OUT_OF_BOUNDS" : {
     "message" : [
       "Column ordinal out of bounds. The number of columns in the table is <attributesLength>, but the column ordinal is <ordinal>.",
