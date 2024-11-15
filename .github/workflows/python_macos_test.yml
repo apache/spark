@@ -138,7 +138,6 @@ jobs:
       # Run the tests.
       - name: Run tests
         env: ${{ fromJSON(inputs.envs) }}
-        shell: 'script -q -e -c "bash {0}"'
         run: |
           if [[ "$MODULES_TO_TEST" == *"pyspark-errors"* ]]; then
             export SKIP_PACKAGING=false
