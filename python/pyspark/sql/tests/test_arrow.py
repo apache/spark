@@ -564,7 +564,9 @@ class ArrowTestsMixin:
                 # which is false by default
                 self.assertEqual(df.collect(), expected)
                 with self.assertRaises(Exception):
-                    with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": True}):
+                    with self.sql_conf(
+                        {"spark.sql.execution.pandas.convertToArrowArraySafely": True}
+                    ):
                         df = self.spark.createDataFrame(pdf, schema=schema)
                 with self.assertRaises(Exception):
                     df = self.spark.createDataFrame(pdf, schema=schema, verifySchema=True)
