@@ -449,3 +449,19 @@ def get_lit_sql_str(val: str) -> str:
     # See `sql` definition in `sql/catalyst/src/main/scala/org/apache/spark/
     # sql/catalyst/expressions/literals.scala`
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def spark_connect_only(func: Union[Callable, property]) -> Union[Callable, property]:
+    """
+    Decorator to mark a function or method as only available in Spark Connect.
+
+    This decorator allows for easy identification of Spark Connect-specific APIs.
+    """
+    if isinstance(func, property):
+        # If it's a property, we need to set the attribute on the getter function
+        getter_func = func.fget
+        getter_func._spark_connect_only = True  # type: ignore[union-attr]
+        return property(getter_func)
+    else:
+        func._spark_connect_only = True  # type: ignore[attr-defined]
+        return func

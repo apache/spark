@@ -60,8 +60,6 @@ if should_test_connect:
     from pyspark.sql.connect.streaming.readwriter import DataStreamReader as ConnectDataStreamReader
     from pyspark.sql.connect.streaming.readwriter import DataStreamWriter as ConnectDataStreamWriter
 
-SPARK_CONNECT_ONLY = "spark_connect_only"
-
 
 class ConnectCompatibilityTestsMixin:
     def get_public_methods(self, cls):
@@ -71,9 +69,8 @@ class ConnectCompatibilityTestsMixin:
             if (
                 inspect.isfunction(method) or isinstance(method, functools._lru_cache_wrapper)
             ) and not name.startswith("_"):
-                source_lines = inspect.getsource(method).upper()
-                if "ONLY_SUPPORTED_WITH_SPARK_CONNECT" in source_lines:
-                    methods[name] = SPARK_CONNECT_ONLY
+                if getattr(method, "_spark_connect_only", False):
+                    methods[name] = None
                 else:
                     methods[name] = method
         return methods
@@ -96,10 +93,7 @@ class ConnectCompatibilityTestsMixin:
 
         for method in common_methods:
             # Skip non-callable, Spark Connect-specific methods
-            if (
-                classic_methods[method] == SPARK_CONNECT_ONLY
-                or connect_methods[method] == SPARK_CONNECT_ONLY
-            ):
+            if classic_methods[method] is None or connect_methods[method] is None:
                 continue
 
             classic_signature = inspect.signature(classic_methods[method])
@@ -162,7 +156,7 @@ class ConnectCompatibilityTestsMixin:
         classic_only_methods = {
             name
             for name, method in classic_methods.items()
-            if name not in connect_methods or method == SPARK_CONNECT_ONLY
+            if name not in connect_methods or method is None
         }
         connect_only_methods = set(connect_methods.keys()) - set(classic_methods.keys())
 
