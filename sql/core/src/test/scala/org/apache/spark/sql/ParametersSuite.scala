@@ -744,14 +744,14 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
 
   test("SPARK-50322: parameterized identifier in a sub-query") {
     withTable("tt1") {
-      sql("create table tt1(c1 int)")
-      sql("insert into tt1 values (1)")
+      sql("CREATE TABLE tt1 (c1 INT)")
+      sql("INSERT INTO tt1 VALUES (1)")
       def query(p: String): String = {
         s"""
-          |with v1 as (
-          |  select * from tt1
-          |  where 1 = (Select * from identifier($p))
-          |) select * from v1""".stripMargin
+          |WITH v1 AS (
+          |  SELECT * FROM tt1
+          |  WHERE 1 = (SELECT * FROM IDENTIFIER($p))
+          |) SELECT * FROM v1""".stripMargin
       }
 
       checkAnswer(spark.sql(query(":tab"), args = Map("tab" -> "tt1")), Row(1))
