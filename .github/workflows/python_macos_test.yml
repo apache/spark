@@ -79,7 +79,7 @@ jobs:
             pyspark-pandas-connect-part3
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
-      PYTHON_TO_TEST: ${{inputs.python}}
+      PYTHON_TO_TEST: python${{inputs.python}}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       # GitHub Actions' default miniconda to use in pip packaging test.
