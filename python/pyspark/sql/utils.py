@@ -451,6 +451,15 @@ def get_lit_sql_str(val: str) -> str:
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
 
+class NumpyHelper:
+    @staticmethod
+    def linspace(start: float, stop: float, num: int) -> Sequence[float]:
+        if num == 1:
+            return [float(start)]
+        step = (float(stop) - float(start)) / (num - 1)
+        return [start + step * i for i in range(num)]
+
+
 def spark_connect_only(func: Union[Callable, property]) -> Union[Callable, property]:
     """
     Decorator to mark a function or method as only available in Spark Connect.

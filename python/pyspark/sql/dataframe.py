@@ -6476,6 +6476,167 @@ class DataFrame:
         """
         ...
 
+    def scalar(self) -> Column:
+        """
+        Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.
+
+        The `scalar()` method is useful for extracting a `Column` object that represents a scalar
+        value from a DataFrame, especially when the DataFrame results from an aggregation or
+        single-value computation. This returned `Column` can then be used directly in `select`
+        clauses or as predicates in filters on the outer DataFrame, enabling dynamic data filtering
+        and calculations based on scalar values.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Column`
+            A `Column` object representing a SCALAR subquery.
+
+        Examples
+        --------
+        Setup a sample DataFrame.
+
+        >>> data = [
+        ...     (1, "Alice", 45000, 101), (2, "Bob", 54000, 101), (3, "Charlie", 29000, 102),
+        ...     (4, "David", 61000, 102), (5, "Eve", 48000, 101),
+        ... ]
+        >>> employees = spark.createDataFrame(data, ["id", "name", "salary", "department_id"])
+
+        Example 1 (non-correlated): Filter for employees with salary greater than the average
+        salary.
+
+        >>> from pyspark.sql import functions as sf
+        >>> employees.where(
+        ...     sf.col("salary") > employees.select(sf.avg("salary")).scalar()
+        ... ).select("name", "salary", "department_id").show()
+        +-----+------+-------------+
+        | name|salary|department_id|
+        +-----+------+-------------+
+        |  Bob| 54000|          101|
+        |David| 61000|          102|
+        |  Eve| 48000|          101|
+        +-----+------+-------------+
+
+        Example 2 (correlated): Filter for employees with salary greater than the average salary
+        in their department.
+
+        >>> from pyspark.sql import functions as sf
+        >>> employees.where(
+        ...     sf.col("salary")
+        ...     > employees.where(sf.col("department_id") == sf.col("department_id").outer())
+        ...         .select(sf.avg("salary")).scalar()
+        ... ).select("name", "salary", "department_id").show()
+        +-----+------+-------------+
+        | name|salary|department_id|
+        +-----+------+-------------+
+        |  Bob| 54000|          101|
+        |David| 61000|          102|
+        +-----+------+-------------+
+
+        Example 3 (in select): Select the name, salary, and the proportion of the salary in the
+        department.
+
+        >>> from pyspark.sql import functions as sf
+        >>> employees.select(
+        ...     "name", "salary", "department_id",
+        ...     sf.format_number(
+        ...         sf.lit(100) * sf.col("salary") /
+        ...             employees.where(sf.col("department_id") == sf.col("department_id").outer())
+        ...             .select(sf.sum("salary")).scalar().alias("avg_salary"),
+        ...         1
+        ...     ).alias("salary_proportion_in_department")
+        ... ).show()
+        +-------+------+-------------+-------------------------------+
+        |   name|salary|department_id|salary_proportion_in_department|
+        +-------+------+-------------+-------------------------------+
+        |  Alice| 45000|          101|                           30.6|
+        |    Bob| 54000|          101|                           36.7|
+        |Charlie| 29000|          102|                           32.2|
+        |    Eve| 48000|          101|                           32.7|
+        |  David| 61000|          102|                           67.8|
+        +-------+------+-------------+-------------------------------+
+        """
+        ...
+
+    def exists(self) -> Column:
+        """
+        Return a `Column` object for an EXISTS Subquery.
+
+        The `exists` method provides a way to create a boolean column that checks for the presence
+        of related records in a subquery. When applied within a `DataFrame`, this method allows you
+        to filter rows based on whether matching records exist in the related dataset. The resulting
+        `Column` object can be used directly in filtering conditions or as a computed column.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Column`
+            A `Column` object representing an EXISTS subquery
+
+        Examples
+        --------
+        Setup sample data for customers and orders.
+
+        >>> data_customers = [
+        ...     (101, "Alice", "USA"), (102, "Bob", "Canada"), (103, "Charlie", "USA"),
+        ...     (104, "David", "Australia")
+        ... ]
+        >>> data_orders = [
+        ...     (1, 101, "2023-01-15", 250), (2, 102, "2023-01-20", 300),
+        ...     (3, 103, "2023-01-25", 400), (4, 101, "2023-02-05", 150)
+        ... ]
+        >>> customers = spark.createDataFrame(
+        ...     data_customers, ["customer_id", "customer_name", "country"])
+        >>> orders = spark.createDataFrame(
+        ...     data_orders, ["order_id", "customer_id", "order_date", "total_amount"])
+
+        Example 1: Filter for customers who have placed at least one order.
+
+        >>> from pyspark.sql import functions as sf
+        >>> customers.where(
+        ...     orders.where(sf.col("customer_id") == sf.col("customer_id").outer()).exists()
+        ... ).orderBy("customer_id").show()
+        +-----------+-------------+-------+
+        |customer_id|customer_name|country|
+        +-----------+-------------+-------+
+        |        101|        Alice|    USA|
+        |        102|          Bob| Canada|
+        |        103|      Charlie|    USA|
+        +-----------+-------------+-------+
+
+        Example 2: Filter for customers who have never placed an order.
+
+        >>> from pyspark.sql import functions as sf
+        >>> customers.where(
+        ...     ~orders.where(sf.col("customer_id") == sf.col("customer_id").outer()).exists()
+        ... ).orderBy("customer_id").show()
+        +-----------+-------------+---------+
+        |customer_id|customer_name|  country|
+        +-----------+-------------+---------+
+        |        104|        David|Australia|
+        +-----------+-------------+---------+
+
+        Example 3: Find Orders from Customers in the USA.
+
+        >>> from pyspark.sql import functions as sf
+        >>> orders.where(
+        ...     customers.where(
+        ...         (sf.col("customer_id") == sf.col("customer_id").outer())
+        ...         & (sf.col("country") == "USA")
+        ...     ).exists()
+        ... ).orderBy("order_id").show()
+        +--------+-----------+----------+------------+
+        |order_id|customer_id|order_date|total_amount|
+        +--------+-----------+----------+------------+
+        |       1|        101|2023-01-15|         250|
+        |       3|        103|2023-01-25|         400|
+        |       4|        101|2023-02-05|         150|
+        +--------+-----------+----------+------------+
+        """
+        ...
+
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
         """

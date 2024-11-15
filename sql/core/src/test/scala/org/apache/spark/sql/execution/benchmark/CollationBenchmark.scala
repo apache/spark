@@ -113,13 +113,13 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val collation = CollationFactory.fetchCollation(collationType)
+      val collationId = CollationFactory.collationNameToId(collationType)
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
               CollationSupport.Contains.exec(
-                s, s1, CollationFactory.collationNameToId(collation.collationName)
+                s, s1, collationId
               )
             }
           }
@@ -141,13 +141,13 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val collation = CollationFactory.fetchCollation(collationType)
+      val collationId = CollationFactory.collationNameToId(collationType)
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
               CollationSupport.StartsWith.exec(
-                s, s1, CollationFactory.collationNameToId(collation.collationName)
+                s, s1, collationId
               )
             }
           }
@@ -169,13 +169,13 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val collation = CollationFactory.fetchCollation(collationType)
+      val collationId = CollationFactory.collationNameToId(collationType)
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
               CollationSupport.EndsWith.exec(
-                s, s1, CollationFactory.collationNameToId(collation.collationName)
+                s, s1, collationId
               )
             }
           }

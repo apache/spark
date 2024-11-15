@@ -298,15 +298,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         table.partitionColumnNames.map(name => name -> None).toMap,
         Seq.empty, append.query, false, append.isByName)
 
-    case UnresolvedCatalogRelation(tableMeta, options, false)
-        if DDLUtils.isDatasourceTable(tableMeta) =>
-      readDataSourceTable(tableMeta, options)
-
-    case UnresolvedCatalogRelation(tableMeta, _, false) =>
-      DDLUtils.readHiveTable(tableMeta)
-
-    case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
-      getStreamingRelation(tableMeta, extraOptions)
+    case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
+      resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
@@ -319,6 +312,21 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         // Fallback to V1 relation
         v1Relation
       }
+  }
+
+  def resolveUnresolvedCatalogRelation(
+      unresolvedCatalogRelation: UnresolvedCatalogRelation): LogicalPlan = {
+    unresolvedCatalogRelation match {
+      case UnresolvedCatalogRelation(tableMeta, options, false)
+          if DDLUtils.isDatasourceTable(tableMeta) =>
+        readDataSourceTable(tableMeta, options)
+
+      case UnresolvedCatalogRelation(tableMeta, _, false) =>
+        DDLUtils.readHiveTable(tableMeta)
+
+      case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
+        getStreamingRelation(tableMeta, extraOptions)
+    }
   }
 }
 
@@ -362,6 +370,7 @@ object DataSourceStrategy
         PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
+        l.stream,
         None) :: Nil
 
     case _ => Nil
@@ -436,6 +445,7 @@ object DataSourceStrategy
         PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
+        relation.stream,
         relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
@@ -459,6 +469,7 @@ object DataSourceStrategy
         PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
+        relation.stream,
         relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))

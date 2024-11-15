@@ -22,9 +22,7 @@ from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_plotly,
-    have_numpy,
     plotly_requirement_message,
-    numpy_requirement_message,
     have_pandas,
     pandas_requirement_message,
 )
@@ -45,7 +43,7 @@ class DataFramePlotPlotlyTestsMixin:
 
     @property
     def sdf2(self):
-        data = [(5.1, 3.5, 0), (4.9, 3.0, 0), (7.0, 3.2, 1), (6.4, 3.2, 1), (5.9, 3.0, 2)]
+        data = [(5.1, 3.5, "0"), (4.9, 3.0, "0"), (7.0, 3.2, "1"), (6.4, 3.2, "1"), (5.9, 3.0, "2")]
         columns = ["length", "width", "species"]
         return self.spark.createDataFrame(data, columns)
 
@@ -324,13 +322,13 @@ class DataFramePlotPlotlyTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="PLOT_NOT_NUMERIC_COLUMN",
-            messageParameters={"arg_name": "y", "arg_type": "StringType()"},
+            errorClass="PLOT_NOT_NUMERIC_COLUMN_ARGUMENT",
+            messageParameters={"arg_name": "y", "arg_type": "StringType"},
         )
 
     def test_box_plot(self):
         fig = self.sdf4.plot.box(column="math_score")
-        expected_fig_data = {
+        expected_fig_data1 = {
             "boxpoints": "suspectedoutliers",
             "lowerfence": (5,),
             "mean": (50.0,),
@@ -343,11 +341,11 @@ class DataFramePlotPlotlyTestsMixin:
             "x": [0],
             "type": "box",
         }
-        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        self._check_fig_data(fig["data"][0], **expected_fig_data1)
 
         fig = self.sdf4.plot(kind="box", column=["math_score", "english_score"])
-        self._check_fig_data(fig["data"][0], **expected_fig_data)
-        expected_fig_data = {
+        self._check_fig_data(fig["data"][0], **expected_fig_data1)
+        expected_fig_data2 = {
             "boxpoints": "suspectedoutliers",
             "lowerfence": (55,),
             "mean": (72.5,),
@@ -361,7 +359,12 @@ class DataFramePlotPlotlyTestsMixin:
             "y": [[150, 15]],
             "type": "box",
         }
-        self._check_fig_data(fig["data"][1], **expected_fig_data)
+        self._check_fig_data(fig["data"][1], **expected_fig_data2)
+
+        fig = self.sdf4.plot(kind="box")
+        self._check_fig_data(fig["data"][0], **expected_fig_data1)
+        self._check_fig_data(fig["data"][1], **expected_fig_data2)
+
         with self.assertRaises(PySparkValueError) as pe:
             self.sdf4.plot.box(column="math_score", boxpoints=True)
         self.check_error(
@@ -387,10 +390,9 @@ class DataFramePlotPlotlyTestsMixin:
             },
         )
 
-    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_kde_plot(self):
         fig = self.sdf4.plot.kde(column="math_score", bw_method=0.3, ind=5)
-        expected_fig_data = {
+        expected_fig_data1 = {
             "mode": "lines",
             "name": "math_score",
             "orientation": "v",
@@ -398,11 +400,11 @@ class DataFramePlotPlotlyTestsMixin:
             "yaxis": "y",
             "type": "scatter",
         }
-        self._check_fig_data(fig["data"][0], **expected_fig_data)
+        self._check_fig_data(fig["data"][0], **expected_fig_data1)
 
         fig = self.sdf4.plot.kde(column=["math_score", "english_score"], bw_method=0.3, ind=5)
-        self._check_fig_data(fig["data"][0], **expected_fig_data)
-        expected_fig_data = {
+        self._check_fig_data(fig["data"][0], **expected_fig_data1)
+        expected_fig_data2 = {
             "mode": "lines",
             "name": "english_score",
             "orientation": "v",
@@ -410,7 +412,12 @@ class DataFramePlotPlotlyTestsMixin:
             "yaxis": "y",
             "type": "scatter",
         }
-        self._check_fig_data(fig["data"][1], **expected_fig_data)
+        self._check_fig_data(fig["data"][1], **expected_fig_data2)
+        self.assertEqual(list(fig["data"][0]["x"]), list(fig["data"][1]["x"]))
+
+        fig = self.sdf4.plot.kde(bw_method=0.3, ind=5)
+        self._check_fig_data(fig["data"][0], **expected_fig_data1)
+        self._check_fig_data(fig["data"][1], **expected_fig_data2)
         self.assertEqual(list(fig["data"][0]["x"]), list(fig["data"][1]["x"]))
 
     def test_hist_plot(self):
@@ -423,23 +430,55 @@ class DataFramePlotPlotlyTestsMixin:
             "type": "bar",
         }
         self._check_fig_data(fig["data"][0], **expected_fig_data)
+
         fig = self.sdf2.plot.hist(column=["length", "width"], bins=4)
-        expected_fig_data = {
+        expected_fig_data1 = {
             "name": "length",
             "x": [3.5, 4.5, 5.5, 6.5],
             "y": [0, 1, 2, 2],
             "text": ("[3.0, 4.0)", "[4.0, 5.0)", "[5.0, 6.0)", "[6.0, 7.0]"),
             "type": "bar",
         }
-        self._check_fig_data(fig["data"][0], **expected_fig_data)
-        expected_fig_data = {
+        self._check_fig_data(fig["data"][0], **expected_fig_data1)
+        expected_fig_data2 = {
             "name": "width",
             "x": [3.5, 4.5, 5.5, 6.5],
             "y": [5, 0, 0, 0],
             "text": ("[3.0, 4.0)", "[4.0, 5.0)", "[5.0, 6.0)", "[6.0, 7.0]"),
             "type": "bar",
         }
-        self._check_fig_data(fig["data"][1], **expected_fig_data)
+        self._check_fig_data(fig["data"][1], **expected_fig_data2)
+
+        fig = self.sdf2.plot.hist(bins=4)
+        self._check_fig_data(fig["data"][0], **expected_fig_data1)
+        self._check_fig_data(fig["data"][1], **expected_fig_data2)
+
+    def test_process_column_param_errors(self):
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.sdf4.plot.box(column="math_scor")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="PLOT_INVALID_TYPE_COLUMN",
+            messageParameters={
+                "col_name": "math_scor",
+                "valid_types": "NumericType",
+                "col_type": "None",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.sdf4.plot.box(column="student")
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="PLOT_INVALID_TYPE_COLUMN",
+            messageParameters={
+                "col_name": "student",
+                "valid_types": "NumericType",
+                "col_type": "StringType",
+            },
+        )
 
 
 class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, ReusedSQLTestCase):

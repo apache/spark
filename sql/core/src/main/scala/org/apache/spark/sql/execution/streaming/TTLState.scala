@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.time.Duration
 
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
@@ -199,7 +198,7 @@ abstract class CompositeKeyTTLStateImpl[K](
     stateName: String,
     store: StateStore,
     keyExprEnc: ExpressionEncoder[Any],
-    userKeyEncoder: Encoder[K],
+    userKeyEncoder: ExpressionEncoder[Any],
     ttlExpirationMs: Long)
   extends TTLState {
 
