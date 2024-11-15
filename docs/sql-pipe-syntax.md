@@ -68,53 +68,56 @@ FROM customer
 |> ORDER BY custdist DESC, c_count DESC;
 ```
 
-#### Projection
+#### Source Tables
 
-The following ways to evaluate expressions within projections are supported.
+To start a new query using SQL pipe syntax, use the `FROM <tableName>` or `TABLE <tableName>`
+clause, which creates a relation comprising all rows from the source table. Then append one or more
+pipe operators to the end of this clause to perform further transformations.
 
-* `SELECT` produces a new table by evaluating the provided expressions.<br>
-  It is possible to use `DISTINCT` and `*` as needed.<br>
-  This works like the outermost `SELECT` in a table subquery in regular Spark SQL.
-* `EXTEND` adds new columns to the input table by evaluating the provided expressions.<br>
-  This also preserves table aliases.<br>
-  This works like `SELECT *, new_column` in regular Spark SQL.
-* `DROP` removes columns from the input table.<br>
-  This is similar to `SELECT * EXCEPT (column)` in regular Spark SQL.
-* `SET` replaces column values from the input table.<br>
-  This is similar to `SELECT * REPLACE (expression AS column)` in regular Spark SQL.
-* `AS` forwards the input table and introduces a new alias for each row.
+#### Projections
 
-A major advantage of these projection features is that they support applying repeatedly to
-incrementally compute new expressions based on previous ones in a composable way. No lateral column
-references are needed here since each operator applies independently on its input table, regardless
-of the order in which they appear. Each of these computed columns are then visible to use any
-following operators.
+SQL pipe syntax supports composable ways to evaluate expressions. A major advantage of these
+projection features is that they support computing new expressions based on previous ones in an
+incremental way. No lateral column references are needed here since each operator applies
+independently on its input table, regardless of the order in which the operators appear. Each of
+these computed columns then becomes visible to use with the following operator.
 
-#### Aggregation
+`SELECT` produces a new table by evaluating the provided expressions.<br>
+It is possible to use `DISTINCT` and `*` as needed.<br>
+This works like the outermost `SELECT` in a table subquery in regular Spark SQL.
 
-Aggregation takes place differently using SQL pipe syntax as opposed to regular Spark SQL.
+`EXTEND` adds new columns to the input table by evaluating the provided expressions.<br>
+This also preserves table aliases.<br>
+This works like `SELECT *, new_column` in regular Spark SQL.
 
-* To perform full-table aggregation, use the `AGGREGATE` operator with a list of aggregate
-expressions to evaluate.<br>
-  This returns one single row in the output table.
-* To perform aggregation with grouping, use the `AGGREGATE` oeprator with a `GROUP BY` clause.<br>
-  This returns one row for each unique combination of values of the grouping expressions.
+`DROP` removes columns from the input table.<br>
+This is similar to `SELECT * EXCEPT (column)` in regular Spark SQL.
 
-In both cases, the output table contains the evaluated grouping expressions followed by the
-evaluated aggregate functions. Grouping expressions support assigning aliases for purposes of
-referring to them in future operators. In this way, it is not necessary to repeat entire expressions
-between `GROUP BY` and `SELECT`, since `AGGREGATE` is a single operator that performs both.
+`SET` replaces column values from the input table.<br>
+This is similar to `SELECT * REPLACE (expression AS column)` in regular Spark SQL.
 
-#### Filtering
+`AS` forwards the input table and introduces a new alias for each row.
 
-The pipe `WHERE` operator performs any necessary filtering operations.
+#### Aggregations
 
-Since it may appear anywhere, no separate `HAVING` or `QUALIFY` syntax is needed.
+In general, aggregation takes place differently using SQL pipe syntax as opposed to regular Spark
+SQL.
 
-#### Other Operations
+To perform full-table aggregation, use the `AGGREGATE` operator with a list of aggregate
+expressions to evaluate. This returns one single row in the output table.
 
-Each other operator applies in a straightforward manner over its input table (as well as zero or
-more other table or table subquery arguments) as listed in the table below.
+To perform aggregation with grouping, use the `AGGREGATE` operator with a `GROUP BY` clause.
+This returns one row for each unique combination of values of the grouping expressions. The output
+table contains the evaluated grouping expressions followed by the evaluated aggregate functions.
+Grouping expressions support assigning aliases for purposes of referring to them in future
+operators. In this way, it is not necessary to repeat entire expressions between `GROUP BY` and
+`SELECT`, since `AGGREGATE` is a single operator that performs both.
+
+#### Other Transformations
+
+The remaining operators are used for other transformations, such as filtering, joining, sorting,
+sampling, and set operations. These operators generally work in the same way as in regular Spark
+SQL, as described in the table below.
 
 ### Independence and Interoperability
 
@@ -139,24 +142,391 @@ represents a valid query.<br>
 
 ### Supported Operators
 
+| Operator                                          | Output rows                                                                                                         |
+|---------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
+| [FROM](#from-or-table) or [TABLE](#from-or-table) | Returns all the output rows from the source table unmodified.                                                       |
+| [SELECT](#select)                                 | Evaluates the provided expressions over each of the rows of the input table.                                        |
+| [EXTEND](#extend)                                 | Appends new columns to the input table by evaluating the specified expressions over each of the input rows.         |
+| [SET](#set)                                       | Updates columns of the input table by replacing them with the result of evaluating the provided expressions.        |
+| [DROP](#drop)                                     | Drops columns of the input table by name.                                                                           |
+| [AS](#as)                                         | Retains the same rows and column names of the input table but with a new table alias.                               |
+| [WHERE](#where)                                   | Returns the subset of input rows passing the condition.                                                             |
+| [LIMIT](#limit)                                   | Returns the specified number of input rows, preserving ordering (if any).                                           |
+| [AGGREGATE](#aggregate)                           | Performs aggregation with or without grouping.                                                                      |
+| [JOIN](#join)                                     | Joins rows from both inputs, returning a filtered cross-product of the input table and the table argument.          |
+| [ORDER BY](#order-by)                             | Returns the input rows after sorting as indicated.                                                                  |
+| [UNION ALL](#union-intersect-except)              | Performs the union or other set operation over the combined rows from the input table plus other table argument(s). |
+| [TABLESAMPLE](#tablesample)                       | Returns the subset of rows chosen by the provided sampling algorithm.                                               |
+| [PIVOT](#pivot)                                   | Returns a new table with the input rows pivoted to become columns.                                                  |
+| [UNPIVOT](#unpivot)                               | Returns a new table with the input columns pivoted to become rows.                                                  |
+
 This table lists each of the supported pipe operators and describes the output rows they produce.
 Note that each operator accepts an input relation comprising the rows generated by the query
 preceding the `|>` symbol.
 
-| Operator                                                                                  | Output rows                                                                                                                                                                                                                           |
-|-------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `SELECT <expr> [[AS] alias], ...`                                                         | Evaluates the provided expressions over each of the rows<br/>of the input table.                                                                                                                                                      |
-| `EXTEND <expr> [[AS] alias], ...`                                                         | Appends new columns to the input table by evaluating the<br/>specified expressions over each of the input rows.                                                                                                                       |
-| `SET <column> = <expression>, ...`                                                        | Updates columns of the input table by replacing them with<br/>the result of evaluating the provided expressions.                                                                                                                      |
-| `DROP <column>, ...`                                                                      | Drops columns of the input table by name.                                                                                                                                                                                             |
-| `AS <alias>`                                                                              | Retains the same rows and column names of the input table<br/>but with a new table alias.                                                                                                                                             |
-| `WHERE <condition>`                                                                       | Returns the subset of input rows passing the condition.                                                                                                                                                                               |
-| `LIMIT <n> [OFFSET <m>]`                                                                  | Returns the specified number of input rows, preserving ordering<br/>(if any).                                                                                                                                                         |
-| `AGGREGATE <agg_expr> [[AS] alias], ...`                                                  | Performs full-table aggregation, returning one result row with<br/>a column for each aggregate expression.                                                                                                                            |
-| `AGGREGATE [<agg_expr> [[AS] alias], ...]`<br/>`GROUP BY <grouping_expr> [AS alias], ...` | Performs aggregation with grouping, returning one row per group.<br/>The column list includes the grouping columns first and then the<br/>aggregate columns afterwards. Aliases can be assigned directly<br/>on grouping expressions. |
-| `[LEFT \| ...] JOIN <relation>`<br/>` [ON <condition> \| USING(col, ...)]`                | Joins rows from both inputs, returning a filtered cross-product of<br/>the pipe input table and the table expression following the<br/>JOIN keyword.                                                                                  |
-| `ORDER BY <expr> [ASC \| DESC], ...`                                                      | Returns the input rows after sorting as indicated.                                                                                                                                                                                    |
-| `{UNION \| INTERSECT \| EXCEPT}`<br/>`{ALL \| DISTINCT}`<br/>`(<query>), (<query>), ...`  | Performs the union or other set operation over the combined<br/>rows from the input table plus one or more tables provided as<br/>input arguments.                                                                                    |
-| `TABLESAMPLE <method>`<br/>`(<size> {ROWS \| PERCENT})`                                   | Returns the subset of rows chosen by the provided sampling algorithm.                                                                                                                                                                 |
-| `PIVOT`<br/>`(agg_expr FOR col IN (val1, ...))`                                           | Returns a new table with the input rows pivoted to become columns.                                                                                                                                                                    |
-| `UNPIVOT`<br/>`(value_col FOR key_col IN (col1, ...))`                                    | Returns a new table with the input columns pivoted to become rows.                                                                                                                                                                    |
+#### FROM or TABLE
+
+```sql
+FROM <tableName>
+```
+
+```sql
+TABLE <tableName>
+```
+
+Returns all the output rows from the source table unmodified.
+
+For example:
+
+```sql
+CREATE TABLE t(a INT, b INT) AS VALUES (1, 2), (3, 4);
+TABLE t;
+
++---+---+
+|  a|  b|
++---+---+
+|  1|  2|
+|  3|  4|
++---+---+
+```
+
+#### SELECT
+
+```sql
+|> SELECT <expr> [[AS] alias], ...
+```
+
+Evaluates the provided expressions over each of the rows of the input table.                                                                                                                                                    
+
+For example:
+
+```sql
+VALUES (0), (1) tab(col)
+|> SELECT col * 2 AS result;
+
++------+
+|result|
++------+
+|     0|
+|     2|
++------+
+```
+
+#### EXTEND
+
+```sql
+|> EXTEND <expr> [[AS] alias], ...
+```
+
+Appends new columns to the input table by evaluating the specified expressions over each of the input rows.
+
+For example:
+
+```sql
+VALUES (0), (1) tab(col)
+|> EXTEND col * 2 AS result;
+
++---+------+
+|col|result|
++---+------+
+|  0|     0|
+|  1|     2|
++---+------+
+```
+
+#### SET
+
+```sql
+|> SET <column> = <expression>, ...
+```
+
+Updates columns of the input table by replacing them with the result of evaluating the provided expressions.
+
+For example:
+
+```sql
+VALUES (0), (1) tab(col)
+|> SET col = col * 2;
+
++---+
+|col|
++---+
+|  0|
+|  2|
++---+
+```
+
+#### DROP
+
+```sql
+|> DROP <column>, ...
+```
+
+Drops columns of the input table by name.
+
+For example:
+
+```sql
+VALUES (0, 1) tab(col1, col2)
+|> DROP col1;
+
++----+
+|col2|
++----+
+|   1|
++----+
+```
+
+#### AS
+
+```sql
+|> AS <alias>
+```
+
+Retains the same rows and column names of the input table but with a new table alias.
+
+For example:
+
+```sql
+VALUES (0, 1) tab(col1, col2)
+|> AS new_tab;
+|> SELECT * FROM new_tab;
+
++----+----+
+|col1|col2|
++----+----+
+|   0|   1|
++----+----+
+```
+
+#### WHERE
+
+```sql
+|> WHERE <condition>
+```
+
+Returns the subset of input rows passing the condition.
+
+Since this operator may appear anywhere, no separate `HAVING` or `QUALIFY` syntax is needed.
+
+For example:
+
+```sql
+VALUES (0), (1) tab(col)
+|> WHERE col = 1;
+
++---+
+|col|
++---+
+|  1|
++---+
+```
+
+#### LIMIT
+
+```sql
+|> LIMIT <n> [OFFSET <m>]
+```
+
+Returns the specified number of input rows, preserving ordering (if any).
+
+For example:
+
+```sql
+VALUES (0), (0) tab(col)
+|> LIMIT 1;
+
++---+
+|col|
++---+
+|  0|
++---+
+```
+
+#### AGGREGATE
+
+```sql
+|> AGGREGATE <agg_expr> [[AS] alias], ...
+```
+
+Performs full-table aggregation, returning one result row with a column for each aggregate expression.
+
+```sql
+|> AGGREGATE [<agg_expr> [[AS] alias], ...] GROUP BY <grouping_expr> [AS alias], ...
+```
+
+Performs aggregation with grouping, returning one row per group. The column list includes the
+grouping columns first and then the aggregate columns afterward. Aliases can be assigned directly
+on grouping expressions.
+
+For example:
+
+```sql
+VALUES (0), (1) tab(col)
+|> AGGREGATE COUNT(col) AS count;
+
++-----+
+|count|
++-----+
+|    2|
++-----+
+
+VALUES (0, 1), (0, 2) tab(col1, col2)
+|> AGGREGATE COUNT(col2) AS count GROUP BY col1;
+
++----+-----+
+|col1|count|
++----+-----+
+|   0|    2|
++----+-----+
+```
+
+#### JOIN
+
+```sql
+|> [LEFT | RIGHT | FULL | CROSS | SEMI | ANTI | NATURAL | LATERAL] JOIN <table> [ON <condition> | USING(col, ...)]
+```
+
+Joins rows from both inputs, returning a filtered cross-product of the pipe input table and the table expression following the JOIN keyword.
+
+For example:
+
+```sql
+VALUES (0, 1) tab(a, b)
+|> JOIN VALUES (0, 2) tab(c, d) ON a = c;
+
++---+---+---+---+
+|  a|  b|  c|  d|
++---+---+---+---+
+|  0|  1|  0|  2|
++---+---+---+---+
+```
+
+#### ORDER BY
+
+```sql
+|> ORDER BY <expr> [ASC | DESC], ...
+```
+
+Returns the input rows after sorting as indicated. Standard modifiers are supported including NULLS FIRST/LAST.
+
+For example:
+
+```sql
+VALUES (0), (1) tab(col)
+|> ORDER BY col DESC;
+
++---+
+|col|
++---+
+|  1|
+|  0|
++---+
+```
+
+#### UNION, INTERSECT, EXCEPT
+
+```sql
+|> {UNION | INTERSECT | EXCEPT} {ALL | DISTINCT} (<query>), (<query>), ...
+```
+
+Performs the union or other set operation over the combined rows from the input table plus one or more tables provided as input arguments.
+
+For example:
+
+```sql
+VALUES (0), (1) tab(a, b)
+|> UNION ALL VALUES (2), (3) tab(c, d);
+
++---+----+
+|  a|   b|
++---+----+
+|  0|   1|
+|  2|   3|
++---+----+
+```
+
+#### TABLESAMPLE
+
+```sql
+|> TABLESAMPLE <method>(<size> {ROWS | PERCENT})
+```
+
+Returns the subset of rows chosen by the provided sampling algorithm.
+
+For example:
+
+```sql
+VALUES (0), (0), (0), (0) tab(col)
+|> TABLESAMPLE BERNOULLI(1 ROWS);
+
++---+
+|col|
++---+
+|  0|
++---+
+```
+
+#### PIVOT
+
+```sql
+|> PIVOT (agg_expr FOR col IN (val1, ...))
+```
+
+Returns a new table with the input rows pivoted to become columns.
+
+For example:
+
+```sql
+VALUES
+  ("dotNET", 2012, 10000),
+  ("Java", 2012, 20000),
+  ("dotNET", 2012, 5000),
+  ("dotNET", 2013, 48000),
+  ("Java", 2013, 30000)
+  courseSales(course, year, earnings)
+|> PIVOT (
+     SUM(earnings)
+     FOR COURSE IN ('dotNET', 'Java')
+  )
+
++----+------+------+
+|year|dotNET|  Java|
++----+------+------+
+|2012| 15000| 20000|
+|2013| 48000| 30000|
++----+------+------+
+```
+
+#### UNPIVOT
+
+```sql
+|> UNPIVOT (value_col FOR key_col IN (col1, ...))
+```
+
+Returns a new table with the input columns pivoted to become rows.
+
+For example:
+
+```sql
+VALUES
+  ("dotNET", 2012, 10000),
+  ("Java", 2012, 20000),
+  ("dotNET", 2012, 5000),
+  ("dotNET", 2013, 48000),
+  ("Java", 2013, 30000)
+  courseSales(course, year, earnings)
+|> UNPIVOT (
+  earningsYear FOR `year` IN (`2012`, `2013`, `2014`)
+
++--------+------+--------+
+|  course|  year|earnings|
++--------+------+--------+
+|    Java|  2012|   20000|
+|    Java|  2013|   30000|
+|  dotNET|  2012|   15000|
+|  dotNET|  2013|   48000|
+|  dotNET|  2014|   22500|
++--------+------+--------+
+```
+
