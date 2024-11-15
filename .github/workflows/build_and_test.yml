@@ -1198,3 +1198,9 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
+
+  maven-test:
+    name: "Run PySpark Test on macos"
+    permissions:
+      packages: write
+    uses: ./.github/workflows/python_macos_test.yml
