@@ -201,7 +201,9 @@ Evaluates the provided expressions over each of the rows of the input table.
 For example:
 
 ```sql
-VALUES (0), (1) tab(col)
+CREATE TABLE t(col INT) AS VALUES (0), (1);
+
+FROM t
 |> SELECT col * 2 AS result;
 
 +------+
