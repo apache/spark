@@ -25,6 +25,7 @@ import unittest
 from typing import cast
 
 from pyspark import SparkConf
+from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import split
 from pyspark.sql.types import (
     StringType,
@@ -108,6 +109,7 @@ class TransformWithStateInPandasTestsMixin:
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
         if not single_batch:
+            time.sleep(2)
             self._prepare_test_resource2(input_path)
 
         df = self._build_test_df(input_path)
@@ -211,6 +213,10 @@ class TransformWithStateInPandasTestsMixin:
         q.processAllAvailable()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
+
+        # Verify custom metrics.
+        self.assertTrue(q.lastProgress.stateOperators[0].customMetrics["numValueStateVars"] > 0)
+        self.assertTrue(q.lastProgress.stateOperators[0].customMetrics["numDeletedStateVars"] > 0)
 
         q.stop()
 
@@ -384,7 +390,9 @@ class TransformWithStateInPandasTestsMixin:
     def _test_transform_with_state_in_pandas_proc_timer(self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource3(input_path)
+        time.sleep(2)
         self._prepare_test_resource1(input_path)
+        time.sleep(2)
         self._prepare_test_resource2(input_path)
 
         df = self._build_test_df(input_path)
@@ -496,7 +504,9 @@ class TransformWithStateInPandasTestsMixin:
                 fw.write("a, 15\n")
 
         prepare_batch1(input_path)
+        time.sleep(2)
         prepare_batch2(input_path)
+        time.sleep(2)
         prepare_batch3(input_path)
 
         df = self._build_test_df(input_path)
@@ -554,6 +564,7 @@ class TransformWithStateInPandasTestsMixin:
     def _test_transform_with_state_init_state_in_pandas(self, stateful_processor, check_results):
         input_path = tempfile.mkdtemp()
         self._prepare_test_resource1(input_path)
+        time.sleep(2)
         self._prepare_input_data(input_path + "/text-test2.txt", [0, 3], [67, 12])
 
         df = self._build_test_df(input_path)
@@ -835,17 +846,21 @@ class ProcTimeStatefulProcessor(StatefulProcessor):
         pass
 
 
-class SimpleStatefulProcessor(StatefulProcessor):
+class SimpleStatefulProcessor(StatefulProcessor, unittest.TestCase):
     dict = {0: {"0": 1, "1": 2}, 1: {"0": 4, "1": 3}}
     batch_id = 0
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.num_violations_state = handle.getValueState("numViolations", state_schema)
+        self.temp_state = handle.getValueState("tempState", state_schema)
+        handle.deleteIfExists("tempState")
 
     def handleInputRows(
         self, key, rows, timer_values, expired_timer_info
     ) -> Iterator[pd.DataFrame]:
+        with self.assertRaisesRegex(PySparkRuntimeError, "Error checking value state exists"):
+            self.temp_state.exists()
         new_violations = 0
         count = 0
         key_str = key[0]
@@ -873,10 +888,12 @@ class SimpleStatefulProcessor(StatefulProcessor):
 
 # A stateful processor that inherit all behavior of SimpleStatefulProcessor except that it use
 # ttl state with a large timeout.
-class SimpleTTLStatefulProcessor(SimpleStatefulProcessor):
+class SimpleTTLStatefulProcessor(SimpleStatefulProcessor, unittest.TestCase):
     def init(self, handle: StatefulProcessorHandle) -> None:
         state_schema = StructType([StructField("value", IntegerType(), True)])
         self.num_violations_state = handle.getValueState("numViolations", state_schema, 30000)
+        self.temp_state = handle.getValueState("tempState", state_schema)
+        handle.deleteIfExists("tempState")
 
 
 class TTLStatefulProcessor(StatefulProcessor):

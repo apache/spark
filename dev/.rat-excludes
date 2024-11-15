@@ -126,9 +126,6 @@ exported_table/*
 node_modules
 spark-events-broken/*
 SqlBaseLexer.tokens
-# Spark Connect related files with custom licence
-any.proto
-empty.proto
 .*\.explain
 .*\.proto.bin
 LimitedInputStream.java

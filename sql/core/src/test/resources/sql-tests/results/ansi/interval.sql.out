@@ -936,8 +936,18 @@ select make_dt_interval(2147483647)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-long overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "make_dt_interval(2147483647)"
+  } ]
+}
 
 
 -- !query
@@ -977,8 +987,18 @@ select make_ym_interval(178956970, 8)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "make_ym_interval(178956970, 8)"
+  } ]
+}
 
 
 -- !query
@@ -994,8 +1014,18 @@ select make_ym_interval(-178956970, -9)
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
-integer overflow
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "make_ym_interval(-178956970, -9)"
+  } ]
+}
 
 
 -- !query
@@ -2493,12 +2523,8 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
-  "sqlState" : "22015",
-  "messageParameters" : {
-    "alternative" : "",
-    "message" : "integer overflow"
-  }
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITHOUT_SUGGESTION",
+  "sqlState" : "22015"
 }
 
 
@@ -2509,11 +2535,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_subtract' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "functionName" : "`try_subtract`"
   }
 }
 
@@ -2525,11 +2550,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
-    "message" : "integer overflow"
+    "functionName" : "`try_add`"
   }
 }
 
@@ -2838,11 +2862,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2861,11 +2884,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2918,11 +2940,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2941,11 +2962,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW",
+  "errorClass" : "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
   "sqlState" : "22015",
   "messageParameters" : {
-    "alternative" : " Use 'try_divide' to tolerate overflow and return NULL instead.",
-    "message" : "Interval value overflows after being divided by -1"
+    "functionName" : "`try_divide`"
   },
   "queryContext" : [ {
     "objectType" : "",

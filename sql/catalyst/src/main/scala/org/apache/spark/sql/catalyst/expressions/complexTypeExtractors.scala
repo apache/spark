@@ -90,7 +90,8 @@ object ExtractValue {
   }
 }
 
-trait ExtractValue extends Expression with NullIntolerant {
+trait ExtractValue extends Expression {
+  override def nullIntolerant: Boolean = true
   final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
 }
 

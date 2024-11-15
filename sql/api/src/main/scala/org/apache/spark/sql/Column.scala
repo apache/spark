@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{lit, map}
-import org.apache.spark.sql.internal.ColumnNode
+import org.apache.spark.sql.internal.{ColumnNode, LazyOuterReference, UnresolvedAttribute}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1382,6 +1382,21 @@ class Column(val node: ColumnNode) extends Logging {
    */
   def over(): Column = over(Window.spec)
 
+  /**
+   * Marks this column reference as an outer reference for subqueries.
+   *
+   * @group subquery
+   * @since 4.0.0
+   */
+  def outer(): Column = withOrigin {
+    node match {
+      case attr: UnresolvedAttribute if !attr.isMetadataColumn =>
+        Column(LazyOuterReference(attr.nameParts, attr.planId))
+      case _ =>
+        throw new IllegalArgumentException(
+          "Only unresolved attributes can be used as outer references")
+    }
+  }
 }
 
 /**
