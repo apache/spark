@@ -137,7 +137,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def test_create_dataframe_namedtuples(self):
         self.check_create_dataframe_namedtuples(True)
 
-    @unittest.skip("Spark Connect does not support verifySchema.")
     def test_createDataFrame_verifySchema(self):
         super().test_createDataFrame_verifySchema()
 

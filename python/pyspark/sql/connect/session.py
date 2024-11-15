@@ -655,13 +655,15 @@ class SparkSession:
                 _table = pa.Table.from_arrays(
                     [pa.array(data[::, i]) for i in range(0, data.shape[1])], _cols
                 )
-            _table.cast()
 
             # The _table should already have the proper column names.
             _cols = None
 
-            if verifySchema is _NoValue:
-                verifySchema = True
+            if verifySchema is not _NoValue:
+                warnings.warn(
+                    "'verifySchema' is ignored. It is not supported"
+                    " with np.ndarray input on Spark Connect."
+                )
 
         else:
             _data = list(data)
@@ -702,7 +704,7 @@ class SparkSession:
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
-            _table = LocalDataToArrowConversion.convert(_data, _schema, verifySchema)
+            _table = LocalDataToArrowConversion.convert(_data, _schema, cast(bool, verifySchema))
 
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.
