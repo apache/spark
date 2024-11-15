@@ -21,7 +21,6 @@ import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
-import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -160,19 +159,14 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   }
 
   private[connect] def removeAllExecutionsForSession(key: SessionKey): Unit = {
-    var sessionExecutionHolders = mutable.ArrayBuffer[ExecuteHolder]()
     executions.forEach((_, executeHolder) => {
       if (executeHolder.sessionHolder.key == key) {
-        sessionExecutionHolders += executeHolder
+        val info = executeHolder.getExecuteInfo
+        logInfo(
+          log"Execution ${MDC(LogKeys.EXECUTE_INFO, info)} removed in removeSessionExecutions.")
+        removeExecuteHolder(executeHolder.key, abandoned = true)
       }
     })
-
-    sessionExecutionHolders.foreach { executeHolder =>
-      val info = executeHolder.getExecuteInfo
-      logInfo(
-        log"Execution ${MDC(LogKeys.EXECUTE_INFO, info)} removed in removeSessionExecutions.")
-      removeExecuteHolder(executeHolder.key, abandoned = true)
-    }
   }
 
   /** Get info about abandoned execution, if there is one. */
@@ -252,30 +246,24 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
 
   // Visible for testing.
   private[connect] def periodicMaintenance(timeout: Long): Unit = {
+    // Find any detached executions that expired and should be removed.
     logInfo("Started periodic run of SparkConnectExecutionManager maintenance.")
 
-    // Find any detached executions that expired and should be removed.
-    val toRemove = new mutable.ArrayBuffer[ExecuteHolder]()
     val nowMs = System.currentTimeMillis()
-
     executions.forEach((_, executeHolder) => {
       executeHolder.lastAttachedRpcTimeMs match {
         case Some(detached) =>
           if (detached + timeout <= nowMs) {
-            toRemove += executeHolder
+            val info = executeHolder.getExecuteInfo
+            logInfo(
+              log"Found execution ${MDC(LogKeys.EXECUTE_INFO, info)} that was abandoned " +
+                log"and expired and will be removed.")
+            removeExecuteHolder(executeHolder.key, abandoned = true)
           }
         case _ => // execution is active
       }
     })
 
-    // .. and remove them.
-    toRemove.foreach { executeHolder =>
-      val info = executeHolder.getExecuteInfo
-      logInfo(
-        log"Found execution ${MDC(LogKeys.EXECUTE_INFO, info)} that was abandoned " +
-          log"and expired and will be removed.")
-      removeExecuteHolder(executeHolder.key, abandoned = true)
-    }
     logInfo("Finished periodic run of SparkConnectExecutionManager maintenance.")
   }
 

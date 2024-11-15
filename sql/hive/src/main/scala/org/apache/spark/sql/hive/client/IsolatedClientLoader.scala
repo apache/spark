@@ -98,6 +98,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       case (2, 3, _) => Some(hive.v2_3)
       case (3, 0, _) => Some(hive.v3_0)
       case (3, 1, _) => Some(hive.v3_1)
+      case (4, 0, _) => Some(hive.v4_0)
       case _ => None
     }.getOrElse {
       throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(

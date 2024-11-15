@@ -90,7 +90,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       }
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
-    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
+    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _, _)
       if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
         mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
       s
@@ -894,7 +894,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 
       // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
       // a null literal.
-      case e: NullIntolerant if e.children.exists(isNullLiteral) =>
+      case e if e.nullIntolerant && e.children.exists(isNullLiteral) =>
         Literal.create(null, e.dataType)
     }
   }
@@ -914,7 +914,7 @@ object NullDownPropagation extends Rule[LogicalPlan] {
   // Applying to `EqualTo` is too disruptive for [SPARK-32290] optimization, not supported for now.
   // If e has multiple children, the deterministic check is required because optimizing
   // IsNull(a > b) to Or(IsNull(a), IsNull(b)), for example, may cause skipping the evaluation of b
-  private def supportedNullIntolerant(e: NullIntolerant): Boolean = (e match {
+  private def supportedNullIntolerant(e: Expression): Boolean = (e match {
     case _: Not => true
     case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual
       if e.deterministic => true
@@ -925,9 +925,9 @@ object NullDownPropagation extends Rule[LogicalPlan] {
     _.containsPattern(NULL_CHECK), ruleId) {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(
       _.containsPattern(NULL_CHECK), ruleId) {
-      case IsNull(e: NullIntolerant) if supportedNullIntolerant(e) =>
+      case IsNull(e) if e.nullIntolerant && supportedNullIntolerant(e) =>
         e.children.map(IsNull(_): Expression).reduceLeft(Or)
-      case IsNotNull(e: NullIntolerant) if supportedNullIntolerant(e) =>
+      case IsNotNull(e) if e.nullIntolerant && supportedNullIntolerant(e) =>
         e.children.map(IsNotNull(_): Expression).reduceLeft(And)
     }
   }

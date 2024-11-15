@@ -34,9 +34,10 @@ import org.apache.spark.unsafe.types.UTF8String
  * This is not the world's most efficient implementation due to type conversion, but works.
  */
 abstract class XPathExtract
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback with NullIntolerant {
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
   override def left: Expression = xml
   override def right: Expression = path
+  override def nullIntolerant: Boolean = true
 
   /** XPath expressions are always nullable, e.g. if the xml string is empty. */
   override def nullable: Boolean = true

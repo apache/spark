@@ -1605,6 +1605,248 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(nestedLoopStmt.body.collection(1).asInstanceOf[IterateStatement].label == "lbl")
   }
 
+  test("unique label names: nested begin-end blocks") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: nested begin-end blocks with same prefix") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl_1: BEGIN
+        |  lbl_11: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+    val body_1 = tree.collection.head.asInstanceOf[CompoundBody]
+    assert(body_1.label.get == "lbl_1")
+    assert(body_1.collection.length == 1)
+    assert(body_1.collection.head.isInstanceOf[CompoundBody])
+    val body_11 = body_1.collection.head.asInstanceOf[CompoundBody]
+    assert(body_11.label.get == "lbl_11")
+  }
+
+  test("unique label names: multi-level nested begin-end blocks") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl_1: BEGIN
+        |  lbl_2: BEGIN
+        |    lbl_1: BEGIN
+        |      SELECT 1;
+        |    END;
+        |  END;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl_1")))
+  }
+
+  test("unique label names: while loop in begin-end block") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: BEGIN
+        |  lbl: WHILE 1=1 DO
+        |    SELECT 1;
+        |  END WHILE;
+        |END;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: begin-end block in while loop") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: WHILE 1=1 DO
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |  END;
+        |END WHILE;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("lbl")))
+  }
+
+  test("unique label names: nested while loops") {
+    val sqlScriptText =
+      """BEGIN
+        |w_loop: WHILE 1=1 DO
+        |  w_loop: WHILE 2=2 DO
+        |    SELECT 1;
+        |  END WHILE;
+        |END WHILE;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("w_loop")))
+  }
+
+  test("unique label names: nested repeat loops") {
+    val sqlScriptText =
+      """BEGIN
+        |r_loop: REPEAT
+        |  r_loop: REPEAT
+        |    SELECT 1;
+        |  UNTIL 1 = 1
+        |  END REPEAT;
+        |UNTIL 1 = 1
+        |END REPEAT;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("r_loop")))
+  }
+
+  test("unique label names: nested loop loops") {
+    val sqlScriptText =
+      """BEGIN
+        |l_loop: LOOP
+        |  l_loop: LOOP
+        |    SELECT 1;
+        |  END LOOP;
+        |END LOOP;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parseScript(sqlScriptText)
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("l_loop")))
+  }
+
+  test("unique label names: begin-end block on the same level") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: BEGIN
+        |  SELECT 1;
+        |END;
+        |lbl: BEGIN
+        |  SELECT 2;
+        |END;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 2)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+    assert(tree.collection.head.asInstanceOf[CompoundBody].label.get == "lbl")
+    assert(tree.collection(1).isInstanceOf[CompoundBody])
+    assert(tree.collection(1).asInstanceOf[CompoundBody].label.get == "lbl")
+  }
+
+  test("unique label names: begin-end block and loops on the same level") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl: BEGIN
+        |  SELECT 1;
+        |END;
+        |lbl: WHILE 1=1 DO
+        |  SELECT 2;
+        |END WHILE;
+        |lbl: LOOP
+        |  SELECT 3;
+        |END LOOP;
+        |lbl: REPEAT
+        |  SELECT 4;
+        |UNTIL 1=1
+        |END REPEAT;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 4)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+    assert(tree.collection.head.asInstanceOf[CompoundBody].label.get == "lbl")
+    assert(tree.collection(1).isInstanceOf[WhileStatement])
+    assert(tree.collection(1).asInstanceOf[WhileStatement].label.get == "lbl")
+    assert(tree.collection(2).isInstanceOf[LoopStatement])
+    assert(tree.collection(2).asInstanceOf[LoopStatement].label.get == "lbl")
+    assert(tree.collection(3).isInstanceOf[RepeatStatement])
+    assert(tree.collection(3).asInstanceOf[RepeatStatement].label.get == "lbl")
+  }
+
+  test("unique label names: nested labeled scope statements") {
+    val sqlScriptText =
+      """BEGIN
+        |lbl_0: BEGIN
+        |  lbl_1: WHILE 1=1 DO
+        |    lbl_2: LOOP
+        |      lbl_3: REPEAT
+        |        SELECT 4;
+        |      UNTIL 1=1
+        |      END REPEAT;
+        |    END LOOP;
+        |  END WHILE;
+        |END;
+        |END
+      """.stripMargin
+    val tree = parseScript(sqlScriptText)
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+    // Compound body
+    val body = tree.collection.head.asInstanceOf[CompoundBody]
+    assert(body.label.get == "lbl_0")
+    assert(body.collection.head.isInstanceOf[WhileStatement])
+    // While statement
+    val whileStatement = body.collection.head.asInstanceOf[WhileStatement]
+    assert(whileStatement.label.get == "lbl_1")
+    assert(whileStatement.body.collection.head.isInstanceOf[LoopStatement])
+    // Loop statement
+    val loopStatement = whileStatement.body.collection.head.asInstanceOf[LoopStatement]
+    assert(loopStatement.label.get == "lbl_2")
+    assert(loopStatement.body.collection.head.isInstanceOf[RepeatStatement])
+    // Repeat statement
+    val repeatStatement = loopStatement.body.collection.head.asInstanceOf[RepeatStatement]
+    assert(repeatStatement.label.get == "lbl_3")
+  }
+
   // Helper methods
   def cleanupStatementString(statementStr: String): String = {
     statementStr
