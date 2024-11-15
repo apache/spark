@@ -45,7 +45,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{Dataset, Encoders, ForeachWriter, Observation, RelationalGroupedDataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, NameParameterizedQuery, PosParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -55,7 +55,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
@@ -165,9 +165,12 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.DROP => transformDrop(rel.getDrop)
         case proto.Relation.RelTypeCase.AGGREGATE => transformAggregate(rel.getAggregate)
         case proto.Relation.RelTypeCase.SQL => transformSql(rel.getSql)
-        case proto.Relation.RelTypeCase.WITH_RELATIONS
-            if isValidSQLWithRefs(rel.getWithRelations) =>
-          transformSqlWithRefs(rel.getWithRelations)
+        case proto.Relation.RelTypeCase.WITH_RELATIONS =>
+          if (isValidSQLWithRefs(rel.getWithRelations)) {
+            transformSqlWithRefs(rel.getWithRelations)
+          } else {
+            transformWithRelations(rel.getWithRelations)
+          }
         case proto.Relation.RelTypeCase.LOCAL_RELATION =>
           transformLocalRelation(rel.getLocalRelation)
         case proto.Relation.RelTypeCase.SAMPLE => transformSample(rel.getSample)
@@ -1561,6 +1564,8 @@ class SparkConnectPlanner(
         transformMergeAction(exp.getMergeAction)
       case proto.Expression.ExprTypeCase.TYPED_AGGREGATE_EXPRESSION =>
         transformTypedAggregateExpression(exp.getTypedAggregateExpression, baseRelationOpt)
+      case proto.Expression.ExprTypeCase.SUBQUERY_EXPRESSION =>
+        transformSubqueryExpression(exp.getSubqueryExpression)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -3707,6 +3712,35 @@ class SparkConnectPlanner(
       session.catalog.listCatalogs(getListCatalogs.getPattern).logicalPlan
     } else {
       session.catalog.listCatalogs().logicalPlan
+    }
+  }
+
+  private def transformSubqueryExpression(
+      getSubqueryExpression: proto.SubqueryExpression): Expression = {
+    val planId = getSubqueryExpression.getPlanId
+    getSubqueryExpression.getSubqueryType match {
+      case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR =>
+        UnresolvedScalarSubqueryPlanId(planId)
+      case proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_EXISTS =>
+        UnresolvedExistsPlanId(planId)
+      case other => throw InvalidPlanInput(s"Unknown SubqueryType $other")
+    }
+  }
+
+  private def transformWithRelations(
+      getWithRelations: proto.WithRelations): LogicalPlan = {
+    val plan = transformRelation(getWithRelations.getRoot)
+
+    val references = getWithRelations.getReferencesList.asScala.map { ref =>
+      val planId = ref.getCommon.getPlanId
+      val plan = transformRelation(ref)
+      planId -> plan
+    }.toMap
+
+    plan.transformAllExpressionsWithPruning(
+      _.containsPattern(TreePattern.UNRESOLVED_PLAN_ID)) {
+      case u: UnresolvedPlanId if references.contains(u.planId) =>
+        u.withPlan(references(u.planId))
     }
   }
 }

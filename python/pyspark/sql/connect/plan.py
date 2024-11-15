@@ -73,9 +73,17 @@ class LogicalPlan:
 
     INDENT = 2
 
-    def __init__(self, child: Optional["LogicalPlan"]) -> None:
+    def __init__(
+        self, child: Optional["LogicalPlan"], references: Optional[Sequence["LogicalPlan"]] = None
+    ) -> None:
         self._child = child
         self._plan_id = LogicalPlan._fresh_plan_id()
+
+        self._references: Sequence["LogicalPlan"] = references or []
+        self._plan_id_with_rel: Optional[int] = None
+        if len(self._references) > 0:
+            assert all(isinstance(r, LogicalPlan) for r in self._references)
+            self._plan_id_with_rel = LogicalPlan._fresh_plan_id()
 
     @staticmethod
     def _fresh_plan_id() -> int:
@@ -135,6 +143,33 @@ class LogicalPlan:
             return {}
         else:
             return self._child.observations
+
+    @staticmethod
+    def _collect_references(cols: Sequence[Column]) -> Sequence["LogicalPlan"]:
+        return list(
+            {
+                ref._plan_id: ref for c in cols for ref in c._expr.references  # type: ignore[attr-defined]
+            }.values()
+        )
+
+    def _with_relations(
+        self, root: proto.Relation, relations: Sequence[proto.Relation]
+    ) -> proto.Relation:
+        if len(relations) == 0:
+            return root
+        else:
+            # build new plan like
+            # with_relations [id 10]
+            #     root: plan  [id 9]
+            #     reference:
+            #          refs#1: [id 8]
+            #          refs#2: [id 5]
+            plan = proto.Relation()
+            assert isinstance(self._plan_id_with_rel, int)
+            plan.common.plan_id = self._plan_id_with_rel
+            plan.with_relations.root.CopyFrom(root)
+            plan.with_relations.references.extend(relations)
+            return plan
 
     def _parameters_to_print(self, parameters: Mapping[str, Any]) -> Mapping[str, Any]:
         """
@@ -473,8 +508,8 @@ class Project(LogicalPlan):
         child: Optional["LogicalPlan"],
         columns: List[Column],
     ) -> None:
-        super().__init__(child)
         assert all(isinstance(c, Column) for c in columns)
+        super().__init__(child, self._collect_references(columns))
         self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -482,7 +517,8 @@ class Project(LogicalPlan):
         plan = self._create_proto_relation()
         plan.project.input.CopyFrom(self._child.plan(session))
         plan.project.expressions.extend([c.to_plan(session) for c in self._columns])
-        return plan
+
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class WithColumns(LogicalPlan):
@@ -495,8 +531,6 @@ class WithColumns(LogicalPlan):
         columns: Sequence[Column],
         metadata: Optional[Sequence[str]] = None,
     ) -> None:
-        super().__init__(child)
-
         assert isinstance(columnNames, list)
         assert len(columnNames) > 0
         assert all(isinstance(c, str) for c in columnNames)
@@ -512,6 +546,8 @@ class WithColumns(LogicalPlan):
                 assert isinstance(m, str)
                 # validate json string
                 assert m == "" or json.loads(m) is not None
+
+        super().__init__(child, self._collect_references(columns))
 
         self._columnNames = columnNames
         self._columns = columns
@@ -530,7 +566,7 @@ class WithColumns(LogicalPlan):
                 alias.metadata = self._metadata[i]
             plan.with_columns.aliases.append(alias)
 
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class WithWatermark(LogicalPlan):
@@ -608,16 +644,14 @@ class Hint(LogicalPlan):
         name: str,
         parameters: Sequence[Column],
     ) -> None:
-        super().__init__(child)
-
         assert isinstance(name, str)
-
-        self._name = name
 
         assert parameters is not None and isinstance(parameters, List)
         for param in parameters:
             assert isinstance(param, Column)
 
+        super().__init__(child, self._collect_references(parameters))
+        self._name = name
         self._parameters = parameters
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -626,12 +660,12 @@ class Hint(LogicalPlan):
         plan.hint.input.CopyFrom(self._child.plan(session))
         plan.hint.name = self._name
         plan.hint.parameters.extend([param.to_plan(session) for param in self._parameters])
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class Filter(LogicalPlan):
     def __init__(self, child: Optional["LogicalPlan"], filter: Column) -> None:
-        super().__init__(child)
+        super().__init__(child, self._collect_references([filter]))
         self.filter = filter
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -639,7 +673,7 @@ class Filter(LogicalPlan):
         plan = self._create_proto_relation()
         plan.filter.input.CopyFrom(self._child.plan(session))
         plan.filter.condition.CopyFrom(self.filter.to_plan(session))
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class Limit(LogicalPlan):
@@ -712,11 +746,10 @@ class Sort(LogicalPlan):
         columns: List[Column],
         is_global: bool,
     ) -> None:
-        super().__init__(child)
-
         assert all(isinstance(c, Column) for c in columns)
         assert isinstance(is_global, bool)
 
+        super().__init__(child, self._collect_references(columns))
         self.columns = columns
         self.is_global = is_global
 
@@ -726,7 +759,7 @@ class Sort(LogicalPlan):
         plan.sort.input.CopyFrom(self._child.plan(session))
         plan.sort.order.extend([c.to_plan(session).sort_order for c in self.columns])
         plan.sort.is_global = self.is_global
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class Drop(LogicalPlan):
@@ -735,9 +768,12 @@ class Drop(LogicalPlan):
         child: Optional["LogicalPlan"],
         columns: List[Union[Column, str]],
     ) -> None:
-        super().__init__(child)
         if len(columns) > 0:
             assert all(isinstance(c, (Column, str)) for c in columns)
+
+        super().__init__(
+            child, self._collect_references([c for c in columns if isinstance(c, Column)])
+        )
         self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -749,7 +785,7 @@ class Drop(LogicalPlan):
                 plan.drop.columns.append(c.to_plan(session))
             else:
                 plan.drop.column_names.append(c)
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class Sample(LogicalPlan):
@@ -792,8 +828,6 @@ class Aggregate(LogicalPlan):
         pivot_values: Optional[Sequence[Column]],
         grouping_sets: Optional[Sequence[Sequence[Column]]],
     ) -> None:
-        super().__init__(child)
-
         assert isinstance(group_type, str) and group_type in [
             "groupby",
             "rollup",
@@ -801,15 +835,12 @@ class Aggregate(LogicalPlan):
             "pivot",
             "grouping_sets",
         ]
-        self._group_type = group_type
 
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
-        self._grouping_cols = grouping_cols
 
         assert isinstance(aggregate_cols, list) and all(
             isinstance(c, Column) for c in aggregate_cols
         )
-        self._aggregate_cols = aggregate_cols
 
         if group_type == "pivot":
             assert pivot_col is not None and isinstance(pivot_col, Column)
@@ -821,6 +852,19 @@ class Aggregate(LogicalPlan):
             assert pivot_values is None
             assert grouping_sets is None
 
+        super().__init__(
+            child,
+            self._collect_references(
+                grouping_cols
+                + aggregate_cols
+                + ([pivot_col] if pivot_col is not None else [])
+                + (pivot_values if pivot_values is not None else [])
+                + ([g for gs in grouping_sets for g in gs] if grouping_sets is not None else [])
+            ),
+        )
+        self._group_type = group_type
+        self._grouping_cols = grouping_cols
+        self._aggregate_cols = aggregate_cols
         self._pivot_col = pivot_col
         self._pivot_values = pivot_values
         self._grouping_sets = grouping_sets
@@ -859,7 +903,7 @@ class Aggregate(LogicalPlan):
                         grouping_set=[c.to_plan(session) for c in grouping_set]
                     )
                 )
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class Join(LogicalPlan):
@@ -870,7 +914,12 @@ class Join(LogicalPlan):
         on: Optional[Union[str, List[str], Column, List[Column]]],
         how: Optional[str],
     ) -> None:
-        super().__init__(left)
+        super().__init__(
+            left,
+            self._collect_references(
+                [c for c in on if isinstance(c, Column)] if on and isinstance(on, List) else []
+            ),
+        )
         self.left = cast(LogicalPlan, left)
         self.right = right
         self.on = on
@@ -914,7 +963,7 @@ class Join(LogicalPlan):
                     merge_column = functools.reduce(lambda c1, c2: c1 & c2, self.on)
                     plan.join.join_condition.CopyFrom(cast(Column, merge_column).to_plan(session))
         plan.join.join_type = self.how
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
@@ -954,7 +1003,14 @@ class AsOfJoin(LogicalPlan):
         allow_exact_matches: bool,
         direction: str,
     ) -> None:
-        super().__init__(left)
+        super().__init__(
+            left,
+            self._collect_references(
+                [left_as_of, right_as_of]
+                + ([c for c in on if isinstance(c, Column)] if on and isinstance(on, List) else [])
+                + ([tolerance] if tolerance is not None else [])
+            ),
+        )
         self.left = left
         self.right = right
         self.left_as_of = left_as_of
@@ -994,7 +1050,7 @@ class AsOfJoin(LogicalPlan):
         plan.as_of_join.allow_exact_matches = self.allow_exact_matches
         plan.as_of_join.direction = self.direction
 
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
@@ -1129,9 +1185,9 @@ class RepartitionByExpression(LogicalPlan):
         num_partitions: Optional[int],
         columns: List[Column],
     ) -> None:
-        super().__init__(child)
-        self.num_partitions = num_partitions
         assert all(isinstance(c, Column) for c in columns)
+        super().__init__(child, self._collect_references(columns))
+        self.num_partitions = num_partitions
         self.columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -1144,7 +1200,7 @@ class RepartitionByExpression(LogicalPlan):
             plan.repartition_by_expression.input.CopyFrom(self._child.plan(session))
         if self.num_partitions is not None:
             plan.repartition_by_expression.num_partitions = self.num_partitions
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class SubqueryAlias(LogicalPlan):
@@ -1190,8 +1246,6 @@ class SQL(LogicalPlan):
         named_args: Optional[Dict[str, Column]] = None,
         views: Optional[Sequence[SubqueryAlias]] = None,
     ) -> None:
-        super().__init__(None)
-
         if args is not None:
             assert isinstance(args, List)
             assert all(isinstance(arg, Column) for arg in args)
@@ -1205,14 +1259,11 @@ class SQL(LogicalPlan):
         if views is not None:
             assert isinstance(views, List)
             assert all(isinstance(v, SubqueryAlias) for v in views)
-            if len(views) > 0:
-                # reserved plan id for WithRelations
-                self._plan_id_with_rel = LogicalPlan._fresh_plan_id()
 
+        super().__init__(None, views)
         self._query = query
         self._args = args
         self._named_args = named_args
-        self._views = views
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -1224,20 +1275,7 @@ class SQL(LogicalPlan):
             for k, arg in self._named_args.items():
                 plan.sql.named_arguments[k].CopyFrom(arg.to_plan(session))
 
-        if self._views is not None and len(self._views) > 0:
-            # build new plan like
-            # with_relations [id 10]
-            #     root: sql  [id 9]
-            #     reference:
-            #          view#1: [id 8]
-            #          view#2: [id 5]
-            sql_plan = plan
-            plan = proto.Relation()
-            plan.common.plan_id = self._plan_id_with_rel
-            plan.with_relations.root.CopyFrom(sql_plan)
-            plan.with_relations.references.extend([v.plan(session) for v in self._views])
-
-        return plan
+        return self._with_relations(plan, [v.plan(session) for v in self._references])
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
@@ -1311,7 +1349,7 @@ class Unpivot(LogicalPlan):
         variable_column_name: str,
         value_column_name: str,
     ) -> None:
-        super().__init__(child)
+        super().__init__(child, self._collect_references(ids + (values or [])))
         self.ids = ids
         self.values = values
         self.variable_column_name = variable_column_name
@@ -1326,7 +1364,7 @@ class Unpivot(LogicalPlan):
             plan.unpivot.values.values.extend([v.to_plan(session) for v in self.values])
         plan.unpivot.variable_column_name = self.variable_column_name
         plan.unpivot.value_column_name = self.value_column_name
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class Transpose(LogicalPlan):
@@ -1337,7 +1375,7 @@ class Transpose(LogicalPlan):
         child: Optional["LogicalPlan"],
         index_columns: Sequence[Column],
     ) -> None:
-        super().__init__(child)
+        super().__init__(child, self._collect_references(index_columns))
         self.index_columns = index_columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -1347,7 +1385,7 @@ class Transpose(LogicalPlan):
         if self.index_columns is not None and len(self.index_columns) > 0:
             for index_column in self.index_columns:
                 plan.transpose.index_columns.append(index_column.to_plan(session))
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class UnresolvedTableValuedFunction(LogicalPlan):
@@ -1373,9 +1411,9 @@ class CollectMetrics(LogicalPlan):
         observation: Union[str, "Observation"],
         exprs: List[Column],
     ) -> None:
-        super().__init__(child)
-        self._observation = observation
         assert all(isinstance(e, Column) for e in exprs)
+        super().__init__(child, self._collect_references(exprs))
+        self._observation = observation
         self._exprs = exprs
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -1388,7 +1426,7 @@ class CollectMetrics(LogicalPlan):
             else str(self._observation._name)
         )
         plan.collect_metrics.metrics.extend([e.to_plan(session) for e in self._exprs])
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
     @property
     def observations(self) -> Dict[str, "Observation"]:
@@ -1473,13 +1511,13 @@ class NAReplace(LogicalPlan):
         cols: Optional[List[str]],
         replacements: Sequence[Tuple[Column, Column]],
     ) -> None:
-        super().__init__(child)
-        self.cols = cols
-
         assert replacements is not None and isinstance(replacements, List)
         for k, v in replacements:
             assert k is not None and isinstance(k, Column)
             assert v is not None and isinstance(v, Column)
+
+        super().__init__(child, self._collect_references([e for t in replacements for e in t]))
+        self.cols = cols
         self.replacements = replacements
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
@@ -1494,7 +1532,10 @@ class NAReplace(LogicalPlan):
                 replacement.old_value.CopyFrom(old_value.to_plan(session).literal)
                 replacement.new_value.CopyFrom(new_value.to_plan(session).literal)
                 plan.replace.replacements.append(replacement)
-        return plan
+        return self._with_relations(
+            plan,
+            [ref.plan(session) for ref in self._references],
+        )
 
 
 class StatSummary(LogicalPlan):
@@ -1604,8 +1645,6 @@ class StatSampleBy(LogicalPlan):
         fractions: Sequence[Tuple[Column, float]],
         seed: int,
     ) -> None:
-        super().__init__(child)
-
         assert col is not None and isinstance(col, (Column, str))
 
         assert fractions is not None and isinstance(fractions, List)
@@ -1615,6 +1654,7 @@ class StatSampleBy(LogicalPlan):
 
         assert seed is None or isinstance(seed, int)
 
+        super().__init__(child, self._collect_references([c for c, _ in fractions]))
         self._col = col
         self._fractions = fractions
         self._seed = seed
@@ -1631,7 +1671,7 @@ class StatSampleBy(LogicalPlan):
                 fraction.fraction = float(v)
                 plan.sample_by.fractions.append(fraction)
         plan.sample_by.seed = self._seed
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class StatCorr(LogicalPlan):
@@ -2279,7 +2319,7 @@ class GroupMap(LogicalPlan):
     ):
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
 
-        super().__init__(child)
+        super().__init__(child, self._collect_references(grouping_cols))
         self._grouping_cols = grouping_cols
         self._function = function._build_common_inline_user_defined_function(*cols)
 
@@ -2291,7 +2331,7 @@ class GroupMap(LogicalPlan):
             [c.to_plan(session) for c in self._grouping_cols]
         )
         plan.group_map.func.CopyFrom(self._function.to_plan_udf(session))
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class CoGroupMap(LogicalPlan):
@@ -2312,7 +2352,7 @@ class CoGroupMap(LogicalPlan):
             isinstance(c, Column) for c in other_grouping_cols
         )
 
-        super().__init__(input)
+        super().__init__(input, self._collect_references(input_grouping_cols + other_grouping_cols))
         self._input_grouping_cols = input_grouping_cols
         self._other_grouping_cols = other_grouping_cols
         self._other = cast(LogicalPlan, other)
@@ -2332,7 +2372,7 @@ class CoGroupMap(LogicalPlan):
             [c.to_plan(session) for c in self._other_grouping_cols]
         )
         plan.co_group_map.func.CopyFrom(self._function.to_plan_udf(session))
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class ApplyInPandasWithState(LogicalPlan):
@@ -2351,7 +2391,7 @@ class ApplyInPandasWithState(LogicalPlan):
     ):
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
 
-        super().__init__(child)
+        super().__init__(child, self._collect_references(grouping_cols))
         self._grouping_cols = grouping_cols
         self._function = function._build_common_inline_user_defined_function(*cols)
         self._output_schema = output_schema
@@ -2371,7 +2411,7 @@ class ApplyInPandasWithState(LogicalPlan):
         plan.apply_in_pandas_with_state.state_schema = self._state_schema
         plan.apply_in_pandas_with_state.output_mode = self._output_mode
         plan.apply_in_pandas_with_state.timeout_conf = self._timeout_conf
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
 
 class PythonUDTF:
@@ -2435,7 +2475,7 @@ class CommonInlineUserDefinedTableFunction(LogicalPlan):
         deterministic: bool,
         arguments: Sequence[Expression],
     ) -> None:
-        super().__init__(None)
+        super().__init__(None, [ref for arg in arguments for ref in arg.references])
         self._function_name = function_name
         self._deterministic = deterministic
         self._arguments = arguments
@@ -2452,7 +2492,7 @@ class CommonInlineUserDefinedTableFunction(LogicalPlan):
         plan.common_inline_user_defined_table_function.python_udtf.CopyFrom(
             self._function.to_plan(session)
         )
-        return plan
+        return self._with_relations(plan, [ref.plan(session) for ref in self._references])
 
     def udtf_plan(
         self, session: "SparkConnectClient"

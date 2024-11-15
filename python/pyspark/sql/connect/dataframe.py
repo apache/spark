@@ -79,6 +79,7 @@ from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.column import Column
 from pyspark.sql.connect.expressions import (
     ColumnReference,
+    SubqueryExpression,
     UnresolvedRegex,
     UnresolvedStar,
 )
@@ -1783,6 +1784,16 @@ class DataFrame(ParentDataFrame):
             plan.Transpose(self._plan, [F._to_col(indexColumn)] if indexColumn is not None else []),
             self._session,
         )
+
+    def scalar(self) -> Column:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="scalar"))
+
+    def exists(self) -> Column:
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        return ConnectColumn(SubqueryExpression(self._plan, subquery_type="exists"))
 
     @property
     def schema(self) -> StructType:

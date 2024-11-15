@@ -30,12 +30,18 @@ from typing import (
 )
 
 from pyspark.sql.column import Column as ParentColumn
-from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkValueError
+from pyspark.errors import (
+    IllegalArgumentException,
+    PySparkTypeError,
+    PySparkAttributeError,
+    PySparkValueError,
+)
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import enum_to_value
 
 import pyspark.sql.connect.proto as proto
 from pyspark.sql.connect.expressions import (
+    ColumnReference,
     Expression,
     UnresolvedFunction,
     UnresolvedExtractValue,
@@ -46,6 +52,7 @@ from pyspark.sql.connect.expressions import (
     WindowExpression,
     WithField,
     DropField,
+    LazyOuterReference,
 )
 from pyspark.errors.utils import with_origin_to_class
 

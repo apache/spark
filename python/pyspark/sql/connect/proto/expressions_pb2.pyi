@@ -1184,6 +1184,7 @@ class Expression(google.protobuf.message.Message):
     NAMED_ARGUMENT_EXPRESSION_FIELD_NUMBER: builtins.int
     MERGE_ACTION_FIELD_NUMBER: builtins.int
     TYPED_AGGREGATE_EXPRESSION_FIELD_NUMBER: builtins.int
+    SUBQUERY_EXPRESSION_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def common(self) -> global___ExpressionCommon: ...
@@ -1228,6 +1229,8 @@ class Expression(google.protobuf.message.Message):
     @property
     def typed_aggregate_expression(self) -> global___TypedAggregateExpression: ...
     @property
+    def subquery_expression(self) -> global___SubqueryExpression: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1256,6 +1259,7 @@ class Expression(google.protobuf.message.Message):
         named_argument_expression: global___NamedArgumentExpression | None = ...,
         merge_action: global___MergeAction | None = ...,
         typed_aggregate_expression: global___TypedAggregateExpression | None = ...,
+        subquery_expression: global___SubqueryExpression | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1287,6 +1291,8 @@ class Expression(google.protobuf.message.Message):
             b"named_argument_expression",
             "sort_order",
             b"sort_order",
+            "subquery_expression",
+            b"subquery_expression",
             "typed_aggregate_expression",
             b"typed_aggregate_expression",
             "unresolved_attribute",
@@ -1336,6 +1342,8 @@ class Expression(google.protobuf.message.Message):
             b"named_argument_expression",
             "sort_order",
             b"sort_order",
+            "subquery_expression",
+            b"subquery_expression",
             "typed_aggregate_expression",
             b"typed_aggregate_expression",
             "unresolved_attribute",
@@ -1379,6 +1387,7 @@ class Expression(google.protobuf.message.Message):
             "named_argument_expression",
             "merge_action",
             "typed_aggregate_expression",
+            "subquery_expression",
             "extension",
         ]
         | None
@@ -1801,3 +1810,47 @@ class MergeAction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["condition"] | None: ...
 
 global___MergeAction = MergeAction
+
+class SubqueryExpression(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _SubqueryType:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _SubqueryTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            SubqueryExpression._SubqueryType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        SUBQUERY_TYPE_INVALID: SubqueryExpression._SubqueryType.ValueType  # 0
+        SUBQUERY_TYPE_SCALAR: SubqueryExpression._SubqueryType.ValueType  # 1
+        SUBQUERY_TYPE_EXISTS: SubqueryExpression._SubqueryType.ValueType  # 2
+
+    class SubqueryType(_SubqueryType, metaclass=_SubqueryTypeEnumTypeWrapper): ...
+    SUBQUERY_TYPE_INVALID: SubqueryExpression.SubqueryType.ValueType  # 0
+    SUBQUERY_TYPE_SCALAR: SubqueryExpression.SubqueryType.ValueType  # 1
+    SUBQUERY_TYPE_EXISTS: SubqueryExpression.SubqueryType.ValueType  # 2
+
+    PLAN_ID_FIELD_NUMBER: builtins.int
+    SUBQUERY_TYPE_FIELD_NUMBER: builtins.int
+    plan_id: builtins.int
+    """(Required) The id of corresponding connect plan."""
+    subquery_type: global___SubqueryExpression.SubqueryType.ValueType
+    """(Required) The type of the subquery."""
+    def __init__(
+        self,
+        *,
+        plan_id: builtins.int = ...,
+        subquery_type: global___SubqueryExpression.SubqueryType.ValueType = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "plan_id", b"plan_id", "subquery_type", b"subquery_type"
+        ],
+    ) -> None: ...
+
+global___SubqueryExpression = SubqueryExpression
