@@ -1108,7 +1108,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         val actualPartitionPath = new Path(currentFullPath, actualPartitionString)
         try {
           fs.mkdirs(expectedPartitionPath)
-          if(!fs.rename(actualPartitionPath, expectedPartitionPath)) {
+          if (!fs.rename(actualPartitionPath, expectedPartitionPath)) {
             throw new IOException(s"Renaming partition path from $actualPartitionPath to " +
               s"$expectedPartitionPath returned false")
           }

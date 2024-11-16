@@ -40,7 +40,7 @@ object Word2VecExample {
 
     val synonyms = model.findSynonyms("1", 5)
 
-    for((synonym, cosineSimilarity) <- synonyms) {
+    for ((synonym, cosineSimilarity) <- synonyms) {
       println(s"$synonym $cosineSimilarity")
     }
 
