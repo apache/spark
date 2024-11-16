@@ -55,9 +55,8 @@ case class StateStoreColFamilySchema(
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: Option[KeyStateEncoderSpec] = None,
-    userKeyEncoderSchema: Option[StructType] = None,
-    avroEnc: Option[AvroEncoder] = None
-) extends Serializable
+    userKeyEncoderSchema: Option[StructType] = None
+)
 
 class StateSchemaCompatibilityChecker(
     providerId: StateStoreProviderId,
