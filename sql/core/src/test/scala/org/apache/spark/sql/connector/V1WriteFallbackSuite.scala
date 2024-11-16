@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.QueryTest.withPhysicalPlansCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -34,7 +35,7 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTrans
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder}
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.execution.datasources.v2.{AppendDataExecV1, OverwriteByExpressionExecV1}
 import org.apache.spark.sql.functions.lit
@@ -209,27 +210,15 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
       .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
       .getOrCreate()
 
-    def captureWrite(writeFun: => Unit): SparkPlan = {
-      var writePlan: Option[SparkPlan] = None
-
-      val listener = new QueryExecutionListener {
-        override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-          qe.executedPlan match {
-            case _: AppendDataExecV1 | _: OverwriteByExpressionExecV1 =>
-              assert(writePlan.isEmpty)
-              writePlan = Some(qe.executedPlan)
-            case _ =>
-          }
-        }
-
-        override def onFailure(fname: String, qe: QueryExecution, exception: Exception): Unit = {}
+    def captureWrite(thunk: => Unit): SparkPlan = {
+      val physicalPlans = withPhysicalPlansCaptured(spark, thunk)
+      val v1FallbackWritePlans = physicalPlans.filter {
+        case _: AppendDataExecV1 | _: OverwriteByExpressionExecV1 => true
+        case _ => false
       }
-      spark.listenerManager.register(listener)
 
-      writeFun
-
-      sparkContext.listenerBus.waitUntilEmpty()
-      writePlan.get
+      assert(v1FallbackWritePlans.size === 1)
+      v1FallbackWritePlans.head
     }
 
     val appendPlan = captureWrite {
