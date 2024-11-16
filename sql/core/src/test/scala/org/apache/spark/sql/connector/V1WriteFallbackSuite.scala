@@ -31,15 +31,19 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.v2.{AppendDataExecV1, OverwriteByExpressionExecV1}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf.{OPTIMIZER_MAX_ITERATIONS, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.ArrayImplicits._
 
 class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
@@ -197,6 +201,50 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
       SparkSession.setActiveSession(spark)
       SparkSession.setDefaultSession(spark)
     }
+  }
+
+  test("SPARK-50315: metrics for V1 fallback writers") {
+    val session = SparkSession.builder()
+      .master("local[1]")
+      .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
+      .getOrCreate()
+
+    def captureWrite(writeFun: => Unit): SparkPlan = {
+      var writePlan: Option[SparkPlan] = None
+
+      val listener = new QueryExecutionListener {
+        override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+          qe.executedPlan match {
+            case _: AppendDataExecV1 | _: OverwriteByExpressionExecV1 =>
+              assert(writePlan.isEmpty)
+              writePlan = Some(qe.executedPlan)
+            case _ =>
+          }
+        }
+
+        override def onFailure(fname: String, qe: QueryExecution, exception: Exception): Unit = {}
+      }
+      spark.listenerManager.register(listener)
+
+      writeFun
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      writePlan.get
+    }
+
+    val appendPlan = captureWrite {
+      val df = session.createDataFrame(Seq((1, "x")))
+      df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
+    }
+    assert(appendPlan.metrics("numOutputRows").value === 1)
+
+    session.catalog.cacheTable("test")
+
+    val overwritePlan = captureWrite {
+      val df2 = session.createDataFrame(Seq((2, "y")))
+      df2.writeTo("test").overwrite(lit(true))
+    }
+    assert(overwritePlan.metrics("numOutputRows").value === 1)
   }
 }
 
@@ -376,10 +424,23 @@ class InMemoryTableWithV1Fallback(
     }
 
     override def build(): V1Write = new V1Write {
+      case class SupportedV1WriteMetric(name: String, description: String) extends CustomSumMetric
+
+      override def supportedCustomMetrics(): Array[CustomMetric] =
+        Array(SupportedV1WriteMetric("numOutputRows", "Number of output rows"))
+
+      private var writeMetrics = Array.empty[CustomTaskMetric]
+
+      override def reportDriverMetrics(): Array[CustomTaskMetric] = writeMetrics
+
       override def toInsertableRelation: InsertableRelation = {
         (data: DataFrame, overwrite: Boolean) => {
           assert(!overwrite, "V1 write fallbacks cannot be called with overwrite=true")
           val rows = data.collect()
+
+          case class V1WriteTaskMetric(name: String, value: Long) extends CustomTaskMetric
+          writeMetrics = Array(V1WriteTaskMetric("numOutputRows", rows.length))
+
           rows.groupBy(getPartitionValues).foreach { case (partition, elements) =>
             if (dataMap.contains(partition) && mode == "append") {
               dataMap.put(partition, dataMap(partition) ++ elements)
