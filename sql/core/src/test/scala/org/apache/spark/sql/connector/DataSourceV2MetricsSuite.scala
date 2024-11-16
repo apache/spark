@@ -19,16 +19,13 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import scala.jdk.CollectionConverters.IterableHasAsJava
-
 import org.apache.spark.sql.QueryTest.withPhysicalPlansCaptured
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagedTableWithCommitMetrics, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{AtomicCreateTableAsSelectExec, AtomicReplaceTableAsSelectExec, AtomicReplaceTableExec, CreateTableAsSelectExec, ReplaceTableAsSelectExec, ReplaceTableExec}
-import org.apache.spark.sql.util.QueryExecutionListener
 
 class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog {
 
@@ -44,12 +41,16 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
       delegateTable: InMemoryTable
   ) extends TestStagedTable(ident, delegateTable) with StagedTableWithCommitMetrics {
 
+    private var stagedChangesCommitted = false
+
     override def commitStagedChanges(): Unit = {
       tables.put(ident, delegateTable)
+      stagedChangesCommitted = true
     }
 
-    override def getCommitMetrics: java.lang.Iterable[CustomTaskMetric] = {
-      StagingInMemoryTableCatalogWithMetrics.testMetrics.asJava
+    override def reportDriverMetrics: Array[CustomTaskMetric] = {
+      assert(stagedChangesCommitted)
+      StagingInMemoryTableCatalogWithMetrics.testMetrics
     }
   }
 
@@ -83,7 +84,7 @@ object StagingInMemoryTableCatalogWithMetrics {
 
   case class TestCustomTaskMetric(name: String, value: Long) extends CustomTaskMetric
 
-  val testMetrics: Seq[CustomTaskMetric] = Seq(
+  val testMetrics: Array[CustomTaskMetric] = Array(
     TestCustomTaskMetric("numFiles", 1337),
     TestCustomTaskMetric("numOutputRows", 1338),
     TestCustomTaskMetric("numOutputBytes", 1339))
@@ -151,7 +152,7 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
       "Plan metrics values are the values from the catalog", atomicTestCatalog) { sparkPlan =>
     val metrics = sparkPlan.metrics
 
-    assert(metrics.size === StagingInMemoryTableCatalogWithMetrics.testMetrics.size)
+    assert(metrics.size === StagingInMemoryTableCatalogWithMetrics.testMetrics.length)
     StagingInMemoryTableCatalogWithMetrics.testMetrics.foreach(customTaskMetric =>
       assert(metrics(customTaskMetric.name()).value === customTaskMetric.value()))
   }

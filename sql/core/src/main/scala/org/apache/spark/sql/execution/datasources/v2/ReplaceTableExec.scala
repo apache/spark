@@ -103,7 +103,7 @@ case class AtomicReplaceTableExec(
         case st: StagedTableWithCommitMetrics =>
           st.commitStagedChanges()
 
-          st.getCommitMetrics.forEach { taskMetric =>
+          for (taskMetric <- st.reportDriverMetrics) {
             metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
           }
 

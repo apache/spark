@@ -27,8 +27,7 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 public interface StagedTableWithCommitMetrics extends StagedTable {
 
     /**
-     * @return a {@link java.lang.Iterable} of commit metric values. Throws if the table has not
-     * been committed yet.
+     * @return an Array of commit metric values. Throws if the table has not been committed yet.
      */
-    Iterable<CustomTaskMetric> getCommitMetrics() throws AssertionError;
+    CustomTaskMetric[] reportDriverMetrics() throws AssertionError;
 }

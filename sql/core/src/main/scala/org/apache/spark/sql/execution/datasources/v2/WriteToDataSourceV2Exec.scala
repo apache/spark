@@ -639,7 +639,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
         case st: StagedTableWithCommitMetrics =>
           st.commitStagedChanges()
 
-          st.getCommitMetrics.forEach { taskMetric =>
+          for (taskMetric <- st.reportDriverMetrics) {
               metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
           }
 
