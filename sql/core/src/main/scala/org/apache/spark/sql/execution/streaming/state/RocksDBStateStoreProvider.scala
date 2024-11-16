@@ -79,6 +79,9 @@ private[sql] class RocksDBStateStoreProvider
       val avroEncCacheKey = s"${stateStoreId.operatorId}_" +
         s"${stateStoreId.partitionId}_$colFamilyName"
 
+      // If we have not created the avroEncoder for this column family, create
+      // it, or look in the cache maintained in the RocksDBStateStoreProvider
+      // companion object
       lazy val avroEnc = stateStoreEncoding match {
         case "avro" => Some(
           RocksDBStateStoreProvider.avroEncoderMap.computeIfAbsent(avroEncCacheKey,

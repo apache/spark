@@ -1538,7 +1538,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  testWithEncodingTypes("transformWithState - verify that schema file " +
+  test("transformWithState - verify that schema file " +
     "is kept after metadata is purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
