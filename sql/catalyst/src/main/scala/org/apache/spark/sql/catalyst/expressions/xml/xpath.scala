@@ -36,7 +36,6 @@ abstract class XPathExtract
   extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override def left: Expression = xml
   override def right: Expression = path
-  override def nullIntolerant: Boolean = true
 
   /** XPath expressions are always nullable, e.g. if the xml string is empty. */
   override def nullable: Boolean = true
