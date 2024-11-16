@@ -68,7 +68,7 @@ case class AtomicReplaceTableExec(
   val tableProperties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override val metrics: Map[String, SQLMetric] =
-    catalog.supportedCommitMetrics().asScala.map { metric =>
+    catalog.supportedCustomMetrics().map { metric =>
       metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
     }.toMap
 

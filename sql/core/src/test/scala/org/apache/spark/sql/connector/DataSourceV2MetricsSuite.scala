@@ -31,7 +31,7 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
 
   case class TestSupportedCommitMetric(name: String, description: String) extends CustomSumMetric
 
-  override def supportedCommitMetrics(): java.lang.Iterable[CustomMetric] = java.util.List.of(
+  override def supportedCustomMetrics(): Array[CustomMetric] = Array(
     TestSupportedCommitMetric("numFiles", "number of written files"),
     TestSupportedCommitMetric("numOutputRows", "number of output rows"),
     TestSupportedCommitMetric("numOutputBytes", "written output"))

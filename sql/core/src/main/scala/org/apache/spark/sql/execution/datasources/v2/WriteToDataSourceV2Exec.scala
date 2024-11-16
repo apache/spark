@@ -623,7 +623,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   protected def commitMetrics(tableCatalog: TableCatalog): Map[String, SQLMetric] = {
     tableCatalog match {
       case st: StagingTableCatalog =>
-        st.supportedCommitMetrics().asScala.map {
+        st.supportedCustomMetrics().map {
           metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
         }.toMap
       case _ => Map.empty

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog;
 
-import java.util.Collections;
 import java.util.Map;
 
 import org.apache.spark.annotation.Evolving;
@@ -28,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.connector.write.BatchWrite;
+import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
@@ -204,7 +204,12 @@ public interface StagingTableCatalog extends TableCatalog {
   }
 
   /**
-   * @return A {@link java.lang.Iterable} of commit metrics that are supported by the catalog.
+   * @return An Array of commit metrics that are supported by the catalog. This is analogous to
+   *        {@link Write#supportedCustomMetrics()}. The corresponding
+   *        {@link StagedTableWithCommitMetrics#reportDriverMetrics()} method must be called to
+   *        retrieve the actual metric values after a commit. The methods are not in the same class
+   *        because the supported metrics are required before the staged table object is created
+   *        and only the staged table object can capture the write metrics during the commit.
    */
-  default Iterable<CustomMetric> supportedCommitMetrics() { return Collections.emptyList(); }
+  default CustomMetric[] supportedCustomMetrics() { return new CustomMetric[0]; }
 }
