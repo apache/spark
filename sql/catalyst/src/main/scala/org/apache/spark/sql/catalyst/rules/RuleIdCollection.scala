@@ -176,7 +176,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
   }
 
-  if(Utils.isTesting) {
+  if (Utils.isTesting) {
     rulesNeedingIds = rulesNeedingIds ++ {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.

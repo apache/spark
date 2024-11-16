@@ -349,8 +349,21 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(write.toBatch)
+    postDriverMetrics()
     refreshCache()
     writtenRows
+  }
+
+  protected def postDriverMetrics(): Unit = {
+    val driveSQLMetrics = write.reportDriverMetrics().map(customTaskMetric => {
+      val metric = metrics(customTaskMetric.name())
+      metric.set(customTaskMetric.value())
+      metric
+    })
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      driveSQLMetrics.toImmutableArraySeq)
   }
 }
 

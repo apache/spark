@@ -145,7 +145,7 @@ private case class PostgresDialect()
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
-    case _: StringType => Some(JdbcType("TEXT", Types.VARCHAR))
+    case StringType => Some(JdbcType("TEXT", Types.VARCHAR))
     case BinaryType => Some(JdbcType("BYTEA", Types.BINARY))
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
@@ -393,7 +393,9 @@ private case class PostgresDialect()
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
-              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
+              // Metadata can return 0 for CTAS tables. For such tables, we are always reading
+              // them as 1D array
+              if (rs.next()) metadata.putLong("arrayDimension", Math.max(1L, rs.getLong(1)))
             }
           }
         } catch {

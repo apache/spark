@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.internal.UdfToProtoUtils
+import org.apache.spark.sql.types.DataType
 
 /**
  * Functions for registering user-defined functions. Use `SparkSession.udf` to access this:
@@ -30,6 +31,11 @@ import org.apache.spark.sql.internal.UdfToProtoUtils
  * @since 3.5.0
  */
 class UDFRegistration(session: SparkSession) extends api.UDFRegistration {
+  override def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
+    throw new UnsupportedOperationException(
+      "registerJava is currently not supported in Spark Connect.")
+  }
+
   override protected def register(
       name: String,
       udf: UserDefinedFunction,

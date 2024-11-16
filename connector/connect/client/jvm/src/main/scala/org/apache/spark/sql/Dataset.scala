@@ -585,6 +585,19 @@ class Dataset[T] private[sql] (
   def transpose(): DataFrame =
     buildTranspose(Seq.empty)
 
+  // TODO(SPARK-50134): Support scalar Subquery API in Spark Connect
+  // scalastyle:off not.implemented.error.usage
+  /** @inheritdoc */
+  def scalar(): Column = {
+    ???
+  }
+
+  /** @inheritdoc */
+  def exists(): Column = {
+    ???
+  }
+  // scalastyle:on not.implemented.error.usage
+
   /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
     builder.getLimitBuilder

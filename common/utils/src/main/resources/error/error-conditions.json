@@ -497,6 +497,12 @@
     ],
     "sqlState" : "56000"
   },
+  "CIRCULAR_CLASS_REFERENCE" : {
+    "message" : [
+      "Cannot have circular references in class, but got the circular reference of class <t>."
+    ],
+    "sqlState" : "42602"
+  },
   "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
     "message" : [
       "<className> must override either <method1> or <method2>."
@@ -1045,16 +1051,6 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
-      "UNSUPPORTED_UDF_INPUT_TYPE" : {
-        "message" : [
-          "UDFs do not support '<dataType>' as an input data type."
-        ]
-      },
-      "UNSUPPORTED_UDF_OUTPUT_TYPE" : {
-        "message" : [
-          "UDFs do not support '<dataType>' as an output data type."
-        ]
-      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
@@ -1110,6 +1106,12 @@
       "Expected schema: <expectedSchema>"
     ],
     "sqlState" : "42K03"
+  },
+  "DATETIME_FIELD_OUT_OF_BOUNDS" : {
+    "message" : [
+      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22023"
   },
   "DATETIME_OVERFLOW" : {
     "message" : [
@@ -2022,8 +2024,20 @@
   },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative>"
+      "Integer overflow while operating with intervals."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "Try devising appropriate values for the interval parameters."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Use <functionName> to tolerate overflow and return NULL instead."
+        ]
+      }
+    },
     "sqlState" : "22015"
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
@@ -2607,6 +2621,12 @@
     },
     "sqlState" : "22006"
   },
+  "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
+    "message" : [
+      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22006"
+  },
   "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
     "message" : [
       "Invalid inverse distribution function <funcName>."
@@ -2654,6 +2674,12 @@
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
+  },
+  "INVALID_JSON_RECORD_TYPE" : {
+    "message" : [
+      "Detected an invalid type of a JSON record while inferring a common schema in the mode <failFastMode>. Expected a STRUCT type, but found <invalidType>."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -2959,6 +2985,12 @@
       }
     },
     "sqlState" : "42601"
+  },
+  "INVALID_PARTITION_VALUE" : {
+    "message" : [
+      "Failed to cast value <value> to data type <dataType> for partition column <columnName>. Ensure the value matches the expected data type for this partition column."
+    ],
+    "sqlState" : "42846"
   },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
@@ -3319,6 +3351,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_SHREDDING_SCHEMA" : {
+    "message" : [
+      "The schema `<schema>` is not a valid variant shredding schema."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -3376,6 +3414,12 @@
   "LABELS_MISMATCH" : {
     "message" : [
       "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
+  },
+  "LABEL_ALREADY_EXISTS" : {
+    "message" : [
+      "The label <label> already exists. Choose another name or rename the existing label."
     ],
     "sqlState" : "42K0L"
   },
@@ -3637,6 +3681,19 @@
       "UNPIVOT_WITH_PIVOT" : {
         "message" : [
           "UNPIVOT together with PIVOT."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
+  "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE" : {
+    "message" : [
+      "Not allowed in the pipe WHERE clause:"
+    ],
+    "subClass" : {
+      "WINDOW_CLAUSE" : {
+        "message" : [
+          "WINDOW clause."
         ]
       }
     },
@@ -4233,12 +4290,6 @@
     ],
     "sqlState" : "42802"
   },
-  "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
-    "message" : [
-      "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
-    ],
-    "sqlState" : "42802"
-  },
   "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED" : {
     "message" : [
       "State variable with name <stateVarName> has already been defined in the StatefulProcessor."
@@ -4696,6 +4747,12 @@
       "Unable to infer schema for <format>. It must be specified manually."
     ],
     "sqlState" : "42KD9"
+  },
+  "UNANALYZABLE_EXPRESSION" : {
+    "message" : [
+      "The plan contains an unanalyzable expression <expr> that holds the analysis."
+    ],
+    "sqlState" : "03000"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
@@ -5372,6 +5429,11 @@
       "UPDATE_COLUMN_NULLABILITY" : {
         "message" : [
           "Update column nullability for MySQL and MS SQL Server."
+        ]
+      },
+      "WRITE_FOR_BINARY_SOURCE" : {
+        "message" : [
+          "Write for the binary file data source."
         ]
       }
     },
@@ -6338,11 +6400,6 @@
       "Partition column `<col>` not found in schema <schemaCatalog>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1156" : {
-    "message" : [
-      "Column <colName> not found in schema <tableSchema>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1158" : {
     "message" : [
       "Saving data into a view is not allowed."
@@ -6867,11 +6924,6 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2000" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2003" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
@@ -7012,11 +7064,6 @@
       "Unable to clear partition directory <path> prior to writing to it."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2058" : {
-    "message" : [
-      "Failed to cast value `<value>` to `<dataType>` for partition column `<columnName>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2059" : {
     "message" : [
       "End of stream."
@@ -7072,11 +7119,6 @@
   "_LEGACY_ERROR_TEMP_2074" : {
     "message" : [
       "user-specified schema."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2075" : {
-    "message" : [
-      "Write is not supported for binary file data source."
     ]
   },
   "_LEGACY_ERROR_TEMP_2076" : {
@@ -7284,16 +7326,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2138" : {
-    "message" : [
-      "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2139" : {
-    "message" : [
-      "cannot have circular references in class, but got the circular reference of class <t>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
@@ -7342,11 +7374,6 @@
   "_LEGACY_ERROR_TEMP_2166" : {
     "message" : [
       "Malformed JSON."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2167" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>. Reasons: Failed to infer a common schema. Struct types are expected, but `<dataType>` was found."
     ]
   },
   "_LEGACY_ERROR_TEMP_2168" : {
