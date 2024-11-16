@@ -21,6 +21,7 @@ import java.util
 
 import scala.jdk.CollectionConverters.IterableHasAsJava
 
+import org.apache.spark.sql.QueryTest.withPhysicalPlansCaptured
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagedTableWithCommitMetrics, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
@@ -31,19 +32,12 @@ import org.apache.spark.sql.util.QueryExecutionListener
 
 class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog {
 
+  case class TestSupportedCommitMetric(name: String, description: String) extends CustomSumMetric
+
   override def supportedCommitMetrics(): java.lang.Iterable[CustomMetric] = java.util.List.of(
-    new CustomSumMetric {
-      override def name(): String = "numFiles"
-      override def description(): String = "number of written files"
-    },
-    new CustomSumMetric {
-      override def name(): String = "numOutputRows"
-      override def description(): String = "number of output rows"
-    },
-    new CustomSumMetric {
-      override def name(): String = "numOutputBytes"
-      override def description(): String = "written output"
-    })
+    TestSupportedCommitMetric("numFiles", "number of written files"),
+    TestSupportedCommitMetric("numOutputRows", "number of output rows"),
+    TestSupportedCommitMetric("numOutputBytes", "written output"))
 
   private class TestStagedTableWithMetric(
       ident: Identifier,
@@ -87,19 +81,12 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
 
 object StagingInMemoryTableCatalogWithMetrics {
 
+  case class TestCustomTaskMetric(name: String, value: Long) extends CustomTaskMetric
+
   val testMetrics: Seq[CustomTaskMetric] = Seq(
-    new CustomTaskMetric {
-      override def name(): String = "numFiles"
-      override def value(): Long = 1337
-    },
-    new CustomTaskMetric {
-      override def name(): String = "numOutputRows"
-      override def value(): Long = 1338
-    },
-    new CustomTaskMetric {
-      override def name(): String = "numOutputBytes"
-      override def value(): Long = 1339
-    })
+    TestCustomTaskMetric("numFiles", 1337),
+    TestCustomTaskMetric("numOutputRows", 1338),
+    TestCustomTaskMetric("numOutputBytes", 1339))
 }
 
 class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
@@ -109,34 +96,16 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
   private val nonExistingTable = "non_existing_table"
   private val existingTable = "existing_table"
 
-  private def captureExecutedPlan(command: => Unit): SparkPlan = {
-    var commandPlan: Option[SparkPlan] = None
-    var otherPlans = Seq.empty[SparkPlan]
-
-    val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        qe.executedPlan match {
-          case _: CreateTableAsSelectExec | _: AtomicCreateTableAsSelectExec
-               | _: ReplaceTableAsSelectExec | _: AtomicReplaceTableAsSelectExec
-               | _: ReplaceTableExec | _: AtomicReplaceTableExec =>
-            assert(commandPlan.isEmpty)
-            commandPlan = Some(qe.executedPlan)
-          case _ =>
-            otherPlans :+= qe.executedPlan
-        }
-      }
-
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+  private def captureStagedTableWrite(thunk: => Unit): SparkPlan = {
+    val physicalPlans = withPhysicalPlansCaptured(spark, thunk)
+    val stagedTableWrites = physicalPlans.filter {
+      case _: AtomicCreateTableAsSelectExec | _: CreateTableAsSelectExec |
+           _: AtomicReplaceTableAsSelectExec | _: ReplaceTableAsSelectExec |
+           _: AtomicReplaceTableExec | _: ReplaceTableExec => true
+      case _ => false
     }
-
-    spark.listenerManager.register(listener)
-
-    command
-
-    sparkContext.listenerBus.waitUntilEmpty()
-
-    assert(commandPlan.nonEmpty, s"No command plan found, but saw $otherPlans")
-    commandPlan.get
+    assert(stagedTableWrites.size === 1)
+    stagedTableWrites.head
   }
 
   private def commands: Seq[String => Unit] = Seq(
@@ -165,7 +134,7 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
           sql(s"CREATE TABLE $existingTable (id bigint, data string)")
           sql(s"CREATE TABLE $catalogName.$existingTable (id bigint, data string)")
 
-          testFunction(captureExecutedPlan(command(catalogName)))
+          testFunction(captureStagedTableWrite(command(catalogName)))
         }
       }
     }
