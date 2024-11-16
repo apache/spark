@@ -29,6 +29,7 @@ import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
@@ -74,10 +75,68 @@ private[sql] class RocksDBStateStoreProvider
         isInternal: Boolean = false): Unit = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
+      // Create cache key using store ID to avoid collisions
+      val avroEncCacheKey = s"${stateStoreId.operatorId}_" +
+        s"${stateStoreId.partitionId}_$colFamilyName"
+
+      lazy val avroEnc = stateStoreEncoding match {
+        case "avro" => Some(
+          RocksDBStateStoreProvider.avroEncoderMap.computeIfAbsent(avroEncCacheKey,
+            _ => getAvroEnc(keyStateEncoderSpec, valueSchema))
+        )
+        case "unsaferow" => None
+      }
+
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
-          Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
-          useMultipleValuesPerKey)))
+          Some(newColFamilyId), avroEnc), RocksDBStateEncoder.getValueEncoder(valueSchema,
+          useMultipleValuesPerKey, avroEnc)))
+    }
+    private def getAvroSerializer(schema: StructType): AvroSerializer = {
+      val avroType = SchemaConverters.toAvroType(schema)
+      new AvroSerializer(schema, avroType, nullable = false)
+    }
+
+    private def getAvroDeserializer(schema: StructType): AvroDeserializer = {
+      val avroType = SchemaConverters.toAvroType(schema)
+      val avroOptions = AvroOptions(Map.empty)
+      new AvroDeserializer(avroType, schema,
+        avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
+        avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
+    }
+
+    private def getAvroEnc(
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        valueSchema: StructType
+    ): AvroEncoder = {
+      val valueSerializer = getAvroSerializer(valueSchema)
+      val valueDeserializer = getAvroDeserializer(valueSchema)
+      val keySchema = keyStateEncoderSpec match {
+        case NoPrefixKeyStateEncoderSpec(schema) =>
+          schema
+        case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
+          StructType(schema.take(numColsPrefixKey))
+        case RangeKeyScanStateEncoderSpec(schema, orderingOrdinals) =>
+          val remainingSchema = {
+            0.until(schema.length).diff(orderingOrdinals).map { ordinal =>
+              schema(ordinal)
+            }
+          }
+          StructType(remainingSchema)
+      }
+      val suffixKeySchema = keyStateEncoderSpec match {
+        case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
+          Some(StructType(schema.drop(numColsPrefixKey)))
+        case _ => None
+      }
+      AvroEncoder(
+        getAvroSerializer(keySchema),
+        getAvroDeserializer(keySchema),
+        valueSerializer,
+        valueDeserializer,
+        suffixKeySchema.map(getAvroSerializer),
+        suffixKeySchema.map(getAvroDeserializer)
+      )
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -364,6 +423,7 @@ private[sql] class RocksDBStateStoreProvider
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
+    this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -458,6 +518,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
+  @volatile private var stateStoreEncoding: String = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -592,6 +653,9 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
+
+  // Add the cache at companion object level so it persists across provider instances
+  private val avroEncoderMap = new java.util.concurrent.ConcurrentHashMap[String, AvroEncoder]()
 
   // Native operation latencies report as latency in microseconds
   // as SQLMetrics support millis. Convert the value to millis

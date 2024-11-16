@@ -110,7 +110,7 @@ class TransformWithMapStateSuite extends StreamTest
     }
   }
 
-  test("Test retrieving value with non-existing user key") {
+  testWithEncodingTypes("Test retrieving value with non-existing user key") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -129,12 +129,12 @@ class TransformWithMapStateSuite extends StreamTest
   }
 
   Seq("getValue", "containsKey", "updateValue", "removeKey").foreach { mapImplFunc =>
-    test(s"Test $mapImplFunc with null user key") {
+    testWithEncodingTypes(s"Test $mapImplFunc with null user key") {
       testMapStateWithNullUserKey(InputMapRow("k1", mapImplFunc, (null, "")))
     }
   }
 
-  test("Test put value with null value") {
+  testWithEncodingTypes("Test put value with null value") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -158,7 +158,7 @@ class TransformWithMapStateSuite extends StreamTest
     }
   }
 
-  test("Test map state correctness") {
+  testWithEncodingTypes("Test map state correctness") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputMapRow]
@@ -219,7 +219,7 @@ class TransformWithMapStateSuite extends StreamTest
     }
   }
 
-  test("transformWithMapState - batch should succeed") {
+  testWithEncodingTypes("transformWithMapState - batch should succeed") {
     val inputData = Seq(
       InputMapRow("k1", "updateValue", ("v1", "10")),
       InputMapRow("k1", "getValue", ("v1", "")))

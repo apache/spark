@@ -30,7 +30,7 @@ class TimerSuite extends StateVariableSuiteBase {
   private def testWithTimeMode(testName: String)
       (testFunc: TimeMode => Unit): Unit = {
     Seq("Processing", "Event").foreach { timeoutMode =>
-      test(s"$timeoutMode timer - " + testName) {
+      testWithEncodingTypes(s"$timeoutMode timer - " + testName) {
         timeoutMode match {
           case "Processing" => testFunc(TimeMode.ProcessingTime())
           case "Event" => testFunc(TimeMode.EventTime())

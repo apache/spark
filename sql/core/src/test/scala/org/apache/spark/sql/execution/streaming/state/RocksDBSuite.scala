@@ -128,6 +128,73 @@ trait AlsoTestWithChangelogCheckpointingEnabled
     }
   }
 
+  def testWithEncodingTypes(testName: String, testTags: Tag*)
+                           (testBody: => Any): Unit = {
+    Seq("unsaferow", "avro").foreach { encoding =>
+      super.test(testName + s" (encoding = $encoding)", testTags: _*) {
+        // in case tests have any code that needs to execute before every test
+        // super.beforeEach()
+        withSQLConf(
+          SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key ->
+            encoding) {
+          testBody
+        }
+        // in case tests have any code that needs to execute after every test
+        // super.afterEach()
+      }
+    }
+  }
+
+  def testWithColumnFamiliesAndEncodingTypes(
+      testName: String,
+      testMode: TestMode,
+      testTags: Tag*)
+      (testBody: Boolean => Any): Unit = {
+
+    Seq(true, false).foreach { colFamiliesEnabled =>
+      Seq("unsaferow", "avro").foreach { encoding =>
+        testMode match {
+          case TestWithChangelogCheckpointingEnabled =>
+            testWithChangelogCheckpointingEnabled(
+              s"$testName - with colFamiliesEnabled=$colFamiliesEnabled (encoding = $encoding)",
+              testTags: _*) {
+              withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+                testBody(colFamiliesEnabled)
+              }
+            }
+
+          case TestWithChangelogCheckpointingDisabled =>
+            testWithChangelogCheckpointingDisabled(
+              s"$testName - with colFamiliesEnabled=$colFamiliesEnabled (encoding = $encoding)",
+              testTags: _*) {
+              withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+                testBody(colFamiliesEnabled)
+              }
+            }
+
+          case TestWithBothChangelogCheckpointingEnabledAndDisabled =>
+            testWithChangelogCheckpointingEnabled(
+              s"$testName - with colFamiliesEnabled=$colFamiliesEnabled (encoding = $encoding)",
+              testTags: _*) {
+              withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+                testBody(colFamiliesEnabled)
+              }
+            }
+            testWithChangelogCheckpointingDisabled(
+              s"$testName - with colFamiliesEnabled=$colFamiliesEnabled (encoding = $encoding)",
+              testTags: _*) {
+              withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+                testBody(colFamiliesEnabled)
+              }
+            }
+
+          case _ =>
+            throw new IllegalArgumentException(s"Unknown test mode: $testMode")
+        }
+      }
+    }
+  }
+
   def testWithColumnFamilies(
       testName: String,
       testMode: TestMode,

@@ -60,7 +60,7 @@ class ListStateSuite extends StateVariableSuiteBase {
   }
 
   Seq("appendList", "put").foreach { listImplFunc =>
-    test(s"Test list operation($listImplFunc) with null") {
+    testWithEncodingTypes(s"Test list operation($listImplFunc) with null") {
       testMapStateWithNullUserKey() { listState =>
         listImplFunc match {
           case "appendList" => listState.appendList(null)
@@ -70,7 +70,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("List state operations for single instance") {
+  testWithEncodingTypes("List state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -99,7 +99,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("List state operations for multiple instance") {
+  testWithEncodingTypes("List state operations for multiple instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -139,7 +139,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("List state operations with list, value, another list instances") {
+  testWithEncodingTypes("List state operations with list, value, another list instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -170,7 +170,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test(s"test List state TTL") {
+  testWithEncodingTypes(s"test List state TTL") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
@@ -226,7 +226,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("test null or negative TTL duration throws error") {
+  testWithEncodingTypes("test null or negative TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
@@ -253,7 +253,7 @@ class ListStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("ListState TTL with non-primitive types") {
+  testWithEncodingTypes("ListState TTL with non-primitive types") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
