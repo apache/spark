@@ -19,11 +19,7 @@ import math
 
 from typing import Any, TYPE_CHECKING, List, Optional, Union, Sequence
 from types import ModuleType
-from pyspark.errors import (
-    PySparkRuntimeError,
-    PySparkTypeError,
-    PySparkValueError,
-)
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql import Column, functions as F
 from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.pandas.utils import require_minimum_pandas_version
@@ -38,14 +34,8 @@ if TYPE_CHECKING:
 
 class PySparkTopNPlotBase:
     def get_top_n(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import SparkSession
-
-        session = SparkSession.getActiveSession()
-        if session is None:
-            raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
-
         max_rows = int(
-            session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
+            sdf._session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
         )
         pdf = sdf.limit(max_rows + 1).toPandas()
 
@@ -59,16 +49,11 @@ class PySparkTopNPlotBase:
 
 class PySparkSampledPlotBase:
     def get_sampled(self, sdf: "DataFrame") -> "pd.DataFrame":
-        from pyspark.sql import SparkSession, Observation, functions as F
-
-        session = SparkSession.getActiveSession()
-        if session is None:
-            raise PySparkRuntimeError(errorClass="NO_ACTIVE_SESSION", messageParameters=dict())
+        from pyspark.sql import Observation, functions as F
 
         max_rows = int(
-            session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
+            sdf._session.conf.get("spark.sql.pyspark.plotting.max_rows")  # type: ignore[arg-type]
         )
-
         observation = Observation("pyspark plotting")
 
         rand_col_name = "__pyspark_plotting_sampled_plot_base_rand__"
@@ -575,29 +560,30 @@ class PySparkHistogramPlotBase:
     @staticmethod
     def compute_hist(sdf: "DataFrame", bins: Sequence[float]) -> List["pd.Series"]:
         require_minimum_pandas_version()
-        import pandas as pd
 
         assert isinstance(bins, list)
 
+        spark = sdf._session
+        assert spark is not None
+
         # 1. Make the bucket output flat to:
-        #     +----------+-------+
-        #     |__group_id|buckets|
-        #     +----------+-------+
-        #     |0         |0.0    |
-        #     |0         |0.0    |
-        #     |0         |1.0    |
-        #     |0         |2.0    |
-        #     |0         |3.0    |
-        #     |0         |3.0    |
-        #     |1         |0.0    |
-        #     |1         |1.0    |
-        #     |1         |1.0    |
-        #     |1         |2.0    |
-        #     |1         |1.0    |
-        #     |1         |0.0    |
-        #     +----------+-------+
+        #     +----------+--------+
+        #     |__group_id|__bucket|
+        #     +----------+--------+
+        #     |0         |0       |
+        #     |0         |0       |
+        #     |0         |1       |
+        #     |0         |2       |
+        #     |0         |3       |
+        #     |0         |3       |
+        #     |1         |0       |
+        #     |1         |1       |
+        #     |1         |1       |
+        #     |1         |2       |
+        #     |1         |1       |
+        #     |1         |0       |
+        #     +----------+--------+
         colnames = sdf.columns
-        bucket_names = ["__{}_bucket".format(colname) for colname in colnames]
 
         # determines which bucket a given value falls into, based on predefined bin intervals
         # refers to org.apache.spark.ml.feature.Bucketizer#binarySearchForBuckets
@@ -620,44 +606,59 @@ class PySparkHistogramPlotBase:
             .where(F.col("__value").isNotNull() & ~F.col("__value").isNaN())
             .select(
                 F.col("__group_id"),
-                binary_search_for_buckets(F.col("__value")).cast("double").alias("__bucket"),
+                binary_search_for_buckets(F.col("__value")).alias("__bucket"),
             )
         )
 
-        # 2. Calculate the count based on each group and bucket.
-        #     +----------+-------+------+
-        #     |__group_id|buckets| count|
-        #     +----------+-------+------+
-        #     |0         |0.0    |2     |
-        #     |0         |1.0    |1     |
-        #     |0         |2.0    |1     |
-        #     |0         |3.0    |2     |
-        #     |1         |0.0    |2     |
-        #     |1         |1.0    |3     |
-        #     |1         |2.0    |1     |
-        #     +----------+-------+------+
-        result = (
-            output_df.groupby("__group_id", "__bucket")
-            .agg(F.count("*").alias("count"))
-            .toPandas()
-            .sort_values(by=["__group_id", "__bucket"])
+        # 2. Calculate the count based on each group and bucket, also fill empty bins.
+        #     +----------+--------+------+
+        #     |__group_id|__bucket| count|
+        #     +----------+--------+------+
+        #     |0         |0       |2     |
+        #     |0         |1       |1     |
+        #     |0         |2       |1     |
+        #     |0         |3       |2     |
+        #     |1         |0       |2     |
+        #     |1         |1       |3     |
+        #     |1         |2       |1     |
+        #     |1         |3       |0     | <- fill empty bins with zeros (by joining with bin_df)
+        #     +----------+--------+------+
+        output_df = output_df.groupby("__group_id", "__bucket").agg(F.count("*").alias("count"))
+
+        # Generate all possible combinations of group id and bucket
+        bin_df = (
+            spark.range(len(colnames))
+            .select(
+                F.col("id").alias("__group_id"),
+                F.explode(F.lit(list(range(len(bins) - 1)))).alias("__bucket"),
+            )
+            .hint("broadcast")
         )
 
-        # 3. Fill empty bins and calculate based on each group id. From:
+        output_df = (
+            bin_df.join(output_df, ["__group_id", "__bucket"], "left")
+            .select("__group_id", "__bucket", F.nvl(F.col("count"), F.lit(0)).alias("count"))
+            .coalesce(1)
+            .sortWithinPartitions("__group_id", "__bucket")
+            .select("__group_id", "count")
+        )
+
+        # 3. Calculate based on each group id. From:
         #     +----------+--------+------+
         #     |__group_id|__bucket| count|
         #     +----------+--------+------+
-        #     |0         |0.0     |2     |
-        #     |0         |1.0     |1     |
-        #     |0         |2.0     |1     |
-        #     |0         |3.0     |2     |
+        #     |0         |0       |2     |
+        #     |0         |1       |1     |
+        #     |0         |2       |1     |
+        #     |0         |3       |2     |
         #     +----------+--------+------+
         #     +----------+--------+------+
         #     |__group_id|__bucket| count|
         #     +----------+--------+------+
-        #     |1         |0.0     |2     |
-        #     |1         |1.0     |3     |
-        #     |1         |2.0     |1     |
+        #     |1         |0       |2     |
+        #     |1         |1       |3     |
+        #     |1         |2       |1     |
+        #     |1         |3       |0     |
         #     +----------+--------+------+
         #
         # to:
@@ -679,16 +680,11 @@ class PySparkHistogramPlotBase:
         #     |0                |
         #     |0                |
         #     +-----------------+
+        result = output_df.toPandas()
         output_series = []
-        for i, (input_column_name, bucket_name) in enumerate(zip(colnames, bucket_names)):
-            current_bucket_result = result[result["__group_id"] == i]
-            # generates a pandas DF with one row for each bin
-            # we need this as some of the bins may be empty
-            indexes = pd.DataFrame({"__bucket": list(range(0, len(bins) - 1))})
-            # merges the bins with counts on it and fills remaining ones with zeros
-            pdf = indexes.merge(current_bucket_result, how="left", on=["__bucket"]).fillna(0)[
-                ["count"]
-            ]
+        for i, input_column_name in enumerate(colnames):
+            pdf = result[result["__group_id"] == i]
+            pdf = pdf[["count"]]
             pdf.columns = [input_column_name]
             output_series.append(pdf[input_column_name])
 

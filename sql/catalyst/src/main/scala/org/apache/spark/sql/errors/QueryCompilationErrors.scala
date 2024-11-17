@@ -1832,12 +1832,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def columnNotFoundInSchemaError(
-      col: StructField, tableSchema: Option[StructType]): Throwable = {
+      colType: DataType,
+      colName: String,
+      tableName: String,
+      tableCols: Array[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1156",
+      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
       messageParameters = Map(
-        "colName" -> col.name,
-        "tableSchema" -> tableSchema.toString))
+        "colType" -> toSQLType(colType),
+        "colName" -> toSQLId(colName),
+        "tableName" -> toSQLId(tableName),
+        "tableCols" -> tableCols.map(toSQLId).mkString(", "))
+    )
   }
 
   def saveDataIntoViewNotAllowedError(): Throwable = {
@@ -1987,6 +1993,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidVariantNullableOrNotBinaryFieldError(field: String): Throwable = {
     new AnalysisException(errorClass = "INVALID_VARIANT_FROM_PARQUET.NULLABLE_OR_NOT_BINARY_FIELD",
       messageParameters = Map("field" -> field))
+  }
+
+  def invalidVariantShreddingSchema(schema: DataType): Throwable = {
+    new AnalysisException(errorClass = "INVALID_VARIANT_SHREDDING_SCHEMA",
+      messageParameters = Map("schema" -> toSQLType(schema)))
   }
 
   def invalidVariantWrongNumFieldsError(): Throwable = {
@@ -3814,12 +3825,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "unsupported" -> unsupported.toString,
         "class" -> unsupported.getClass.toString))
-  }
-
-  def unsupportedUDFOuptutType(expr: Expression, dt: DataType): Throwable = {
-    new AnalysisException(
-      errorClass = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-      messageParameters = Map("sqlExpr" -> toSQLExpr(expr), "dataType" -> dt.sql))
   }
 
   def funcBuildError(funcName: String, cause: Exception): Throwable = {

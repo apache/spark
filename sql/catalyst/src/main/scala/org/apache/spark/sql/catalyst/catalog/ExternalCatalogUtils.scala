@@ -85,7 +85,7 @@ object ExternalCatalogUtils {
     } else {
       val sb = new java.lang.StringBuilder(length + 16)
       if (firstIndex != 0) sb.append(path, 0, firstIndex)
-      while(firstIndex < length) {
+      while (firstIndex < length) {
         val c = path.charAt(firstIndex)
         if (needsEscaping(c)) {
           sb.append('%').append(HEX_CHARS((c & 0xF0) >> 4)).append(HEX_CHARS(c & 0x0F))
@@ -110,7 +110,7 @@ object ExternalCatalogUtils {
     } else {
       val sb = new java.lang.StringBuilder(length)
       var plaintextStartIdx = 0
-      while(plaintextEndIdx != -1 && plaintextEndIdx + 2 < length) {
+      while (plaintextEndIdx != -1 && plaintextEndIdx + 2 < length) {
         if (plaintextEndIdx > plaintextStartIdx) sb.append(path, plaintextStartIdx, plaintextEndIdx)
         val high = path.charAt(plaintextEndIdx + 1)
         if ((high >>> 8) == 0 && unhexDigits(high) != -1) {

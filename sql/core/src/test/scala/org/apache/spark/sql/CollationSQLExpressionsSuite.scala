@@ -210,10 +210,10 @@ class CollationSQLExpressionsSuite
       Murmur3HashTestCase("Spark  ", "UTF8_BINARY_RTRIM", 1779328737),
       Murmur3HashTestCase("Spark", "UTF8_LCASE", -1928694360),
       Murmur3HashTestCase("Spark  ", "UTF8_LCASE_RTRIM", -1928694360),
-      Murmur3HashTestCase("SQL", "UNICODE", -1923567940),
-      Murmur3HashTestCase("SQL ", "UNICODE_RTRIM", -1923567940),
-      Murmur3HashTestCase("SQL", "UNICODE_CI", 1029527950),
-      Murmur3HashTestCase("SQL ", "UNICODE_CI_RTRIM", 1029527950)
+      Murmur3HashTestCase("SQL", "UNICODE", 1483684981),
+      Murmur3HashTestCase("SQL ", "UNICODE_RTRIM", 1483684981),
+      Murmur3HashTestCase("SQL", "UNICODE_CI", 279787709),
+      Murmur3HashTestCase("SQL ", "UNICODE_CI_RTRIM", 279787709)
     )
 
     // Supported collations
@@ -242,10 +242,10 @@ class CollationSQLExpressionsSuite
       XxHash64TestCase("Spark ", "UTF8_BINARY_RTRIM", 6480371823304753502L),
       XxHash64TestCase("Spark", "UTF8_LCASE", -3142112654825786434L),
       XxHash64TestCase("Spark ", "UTF8_LCASE_RTRIM", -3142112654825786434L),
-      XxHash64TestCase("SQL", "UNICODE", 5964849564945649886L),
-      XxHash64TestCase("SQL ", "UNICODE_RTRIM", 5964849564945649886L),
-      XxHash64TestCase("SQL", "UNICODE_CI", 3732497619779520590L),
-      XxHash64TestCase("SQL ", "UNICODE_CI_RTRIM", 3732497619779520590L)
+      XxHash64TestCase("SQL", "UNICODE", 7549349329256749019L),
+      XxHash64TestCase("SQL ", "UNICODE_RTRIM", 7549349329256749019L),
+      XxHash64TestCase("SQL", "UNICODE_CI", -3010409544364398863L),
+      XxHash64TestCase("SQL ", "UNICODE_CI_RTRIM", -3010409544364398863L)
     )
 
     // Supported collations

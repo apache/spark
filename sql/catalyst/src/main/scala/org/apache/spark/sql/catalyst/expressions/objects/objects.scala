@@ -332,6 +332,7 @@ case class StaticInvoke(
   }
 
   override def nullable: Boolean = needNullCheck || returnNullable
+  override def nullIntolerant: Boolean = propagateNull
   override def children: Seq[Expression] = arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
@@ -448,7 +449,7 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
-
+  override def nullIntolerant: Boolean = propagateNull
   lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
@@ -1694,7 +1695,7 @@ case class ExternalMapToCatalyst private(
           final Object[] $convertedValues = new Object[$length];
           int $index = 0;
           $defineEntries
-          while($entries.hasNext()) {
+          while ($entries.hasNext()) {
             $defineKeyValue
             $keyNullCheck
             $valueNullCheck
