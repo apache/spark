@@ -561,17 +561,13 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("custom sort hint") {
-    // The custom hint allows us to replace the aggregate (without grouping keys) with just
-    // Literal.
+    // The custom hint allows us to replace the sort with its input
     withSession(Seq(_.injectHintResolutionRule(CustomerSortHintResolutionRule),
       _.injectOptimizerRule(CustomSortRule))) { session =>
       val res = session.range(10).sort("id")
         .hint("INPUT_SORTED")
         .queryExecution.optimizedPlan
       assert(res.collect {case s: Sort => s}.isEmpty)
-      // assert(res.isInstanceOf[Aggregate])
-      // val expectedAlias = Alias(Literal(10L), "max(id)")()
-      // compareExpressions(expectedAlias, res.asInstanceOf[Aggregate].aggregateExpressions.head)
     }
   }
 }
@@ -1318,7 +1314,7 @@ case class CustomAggregateRule(spark: SparkSession) extends Rule[LogicalPlan] {
   }
 }
 
-// Example of an Sort hint that tells that the input is already sorted,
+// Example of a Sort hint that tells that the input is already sorted,
 // and the rule that removes all Sort nodes based on such hint.
 case class CustomSortHint(inputSorted: Boolean) extends SortHint
 
