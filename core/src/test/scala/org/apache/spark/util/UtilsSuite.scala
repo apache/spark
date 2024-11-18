@@ -1581,26 +1581,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
     //   ... 56 more
     // scalastyle:on line.size.limit
-    val origSt = e1.getSuppressed.find(
-      _.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
+    val origSt = e1.getSuppressed.find(_.isInstanceOf[Utils.OriginalTryStackTraceException])
     assert(origSt.isDefined)
     assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
     assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
 
-    // The stack trace under Try should be in the suppressed exceptions.
-    // Example:
-    // Suppressed: java.lang.Exception: Stacktrace under doTryWithCallerStacktrace
-    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala: 1640)
-    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala: 1645)
-    //   at scala.util.Try$.apply(Try.scala: 213)
-    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala: 1586)
-    val trySt = e1.getSuppressed.find(
-      _.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE)
-    assert(trySt.isDefined)
-    // calls under callDoTry should be present.
-    assert(trySt.get.getStackTrace.exists(_.getMethodName == "throwException"))
-    // callDoTry should be removed.
-    assert(!trySt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
+    // Should save the depth of the stack trace under doTryWithCallerStacktrace.
+    assert(origSt.get.asInstanceOf[Utils.OriginalTryStackTraceException]
+      .doTryWithCallerStacktraceDepth == 4)
 
     val e2 = intercept[Exception] {
       callGetTryAgain(t)
