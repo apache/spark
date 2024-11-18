@@ -46,25 +46,25 @@ FROM   (SELECT * FROM t1
         UNION ALL
         SELECT * FROM t2)
 -- !query analysis
-Project [c1#x, c2#x]
+Project [c1#x, c2#xL]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
       :- Union false, false
-      :  :- Project [cast(c1#x as decimal(11,1)) AS c1#x, c2#x]
+      :  :- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as bigint) AS c2#xL]
       :  :  +- Project [c1#x, c2#x]
       :  :     +- SubqueryAlias t1
       :  :        +- View (`t1`, [c1#x, c2#x])
       :  :           +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as string) AS c2#x]
       :  :              +- SubqueryAlias tbl
       :  :                 +- LocalRelation [c1#x, c2#x]
-      :  +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as string) AS c2#x]
+      :  +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as bigint) AS c2#xL]
       :     +- Project [c1#x, c2#x]
       :        +- SubqueryAlias t2
       :           +- View (`t2`, [c1#x, c2#x])
       :              +- Project [cast(c1#x as decimal(2,1)) AS c1#x, cast(c2#x as int) AS c2#x]
       :                 +- SubqueryAlias tbl
       :                    +- LocalRelation [c1#x, c2#x]
-      +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as string) AS c2#x]
+      +- Project [cast(c1#x as decimal(11,1)) AS c1#x, cast(c2#x as bigint) AS c2#xL]
          +- Project [c1#x, c2#x]
             +- SubqueryAlias t2
                +- View (`t2`, [c1#x, c2#x])
@@ -159,10 +159,10 @@ UNION ALL
 SELECT map(1, 2, 3, NULL), 1
 -- !query analysis
 Union false, false
-:- Project [cast(map(1, 2)#x as map<int,int>) AS map(1, 2)#x, str#x]
+:- Project [cast(map(1, 2)#x as map<int,int>) AS map(1, 2)#x, cast(str#x as bigint) AS str#xL]
 :  +- Project [map(1, 2) AS map(1, 2)#x, str AS str#x]
 :     +- OneRowRelation
-+- Project [map(1, 2, 3, NULL)#x, cast(1#x as string) AS 1#x]
++- Project [map(1, 2, 3, NULL)#x, cast(1#x as bigint) AS 1#xL]
    +- Project [map(1, 2, 3, cast(null as int)) AS map(1, 2, 3, NULL)#x, 1 AS 1#x]
       +- OneRowRelation
 
@@ -173,10 +173,10 @@ UNION ALL
 SELECT array(1, 2, 3, NULL), 1
 -- !query analysis
 Union false, false
-:- Project [cast(array(1, 2)#x as array<int>) AS array(1, 2)#x, str#x]
+:- Project [cast(array(1, 2)#x as array<int>) AS array(1, 2)#x, cast(str#x as bigint) AS str#xL]
 :  +- Project [array(1, 2) AS array(1, 2)#x, str AS str#x]
 :     +- OneRowRelation
-+- Project [array(1, 2, 3, NULL)#x, cast(1#x as string) AS 1#x]
++- Project [array(1, 2, 3, NULL)#x, cast(1#x as bigint) AS 1#xL]
    +- Project [array(1, 2, 3, cast(null as int)) AS array(1, 2, 3, NULL)#x, 1 AS 1#x]
       +- OneRowRelation
 
