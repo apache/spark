@@ -24,6 +24,8 @@ import scala.util.control.NonFatal
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
+import org.json4s._
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
@@ -89,6 +91,8 @@ abstract class StateStoreChangelogWriter(
     file: Path,
     compressionCodec: CompressionCodec) extends Logging {
 
+  implicit val formats: Formats = DefaultFormats
+
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = compressionCodec.compressedOutputStream(outputStream)
     new DataOutputStream(compressed)
@@ -103,9 +107,8 @@ abstract class StateStoreChangelogWriter(
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
 
   def writeLineage(lineage: Array[(Long, String)]): Unit = {
-    val lineageStr = lineage.map { case (version, uniqueId) =>
-      s"$version:$uniqueId"
-    }.mkString(" ")
+    val lineageStr = Serialization.write(lineage)
+    println("wei== lineagstr: " + lineageStr)
     compressedStream.writeUTF(lineageStr)
   }
 
@@ -274,6 +277,8 @@ abstract class StateStoreChangelogReader(
     compressionCodec: CompressionCodec)
   extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])] with Logging {
 
+  implicit val formats: Formats = DefaultFormats
+
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
     new DataInputStream(compressed)
@@ -287,17 +292,9 @@ abstract class StateStoreChangelogReader(
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
-  import org.json4s.{JArray, JLong, JString}
-  import org.json4s.JsonAST.JValue
-  import org.json4s.jackson.JsonMethods.{compact, pretty, render}
-
-
   private def readLineage(): Array[(Long, String)] = {
     val lineageStr = input.readUTF()
-    lineageStr.split(" ").map { lineage =>
-      val Array(version, uniqueId) = lineage.split(":")
-      (version.toLong, uniqueId)
-    }
+    Serialization.read[Array[(Long, String)]](lineageStr)
   }
 
   lazy val lineage: Array[(Long, String)] = readLineage()
