@@ -138,25 +138,9 @@ NULL	NULL	NULL	NULL	NULL	1	NULL
 -- !query
 SELECT nullifzero('abc')
 -- !query schema
-struct<>
+struct<nullifzero(abc):string>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'abc'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 24,
-    "fragment" : "nullifzero('abc')"
-  } ]
-}
+abc
 
 
 -- !query
@@ -173,25 +157,9 @@ struct<zeroifnull(NULL):int,zeroifnull(1):int,zeroifnull(CAST(1 AS TINYINT)):int
 -- !query
 SELECT zeroifnull('abc')
 -- !query schema
-struct<>
+struct<zeroifnull(abc):string>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'abc'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"BIGINT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 24,
-    "fragment" : "zeroifnull('abc')"
-  } ]
-}
+abc
 
 
 -- !query

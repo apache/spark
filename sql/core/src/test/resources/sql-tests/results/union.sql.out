@@ -37,14 +37,25 @@ FROM   (SELECT * FROM t1
         UNION ALL
         SELECT * FROM t2)
 -- !query schema
-struct<c1:decimal(11,1),c2:string>
+struct<>
 -- !query output
-1.0	1
-1.0	1
-1.0	a
-2.0	4
-2.0	4
-2.0	b
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 120,
+    "fragment" : "SELECT *\nFROM   (SELECT * FROM t1\n        UNION ALL\n        SELECT * FROM t2\n        UNION ALL\n        SELECT * FROM t2)"
+  } ]
+}
 
 
 -- !query
@@ -106,10 +117,25 @@ SELECT map(1, 2), 'str'
 UNION ALL
 SELECT map(1, 2, 3, NULL), 1
 -- !query schema
-struct<map(1, 2):map<int,int>,str:string>
+struct<>
 -- !query output
-{1:2,3:null}	1
-{1:2}	str
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'str'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 62,
+    "fragment" : "SELECT map(1, 2), 'str'\nUNION ALL\nSELECT map(1, 2, 3, NULL), 1"
+  } ]
+}
 
 
 -- !query
@@ -117,10 +143,25 @@ SELECT array(1, 2), 'str'
 UNION ALL
 SELECT array(1, 2, 3, NULL), 1
 -- !query schema
-struct<array(1, 2):array<int>,str:string>
+struct<>
 -- !query output
-[1,2,3,null]	1
-[1,2]	str
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'str'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "SELECT array(1, 2), 'str'\nUNION ALL\nSELECT array(1, 2, 3, NULL), 1"
+  } ]
+}
 
 
 -- !query

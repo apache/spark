@@ -4,20 +4,14 @@ SELECT 1 FROM "not_exist"
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 25,
-    "fragment" : "\"not_exist\""
-  } ]
+    "error" : "'\"not_exist\"'",
+    "hint" : ""
+  }
 }
 
 
@@ -26,12 +20,13 @@ USE SCHEMA "not_exist"
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SCHEMA_NOT_FOUND",
-  "sqlState" : "42704",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "schemaName" : "`spark_catalog`.`not_exist`"
+    "error" : "'\"not_exist\"'",
+    "hint" : ""
   }
 }
 
@@ -41,20 +36,14 @@ ALTER TABLE "not_exist" ADD COLUMN not_exist int
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 13,
-    "stopIndex" : 23,
-    "fragment" : "\"not_exist\""
-  } ]
+    "error" : "'\"not_exist\"'",
+    "hint" : ""
+  }
 }
 
 
@@ -63,20 +52,14 @@ ALTER TABLE not_exist ADD COLUMN "not_exist" int
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 13,
-    "stopIndex" : 21,
-    "fragment" : "not_exist"
-  } ]
+    "error" : "'\"not_exist\"'",
+    "hint" : ""
+  }
 }
 
 
@@ -85,20 +68,14 @@ SELECT 1 AS "not_exist" FROM not_exist
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 30,
-    "stopIndex" : 38,
-    "fragment" : "not_exist"
-  } ]
+    "error" : "'\"not_exist\"'",
+    "hint" : ""
+  }
 }
 
 
@@ -107,20 +84,14 @@ SELECT 1 FROM not_exist AS X("hello")
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "relationName" : "`not_exist`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 23,
-    "fragment" : "not_exist"
-  } ]
+    "error" : "'\"hello\"'",
+    "hint" : ""
+  }
 }
 
 
@@ -129,21 +100,14 @@ SELECT "not_exist"()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "routineName" : "`not_exist`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 20,
-    "fragment" : "\"not_exist\"()"
-  } ]
+    "error" : "'\"not_exist\"'",
+    "hint" : ""
+  }
 }
 
 
@@ -152,21 +116,14 @@ SELECT "not_exist".not_exist()
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "routineName" : "`not_exist`.`not_exist`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 30,
-    "fragment" : "\"not_exist\".not_exist()"
-  } ]
+    "error" : "'\"not_exist\"'",
+    "hint" : ""
+  }
 }
 
 
@@ -344,23 +301,9 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT "hello"
 -- !query schema
-struct<>
+struct<hello:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`hello`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 14,
-    "fragment" : "\"hello\""
-  } ]
-}
+hello
 
 
 -- !query
@@ -368,15 +311,7 @@ CREATE TEMPORARY VIEW v(c1 COMMENT "hello") AS SELECT 1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'\"hello\"'",
-    "hint" : ""
-  }
-}
+
 
 
 -- !query
@@ -384,30 +319,15 @@ DROP VIEW v
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`spark_catalog`.`default`.`v`"
-  }
-}
+
 
 
 -- !query
 SELECT INTERVAL "1" YEAR
 -- !query schema
-struct<>
+struct<INTERVAL '1' YEAR:interval year>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'\"1\"'",
-    "hint" : ""
-  }
-}
+1-0
 
 
 -- !query
@@ -447,7 +367,15 @@ CREATE SCHEMA "myschema"
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'\"myschema\"'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -456,15 +384,31 @@ CREATE TEMPORARY VIEW "myview"("c1") AS
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'\"myview\"'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
 SELECT "a1" AS "a2" FROM "myview" AS "atab"("a1")
 -- !query schema
-struct<a2:int>
+struct<>
 -- !query output
-1
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'\"a2\"'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -472,7 +416,15 @@ DROP TABLE "myview"
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'\"myview\"'",
+    "hint" : ""
+  }
+}
 
 
 -- !query
@@ -480,4 +432,12 @@ DROP SCHEMA "myschema"
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'\"myschema\"'",
+    "hint" : ""
+  }
+}

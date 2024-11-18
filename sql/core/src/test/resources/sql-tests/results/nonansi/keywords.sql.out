@@ -7,51 +7,51 @@ struct<keyword:string,reserved:boolean>
 ADD	false
 AFTER	false
 AGGREGATE	false
-ALL	true
+ALL	false
 ALTER	false
 ALWAYS	false
 ANALYZE	false
-AND	true
+AND	false
 ANTI	false
-ANY	true
+ANY	false
 ANY_VALUE	false
 ARCHIVE	false
 ARRAY	false
-AS	true
+AS	false
 ASC	false
 AT	false
-AUTHORIZATION	true
+AUTHORIZATION	false
 BEGIN	false
 BETWEEN	false
 BIGINT	false
 BINARY	false
 BINDING	false
 BOOLEAN	false
-BOTH	true
+BOTH	false
 BUCKET	false
 BUCKETS	false
 BY	false
 BYTE	false
 CACHE	false
-CALL	true
+CALL	false
 CALLED	false
 CASCADE	false
-CASE	true
-CAST	true
+CASE	false
+CAST	false
 CATALOG	false
 CATALOGS	false
 CHANGE	false
 CHAR	false
 CHARACTER	false
-CHECK	true
+CHECK	false
 CLEAR	false
 CLUSTER	false
 CLUSTERED	false
 CODEGEN	false
-COLLATE	true
-COLLATION	true
+COLLATE	false
+COLLATION	false
 COLLECTION	false
-COLUMN	true
+COLUMN	false
 COLUMNS	false
 COMMENT	false
 COMMIT	false
@@ -60,17 +60,17 @@ COMPACTIONS	false
 COMPENSATION	false
 COMPUTE	false
 CONCATENATE	false
-CONSTRAINT	true
+CONSTRAINT	false
 CONTAINS	false
 COST	false
-CREATE	true
-CROSS	true
+CREATE	false
+CROSS	false
 CUBE	false
 CURRENT	false
-CURRENT_DATE	true
-CURRENT_TIME	true
-CURRENT_TIMESTAMP	true
-CURRENT_USER	true
+CURRENT_DATE	false
+CURRENT_TIME	false
+CURRENT_TIMESTAMP	false
+CURRENT_USER	false
 DATA	false
 DATABASE	false
 DATABASES	false
@@ -97,49 +97,49 @@ DETERMINISTIC	false
 DFS	false
 DIRECTORIES	false
 DIRECTORY	false
-DISTINCT	true
+DISTINCT	false
 DISTRIBUTE	false
 DIV	false
 DO	false
 DOUBLE	false
 DROP	false
-ELSE	true
-END	true
-ESCAPE	true
+ELSE	false
+END	false
+ESCAPE	false
 ESCAPED	false
 EVOLUTION	false
-EXCEPT	true
+EXCEPT	false
 EXCHANGE	false
 EXCLUDE	false
-EXECUTE	true
+EXECUTE	false
 EXISTS	false
 EXPLAIN	false
 EXPORT	false
 EXTENDED	false
 EXTERNAL	false
 EXTRACT	false
-FALSE	true
-FETCH	true
+FALSE	false
+FETCH	false
 FIELDS	false
 FILEFORMAT	false
-FILTER	true
+FILTER	false
 FIRST	false
 FLOAT	false
 FOLLOWING	false
-FOR	true
-FOREIGN	true
+FOR	false
+FOREIGN	false
 FORMAT	false
 FORMATTED	false
-FROM	true
-FULL	true
+FROM	false
+FULL	false
 FUNCTION	false
 FUNCTIONS	false
 GENERATED	false
 GLOBAL	false
-GRANT	true
-GROUP	true
+GRANT	false
+GROUP	false
 GROUPING	false
-HAVING	true
+HAVING	false
 HOUR	false
 HOURS	false
 IDENTIFIER	false
@@ -149,34 +149,34 @@ IGNORE	false
 ILIKE	false
 IMMEDIATE	false
 IMPORT	false
-IN	true
+IN	false
 INCLUDE	false
 INCREMENT	false
 INDEX	false
 INDEXES	false
-INNER	true
+INNER	false
 INPATH	false
 INPUT	false
 INPUTFORMAT	false
 INSERT	false
 INT	false
 INTEGER	false
-INTERSECT	true
+INTERSECT	false
 INTERVAL	false
-INTO	true
+INTO	false
 INVOKER	false
-IS	true
+IS	false
 ITEMS	false
 ITERATE	false
-JOIN	true
+JOIN	false
 KEYS	false
 LANGUAGE	false
 LAST	false
-LATERAL	true
+LATERAL	false
 LAZY	false
-LEADING	true
+LEADING	false
 LEAVE	false
-LEFT	true
+LEFT	false
 LIKE	false
 LIMIT	false
 LINES	false
@@ -209,26 +209,26 @@ NAMESPACE	false
 NAMESPACES	false
 NANOSECOND	false
 NANOSECONDS	false
-NATURAL	true
+NATURAL	false
 NO	false
 NONE	false
-NOT	true
-NULL	true
+NOT	false
+NULL	false
 NULLS	false
 NUMERIC	false
 OF	false
-OFFSET	true
-ON	true
-ONLY	true
+OFFSET	false
+ON	false
+ONLY	false
 OPTION	false
 OPTIONS	false
-OR	true
-ORDER	true
+OR	false
+ORDER	false
 OUT	false
-OUTER	true
+OUTER	false
 OUTPUTFORMAT	false
 OVER	false
-OVERLAPS	true
+OVERLAPS	false
 OVERLAY	false
 OVERWRITE	false
 PARTITION	false
@@ -239,7 +239,7 @@ PIVOT	false
 PLACING	false
 POSITION	false
 PRECEDING	false
-PRIMARY	true
+PRIMARY	false
 PRINCIPALS	false
 PROPERTIES	false
 PURGE	false
@@ -252,7 +252,7 @@ RECORDREADER	false
 RECORDWRITER	false
 RECOVER	false
 REDUCE	false
-REFERENCES	true
+REFERENCES	false
 REFRESH	false
 RENAME	false
 REPAIR	false
@@ -265,7 +265,7 @@ RESTRICT	false
 RETURN	false
 RETURNS	false
 REVOKE	false
-RIGHT	true
+RIGHT	false
 ROLE	false
 ROLES	false
 ROLLBACK	false
@@ -277,12 +277,12 @@ SCHEMAS	false
 SECOND	false
 SECONDS	false
 SECURITY	false
-SELECT	true
+SELECT	false
 SEMI	false
 SEPARATED	false
 SERDE	false
 SERDEPROPERTIES	false
-SESSION_USER	true
+SESSION_USER	false
 SET	false
 SETS	false
 SHORT	false
@@ -290,12 +290,12 @@ SHOW	false
 SINGLE	false
 SKEWED	false
 SMALLINT	false
-SOME	true
+SOME	false
 SORT	false
 SORTED	false
 SOURCE	false
 SPECIFIC	false
-SQL	true
+SQL	false
 START	false
 STATISTICS	false
 STORED	false
@@ -307,14 +307,14 @@ SUBSTRING	false
 SYNC	false
 SYSTEM_TIME	false
 SYSTEM_VERSION	false
-TABLE	true
+TABLE	false
 TABLES	false
 TABLESAMPLE	false
 TARGET	false
 TBLPROPERTIES	false
 TERMINATED	false
-THEN	true
-TIME	true
+THEN	false
+TIME	false
 TIMEDIFF	false
 TIMESTAMP	false
 TIMESTAMPADD	false
@@ -322,9 +322,9 @@ TIMESTAMPDIFF	false
 TIMESTAMP_LTZ	false
 TIMESTAMP_NTZ	false
 TINYINT	false
-TO	true
+TO	false
 TOUCH	false
-TRAILING	true
+TRAILING	false
 TRANSACTION	false
 TRANSACTIONS	false
 TRANSFORM	false
@@ -336,17 +336,17 @@ TYPE	false
 UNARCHIVE	false
 UNBOUNDED	false
 UNCACHE	false
-UNION	true
-UNIQUE	true
-UNKNOWN	true
+UNION	false
+UNIQUE	false
+UNKNOWN	false
 UNLOCK	false
 UNPIVOT	false
 UNSET	false
 UNTIL	false
 UPDATE	false
 USE	false
-USER	true
-USING	true
+USER	false
+USING	false
 VALUES	false
 VAR	false
 VARCHAR	false
@@ -358,12 +358,12 @@ VIEWS	false
 VOID	false
 WEEK	false
 WEEKS	false
-WHEN	true
-WHERE	true
+WHEN	false
+WHERE	false
 WHILE	false
 WINDOW	false
-WITH	true
-WITHIN	true
+WITH	false
+WITHIN	false
 X	false
 YEAR	false
 YEARS	false
@@ -375,79 +375,4 @@ SELECT keyword from SQL_KEYWORDS() WHERE reserved
 -- !query schema
 struct<keyword:string>
 -- !query output
-ALL
-AND
-ANY
-AS
-AUTHORIZATION
-BOTH
-CALL
-CASE
-CAST
-CHECK
-COLLATE
-COLLATION
-COLUMN
-CONSTRAINT
-CREATE
-CROSS
-CURRENT_DATE
-CURRENT_TIME
-CURRENT_TIMESTAMP
-CURRENT_USER
-DISTINCT
-ELSE
-END
-ESCAPE
-EXCEPT
-EXECUTE
-FALSE
-FETCH
-FILTER
-FOR
-FOREIGN
-FROM
-FULL
-GRANT
-GROUP
-HAVING
-IN
-INNER
-INTERSECT
-INTO
-IS
-JOIN
-LATERAL
-LEADING
-LEFT
-NATURAL
-NOT
-NULL
-OFFSET
-ON
-ONLY
-OR
-ORDER
-OUTER
-OVERLAPS
-PRIMARY
-REFERENCES
-RIGHT
-SELECT
-SESSION_USER
-SOME
-SQL
-TABLE
-THEN
-TIME
-TO
-TRAILING
-UNION
-UNIQUE
-UNKNOWN
-USER
-USING
-WHEN
-WHERE
-WITH
-WITHIN
+

@@ -268,12 +268,13 @@ SetCommand (spark.sql.decimalOperations.allowPrecisionLoss,Some(false))
 
 
 -- !query
-select id, a+b, a-b, a*b, a/b from decimals_test order by id
+select /*+ COALESCE(1) */ id, a+b, a-b, a*b, a/b from decimals_test order by id
 -- !query analysis
 Sort [id#x ASC NULLS FIRST], true
-+- Project [id#x, (a#x + b#x) AS (a + b)#x, (a#x - b#x) AS (a - b)#x, (a#x * b#x) AS (a * b)#x, (a#x / b#x) AS (a / b)#x]
-   +- SubqueryAlias spark_catalog.default.decimals_test
-      +- Relation spark_catalog.default.decimals_test[id#x,a#x,b#x] parquet
++- Repartition 1, false
+   +- Project [id#x, (a#x + b#x) AS (a + b)#x, (a#x - b#x) AS (a - b)#x, (a#x * b#x) AS (a * b)#x, (a#x / b#x) AS (a / b)#x]
+      +- SubqueryAlias spark_catalog.default.decimals_test
+         +- Relation spark_catalog.default.decimals_test[id#x,a#x,b#x] parquet
 
 
 -- !query
