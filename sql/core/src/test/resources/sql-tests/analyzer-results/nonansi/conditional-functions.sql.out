@@ -131,7 +131,7 @@ Project [zeroifnull(null) AS zeroifnull(NULL)#x, zeroifnull(1) AS zeroifnull(1)#
 -- !query
 SELECT zeroifnull('abc')
 -- !query analysis
-Project [zeroifnull(abc) AS zeroifnull(abc)#xL]
+Project [zeroifnull(abc) AS zeroifnull(abc)#x]
 +- OneRowRelation
 
 

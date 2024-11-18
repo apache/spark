@@ -268,11 +268,11 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY t
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
 ORDER BY cate, to_timestamp_ntz(val_timestamp)
 -- !query analysis
-Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) ASC NULLS FIRST], true
+Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) ASC NULLS FIRST], true
 +- Project [val_timestamp#x, cate#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING)#x]
    +- Project [val_timestamp#x, cate#x, _w0#x, _w1#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING)#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING)#x]
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, _w1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '23 04' DAY TO HOUR)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 04' DAY TO HOUR FOLLOWING)#x], [cate#x], [_w1#x ASC NULLS FIRST]
-         +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) AS _w1#x]
+         +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) AS _w1#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
@@ -304,11 +304,11 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY t
 RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
 ORDER BY cate, to_timestamp_ntz(val_timestamp)
 -- !query analysis
-Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) ASC NULLS FIRST], true
+Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) ASC NULLS FIRST], true
 +- Project [val_timestamp#x, cate#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING)#x]
    +- Project [val_timestamp#x, cate#x, _w0#x, _w1#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING)#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING)#x]
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, _w1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '1-1' YEAR TO MONTH)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1-1' YEAR TO MONTH FOLLOWING)#x], [cate#x], [_w1#x ASC NULLS FIRST]
-         +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) AS _w1#x]
+         +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) AS _w1#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
@@ -340,11 +340,11 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY t
 RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
 ORDER BY cate, to_timestamp_ntz(val_timestamp)
 -- !query analysis
-Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) ASC NULLS FIRST], true
+Sort [cate#x ASC NULLS FIRST, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) ASC NULLS FIRST], true
 +- Project [val_timestamp#x, cate#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x]
    +- Project [val_timestamp#x, cate#x, _w0#x, _w1#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x]
       +- Window [avg(_w0#x) windowspecdefinition(cate#x, _w1#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '1 02:03:04.001' DAY TO SECOND)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp) ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x], [cate#x], [_w1#x ASC NULLS FIRST]
-         +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), false) AS _w1#x]
+         +- Project [val_timestamp#x, cate#x, cast(val_timestamp#x as double) AS _w0#x, to_timestamp_ntz(val_timestamp#x, None, TimestampNTZType, Some(America/Los_Angeles), true) AS _w1#x]
             +- SubqueryAlias testdata
                +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
                   +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
