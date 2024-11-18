@@ -42,6 +42,22 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     super.afterAll()
   }
 
+  test("single select") {
+    val sqlScriptText = "SELECT 1;"
+    val statement = parsePlan(sqlScriptText)
+    assert(!statement.isInstanceOf[CompoundBody])
+  }
+
+  test("multi select without ; - should fail") {
+    val sqlScriptText = "SELECT 1 SELECT 1"
+    val e = intercept[ParseException] {
+      parsePlan(sqlScriptText)
+    }
+    assert(e.getCondition === "PARSE_SYNTAX_ERROR")
+    assert(e.getMessage.contains("Syntax error"))
+    assert(e.getMessage.contains("SELECT"))
+  }
+
   test("multi select") {
     val sqlScriptText = "BEGIN SELECT 1;SELECT 2; END"
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]

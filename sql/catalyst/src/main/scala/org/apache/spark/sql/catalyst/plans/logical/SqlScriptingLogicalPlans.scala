@@ -195,7 +195,7 @@ case class LeaveStatement(label: String) extends CompoundPlanStatement {
  * The statement can be used only for loops.
  * When used, the rest of the loop is skipped and the loop execution continues
  *   with the next iteration.
- * @param label Label of the loop to iterate.``
+ * @param label Label of the loop to iterate.
  */
 case class IterateStatement(label: String) extends CompoundPlanStatement {
   override def output: Seq[Attribute] = Seq.empty
