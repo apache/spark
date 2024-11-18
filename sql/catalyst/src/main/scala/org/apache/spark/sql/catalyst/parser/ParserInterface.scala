@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
  * Interface for a parser.
@@ -62,10 +62,4 @@ trait ParserInterface extends DataTypeParserInterface {
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
   def parseQuery(sqlText: String): LogicalPlan
-
-  /**
-   * Parse a SQL script string to a [[CompoundBody]].
-   */
-  @throws[ParseException]("Text cannot be parsed to a CompoundBody")
-  def parseScript(sqlScriptText: String): CompoundBody
 }

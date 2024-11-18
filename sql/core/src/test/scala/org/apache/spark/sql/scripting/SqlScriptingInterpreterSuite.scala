@@ -20,6 +20,7 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.{SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -34,7 +35,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   // Helpers
   private def runSqlScript(sqlText: String): Array[DataFrame] = {
     val interpreter = SqlScriptingInterpreter()
-    val compoundBody = spark.sessionState.sqlParser.parseScript(sqlText)
+    val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, spark)
     executionPlan.flatMap {
       case statement: SingleStatementExec =>
