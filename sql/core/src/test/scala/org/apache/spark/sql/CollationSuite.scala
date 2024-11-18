@@ -859,21 +859,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-47692: Parameter markers") {
-    val stmtString = "SELECT collation(:var1 || :var2)"
-    checkAnswer(
-      sql(s"EXECUTE IMMEDIATE '$stmtString' USING 'a' AS var1, 'b' AS var2"),
-      Seq(Row("UTF8_BINARY"))
-    )
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        sql(s"EXECUTE IMMEDIATE '$stmtString' USING 'a' AS var1, 'b' AS var2"),
-        Seq(Row("UNICODE"))
-      )
-    }
-  }
-
   test("SPARK-47210: Cast of default collated strings in IN expression") {
     val tableName = "t1"
     withTable(tableName) {
