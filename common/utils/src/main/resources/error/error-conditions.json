@@ -6400,11 +6400,6 @@
       "Partition column `<col>` not found in schema <schemaCatalog>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1156" : {
-    "message" : [
-      "Column <colName> not found in schema <tableSchema>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1158" : {
     "message" : [
       "Saving data into a view is not allowed."

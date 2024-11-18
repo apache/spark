@@ -700,25 +700,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT every("true")
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"true\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"every(true)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 20,
-    "fragment" : "every(\"true\")"
-  } ]
-}
+Aggregate [every(cast(true as boolean)) AS every(true)#x]
++- OneRowRelation
 
 
 -- !query

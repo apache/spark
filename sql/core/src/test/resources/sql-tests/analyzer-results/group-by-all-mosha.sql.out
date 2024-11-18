@@ -60,7 +60,7 @@ SELECT i + 1, f / i, substring(s, 2, 3), extract(year from t), d / 2, size(a) FR
 GROUP BY ALL ORDER BY 1, 3, 4, 5, 6, 2
 -- !query analysis
 Sort [(i + 1)#x ASC NULLS FIRST, substring(s, 2, 3)#x ASC NULLS FIRST, extract(year FROM t)#x ASC NULLS FIRST, (d / 2)#x ASC NULLS FIRST, size(a)#x ASC NULLS FIRST, (f / i)#x ASC NULLS FIRST], true
-+- Aggregate [(i#x + 1), (f#x / cast(i#x as decimal(10,0))), substring(s#x, 2, 3), extract(year, t#x), (cast(d#x as double) / cast(2 as double)), size(a#x, true)], [(i#x + 1) AS (i + 1)#x, (f#x / cast(i#x as decimal(10,0))) AS (f / i)#x, substring(s#x, 2, 3) AS substring(s, 2, 3)#x, extract(year, t#x) AS extract(year FROM t)#x, (cast(d#x as double) / cast(2 as double)) AS (d / 2)#x, size(a#x, true) AS size(a)#x]
++- Aggregate [(i#x + 1), (f#x / cast(i#x as decimal(10,0))), substring(s#x, 2, 3), extract(year, t#x), (cast(cast(d#x as bigint) as double) / cast(cast(2 as bigint) as double)), size(a#x, false)], [(i#x + 1) AS (i + 1)#x, (f#x / cast(i#x as decimal(10,0))) AS (f / i)#x, substring(s#x, 2, 3) AS substring(s, 2, 3)#x, extract(year, t#x) AS extract(year FROM t)#x, (cast(cast(d#x as bigint) as double) / cast(cast(2 as bigint) as double)) AS (d / 2)#x, size(a#x, false) AS size(a)#x]
    +- SubqueryAlias stuff
       +- View (`stuff`, [i#x, f#x, s#x, t#x, d#x, a#x])
          +- Project [cast(i#x as int) AS i#x, cast(f#x as decimal(6,4)) AS f#x, cast(s#x as string) AS s#x, cast(t#x as string) AS t#x, cast(d#x as string) AS d#x, cast(a#x as array<int>) AS a#x]

@@ -123,97 +123,33 @@ struct<(INTERVAL '2' YEAR / 2):interval year to month>
 -- !query
 select interval 2 second * 'a'
 -- !query schema
-struct<>
+struct<(INTERVAL '02' SECOND * a):interval day to second>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'a'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 30,
-    "fragment" : "interval 2 second * 'a'"
-  } ]
-}
+NULL
 
 
 -- !query
 select interval 2 second / 'a'
 -- !query schema
-struct<>
+struct<(INTERVAL '02' SECOND / a):interval day to second>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'a'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 30,
-    "fragment" : "interval 2 second / 'a'"
-  } ]
-}
+NULL
 
 
 -- !query
 select interval 2 year * 'a'
 -- !query schema
-struct<>
+struct<(INTERVAL '2' YEAR * a):interval year to month>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'a'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 28,
-    "fragment" : "interval 2 year * 'a'"
-  } ]
-}
+NULL
 
 
 -- !query
 select interval 2 year / 'a'
 -- !query schema
-struct<>
+struct<(INTERVAL '2' YEAR / a):interval year to month>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'a'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 28,
-    "fragment" : "interval 2 year / 'a'"
-  } ]
-}
+NULL
 
 
 -- !query
@@ -235,49 +171,17 @@ struct<(INTERVAL '2' YEAR * 2):interval year to month>
 -- !query
 select 'a' * interval 2 second
 -- !query schema
-struct<>
+struct<(INTERVAL '02' SECOND * a):interval day to second>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'a'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 30,
-    "fragment" : "'a' * interval 2 second"
-  } ]
-}
+NULL
 
 
 -- !query
 select 'a' * interval 2 year
 -- !query schema
-struct<>
+struct<(INTERVAL '2' YEAR * a):interval year to month>
 -- !query output
-org.apache.spark.SparkNumberFormatException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'a'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"DOUBLE\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 28,
-    "fragment" : "'a' * interval 2 year"
-  } ]
-}
+NULL
 
 
 -- !query
@@ -869,26 +773,9 @@ struct<make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456):interval>
 -- !query
 select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)
 -- !query schema
-struct<>
+struct<make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789):interval>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "precision" : "18",
-    "scale" : "6",
-    "value" : "1234567890123456789"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 59,
-    "fragment" : "make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789)"
-  } ]
-}
+NULL
 
 
 -- !query
@@ -1990,49 +1877,17 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select '4 11:11' - interval '4 22:12' day to minute
 -- !query schema
-struct<>
+struct<4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE:string>
 -- !query output
-org.apache.spark.SparkDateTimeException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'4 11:11'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 51,
-    "fragment" : "'4 11:11' - interval '4 22:12' day to minute"
-  } ]
-}
+NULL
 
 
 -- !query
 select '4 12:12:12' + interval '4 22:12' day to minute
 -- !query schema
-struct<>
+struct<4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE:string>
 -- !query output
-org.apache.spark.SparkDateTimeException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'4 12:12:12'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 54,
-    "fragment" : "'4 12:12:12' + interval '4 22:12' day to minute"
-  } ]
-}
+NULL
 
 
 -- !query
@@ -2094,49 +1949,17 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<>
+struct<str - INTERVAL '4 22:12' DAY TO MINUTE:string>
 -- !query output
-org.apache.spark.SparkDateTimeException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'1'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "str - interval '4 22:12' day to minute"
-  } ]
-}
+NULL
 
 
 -- !query
 select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<>
+struct<str + INTERVAL '4 22:12' DAY TO MINUTE:string>
 -- !query output
-org.apache.spark.SparkDateTimeException
-{
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
-  "messageParameters" : {
-    "expression" : "'1'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "str + interval '4 22:12' day to minute"
-  } ]
-}
+NULL
 
 
 -- !query

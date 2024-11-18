@@ -94,9 +94,25 @@ NULL
 -- !query
 select left("abcd", -2), left("abcd", 0), left("abcd", 'a')
 -- !query schema
-struct<left(abcd, -2):string,left(abcd, 0):string,left(abcd, a):string>
+struct<>
 -- !query output
-		NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 43,
+    "stopIndex" : 59,
+    "fragment" : "left(\"abcd\", 'a')"
+  } ]
+}
 
 
 -- !query
@@ -118,9 +134,25 @@ NULL
 -- !query
 select right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 -- !query schema
-struct<right(abcd, -2):string,right(abcd, 0):string,right(abcd, a):string>
+struct<>
 -- !query output
-		NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 62,
+    "fragment" : "right(\"abcd\", 'a')"
+  } ]
+}
 
 
 -- !query
@@ -466,17 +498,49 @@ bar
 -- !query
 SELECT lpad('hi', 'invalid_length')
 -- !query schema
-struct<lpad(hi, invalid_length,  ):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'invalid_length'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "lpad('hi', 'invalid_length')"
+  } ]
+}
 
 
 -- !query
 SELECT rpad('hi', 'invalid_length')
 -- !query schema
-struct<rpad(hi, invalid_length,  ):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'invalid_length'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "rpad('hi', 'invalid_length')"
+  } ]
+}
 
 
 -- !query
