@@ -46,7 +46,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case a @ AppendData(r: DataSourceV2Relation, query, options, _, None, _) =>
-      val writeBuilder = newWriteBuilder(r.table, r.options.asScala.toMap ++ options, query.schema)
+      val writeOptions = mergeOptions(options, r.options.asScala.toMap)
+      val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
@@ -63,7 +64,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       }.toArray
 
       val table = r.table
-      val writeBuilder = newWriteBuilder(table, r.options.asScala.toMap ++ options, query.schema)
+      val writeOptions = mergeOptions(options, r.options.asScala.toMap)
+      val writeBuilder = newWriteBuilder(table, writeOptions, query.schema)
       val write = writeBuilder match {
         case builder: SupportsTruncate if isTruncate(predicates) =>
           builder.truncate().build()
@@ -78,7 +80,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
 
     case o @ OverwritePartitionsDynamic(r: DataSourceV2Relation, query, options, _, None) =>
       val table = r.table
-      val writeBuilder = newWriteBuilder(table, r.options.asScala.toMap ++ options, query.schema)
+      val writeOptions = mergeOptions(options, r.options.asScala.toMap)
+      val writeBuilder = newWriteBuilder(table, writeOptions, query.schema)
       val write = writeBuilder match {
         case builder: SupportsDynamicOverwrite =>
           builder.overwriteDynamicPartitions().build()
@@ -90,7 +93,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
 
     case WriteToMicroBatchDataSource(
         relationOpt, table, query, queryId, options, outputMode, Some(batchId)) =>
-      val writeOptions = relationOpt.map(r => r.options.asScala.toMap ++ options).getOrElse(options)
+      val writeOptions = mergeOptions(
+        options, relationOpt.map(r => r.options.asScala.toMap).getOrElse(Map.empty))
       val writeBuilder = newWriteBuilder(table, writeOptions, query.schema, queryId)
       val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
@@ -101,17 +105,29 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
 
     case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, _, None) =>
       val rowSchema = DataTypeUtils.fromAttributes(rd.dataInput)
-      val writeBuilder = newWriteBuilder(r.table, r.options.asScala.toMap, rowSchema)
+      val writeOptions = mergeOptions(Map.empty, r.options.asScala.toMap)
+      val writeBuilder = newWriteBuilder(r.table, writeOptions, rowSchema)
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       // project away any metadata columns that could be used for distribution and ordering
       rd.copy(write = Some(write), query = Project(rd.dataInput, newQuery))
 
     case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, None) =>
-      val deltaWriteBuilder = newDeltaWriteBuilder(r.table, r.options.asScala.toMap, projections)
+      val writeOptions = mergeOptions(Map.empty, r.options.asScala.toMap)
+      val deltaWriteBuilder = newDeltaWriteBuilder(r.table, writeOptions, projections)
       val deltaWrite = deltaWriteBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(deltaWrite, query, r.funCatalog)
       wd.copy(write = Some(deltaWrite), query = newQuery)
+  }
+
+  private def mergeOptions(
+      commandOptions: Map[String, String],
+      dsOptions: Map[String, String]): Map[String, String] = {
+    // for DataFrame API cases, same options are carried by both Command and DataSourceV2Relation
+    // for DataFrameV2 API cases, options are only carried by Command
+    // for SQL cases, options are only carried by DataSourceV2Relation
+    assert(commandOptions == dsOptions || commandOptions.isEmpty || dsOptions.isEmpty)
+    commandOptions ++ dsOptions
   }
 
   private def buildWriteForMicroBatch(
