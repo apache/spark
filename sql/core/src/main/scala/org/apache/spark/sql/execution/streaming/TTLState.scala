@@ -41,7 +41,7 @@ import org.apache.spark.sql.types._
  * is a one-to-one mapping between an element key [1] and a value; the primary
  * and secondary index management for this case is implemented by
  * [[OneToOneTTLState]]. When a single element key can have multiple values,
- * all at which can expire at their own, unique times, then
+ * all of which can expire at their own, unique times, then
  * [[OneToManyTTLState]] should be used.
  *
  * In either case, implementations need to use some sort of secondary index
