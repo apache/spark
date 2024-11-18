@@ -312,20 +312,34 @@ class RocksDBFileManager(
     metadata
   }
 
+  def existsSnapshotFile(version: Long, checkpointUniqueId: Option[String] = None): Boolean = {
+    val path = new Path(dfsRootDir)
+    fm.exists(path) && fm.exists(dfsBatchZipFile(version, checkpointUniqueId))
+  }
+
+  // Get latest snapshot version <= version
+  def getLatestSnapshotVersion(version: Long): Long = {
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      // If the latest version snapshot exists, we avoid listing.
+      if (fm.exists(dfsBatchZipFile(version))) {
+        return version
+      }
+      fm.list(path, onlyZipFiles)
+        .map(_.getPath.getName.stripSuffix(".zip"))
+        .map(_.toLong)
+        .filter(_ <= version)
+        .foldLeft(0L)(math.max)
+    } else {
+      0
+    }
+  }
+
   // Get latest snapshot version <= version
   def getLatestSnapshotVersionAndUniqueId(
       version: Long, checkpointUniqueId: Option[String] = None): Array[(Long, Option[String])] = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
-      // If the latest version snapshot exists, we avoid listing.
-      if (fm.exists(dfsBatchZipFile(version, checkpointUniqueId))) {
-        return Array((version, checkpointUniqueId))
-      } else if (fm.exists(dfsBatchZipFile(version))) {
-        // This is possible when the state was previously ran under checkpoint format v1
-        // and restarted with v2. Then even if there is checkpointUniqueId passed in, the file
-        // does not have that uniqueId in the filename.
-        return Array((version, None))
-      }
       val versionAndUniqueIds = fm.list(path, onlyZipFiles)
         .map(_.getPath.getName.stripSuffix(".zip").split("_"))
         .filter {
@@ -343,6 +357,15 @@ class RocksDBFileManager(
     }
   }
 
+
+  def listFiles(): Array[Path] = {
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      fm.list(path).map(_.getPath)
+    } else {
+      Array.empty
+    }
+  }
 
   /** Get the latest version available in the DFS directory. If no data present, it returns 0. */
   def getLatestVersion(): Long = {
@@ -408,6 +431,7 @@ class RocksDBFileManager(
         fm.delete(dfsChangelogFile(version, uniqueId))
         logInfo(log"Deleted changelog file ${MDC(LogKeys.VERSION_NUM, version)} uniqueId: " +
           log"${MDC(LogKeys.UUID, uniqueId.getOrElse(""))}")
+        println(s"Deleted changelog file ${version} uniqueId: ${uniqueId.getOrElse("")}")
       } catch {
         case e: Exception =>
           logWarning(
