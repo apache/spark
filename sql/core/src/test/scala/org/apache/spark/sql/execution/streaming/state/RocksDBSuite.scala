@@ -754,6 +754,43 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog " +
+      "under checkpoint format V2") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    val lineage: Array[(Long, String)] = Array(
+      (1, java.util.UUID.randomUUID.toString),
+      (2, java.util.UUID.randomUUID.toString),
+      (3, java.util.UUID.randomUUID.toString),
+    )
+    val changelogWriter = fileManager.getChangeLogWriter(3, false, checkpointUniqueId)
+    changelogWriter.writeLineage(lineage)
+    assert(changelogWriter.version === 3)
+
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString))
+
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(3, false, checkpointUniqueId)
+    assert(changelogReader.version === 3)
+    assert(changelogReader.lineage sameElements lineage)
+    val entries = changelogReader.toSeq
+    val expectedEntries = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
+    }
+  }
+
   testWithChangelogCheckpointingEnabled(
     "RocksDBFileManager: read and write v2 changelog with default col family") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")

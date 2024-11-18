@@ -164,8 +164,9 @@ class RocksDBFileManager(
 
   def getChangeLogWriter(
       version: Long,
-      useColumnFamilies: Boolean = false): StateStoreChangelogWriter = {
-    val changelogFile = dfsChangelogFile(version)
+      useColumnFamilies: Boolean = false,
+      checkpointUniqueId: Option[String] = None): StateStoreChangelogWriter = {
+    val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
     if (!rootDirChecked) {
       val rootDir = new Path(dfsRootDir)
       if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
@@ -187,8 +188,9 @@ class RocksDBFileManager(
   // Get the changelog file at version
   def getChangelogReader(
       version: Long,
-      useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
-    val changelogFile = dfsChangelogFile(version)
+      useColumnFamilies: Boolean = false,
+      checkpointUniqueId: Option[String] = None): StateStoreChangelogReader = {
+    val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
 
     // Note that ideally we should get the version for the reader from the
     // changelog itself. However, since we don't record this for v1, we need to
@@ -204,6 +206,14 @@ class RocksDBFileManager(
       case _ =>
         throw QueryExecutionErrors.invalidChangeLogReaderVersion(changelogVersion)
     }
+
+    // If the changelogFile is written under checkpoint v2 (checkpointUniqueId.isDefined)
+    // the first line would be the lineage. We should update the file position by
+    // reading from the lineage during the reader initialization.
+    if (checkpointUniqueId.isDefined) {
+      changelogReader.lineage
+    }
+
     changelogReader
   }
 
@@ -777,7 +787,9 @@ class RocksDBFileManager(
   private def dfsBatchZipFile(version: Long): Path = new Path(s"$dfsRootDir/$version.zip")
   // We use changelog suffix intentionally so that we can tell the difference from changelog file of
   // HDFSBackedStateStore which is named version.delta.
-  private def dfsChangelogFile(version: Long): Path = new Path(s"$dfsRootDir/$version.changelog")
+  private def dfsChangelogFile(version: Long, checkpointUniqueId: Option[String] = None): Path =
+    checkpointUniqueId.map(id => new Path(s"$dfsRootDir/${version}_$id.changelog"))
+      .getOrElse(new Path(s"$dfsRootDir/$version.changelog"))
 
   private def localMetadataFile(parentDir: File): File = new File(parentDir, "metadata")
 
