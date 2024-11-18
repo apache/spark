@@ -8557,7 +8557,7 @@ def count_if(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+def histogram_numeric(col: "ColumnOrName", nBins: Column) -> Column:
     """Computes a histogram on numeric 'col' using nb bins.
     The return value is an array of (x,y) pairs representing the centers of the
     histogram's bins. As the value of 'nb' is increased, the histogram approximation
@@ -8573,9 +8573,9 @@ def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    nBins : :class:`~pyspark.sql.Column` or str
+    nBins : :class:`~pyspark.sql.Column`
         number of Histogram columns.
 
     Returns
@@ -8585,17 +8585,13 @@ def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.select(histogram_numeric('c2', lit(5))).show()
-    +------------------------+
-    |histogram_numeric(c2, 5)|
-    +------------------------+
-    |    [{1, 1.0}, {2, 1....|
-    +------------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(100).select(sf.histogram_numeric('id', sf.lit(5))).show(truncate=False)
+    +-----------------------------------------------------------+
+    |histogram_numeric(id, 5)                                   |
+    +-----------------------------------------------------------+
+    |[{6, 13.0}, {18, 12.0}, {37, 25.0}, {62, 25.0}, {87, 25.0}]|
+    +-----------------------------------------------------------+
     """
     return _invoke_function_over_columns("histogram_numeric", col, nBins)
 
