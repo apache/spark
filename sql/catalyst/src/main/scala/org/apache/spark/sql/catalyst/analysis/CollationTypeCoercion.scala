@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayAppend, ArrayContains, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayPosition, ArrayRemove, ArraysOverlap, ArrayUnion, AttributeReference, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, Contains, CreateArray, CreateMap, Elt, EndsWith, EqualNullSafe, EqualTo, Expression, ExtractValue, FindInSet, GetMapValue, GreaterThan, GreaterThanOrEqual, Greatest, If, In, InSubquery, Lag, Lead, Least, LessThan, LessThanOrEqual, Levenshtein, Literal, Mask, Overlay, RaiseError, RegExpReplace, SplitPart, StartsWith, StringInstr, StringLocate, StringLPad, StringReplace, StringRPad, StringSplitSQL, StringToMap, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, SubqueryExpression, SubstringIndex, ToNumber, TryToNumber, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayAppend, ArrayContains, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayPosition, ArrayRemove, ArraysOverlap, ArrayUnion, AttributeReference, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, Contains, CreateArray, CreateMap, CreateNamedStruct, Elt, EndsWith, EqualNullSafe, EqualTo, Expression, ExtractValue, FindInSet, GetMapValue, GreaterThan, GreaterThanOrEqual, Greatest, If, In, InSubquery, Lag, Lead, Least, LessThan, LessThanOrEqual, Levenshtein, Literal, Mask, Overlay, RaiseError, RegExpReplace, SplitPart, StartsWith, StringInstr, StringLocate, StringReplace, StringSplitSQL, StringToMap, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, SubqueryExpression, SubstringIndex, ToNumber, TryToNumber, VariableReference}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
@@ -87,11 +87,6 @@ object CollationTypeCoercion {
       val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
       val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
       regExpReplace.withNewChildren(newChildren)
-
-    case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
-      val Seq(str, len, pad) = stringPadExpr.children
-      val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
-      stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
 
     case raiseError: RaiseError =>
       val newErrorParams = raiseError.errorParms.dataType match {
@@ -235,6 +230,13 @@ object CollationTypeCoercion {
    * so that the context can be reused later.
    */
   private def findCollationContext(expr: Expression): Option[CollationContext] = {
+
+    def getChildren: Seq[Expression] = expr match {
+      // we don't need to consider the struct name expressions
+      case struct: CreateNamedStruct => struct.valExprs
+      case _ => expr.children
+    }
+
     val contextOpt = expr match {
       case _ if hasCollationContextTag(expr) =>
         Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
@@ -259,7 +261,7 @@ object CollationTypeCoercion {
         Some(CollationContext(expr.dataType, Default))
 
       case _ =>
-        val contextWinnerOpt = expr.children
+        val contextWinnerOpt = getChildren
           .flatMap(findCollationContext)
           .foldLeft(Option.empty[CollationContext]) {
             case (Some(left), right) =>

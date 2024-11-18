@@ -799,8 +799,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     checkAnswer(
       spark.sql(
         "SELECT collation(:var1 || :var2)",
-        Map("var1" -> Literal.create('a', StringType("UTF8_BINARY")),
-            "var2" -> Literal.create('b', StringType("UNICODE")))),
+        Map("var1" -> Literal.create('a', StringType),
+            "var2" -> Literal.create('b', StringType))),
       Seq(Row("UTF8_BINARY"))
     )
 
@@ -808,8 +808,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(
         spark.sql(
           "SELECT collation(:var1 || :var2)",
-          Map("var1" -> Literal.create('a', StringType("UTF8_BINARY")),
-              "var2" -> Literal.create('b', StringType("UNICODE")))),
+          Map("var1" -> Literal.create('a', StringType),
+              "var2" -> Literal.create('b', StringType))),
         Seq(Row("UNICODE"))
       )
     }
