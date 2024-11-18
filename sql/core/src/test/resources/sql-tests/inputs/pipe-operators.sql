@@ -211,8 +211,8 @@ table t
 table t
 |> where exists (
     table other
-    |> extend t.x as tx
-    |> where tx = a);
+    |> extend t.x
+    |> where `t.x` = a);
 
 -- Extending with a column name that already exists in the input relation.
 table t
