@@ -95,12 +95,8 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame =
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
-      if (qe.isLazyAnalysis) {
-        new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
-      } else {
-        qe.assertAnalyzed()
-        new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
-      }
+      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
   def ofRows(
@@ -110,12 +106,8 @@ private[sql] object Dataset {
     sparkSession.withActive {
       val qe = new QueryExecution(
         sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
-      if (qe.isLazyAnalysis) {
-        new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
-      } else {
-        qe.assertAnalyzed()
-        new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
-      }
+      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
@@ -127,12 +119,8 @@ private[sql] object Dataset {
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(
       sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
-    if (qe.isLazyAnalysis) {
-      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
-    } else {
-      qe.assertAnalyzed()
-      new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
-    }
+    if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+    new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
   }
 }
 
