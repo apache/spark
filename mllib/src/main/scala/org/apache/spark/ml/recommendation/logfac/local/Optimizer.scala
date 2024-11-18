@@ -157,7 +157,7 @@ private[ml] object Optimizer {
     }
   }
 
-  private def growIfNeeded[@specialized(Long, Float) T: ClassTag](
+  private def ensureCapacity[@specialized(Long, Float) T: ClassTag](
     syn: Array[T], n: Int): Array[T] = {
     if (syn.length < n) {
       val synNew = new Array[T](syn.length + (syn.length >> 1))
@@ -186,16 +186,16 @@ private[ml] object Optimizer {
       if (itemData.t == ItemData.TYPE_LEFT) {
         val i = vocabL.size
         vocabL.update(itemData.id, i)
-        syn0 = growIfNeeded(syn0, (i + 1) * dim)
-        cnL = growIfNeeded(cnL, i + 1)
+        syn0 = ensureCapacity(syn0, (i + 1) * dim)
+        cnL = ensureCapacity(cnL, i + 1)
 
         cnL(i) = itemData.cn
         System.arraycopy(itemData.f, 0, syn0, i * dim, dim)
       } else {
         val i = vocabR.size
         vocabR.update(itemData.id, i)
-        syn1neg = growIfNeeded(syn1neg, (i + 1) * dim)
-        cnR = growIfNeeded(cnR, i + 1)
+        syn1neg = ensureCapacity(syn1neg, (i + 1) * dim)
+        cnR = ensureCapacity(cnR, i + 1)
 
         cnR(i) = itemData.cn
         System.arraycopy(itemData.f, 0, syn1neg, i * dim, dim)
