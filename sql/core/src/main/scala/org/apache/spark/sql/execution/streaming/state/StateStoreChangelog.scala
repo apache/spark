@@ -108,7 +108,6 @@ abstract class StateStoreChangelogWriter(
 
   def writeLineage(lineage: Array[(Long, String)]): Unit = {
     val lineageStr = Serialization.write(lineage)
-    println("wei== lineagstr: " + lineageStr)
     compressedStream.writeUTF(lineageStr)
   }
 

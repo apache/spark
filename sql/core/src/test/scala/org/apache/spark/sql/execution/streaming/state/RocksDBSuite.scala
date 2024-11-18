@@ -763,18 +763,18 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val lineage: Array[(Long, String)] = Array(
       (1, java.util.UUID.randomUUID.toString),
       (2, java.util.UUID.randomUUID.toString),
-      (3, java.util.UUID.randomUUID.toString),
+      (3, java.util.UUID.randomUUID.toString)
     )
     val changelogWriter = fileManager.getChangeLogWriter(3, false, checkpointUniqueId)
     changelogWriter.writeLineage(lineage)
-    assert(changelogWriter.version === 3)
+    assert(changelogWriter.version === 1)
 
     (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
     (2 to 4).foreach(j => changelogWriter.delete(j.toString))
 
     changelogWriter.commit()
     val changelogReader = fileManager.getChangelogReader(3, false, checkpointUniqueId)
-    assert(changelogReader.version === 3)
+    assert(changelogReader.version === 1)
     assert(changelogReader.lineage sameElements lineage)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
