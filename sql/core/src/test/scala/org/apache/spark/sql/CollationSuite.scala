@@ -859,21 +859,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-47692: Parameter markers with variable mapping") {
+  test("SPARK-47692: Parameter markers") {
+    val stmtString = "SELECT collation(:var1 || :var2)"
     checkAnswer(
-      spark.sql(
-        "SELECT collation(:var1 || :var2)",
-        Map("var1" -> Literal.create('a', StringType),
-            "var2" -> Literal.create('b', StringType))),
+      sql(s"EXECUTE IMMEDIATE '$stmtString' USING 'a' AS var1, 'b' AS var2"),
       Seq(Row("UTF8_BINARY"))
     )
 
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
       checkAnswer(
-        spark.sql(
-          "SELECT collation(:var1 || :var2)",
-          Map("var1" -> Literal.create('a', StringType),
-              "var2" -> Literal.create('b', StringType))),
+        sql(s"EXECUTE IMMEDIATE '$stmtString' USING 'a' AS var1, 'b' AS var2"),
         Seq(Row("UNICODE"))
       )
     }

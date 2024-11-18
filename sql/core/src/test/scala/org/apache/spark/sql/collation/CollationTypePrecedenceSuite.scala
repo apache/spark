@@ -346,15 +346,15 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
   test("functions that contain both string and non string params") {
     checkAnswer(
-      sql(s"SELECT COLLATION(LPAD('a', 2, 'b'))"),
+      sql(s"SELECT COLLATION(elt(2, 'a', 'b'))"),
       Row("UTF8_BINARY"))
 
     checkAnswer(
-      sql(s"SELECT COLLATION(LPAD('a' collate UTF8_LCASE, 2, 'b'))"),
+      sql(s"SELECT COLLATION(elt(2, 'a' collate UTF8_LCASE, 'b'))"),
       Row("UTF8_LCASE"))
 
     assertExplicitMismatch(
-      sql(s"SELECT COLLATION(LPAD('a' collate UTF8_LCASE, 2, 'b' collate UNICODE))"))
+      sql(s"SELECT COLLATION(elt(2, 'a' collate UTF8_LCASE, 'b' collate UNICODE))"))
   }
 
   test("access collated map via literal") {
