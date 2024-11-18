@@ -271,13 +271,9 @@ case class TransformWithStateExec(
     ImplicitGroupingKeyTracker.setImplicitKey(keyObj)
     val initStateObjIter = initStateIter.map(getInitStateValueObj.apply)
 
-    var seenInitStateOnKey = false
     initStateObjIter.foreach { initState =>
-      // cannot re-initialize state on the same grouping key during initial state handling
-      if (seenInitStateOnKey) {
-        throw StateStoreErrors.cannotReInitializeStateOnKey(keyObj.toString)
-      }
-      seenInitStateOnKey = true
+      // allow multiple initial state rows on the same grouping key for integration
+      // with state data source reader with initial state
       statefulProcessor
         .asInstanceOf[StatefulProcessorWithInitialState[Any, Any, Any, Any]]
         .handleInitialState(keyObj, initState,
@@ -678,14 +674,10 @@ case class TransformWithStateExec(
   private def validateTimeMode(): Unit = {
     timeMode match {
       case ProcessingTime =>
-        if (batchTimestampMs.isEmpty) {
-          StateStoreErrors.missingTimeValues(timeMode.toString)
-        }
+        TransformWithStateVariableUtils.validateTimeMode(timeMode, batchTimestampMs)
 
       case EventTime =>
-        if (eventTimeWatermarkForEviction.isEmpty) {
-          StateStoreErrors.missingTimeValues(timeMode.toString)
-        }
+        TransformWithStateVariableUtils.validateTimeMode(timeMode, eventTimeWatermarkForEviction)
 
       case _ =>
     }

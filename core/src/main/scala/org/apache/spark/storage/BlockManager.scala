@@ -40,7 +40,7 @@ import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.executor.DataReadMethod
+import org.apache.spark.executor.{DataReadMethod, ExecutorExitCode}
 import org.apache.spark.internal.{config, Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED, Tests}
@@ -671,7 +671,7 @@ private[spark] class BlockManager(
       reportAllBlocks()
     } else {
       logError("Exiting executor due to block manager re-registration failure")
-      System.exit(-1)
+      System.exit(ExecutorExitCode.BLOCK_MANAGER_REREGISTRATION_FAILED)
     }
   }
 
@@ -1516,7 +1516,7 @@ private[spark] class BlockManager(
       return true
     }
 
-    if(master.isRDDBlockVisible(blockId)) {
+    if (master.isRDDBlockVisible(blockId)) {
       // Cache the visibility status if block exists.
       blockInfoManager.tryMarkBlockAsVisible(blockId)
       true
@@ -1882,7 +1882,7 @@ private[spark] class BlockManager(
       blockId,
       numPeersToReplicateTo)
 
-    while(numFailures <= maxReplicationFailureCount &&
+    while (numFailures <= maxReplicationFailureCount &&
       peersForReplication.nonEmpty &&
       peersReplicatedTo.size < numPeersToReplicateTo) {
       val peer = peersForReplication.head

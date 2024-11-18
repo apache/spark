@@ -130,7 +130,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle)
           .getValueState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
       } else {
-        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]])
+        verify(statefulProcessorHandle).getValueState[Row](any[String], any[Encoder[Row]],
+          any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
@@ -153,7 +154,8 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
         verify(statefulProcessorHandle)
           .getListState[Row](any[String], any[Encoder[Row]], any[TTLConfig])
       } else {
-        verify(statefulProcessorHandle).getListState[Row](any[String], any[Encoder[Row]])
+        verify(statefulProcessorHandle).getListState[Row](any[String], any[Encoder[Row]],
+          any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
@@ -178,10 +180,21 @@ class TransformWithStateInPandasStateServerSuite extends SparkFunSuite with Befo
           .getMapState[Row, Row](any[String], any[Encoder[Row]], any[Encoder[Row]], any[TTLConfig])
       } else {
         verify(statefulProcessorHandle).getMapState[Row, Row](any[String], any[Encoder[Row]],
-          any[Encoder[Row]])
+          any[Encoder[Row]], any[TTLConfig])
       }
       verify(outputStream).writeInt(0)
     }
+  }
+
+  test("delete if exists") {
+    val stateCallCommandBuilder = StateCallCommand.newBuilder()
+      .setStateName("stateName")
+    val message = StatefulProcessorCall
+      .newBuilder()
+      .setDeleteIfExists(stateCallCommandBuilder.build())
+      .build()
+    stateServer.handleStatefulProcessorCall(message)
+    verify(statefulProcessorHandle).deleteIfExists(any[String])
   }
 
   test("value state exists") {

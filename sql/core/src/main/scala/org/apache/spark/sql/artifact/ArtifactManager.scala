@@ -22,6 +22,7 @@ import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
 import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -68,18 +69,43 @@ class ArtifactManager(session: SparkSession) extends Logging {
       s"$artifactRootURI${File.separator}${session.sessionUUID}")
 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
-  protected[artifact] val (classDir, classURI): (Path, String) =
+  protected[artifact] val (classDir, replClassURI): (Path, String) =
     (ArtifactUtils.concatenatePaths(artifactPath, "classes"),
       s"$artifactURI${File.separator}classes${File.separator}")
 
-  protected[artifact] val state: JobArtifactState =
-    JobArtifactState(session.sessionUUID, Option(classURI))
+  private lazy val alwaysApplyClassLoader =
+    session.conf.get(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key).toBoolean
 
-  def withResources[T](f: => T): T = {
-    Utils.withContextClassLoader(classloader) {
-      JobArtifactSet.withActiveJobArtifactState(state) {
+  private lazy val sessionIsolated =
+    session.conf.get(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key).toBoolean
+
+  protected[sql] lazy val state: JobArtifactState =
+    if (sessionIsolated) JobArtifactState(session.sessionUUID, Some(replClassURI)) else null
+
+  /**
+   * Whether any artifact has been added to this artifact manager. We use this to determine whether
+   * we should apply the classloader to the session, see `withClassLoaderIfNeeded`.
+   */
+  protected val sessionArtifactAdded = new AtomicBoolean(false)
+
+  private def withClassLoaderIfNeeded[T](f: => T): T = {
+    val log = s" classloader for session ${session.sessionUUID} because " +
+      s"alwaysApplyClassLoader=$alwaysApplyClassLoader, " +
+      s"sessionArtifactAdded=${sessionArtifactAdded.get()}."
+    if (alwaysApplyClassLoader || sessionArtifactAdded.get()) {
+      logDebug(s"Applying $log")
+      Utils.withContextClassLoader(classloader) {
         f
       }
+    } else {
+      logDebug(s"Not applying $log")
+      f
+    }
+  }
+
+  def withResources[T](f: => T): T = withClassLoaderIfNeeded {
+    JobArtifactSet.withActiveJobArtifactState(state) {
+      f
     }
   }
 
@@ -176,6 +202,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         target,
         allowOverwrite = true,
         deleteSource = deleteStagedFile)
+      sessionArtifactAdded.set(true)
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
       // Disallow overwriting with modified version
@@ -199,6 +226,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         sparkContextRelativePaths.add(
           (SparkContextResourceType.JAR, normalizedRemoteRelativePath, fragment))
         jarsList.add(normalizedRemoteRelativePath)
+        sessionArtifactAdded.set(true)
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
         sparkContextRelativePaths.add(
@@ -258,9 +286,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * Returns a [[ClassLoader]] for session-specific jar/class file resources.
    */
   def classloader: ClassLoader = {
-    val urls = getAddedJars :+ classDir.toUri.toURL
+    val urls = (getAddedJars :+ classDir.toUri.toURL).toArray
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
+    val fallbackClassLoader = session.sharedState.jarClassLoader
     val loader = if (prefixes.nonEmpty) {
       // Two things you need to know about classloader for all of this to make sense:
       // 1. A classloader needs to be able to fully define a class.
@@ -274,21 +303,16 @@ class ArtifactManager(session: SparkSession) extends Logging {
       // it delegates to.
       if (userClasspathFirst) {
         // USER -> SYSTEM -> STUB
-        new ChildFirstURLClassLoader(
-          urls.toArray,
-          StubClassLoader(Utils.getContextOrSparkClassLoader, prefixes))
+        new ChildFirstURLClassLoader(urls, StubClassLoader(fallbackClassLoader, prefixes))
       } else {
         // SYSTEM -> USER -> STUB
-        new ChildFirstURLClassLoader(
-          urls.toArray,
-          StubClassLoader(null, prefixes),
-          Utils.getContextOrSparkClassLoader)
+        new ChildFirstURLClassLoader(urls, StubClassLoader(null, prefixes), fallbackClassLoader)
       }
     } else {
       if (userClasspathFirst) {
-        new ChildFirstURLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+        new ChildFirstURLClassLoader(urls, fallbackClassLoader)
       } else {
-        new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+        new URLClassLoader(urls, fallbackClassLoader)
       }
     }
 
@@ -347,14 +371,16 @@ class ArtifactManager(session: SparkSession) extends Logging {
     // Clean up added files
     val fileserver = SparkEnv.get.rpcEnv.fileServer
     val sparkContext = session.sparkContext
-    val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
-      sparkContext.addedArchives.contains(state.uuid) ||
-      sparkContext.addedJars.contains(state.uuid)
-    if (shouldUpdateEnv) {
-      sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-      sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-      sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
-      sparkContext.postEnvironmentUpdate()
+    if (state != null) {
+      val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
+        sparkContext.addedArchives.contains(state.uuid) ||
+        sparkContext.addedJars.contains(state.uuid)
+      if (shouldUpdateEnv) {
+        sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+        sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+        sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
+        sparkContext.postEnvironmentUpdate()
+      }
     }
 
     // Clean up cached relations
