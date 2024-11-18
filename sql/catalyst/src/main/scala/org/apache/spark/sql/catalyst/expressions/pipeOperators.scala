@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Represents an expression when used with SQL pipe operators like |> SELECT or |> EXTEND.
- * We use this to make sure that no aggregate functions exist in these expressions.
+ * Represents an expression when used with non-aggregate SQL pipe operators like |> SELECT or
+ * |> EXTEND. We use this to make sure that no aggregate functions exist in these expressions.
  */
 case class PipeSelect(child: Expression, clause: String = "SELECT")
   extends UnaryExpression with RuntimeReplaceable {
@@ -32,12 +32,12 @@ case class PipeSelect(child: Expression, clause: String = "SELECT")
   override lazy val replacement: Expression = {
     def visit(e: Expression): Unit = e match {
       case a: AggregateFunction =>
-        // If we used the pipe operator |> SELECT clause to specify an aggregate function, this is
-        // invalid; return an error message instructing the user to use the pipe operator
-        // |> AGGREGATE clause for this purpose instead.
+        // If we used the specified non-aggregate pipe operator with specify an aggregate function
+        // inside, this is invalid; return an error message instructing the user to use the pipe
+        // operator |> AGGREGATE clause for this purpose instead.
         throw QueryCompilationErrors.pipeOperatorContainsAggregateFunction(a, clause)
       case _: WindowExpression =>
-        // Window functions are allowed in pipe SELECT operators, so do not traverse into children.
+        // Window functions are allowed in these pipe operators, so do not traverse into children.
       case _ =>
         e.children.foreach(visit)
     }
