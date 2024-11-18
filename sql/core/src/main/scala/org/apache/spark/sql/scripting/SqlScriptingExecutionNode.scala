@@ -698,9 +698,8 @@ class ForStatementExec(
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = {
         val resultSize = cachedQueryResult().length
-        val ret = state == ForState.VariableCleanup ||
+        state == ForState.VariableCleanup ||
           (!interrupted && resultSize > 0 && currRow < resultSize)
-        ret
       }
 
       override def next(): CompoundStatementExec = state match {
@@ -732,7 +731,7 @@ class ForStatementExec(
                 leaveStatementExec.hasBeenMatched = true
               }
               interrupted = true
-              // If this for statement encounters LEAVE, it will either not be executed ever
+              // If this for statement encounters LEAVE, it will either not be executed
               // again, or it will be reset before being executed.
               // In either case, variables will not
               // be dropped normally, from ForState.VariableCleanup, so we drop them here.
@@ -743,7 +742,7 @@ class ForStatementExec(
                 iterStatementExec.hasBeenMatched = true
               } else {
                 // if an outer loop is being iterated, this for statement will either not be
-                // executed ever again, or it will be reset before being executed.
+                // executed again, or it will be reset before being executed.
                 // In either case, variables will not
                 // be dropped normally, from ForState.VariableCleanup, so we drop them here.
                 dropVars()
@@ -761,6 +760,7 @@ class ForStatementExec(
         case ForState.VariableCleanup =>
           val ret = dropVariablesExec.getTreeIterator.next()
           if (!dropVariablesExec.getTreeIterator.hasNext) {
+            // stops execution, as at this point currRow == resultSize
             state = ForState.VariableAssignment
           }
           ret
@@ -862,6 +862,8 @@ class ForStatementExec(
     currRow = 0
     variablesMap = Map()
     areVariablesDeclared = false
+    dropVariablesExec = null
+    interrupted = false
     body.reset()
   }
 }
