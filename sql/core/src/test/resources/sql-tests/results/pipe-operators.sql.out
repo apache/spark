@@ -581,11 +581,12 @@ struct<x:int,y:string,z:int>
 table t
 |> where exists (
     table other
-    |> extend t.x as tx
-    |> where tx = a)
+    |> extend t.x
+    |> select * except (a, b))
 -- !query schema
 struct<x:int,y:string>
 -- !query output
+0	abc
 1	def
 
 

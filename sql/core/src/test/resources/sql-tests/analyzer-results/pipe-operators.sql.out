@@ -636,15 +636,14 @@ Project [x#x, y#x, pipeselect(scalar-subquery#x [x#x], SELECT) AS z#x]
 table t
 |> where exists (
     table other
-    |> extend t.x as tx
-    |> where tx = a)
+    |> extend t.x
+    |> select * except (a, b))
 -- !query analysis
 Filter exists#x [x#x]
-:  +- Filter (tx#x = a#x)
-:     +- SubqueryAlias __auto_generated_subquery_name
-:        +- Project [a#x, b#x, pipeselect(outer(x#x), SELECT) AS tx#x]
-:           +- SubqueryAlias spark_catalog.default.other
-:              +- Relation spark_catalog.default.other[a#x,b#x] json
+:  +- Project [pipeselect(outer(spark_catalog.default.t.x))#x]
+:     +- Project [a#x, b#x, pipeselect(outer(x#x), SELECT) AS pipeselect(outer(spark_catalog.default.t.x))#x]
+:        +- SubqueryAlias spark_catalog.default.other
+:           +- Relation spark_catalog.default.other[a#x,b#x] json
 +- SubqueryAlias spark_catalog.default.t
    +- Relation spark_catalog.default.t[x#x,y#x] csv
 

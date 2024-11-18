@@ -212,7 +212,7 @@ table t
 |> where exists (
     table other
     |> extend t.x
-    |> where `t.x` = a);
+    |> select * except (a, b));
 
 -- Extending with a column name that already exists in the input relation.
 table t
