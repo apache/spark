@@ -149,7 +149,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
 
   test("SPARK-50087: SqlServer handle booleans in IF in SELECT test") {
     // This doesn't compile on SqlServer unless result boolean expressions
-    // in IF / CASE WHEN are wrapped with an IIF(<>, 1, 0).
+    // in IF / CASE WHEN are wrapped with a CASE WHEN(<>, 1, 0).
     val df = sql(
       s"""|WITH dummy AS (
           |  SELECT

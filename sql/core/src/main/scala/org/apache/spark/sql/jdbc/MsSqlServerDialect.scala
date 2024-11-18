@@ -88,7 +88,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
         case e: Predicate => e.name() match {
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
             val Array(l, r) = e.children().map {
-              case p: Predicate => inputToCaseWhenSQL(p)
+              case p: Predicate => predicateToCaseWhenSQL(p)
               case o => inputToSQL(o)
             }
             visitBinaryComparison(e.name(), l, r)
@@ -103,9 +103,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
             // Out: ... CASE WHEN a = b THEN CASE WHEN c = d THEN 1 ELSE 0 END ... END = 1
             val stringArray = e.children().grouped(2).flatMap {
               case Array(whenExpression, thenExpression) =>
-                Array(inputToSQL(whenExpression), inputToIntSQL(thenExpression))
+                Array(inputToSQL(whenExpression), predicateToIntSQL(thenExpression))
               case Array(elseExpression) =>
-                Array(inputToIntSQL(elseExpression))
+                Array(predicateToIntSQL(elseExpression))
             }.toArray
 
             visitCaseWhen(stringArray) + " = 1"

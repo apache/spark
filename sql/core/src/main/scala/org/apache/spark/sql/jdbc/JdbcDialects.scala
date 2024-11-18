@@ -378,13 +378,13 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
-    def inputToCaseWhenSQL(input: Expression): String =
+    def predicateToCaseWhenSQL(input: Expression): String =
       "CASE WHEN " + inputToSQL(input) + " THEN 1 ELSE 0 END"
 
-    def inputToIntSQL(expr: Expression): String = {
+    def predicateToIntSQL(expr: Expression): String = {
       expr match {
         case p: Predicate if p.name() != "ALWAYS_TRUE" && p.name() != "ALWAYS_FALSE" =>
-          inputToCaseWhenSQL(p)
+          predicateToCaseWhenSQL(p)
         case p => inputToSQL(p)
       }
     }
