@@ -8586,11 +8586,12 @@ def histogram_numeric(col: "ColumnOrName", nBins: Column) -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(100).select(sf.histogram_numeric('id', sf.lit(5))).show(truncate=False)
+    >>> df = spark.range(100, numPartitions=1)
+    >>> df.select(sf.histogram_numeric('id', sf.lit(5))).show(truncate=False)
     +-----------------------------------------------------------+
     |histogram_numeric(id, 5)                                   |
     +-----------------------------------------------------------+
-    |[{6, 13.0}, {18, 12.0}, {37, 25.0}, {62, 25.0}, {87, 25.0}]|
+    |[{11, 25.0}, {36, 24.0}, {59, 23.0}, {84, 25.0}, {98, 3.0}]|
     +-----------------------------------------------------------+
     """
     return _invoke_function_over_columns("histogram_numeric", col, nBins)
