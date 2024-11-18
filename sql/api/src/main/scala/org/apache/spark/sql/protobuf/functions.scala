@@ -47,7 +47,7 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
-    val descriptorFileContent = readDescriptorFileContent(descFilePath)
+    val descriptorFileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
     from_protobuf(data, messageName, descriptorFileContent, options)
   }
 
