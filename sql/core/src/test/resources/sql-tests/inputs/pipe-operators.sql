@@ -207,6 +207,13 @@ select col from st
 table t
 |> extend (select a from other where x = a limit 1) as z;
 
+-- Extending with a correlated reference.
+table t
+|> where exists (
+    table other
+    |> extend t.x as tx
+    |> where tx = a);
+
 -- Extending with a column name that already exists in the input relation.
 table t
 |> extend 1 as x;
@@ -233,126 +240,6 @@ table t
 -- EXTEND * is not supported.
 table t
 |> extend *;
-
--- SET operators: positive tests.
----------------------------------
-
--- Setting with a constant.
-table t
-|> set x = 1;
-
--- Setting with an attribute.
-table t
-|> set y = x;
-
--- Setting with an expression.
-table t
-|> extend 1 as z
-|> set z = x + length(y);
-
--- Setting two times.
-table t
-|> extend 1 as z
-|> extend 2 as zz
-|> set z = x + length(y), zz = x + 1;
-
--- Setting two times in sequence.
-table t
-|> extend 1 as z
-|> set z = x + length(y)
-|> set z = z + 1;
-
--- Setting with a struct field.
-select col from st
-|> extend 1 as z
-|> set z = col.i1;
-
--- Setting with a subquery.
-table t
-|> set y = (select a from other where x = a limit 1);
-
--- Window functions are allowed in the pipe operator SET list.
-table t
-|> extend 1 as z
-|> set z = first_value(x) over (partition by y);
-
--- SET operators: negative tests.
----------------------------------
-
--- SET with a column name that does not exist in the input relation.
-table t
-|> set z = 1;
-
--- SET with an alias.
-table t
-|> set x = 1 as z;
-
--- SET assignments with duplicate keys.
-table t
-|> extend 1 as z
-|> set z = x + length(y), z = z + 1;
-
--- DROP operators: positive tests.
-------------------------------------
-
--- Dropping a column.
-table t
-|> drop y;
-
--- Dropping two times.
-select 1 as x, 2 as y, 3 as z
-|> drop z, y;
-
--- Dropping two times in sequence.
-select 1 as x, 2 as y, 3 as z
-|> drop z
-|> drop y;
-
--- Dropping all columns in the input relation.
-select x from t
-|> drop x;
-
--- DROP operators: negative tests.
-----------------------------------
-
--- Dropping a column that is not present in the input relation.
-table t
-|> drop z;
-
--- AS operators: positive tests.
---------------------------------
-
--- Renaming a table.
-table t
-|> as u
-|> select u.x, u.y;
-
--- Renaming an input relation that is not a table.
-select 1 as x, 2 as y
-|> as u
-|> select u.x, u.y;
-
--- Renaming two times.
-table t
-|> as u
-|> as v
-|> select v.x, v.y;
-
--- Filtering by referring to the table or table subquery alias.
-table t
-|> as u
-|> where u.x = 1;
-
--- AS operators: negative tests.
---------------------------------
-
--- Multiple aliases are not supported.
-table t
-|> as u, v;
-
--- Expressions are not supported.
-table t
-|> as 1 + 2;
 
 -- WHERE operators: positive tests.
 -----------------------------------

@@ -81,7 +81,6 @@ object PipeOperators {
   val offsetClause = "OFFSET"
   val orderByClause = "ORDER BY"
   val selectClause = "SELECT"
-  val setClause = "SET"
   val sortByClause = "SORT BY"
   val sortByDistributeByClause = "SORT BY ... DISTRIBUTE BY ..."
   val windowClause = "WINDOW"
