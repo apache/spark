@@ -133,6 +133,9 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitCompoundOrSingleStatement(
       ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_ENABLED)) {
+        throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
+      }
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
       val logicalPlan = visitSingleStatement(ctx.singleStatement())

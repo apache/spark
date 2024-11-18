@@ -23,8 +23,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.parser.{CompoundBody, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LogicalPlan}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.types.{DataType, StructType}
 
