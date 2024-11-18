@@ -204,35 +204,40 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
   }
 
   test("SPARK-50315: metrics for V1 fallback writers") {
-    val session = SparkSession.builder()
-      .master("local[1]")
-      .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
-      .getOrCreate()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    try {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
+        .getOrCreate()
 
-    def captureWrite(thunk: => Unit): SparkPlan = {
-      val physicalPlans = withPhysicalPlansCaptured(spark, thunk)
-      val v1FallbackWritePlans = physicalPlans.filter {
-        case _: AppendDataExecV1 | _: OverwriteByExpressionExecV1 => true
-        case _ => false
+      def captureWrite(sparkSession: SparkSession)(thunk: => Unit): SparkPlan = {
+        val physicalPlans = withPhysicalPlansCaptured(sparkSession, thunk)
+        val v1FallbackWritePlans = physicalPlans.filter {
+          case _: AppendDataExecV1 | _: OverwriteByExpressionExecV1 => true
+          case _ => false
+        }
+
+        assert(v1FallbackWritePlans.size === 1)
+        v1FallbackWritePlans.head
       }
 
-      assert(v1FallbackWritePlans.size === 1)
-      v1FallbackWritePlans.head
-    }
+      val appendPlan = captureWrite(session) {
+        val df = session.createDataFrame(Seq((1, "x")))
+        df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
+      }
+      assert(appendPlan.metrics("numOutputRows").value === 1)
 
-    val appendPlan = captureWrite {
-      val df = session.createDataFrame(Seq((1, "x")))
-      df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
+      val overwritePlan = captureWrite(session) {
+        val df2 = session.createDataFrame(Seq((2, "y")))
+        df2.writeTo("test").overwrite(lit(true))
+      }
+      assert(overwritePlan.metrics("numOutputRows").value === 1)
+    } finally {
+      SparkSession.setActiveSession(spark)
+      SparkSession.setDefaultSession(spark)
     }
-    assert(appendPlan.metrics("numOutputRows").value === 1)
-
-    session.catalog.cacheTable("test")
-
-    val overwritePlan = captureWrite {
-      val df2 = session.createDataFrame(Seq((2, "y")))
-      df2.writeTo("test").overwrite(lit(true))
-    }
-    assert(overwritePlan.metrics("numOutputRows").value === 1)
   }
 }
 

@@ -79,7 +79,7 @@ sealed trait V1FallbackWriters extends LeafV2CommandExec with SupportsV1Write {
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
 
-    metrics.get("numOutputRows").map(metric => InternalRow(metric.value, metric.value)).toSeq
+    Nil
   }
 }
 
