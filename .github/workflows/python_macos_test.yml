@@ -148,7 +148,6 @@ jobs:
             export SKIP_PACKAGING=false
             echo "Python Packaging Tests Enabled!"
           fi
-          echo $PYTHON_TO_TEST
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --python-executables "$PYTHON_TO_TEST"
       - name: Upload test results to report
         env: ${{ fromJSON(inputs.envs) }}
