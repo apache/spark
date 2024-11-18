@@ -23,27 +23,23 @@ import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CreateVariable, IfElseStatement, IterateStatement, LeaveStatement, LoopStatement, Project, RepeatStatement, SingleStatement, WhileStatement}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.internal.SQLConf
 
 class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
 
-  test("single select without ;") {
-    val sqlScriptText = "SELECT 1"
-    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    assert(tree.collection.length == 1)
-    assert(tree.collection.head.isInstanceOf[SingleStatement])
-    val sparkStatement = tree.collection.head.asInstanceOf[SingleStatement]
-    assert(sparkStatement.getText == "SELECT 1")
+  // Tests setup
+  private var originalSqlScriptingConfVal: String = null
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalSqlScriptingConfVal = conf.getConfString(SQLConf.SQL_SCRIPTING_ENABLED.key)
+    conf.setConfString(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
-  test("multi select without ; - should fail") {
-    val sqlScriptText = "SELECT 1 SELECT 1"
-    val e = intercept[ParseException] {
-      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    }
-    assert(e.getCondition === "PARSE_SYNTAX_ERROR")
-    assert(e.getMessage.contains("Syntax error"))
-    assert(e.getMessage.contains("SELECT"))
+  protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_ENABLED.key)
+    super.afterAll()
   }
 
   test("multi select") {
