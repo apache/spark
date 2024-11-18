@@ -94,7 +94,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-36680, SPARK-50286: Supports Dynamic Table Options for SQL Insert") {
+  test("SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -148,7 +148,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-36680, SPARK-50286: Supports Dynamic Table Options for SQL Insert Overwrite") {
+  test("SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert Overwrite") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -208,7 +208,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-36680, SPARK-50286: Supports Dynamic Table Options for SQL Insert Replace") {
+  test("SPARK-49098, SPARK-50286: Supports Dynamic Table Options for SQL Insert Replace") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
