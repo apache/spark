@@ -48,10 +48,11 @@ class StatefulProcessorHandleState(Enum):
 
 
 class StatefulProcessorApiClient:
-    def __init__(self, state_server_port: int, key_schema: StructType) -> None:
+    def __init__(self, state_server_id: int, key_schema: StructType) -> None:
         self.key_schema = key_schema
-        self._client_socket = socket.socket()
-        self._client_socket.connect(("localhost", state_server_port))
+        self._client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server_address = f"./uds_{state_server_id}.sock"
+        self._client_socket.connect(server_address)
         self.sockfile = self._client_socket.makefile(
             "rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536))
         )

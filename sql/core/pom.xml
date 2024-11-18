@@ -252,6 +252,11 @@
       <artifactId>htmlunit3-driver</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.github.jnr</groupId>
+      <artifactId>jnr-unixsocket</artifactId>
+        <version>0.38.18</version>
+    </dependency>
     <!-- Explicit declaration of bouncy-castle dependencies are
          needed for maven test builds on later hadoop releases.-->
     <dependency>

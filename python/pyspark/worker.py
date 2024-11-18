@@ -1449,7 +1449,7 @@ def read_udtf(pickleSer, infile, eval_type):
 def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
-    state_server_port = None
+    state_server_id = None
     key_schema = None
     if eval_type in (
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
@@ -1481,7 +1481,7 @@ def read_udfs(pickleSer, infile, eval_type):
             eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
             or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
         ):
-            state_server_port = read_int(infile)
+            state_server_id = read_int(infile)
             key_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
 
         # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
@@ -1695,7 +1695,7 @@ def read_udfs(pickleSer, infile, eval_type):
         )
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
-        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+        stateful_processor_api_client = StatefulProcessorApiClient(state_server_id, key_schema)
 
         # Create function like this:
         #   mapper a: f([a[0]], [a[0], a[1]])
@@ -1728,7 +1728,7 @@ def read_udfs(pickleSer, infile, eval_type):
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
         ser.init_key_offsets = parsed_offsets[1][0]
-        stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
+        stateful_processor_api_client = StatefulProcessorApiClient(state_server_id, key_schema)
 
         def mapper(a):
             key = a[0]

@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream, EOFException}
-import java.net.ServerSocket
+import java.io.{DataInputStream, DataOutputStream, EOFException}
+import java.nio.channels.Channels
 import java.time.Duration
 
 import scala.collection.mutable
 
 import com.google.protobuf.ByteString
+import jnr.unixsocket.UnixServerSocketChannel
 import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
@@ -51,7 +52,7 @@ import org.apache.spark.util.Utils
  * - Requests for managing state variables (e.g. valueState).
  */
 class TransformWithStateInPandasStateServer(
-    stateServerSocket: ServerSocket,
+    serverChannel: UnixServerSocketChannel,
     statefulProcessorHandle: StatefulProcessorHandleImpl,
     groupingKeySchema: StructType,
     timeZoneId: String,
@@ -134,14 +135,15 @@ class TransformWithStateInPandasStateServer(
   } else new mutable.HashMap[String, Iterator[Long]]()
 
   def run(): Unit = {
-    val listeningSocket = stateServerSocket.accept()
+    val channel = serverChannel.accept()
     inputStream = new DataInputStream(
-      new BufferedInputStream(listeningSocket.getInputStream))
+      Channels.newInputStream(channel)
+    )
     outputStream = new DataOutputStream(
-      new BufferedOutputStream(listeningSocket.getOutputStream)
+      Channels.newOutputStream(channel)
     )
 
-    while (listeningSocket.isConnected &&
+    while (channel.isConnected &&
       statefulProcessorHandle.getHandleState != StatefulProcessorHandleState.CLOSED) {
       try {
         val version = inputStream.readInt()
@@ -758,3 +760,12 @@ case class MapStateInfo(
     keySerializer: ExpressionEncoder.Serializer[Row],
     valueDeserializer: ExpressionEncoder.Deserializer[Row],
     valueSerializer: ExpressionEncoder.Serializer[Row])
+
+object TransformWithStateInPandasStateServer {
+  @volatile private var id = 0
+
+  def allocateServerId(): Int = synchronized {
+    id = id + 1
+    return id
+  }
+}
