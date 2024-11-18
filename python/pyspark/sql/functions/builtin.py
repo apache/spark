@@ -6385,13 +6385,13 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     +----+----+
 
     >>> df.select('*', sf.coalesce("a", df["b"])).show()
-    +--------------+
-    |coalesce(a, b)|
-    +--------------+
-    |          NULL|
-    |             1|
-    |             2|
-    +--------------+
+    +----+----+--------------+
+    |   a|   b|coalesce(a, b)|
+    +----+----+--------------+
+    |NULL|NULL|          NULL|
+    |   1|NULL|             1|
+    |NULL|   2|             2|
+    +----+----+--------------+
 
     >>> df.select('*', sf.coalesce(df["a"], lit(0.0))).show()
     +----+----+----------------+
