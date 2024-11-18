@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, CompoundBody, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.{PlanTest, SQLHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Sort, SortHint, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -557,6 +557,17 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       assert(res.isInstanceOf[Aggregate])
       val expectedAlias = Alias(Literal(10L), "max(id)")()
       compareExpressions(expectedAlias, res.asInstanceOf[Aggregate].aggregateExpressions.head)
+    }
+  }
+
+  test("custom sort hint") {
+    // The custom hint allows us to replace the sort with its input
+    withSession(Seq(_.injectHintResolutionRule(CustomerSortHintResolutionRule),
+      _.injectOptimizerRule(CustomSortRule))) { session =>
+      val res = session.range(10).sort("id")
+        .hint("INPUT_SORTED")
+        .queryExecution.optimizedPlan
+      assert(res.collect {case s: Sort => s}.isEmpty)
     }
   }
 }
@@ -1300,5 +1311,29 @@ case class CustomAggregateRule(spark: SparkSession) extends Rule[LogicalPlan] {
         a.copy(aggregateExpressions = Seq(Alias(Cast(Literal(max), aggregates.head.dataType),
           aggregates.head.name)()), hint = None)
     }
+  }
+}
+
+// Example of a Sort hint that tells that the input is already sorted,
+// and the rule that removes all Sort nodes based on such hint.
+case class CustomSortHint(inputSorted: Boolean) extends SortHint
+
+// Attaches the CustomSortHint to the sort node.
+case class CustomerSortHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  val MY_HINT_NAME = Set("INPUT_SORTED")
+
+  private def applySortHint(plan: LogicalPlan): LogicalPlan = plan.transformDown {
+    case s @ Sort(_, _, _, None) => s.copy(hint = Some(CustomSortHint(true)))
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      applySortHint(h.child)
+  }
+}
+
+case class CustomSortRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case s @ Sort(_, _, _, Some(CustomSortHint(true))) => s.child
   }
 }
