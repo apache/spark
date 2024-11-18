@@ -228,18 +228,6 @@ private[sql] object ProtobufUtils extends Logging {
     }
   }
 
-  def readDescriptorFileContent(filePath: String): Array[Byte] = {
-    try {
-      FileUtils.readFileToByteArray(new File(filePath))
-    } catch {
-      case ex: FileNotFoundException =>
-        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case ex: NoSuchFileException =>
-        throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case NonFatal(ex) => throw QueryCompilationErrors.descriptorParseError(ex)
-    }
-  }
-
   private def parseFileDescriptorSet(bytes: Array[Byte]): List[Descriptors.FileDescriptor] = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
