@@ -47,7 +47,7 @@ on:
         default: '{}'
 jobs:
   build:
-    name: "PySpark test on macos-15: ${{ matrix.modules }}"
+    name: "PySpark test on macos: ${{ matrix.modules }}"
     runs-on: macos-15
     strategy:
       fail-fast: false
