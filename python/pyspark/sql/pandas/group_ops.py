@@ -16,7 +16,7 @@
 #
 import itertools
 import sys
-from typing import Any, Iterator, List, Optional, Union, TYPE_CHECKING, cast
+from typing import Any, Iterator, List, Optional, Union, Tuple, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkTypeError
@@ -502,6 +502,17 @@ class PandasGroupedOpsMixin:
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
+        def get_timestamps(
+            statefulProcessorApiClient: StatefulProcessorApiClient,
+        ) -> Tuple[int, int]:
+            if timeMode != "none":
+                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
+                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
+            else:
+                batch_timestamp = -1
+                watermark_timestamp = -1
+            return batch_timestamp, watermark_timestamp
+
         def handle_data_with_timers(
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
@@ -568,12 +579,7 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
 
-            if timeMode != "none":
-                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
-                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
-            else:
-                batch_timestamp = -1
-                watermark_timestamp = -1
+            batch_timestamp, watermark_timestamp = get_timestamps(statefulProcessorApiClient)
 
             result = handle_data_with_timers(
                 statefulProcessorApiClient, key, batch_timestamp, watermark_timestamp, inputRows
@@ -614,12 +620,7 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
 
-            if timeMode != "none":
-                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
-                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
-            else:
-                batch_timestamp = -1
-                watermark_timestamp = -1
+            batch_timestamp, watermark_timestamp = get_timestamps(statefulProcessorApiClient)
 
             # only process initial state if first batch and initial state is not None
             if initialStates is not None:

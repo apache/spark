@@ -412,12 +412,13 @@ class StatefulProcessor(ABC):
                       Timer value for the current batch that process the input rows.
                       Users can get the processing or event time timestamp from TimerValues.
         """
-        return iter([])
+        ...
 
     def handleExpiredTimer(
         self, key: Any, timer_values: TimerValues, expired_timer_info: ExpiredTimerInfo
     ) -> Iterator["PandasDataFrameLike"]:
         """
+        Optional to implement. Will act return an empty iterator if not defined.
         Function that will be invoked when a timer is fired for a given key. Users can choose to
         evict state, register new timers and optionally provide output rows.
 
