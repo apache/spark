@@ -20,11 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayAppend, ArrayContains, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayPosition, ArrayRemove, ArraysOverlap, ArrayUnion, AttributeReference, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, Contains, CreateArray, CreateMap, Elt, EndsWith, EqualNullSafe, EqualTo, Expression, ExtractValue, FindInSet, GetMapValue, GreaterThan, GreaterThanOrEqual, Greatest, If, In, InSubquery, Lag, Lead, Least, LessThan, LessThanOrEqual, Levenshtein, Literal, Mask, Overlay, RaiseError, RegExpReplace, SplitPart, StartsWith, StringInstr, StringLocate, StringLPad, StringReplace, StringRPad, StringSplitSQL, StringToMap, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, SubqueryExpression, SubstringIndex, ToNumber, TryToNumber, VariableReference}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -260,7 +259,7 @@ object CollationTypeCoercion {
         Some(CollationContext(expr.dataType, Default))
 
       case _ =>
-        expr.children
+        val contextWinnerOpt = expr.children
           .flatMap(findCollationContext)
           .foldLeft(Option.empty[CollationContext]) {
             case (Some(left), right) =>
@@ -268,6 +267,14 @@ object CollationTypeCoercion {
             case (None, right) =>
               Some(right)
           }
+
+        contextWinnerOpt.map { context =>
+          if (hasStringType(expr.dataType)) {
+            CollationContext(expr.dataType, context.strength)
+          } else {
+            context
+          }
+        }
     }
 
     contextOpt.foreach(expr.setTagValue(COLLATION_CONTEXT_TAG, _))
@@ -309,7 +316,8 @@ object CollationTypeCoercion {
         if (left.strength == Implicit) Some(left) else Some(right)
 
       case (Default, Default) if leftStringType != rightStringType =>
-        Some(CollationContext(SQLConf.get.defaultStringType, Default))
+        throw QueryCompilationErrors.implicitCollationMismatchError(
+          Seq(leftStringType, rightStringType))
 
       case _ =>
         Some(left)

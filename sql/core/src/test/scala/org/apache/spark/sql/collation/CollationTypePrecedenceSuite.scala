@@ -18,11 +18,10 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.connector.DatasourceV2SQLBase
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.test.SharedSparkSession
 
-class CollationTypePrecedenceSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
+class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
   val dataSource: String = "parquet"
 
