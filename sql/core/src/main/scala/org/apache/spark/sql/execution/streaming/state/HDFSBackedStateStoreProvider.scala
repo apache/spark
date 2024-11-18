@@ -603,7 +603,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       input = decompressStream(sourceStream)
       var eof = false
 
-      while(!eof) {
+      while (!eof) {
         val keySize = input.readInt()
         if (keySize == -1) {
           eof = true
@@ -656,7 +656,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       rawOutput = fm.createAtomic(targetFile, overwriteIfPossible = true)
       output = compressStream(rawOutput)
       val iter = map.iterator()
-      while(iter.hasNext) {
+      while (iter.hasNext) {
         val entry = iter.next()
         val keyBytes = entry.key.getBytes()
         val valueBytes = entry.value.getBytes()

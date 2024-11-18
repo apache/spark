@@ -44,11 +44,25 @@ struct<i:int,ci:bigint,f:decimal(6,4),sif:decimal(25,4)>
 SELECT i + 1, f / i, substring(s, 2, 3), extract(year from t), d / 2, size(a) FROM stuff
 GROUP BY ALL ORDER BY 1, 3, 4, 5, 6, 2
 -- !query schema
-struct<(i + 1):int,(f / i):decimal(17,15),substring(s, 2, 3):string,extract(year FROM t):int,(d / 2):double,size(a):int>
+struct<>
 -- !query output
-43	0.232142857142857	ell	1970	6.685	3
-43	0.318333333333333	est	1970	6.17283945E8	3
-1338	0.000923335826477	h n	2000	21.0	3
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'42.0'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 64,
+    "stopIndex" : 68,
+    "fragment" : "d / 2"
+  } ]
+}
 
 
 -- !query
