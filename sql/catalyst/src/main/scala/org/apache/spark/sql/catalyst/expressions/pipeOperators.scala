@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
- * Represents an expression when used with the SQL pipe operators |> SELECT, |> EXTEND, or |> SET.
+ * Represents an expression when used with SQL pipe operators like |> SELECT or |> EXTEND.
  * We use this to make sure that no aggregate functions exist in these expressions.
  */
 case class PipeSelect(child: Expression, clause: String = "SELECT")
