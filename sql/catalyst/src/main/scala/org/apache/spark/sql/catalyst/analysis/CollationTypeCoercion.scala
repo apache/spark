@@ -241,6 +241,8 @@ object CollationTypeCoercion {
       case _ if hasCollationContextTag(expr) =>
         Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
 
+      // if `expr` doesn't have a string in its dataType then it doesn't
+      // have the collation context either
       case _ if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
         None
 
@@ -253,12 +255,14 @@ object CollationTypeCoercion {
       case _: Literal =>
         Some(CollationContext(expr.dataType, Default))
 
+      // if it does have a string type but none of its children do
+      // then the collation context strength is default
+      case _ if !expr.children.exists(_.dataType.existsRecursively(_.isInstanceOf[StringType])) =>
+        Some(CollationContext(expr.dataType, Default))
+
       case extract: ExtractValue =>
         findCollationContext(extract.child)
           .map(cc => CollationContext(extract.dataType, cc.strength))
-
-      case _ if expr.children.isEmpty =>
-        Some(CollationContext(expr.dataType, Default))
 
       case _ =>
         val contextWinnerOpt = getChildren
