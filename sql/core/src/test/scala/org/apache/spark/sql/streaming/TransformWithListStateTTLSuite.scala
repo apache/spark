@@ -141,7 +141,6 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
 
   override def getStateTTLMetricName: String = "numListStateWithTTLVars"
 
-
   test("verify the list state secondary index has at most one record per key") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
@@ -160,25 +159,31 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
 
         // We want all of the inputs to have different timestamps, so that each record
-        // gets its own unique TTL, and thus, its own unique secondary index record.
-        //
-        // While this looks contrived, in the real-world, when non-manual clocks are used,
-        // it's very likely that different records will be processed at different UNIX epoch
-        // times.
+        // gets its own unique TTL, and thus, its own unique secondary index record. Each
+        // is also processed in its own microbatch to ensure a unique batchTimestampMs.
         AddData(inputStream, "k1"),
         AdvanceManualClock(1 * 1000),
-        AddData(inputStream, "k2"),
-        AdvanceManualClock(1 * 1000),
-        AddData(inputStream, "k1"),
-        AdvanceManualClock(1 * 1000),
-        AddData(inputStream, "k2"),
-        AdvanceManualClock(1 * 1000),
-        AddData(inputStream, "k1"),
-        AdvanceManualClock(1 * 1000),
-        AddData(inputStream, "k2"),
-        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 1)),
 
-        CheckNewAnswer(("k1", 1), ("k1", 2), ("k1", 3), ("k2", 1), ("k2", 2), ("k2", 3)),
+        AddData(inputStream, "k2"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k2", 1)),
+
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 2)),
+
+        AddData(inputStream, "k2"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k2", 2)),
+
+        AddData(inputStream, "k1"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k1", 3)),
+
+        AddData(inputStream, "k2"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("k2", 3)),
 
         // 2 unique keys, so 2 "data" rows. Then, for each key, we store an entry in the
         // TTL index, the min index, and the count index.

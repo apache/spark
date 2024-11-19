@@ -178,9 +178,9 @@ trait TTLState {
   def clearExpiredStateForAllKeys(): Long
 
   /**
-   * Clears all of the state for this state variable associated with the primary key
-   * elementKey. It is responsible for deleting from the primary index as well as
-   * any secondary index(es).
+   * When a user calls clear() on a stateful variable, this method is invoked to
+   * clear all of the state for the current (implicit) grouping key. It is responsible
+   * for deleting from the primary index as well as any secondary index(es).
    *
    * If a given state variable has to clean up multiple elementKeys (in MapState, for
    * example, every key in the map is its own elementKey), then this method should
@@ -235,7 +235,7 @@ trait TTLState {
  * we'd then be able to find the next minimum value to insert back into the secondary and
  * min-expiry index.
  *
- * All of this logic is implemented by updatePrimaryAndSecondaryIndices.
+ * All of this logic is implemented by the updatePrimaryAndSecondaryIndices function.
  */
 abstract class OneToManyTTLState(
     stateNameArg: String,
@@ -363,8 +363,8 @@ abstract class OneToManyTTLState(
 
     writePrimaryIndexEntries(overwritePrimaryIndex, elementKey, elementValues)
 
-    // If nothing exists in the secondary index, then we need to make sure to write
-    // the primary and the secondary indices. There's nothing to clean-up from the
+    // If nothing exists in the minimum index, then we need to make sure to write
+    // the minimum and the TTL indices. There's nothing to clean-up from the
     // secondary index, since it's empty.
     if (existingMinExpirationUnsafeRow == null) {
       // Insert into the min-expiry and TTL index, in no particular order.
@@ -522,7 +522,6 @@ abstract class OneToOneTTLState(
     if (existingPrimaryValue == null) {
       store.put(elementKey, elementValue, stateName)
       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-
       insertIntoTTLIndex(expirationMs, elementKey)
     } else {
       // The new value and the existing one may differ in either timestamp or in actual

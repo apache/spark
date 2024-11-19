@@ -226,10 +226,6 @@ class CompositeKeyStateEncoder[K, V](
     compositeKeyProjection(InternalRow(groupingKey, userKey))
   }
 
-  def decodeUserKey(row: UnsafeRow): K = {
-    userKeyRowToObjDeserializer.apply(row)
-  }
-
   /**
    * The input row is of composite Key schema.
    * Only user key is returned though grouping key also exist in the row.
