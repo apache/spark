@@ -384,7 +384,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       case p: Predicate if p.name() == "ALWAYS_TRUE" => "1"
       case p: Predicate if p.name() == "ALWAYS_FALSE" => "0"
       case p: Predicate => predicateToIntSQL(inputToSQL(p))
-      case _ => inputToSQL(p)
+      case p => inputToSQL(p)
     }
     
     protected def predicateToIntSQL(input: String): String =
