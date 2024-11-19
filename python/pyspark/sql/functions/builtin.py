@@ -7138,14 +7138,18 @@ def percentile(
     >>> key = (sf.col("id") % 3).alias("key")
     >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
-    >>> df.select(sf.percentile("value", [0.25, 0.5, 0.75], sf.lit(1))).show(truncate=False)
+    >>> df.select(
+    ...     sf.percentile("value", [0.25, 0.5, 0.75], sf.lit(1))
+    ... ).show(truncate=False)
     +--------------------------------------------------------+
     |percentile(value, array(0.25, 0.5, 0.75), 1)            |
     +--------------------------------------------------------+
     |[0.7441991494121..., 9.9900713756..., 19.33740203080...]|
     +--------------------------------------------------------+
 
-    >>> df.groupBy("key").agg(sf.percentile("value", sf.lit(0.5), sf.lit(1))).show()
+    >>> df.groupBy("key").agg(
+    ...     sf.percentile("value", sf.lit(0.5), sf.lit(1))
+    ... ).sort("key").show()
     +---+-------------------------+
     |key|percentile(value, 0.5, 1)|
     +---+-------------------------+
@@ -7199,14 +7203,18 @@ def percentile_approx(
     >>> key = (sf.col("id") % 3).alias("key")
     >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
-    >>> df.select(sf.percentile_approx("value", [0.25, 0.5, 0.75], 1000000)).show(truncate=False)
+    >>> df.select(
+    ...     sf.percentile_approx("value", [0.25, 0.5, 0.75], 1000000)
+    ... ).show(truncate=False)
     +----------------------------------------------------------+
     |percentile_approx(value, array(0.25, 0.5, 0.75), 1000000) |
     +----------------------------------------------------------+
     |[0.7264430125286..., 9.98975299938..., 19.335304783039...]|
     +----------------------------------------------------------+
 
-    >>> df.groupBy("key").agg(sf.percentile_approx("value", sf.lit(0.5), sf.lit(1000000))).show()
+    >>> df.groupBy("key").agg(
+    ...     sf.percentile_approx("value", sf.lit(0.5), sf.lit(1000000))
+    ... ).sort("key").show()
     +---+--------------------------------------+
     |key|percentile_approx(value, 0.5, 1000000)|
     +---+--------------------------------------+
@@ -7256,20 +7264,24 @@ def approx_percentile(
     >>> key = (sf.col("id") % 3).alias("key")
     >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
-    >>> df.select(sf.approx_percentile("value", [0.25, 0.5, 0.75], 1000000)).show(truncate=False)
+    >>> df.select(
+    ...     sf.approx_percentile("value", [0.25, 0.5, 0.75], 1000000)
+    ... ).show(truncate=False)
     +----------------------------------------------------------+
     |approx_percentile(value, array(0.25, 0.5, 0.75), 1000000) |
     +----------------------------------------------------------+
-    |[0.7264430125286507, 9.98975299938167, 19.335304783039014]|
+    |[0.7264430125286..., 9.98975299938..., 19.335304783039...]|
     +----------------------------------------------------------+
 
-    >>> df.groupBy("key").agg(sf.approx_percentile("value", sf.lit(0.5), sf.lit(1000000))).show()
+    >>> df.groupBy("key").agg(
+    ...     sf.approx_percentile("value", sf.lit(0.5), sf.lit(1000000))
+    ... ).sort("key").show()
     +---+--------------------------------------+
     |key|approx_percentile(value, 0.5, 1000000)|
     +---+--------------------------------------+
-    |  0|                  -0.03519435193070876|
-    |  1|                     9.990389751837329|
-    |  2|                    19.967859769284075|
+    |  0|                  -0.03519435193070...|
+    |  1|                     9.990389751837...|
+    |  2|                    19.967859769284...|
     +---+--------------------------------------+
     """
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
