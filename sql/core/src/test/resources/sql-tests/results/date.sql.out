@@ -49,17 +49,33 @@ struct<make_date(2019, 1, 1):date,make_date(12, 12, 12):date>
 -- !query
 select make_date(2000, 13, 1)
 -- !query schema
-struct<make_date(2000, 13, 1):date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "rangeMessage" : "Invalid value for MonthOfYear (valid values 1 - 12): 13"
+  }
+}
 
 
 -- !query
 select make_date(2000, 1, 33)
 -- !query schema
-struct<make_date(2000, 1, 33):date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "rangeMessage" : "Invalid value for DayOfMonth (valid values 1 - 28/31): 33"
+  }
+}
 
 
 -- !query
@@ -184,9 +200,17 @@ struct<to_date(16, dd):date>
 -- !query
 select to_date("02-29", "MM-dd")
 -- !query schema
-struct<to_date(02-29, MM-dd):date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid date 'February 29' as '1970' is not a leap year"
+  }
+}
 
 
 -- !query
@@ -242,9 +266,16 @@ struct<next_day(2015-07-23, Mon):date>
 -- !query
 select next_day("2015-07-23", "xx")
 -- !query schema
-struct<next_day(2015-07-23, xx):date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ILLEGAL_DAY_OF_WEEK",
+  "sqlState" : "22009",
+  "messageParameters" : {
+    "string" : "xx"
+  }
+}
 
 
 -- !query
@@ -274,9 +305,25 @@ struct<next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', Mon):date>
 -- !query
 select next_day("xx", "Mon")
 -- !query schema
-struct<next_day(xx, Mon):date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'xx'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "next_day(\"xx\", \"Mon\")"
+  } ]
+}
 
 
 -- !query
@@ -418,13 +465,22 @@ select date_add('2011-11-11', '1.2')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-  "sqlState" : "22023",
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
-    "functionName" : "date_add"
-  }
+    "expression" : "'1.2'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "date_add('2011-11-11', '1.2')"
+  } ]
 }
 
 
@@ -583,13 +639,22 @@ select date_sub(date'2011-11-11', '1.2')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-  "sqlState" : "22023",
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
-    "functionName" : "date_sub"
-  }
+    "expression" : "'1.2'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "date_sub(date'2011-11-11', '1.2')"
+  } ]
 }
 
 
@@ -628,53 +693,17 @@ struct<date_sub(TIMESTAMP_NTZ '2011-11-11 12:12:12', 1):date>
 -- !query
 select date_add('2011-11-11', int_str) from date_view
 -- !query schema
-struct<>
+struct<date_add(2011-11-11, int_str):date>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"int_str\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_add(2011-11-11, int_str)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 38,
-    "fragment" : "date_add('2011-11-11', int_str)"
-  } ]
-}
+2011-11-12
 
 
 -- !query
 select date_sub('2011-11-11', int_str) from date_view
 -- !query schema
-struct<>
+struct<date_sub(2011-11-11, int_str):date>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"int_str\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_sub(2011-11-11, int_str)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 38,
-    "fragment" : "date_sub('2011-11-11', int_str)"
-  } ]
-}
+2011-11-10
 
 
 -- !query
@@ -754,27 +783,9 @@ struct<(DATE '2001-10-01' - DATE '2001-09-28'):interval day>
 -- !query
 select date '2001-10-01' - '2001-09-28'
 -- !query schema
-struct<>
+struct<(DATE '2001-10-01' - 2001-09-28):interval day>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"2001-09-28\"",
-    "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_sub(DATE '2001-10-01', 2001-09-28)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 39,
-    "fragment" : "date '2001-10-01' - '2001-09-28'"
-  } ]
-}
+3 00:00:00.000000000
 
 
 -- !query
@@ -812,27 +823,9 @@ struct<(date_str - DATE '2001-09-28'):interval day>
 -- !query
 select date '2001-09-28' - date_str from date_view
 -- !query schema
-struct<>
+struct<(DATE '2001-09-28' - date_str):interval day>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"date_str\"",
-    "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_sub(DATE '2001-09-28', date_str)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 35,
-    "fragment" : "date '2001-09-28' - date_str"
-  } ]
-}
+-3696 00:00:00.000000000
 
 
 -- !query
@@ -846,7 +839,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
-    "inputType" : "\"DOUBLE\"",
+    "inputType" : "\"DATE\"",
     "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(DATE '2011-11-11', 1)\""
@@ -871,11 +864,11 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"DOUBLE\"",
+    "inputSql" : "\"DATE '2011-11-11'\"",
+    "inputType" : "\"DATE\"",
     "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_add(DATE '2011-11-11', 1)\""
+    "sqlExpr" : "\"date_add(1, DATE '2011-11-11')\""
   },
   "queryContext" : [ {
     "objectType" : "",

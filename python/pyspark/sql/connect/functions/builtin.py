@@ -1552,7 +1552,7 @@ def count_if(col: "ColumnOrName") -> Column:
 count_if.__doc__ = pysparkfuncs.count_if.__doc__
 
 
-def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+def histogram_numeric(col: "ColumnOrName", nBins: Column) -> Column:
     return _invoke_function_over_columns("histogram_numeric", col, nBins)
 
 
