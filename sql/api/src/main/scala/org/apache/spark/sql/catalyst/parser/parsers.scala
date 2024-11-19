@@ -419,7 +419,7 @@ case class UnclosedCommentProcessor(command: String, tokenStream: CommonTokenStr
       ctx: SqlBaseParser.CompoundOrSingleStatementContext): Unit = {
     // Same as in exitSingleStatement, we shouldn't parse the comments in SET command.
     if (Option(ctx.singleStatement()).forall(
-      !_.setResetStatement().isInstanceOf[SqlBaseParser.SetConfigurationContext])) {
+        !_.setResetStatement().isInstanceOf[SqlBaseParser.SetConfigurationContext])) {
       checkUnclosedComment(tokenStream, command)
     }
   }
