@@ -34,14 +34,14 @@ object TransformWithStateKeyValueRowSchemaUtils {
       groupingKeySchema: StructType,
       userKeySchema: StructType): StructType = {
     new StructType()
-      .add("key", new StructType(groupingKeySchema.fields))
+      .add("groupingKey", new StructType(groupingKeySchema.fields))
       .add("userKey", new StructType(userKeySchema.fields))
   }
 
   def getSingleKeyTTLRowSchema(keySchema: StructType): StructType =
     new StructType()
       .add("expirationMs", LongType)
-      .add("groupingKey", keySchema)
+      .add("elementKey", keySchema)
 
   def getExpirationMsRowSchema(): StructType =
     new StructType()

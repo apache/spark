@@ -123,9 +123,24 @@ trait TTLState {
     store.put(secondaryIndexKey, TTL_EMPTY_VALUE_ROW, TTL_INDEX)
   }
 
+  // The deleteFromTTLIndex overload that takes an expiration time and elementKey as an
+  // argument is used when we need to _construct_ the key to delete from the TTL index.
+  //
+  // If we know the timestamp to delete and the elementKey, but don't have a pre-constructed
+  // UnsafeRow, then you should use this method to delete from the TTL index.
   protected def deleteFromTTLIndex(expirationMs: Long, elementKey: UnsafeRow): Unit = {
     val secondaryIndexKey = TTL_ENCODER.encodeTTLRow(expirationMs, elementKey)
     store.remove(secondaryIndexKey, TTL_INDEX)
+  }
+
+  // The deleteFromTTLIndex overload that takes an UnsafeRow as an argument is used when
+  // we're deleting elements from the TTL index that we are iterating over.
+  //
+  // If we were to use the other deleteFromTTLIndex method, we would have to re-encode the
+  // components into an UnsafeRow. It is more efficient to just pass the UnsafeRow that we
+  // read from the iterator.
+  protected def deleteFromTTLIndex(ttlKey: UnsafeRow): Unit = {
+    store.remove(ttlKey, TTL_INDEX)
   }
 
   private[sql] def toTTLRow(ttlKey: UnsafeRow): TTLRow = {
@@ -138,7 +153,12 @@ trait TTLState {
     store.iterator(TTL_INDEX).map(kv => toTTLRow(kv.key))
   }
 
-  protected def ttlEvictionIterator(): Iterator[TTLRow] = {
+  // Returns an Iterator over all the keys in the TTL index that have expired. This method
+  // does not delete the keys from the TTL index; it is the responsibility of the caller
+  // to do so.
+  //
+  // The schema of the UnsafeRow returned by this iterator is (expirationMs, elementKey).
+  protected def ttlEvictionIterator(): Iterator[UnsafeRow] = {
     val ttlIterator = store.iterator(TTL_INDEX)
 
     // Recall that the format is (expirationMs, elementKey) -> TTL_EMPTY_VALUE_ROW, so
@@ -146,10 +166,7 @@ trait TTLState {
     ttlIterator.takeWhile(kv => {
       val expirationMs = kv.key.getLong(0)
       StateTTL.isExpired(expirationMs, batchTimestampMs)
-    }).map { kv =>
-      store.remove(kv.key, TTL_INDEX)
-      toTTLRow(kv.key)
-    }
+    }).map(_.key)
   }
 
 
@@ -408,9 +425,12 @@ abstract class OneToManyTTLState(
   override def clearExpiredStateForAllKeys(): Long = {
     var totalNumValuesExpired = 0L
 
-    // ttlEvictionIterator deletes from the TTL index
-    ttlEvictionIterator().foreach { ttlRow =>
+    ttlEvictionIterator().foreach { ttlKey =>
+      val ttlRow = toTTLRow(ttlKey)
       val elementKey = ttlRow.elementKey
+
+      // Delete from TTL index and minimum index
+      deleteFromTTLIndex(ttlKey)
       store.remove(elementKey, MIN_INDEX)
 
       // Now, we need the specific implementation to remove all the values associated with
@@ -544,9 +564,12 @@ abstract class OneToOneTTLState(
   override def clearExpiredStateForAllKeys(): Long = {
     var numValuesExpired = 0L
 
-    // ttlEvictionIterator deletes from the secondary index
-    ttlEvictionIterator().foreach { ttlRow =>
-      store.remove(ttlRow.elementKey, stateName)
+    ttlEvictionIterator().foreach { ttlKey =>
+      // Delete from secondary index
+      deleteFromTTLIndex(ttlKey)
+      // Delete from primary index
+      store.remove(toTTLRow(ttlKey).elementKey, stateName)
+
       numValuesExpired += 1
     }
 
