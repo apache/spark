@@ -20,20 +20,28 @@ package org.apache.spark.sql.streaming
 import java.time.Duration
 
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{ListStateImplWithTTL, MemoryStream}
+import org.apache.spark.sql.execution.streaming.{ListStateImplWithTTL, MapStateImplWithTTL, MemoryStream, ValueStateImplWithTTL}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
 
-// OnlyListAppendTTLProcessor is a StatefulProcessor that only appends values to the
-// end of its (keyed) TTL list state. For each record it processes, it returns the new
-// length of its list state.
+// MultiStatefulVariableTTLProcessor is a StatefulProcessor that consumes a stream of
+// strings and returns a stream of <string, count> pairs.
+//
+// Internally, it uses several stateful variables to store the count of each string, for
+// the sole purpose of verifying that these stateful variables all stay in sync and do not
+// interfere with each other.
 //
 // The pattern of calling appendValue is to simulate the old behavior of appendValue, which
 // used to add a record into the secondary index for every appendList call.
-class OnlyListAppendTTLProcessor(ttlConfig: TTLConfig)
+class MultiStatefulVariableTTLProcessor(ttlConfig: TTLConfig)
   extends StatefulProcessor[String, String, (String, Long)]{
   @transient private var _listState: ListStateImplWithTTL[String] = _
+  // Map from index to count
+  @transient private var _mapState: MapStateImplWithTTL[Long, Long] = _
+  // Counts the number of times the string has occurred. It should always be
+  // equal to the size of the list state at the start and end of handleInputRows.
+  @transient private var _valueState: ValueStateImplWithTTL[Long] = _
 
   override def init(
       outputMode: OutputMode,
@@ -41,15 +49,45 @@ class OnlyListAppendTTLProcessor(ttlConfig: TTLConfig)
     _listState = getHandle
       .getListState("listState", Encoders.STRING, ttlConfig)
       .asInstanceOf[ListStateImplWithTTL[String]]
+    _mapState = getHandle
+        .getMapState("mapState", Encoders.scalaLong, Encoders.scalaLong, ttlConfig)
+        .asInstanceOf[MapStateImplWithTTL[Long, Long]]
+    _valueState = getHandle
+        .getValueState("valueState", Encoders.scalaLong, ttlConfig)
+        .asInstanceOf[ValueStateImplWithTTL[Long]]
   }
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
       timerValues: TimerValues): Iterator[(String, Long)] = {
-    inputRows.map { row =>
+    assertSanity()
+    val iter = inputRows.map { row =>
+      // Update the list state
       _listState.appendValue(row)
-      (key, _listState.get().size)
+
+      // Update the map state
+      val mapStateCurrentSize = _mapState.iterator().size
+      _mapState.updateValue(mapStateCurrentSize + 1, mapStateCurrentSize + 1)
+
+      // Update the value state
+      val currentCountFromValueState = _valueState.get()
+      _valueState.update(currentCountFromValueState + 1)
+
+      assertSanity()
+
+      (key, _listState.get().size.toLong)
     }
+
+    iter
+  }
+
+  // Asserts that the list state, map state, and value state are all in sync.
+  private def assertSanity(): Unit = {
+    val listSize = _listState.get().size
+    val mapSize = _mapState.iterator().size
+    val valueState = _valueState.get()
+    assert(listSize == mapSize)
+    assert(listSize == valueState)
   }
 }
 
@@ -150,7 +188,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         val result = inputStream.toDS()
           .groupByKey(x => x)
           .transformWithState(
-            new OnlyListAppendTTLProcessor(ttlConfig),
+            new MultiStatefulVariableTTLProcessor(ttlConfig),
             TimeMode.ProcessingTime(),
             OutputMode.Append())
       val clock = new StreamManualClock
@@ -185,11 +223,20 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
         AdvanceManualClock(1 * 1000),
         CheckNewAnswer(("k2", 3)),
 
-        // 2 unique keys, so 2 "data" rows. Then, for each key, we store an entry in the
-        // TTL index, the min index, and the count index.
+        // For each unique key that occurs t times, the MultiStatefulVariableTTLProcessor maintains:
+        //    - Map state: t records in the primary, and t records in the TTL index
+        //    - List state: 1 record in the primary, TTL, min, and count indexes
+        //    - Value state: 1 record in the primary, and 1 record in the TTL index
         //
-        // Thus, we have 2 + (2 * 3) = 8 rows.
-        assertNumStateRows(total = 8, updated = 6)
+        // So in total, that amounts to 2t + 4 + 2 = 2t + 6 records.
+        //
+        // In this test, we have 2 unique keys, and each key occurs 3 times. Thus, the total number
+        // of keys in state is 2 * (2t + 6) where t = 3, which is 24.
+        //
+        // The number of updated rows is the total across the last time assertNumStateRows
+        // was called, and we only update numRowsUpdated for primary key updates. We ran 6 batches
+        // and each wrote 3 primary keys, so the total number of updated rows is 6 * 3 = 18.
+        assertNumStateRows(total = 24, updated = 18)
       )
     }
   }
