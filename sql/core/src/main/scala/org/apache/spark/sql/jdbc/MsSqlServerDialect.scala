@@ -105,7 +105,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
             }.toArray
 
             visitCaseWhen(stringArray) + " = 1"
-          case _ => super.build(e)
+          case _ => super.build(expr)
         }
         case _ => super.build(expr)
       }
