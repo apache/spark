@@ -50,49 +50,8 @@ on:
         type: string
         default: '{"tpcds-1g":"true"}'
 jobs:
-  precondition:
-    name: Check changes
-    runs-on: ubuntu-latest
-    env:
-      GITHUB_PREV_SHA: ${{ github.event.before }}
-    outputs:
-      required: ${{ steps.set-outputs.outputs.required }}
-      image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
-      image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
-      image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
-      image_lint_url: ${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}
-      image_lint_url_link: ${{ steps.infra-image-link.outputs.image_lint_url_link }}
-    steps:
-      # 1.这里指定拉去apache/spark仓库的指定分支代码
-      - name: Checkout Spark repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          repository: apache/spark
-          ref: ${{ inputs.branch }}
-      # 2. 设置执行哪些任务，这里设置执行tpcds 1g
-      - name: Check all modules
-        id: set-outputs
-        run: |
-          # This is usually set by scheduled jobs.
-          precondition='${{ inputs.jobs }}'
-          echo $precondition # For debugging
-          precondition="${precondition//$'\n'/}"
-          echo "required=$precondition" >> $GITHUB_OUTPUT
-
-      - name: Generate infra image URL
-        id: infra-image-outputs
-        run: |
-          # Convert to lowercase to meet Docker repo name requirement
-          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          IMG_NAME="apache-spark-ci-image:${{ inputs.branch }}-${{ github.run_id }}"
-          IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
-          echo "image_url=$IMG_URL" >> $GITHUB_OUTPUT
-
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     # Pin to 'Ubuntu 20.04' due to 'databricks/tpcds-kit' compilation
     runs-on: ubuntu-20.04
