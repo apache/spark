@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{File, FileWriter}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkClassNotFoundException, SparkException}
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -96,8 +97,21 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
 
   test("SPARK-45917: automatic registration of Python Data Source") {
     assume(shouldTestPandasUDFs)
-    val df = spark.read.format(staticSourceName).load()
-    checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+    withSQLConf(SQLConf.PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED.key -> "true") {
+      val df = spark.read.format(staticSourceName).load()
+      checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
+    }
+  }
+
+  test("SPARK-50348: make static import Python data source configurable") {
+    assume(shouldTestPandasUDFs)
+    withSQLConf(SQLConf.PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkClassNotFoundException](
+          spark.read.format(staticSourceName).load()),
+        condition = "DATA_SOURCE_NOT_FOUND",
+        parameters = Map("provider" -> "custom_source"))
+    }
   }
 
   test("simple data source") {

@@ -25,6 +25,7 @@ import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.DATA_SOURCE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 
@@ -94,6 +95,7 @@ object DataSourceManager extends Logging {
   // Visible for testing
   private[spark] var dataSourceBuilders: Option[Map[String, UserDefinedPythonDataSource]] = None
   private lazy val shouldLoadPythonDataSources: Boolean = {
+    SQLConf.get.pythonDataSourceStaticImportEnabled &&
     Utils.checkCommandAvailable(PythonUtils.defaultPythonExec)
   }
 
