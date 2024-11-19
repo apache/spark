@@ -97,7 +97,8 @@ case class LineageItem(
 abstract class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec) extends Logging {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
 
   implicit val formats: Formats = DefaultFormats
 
@@ -115,6 +116,8 @@ abstract class StateStoreChangelogWriter(
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
 
   def writeLineage(lineage: Array[LineageItem]): Unit = {
+    assert(enableStateStoreCheckpointIds,
+      "writeLineage should only be invoked with state store checkpoint id enabled")
     val lineageStr = Serialization.write(lineage)
     compressedStream.writeUTF(lineageStr)
   }
@@ -161,8 +164,10 @@ abstract class StateStoreChangelogWriter(
 class StateStoreChangelogWriterV1(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
+  extends StateStoreChangelogWriter(
+    fm, file, compressionCodec, enableStateStoreCheckpointIds) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
@@ -218,8 +223,10 @@ class StateStoreChangelogWriterV1(
 class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
+  extends StateStoreChangelogWriter(
+    fm, file, compressionCodec, enableStateStoreCheckpointIds) {
 
   override def version: Short = 2
 
