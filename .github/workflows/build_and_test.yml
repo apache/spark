@@ -70,60 +70,16 @@ jobs:
           fetch-depth: 0
           repository: apache/spark
           ref: ${{ inputs.branch }}
+      # 2. 设置执行哪些任务，这里设置执行tpcds 1g
       - name: Check all modules
         id: set-outputs
         run: |
-          if [ -z "${{ inputs.jobs }}" ]; then
-            pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark')))"`
-            pyspark=`./dev/is-changed.py -m $pyspark_modules`
-            if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
-              pandas=$pyspark
-              yarn=`./dev/is-changed.py -m yarn`
-              kubernetes=`./dev/is-changed.py -m kubernetes`
-              sparkr=`./dev/is-changed.py -m sparkr`
-              tpcds=`./dev/is-changed.py -m sql`
-              docker=`./dev/is-changed.py -m docker-integration-tests`
-              buf=true
-              ui=true
-              docs=true
-            else
-              pandas=false
-              yarn=false
-              kubernetes=false
-              sparkr=false
-              tpcds=false
-              docker=false
-              buf=false
-              ui=false
-              docs=false
-            fi
-            build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,protobuf,yarn,connect,sql,hive"`
-            precondition="
-              {
-                \"build\": \"$build\",
-                \"pyspark\": \"$pyspark\",
-                \"pyspark-pandas\": \"$pandas\",
-                \"sparkr\": \"$sparkr\",
-                \"tpcds-1g\": \"$tpcds\",
-                \"docker-integration-tests\": \"$docker\",
-                \"lint\" : \"true\",
-                \"docs\" : \"$docs\",
-                \"yarn\" : \"$yarn\",
-                \"k8s-integration-tests\" : \"$kubernetes\",
-                \"buf\" : \"$buf\",
-                \"ui\" : \"$ui\",
-              }"
-            echo $precondition # For debugging
-            # Remove `\n` to avoid "Invalid format" error
-            precondition="${precondition//$'\n'/}}"
-            echo "required=$precondition" >> $GITHUB_OUTPUT
-          else
-            # This is usually set by scheduled jobs.
-            precondition='${{ inputs.jobs }}'
-            echo $precondition # For debugging
-            precondition="${precondition//$'\n'/}"
-            echo "required=$precondition" >> $GITHUB_OUTPUT
-          fi
+          # This is usually set by scheduled jobs.
+          precondition='${{ inputs.jobs }}'
+          echo $precondition # For debugging
+          precondition="${precondition//$'\n'/}"
+          echo "required=$precondition" >> $GITHUB_OUTPUT
+
       - name: Generate infra image URL
         id: infra-image-outputs
         run: |
@@ -178,12 +134,6 @@ jobs:
           fetch-depth: 0
           repository: apache/spark
           ref: ${{ inputs.branch }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Cache SBT and Maven
         uses: actions/cache@v4
         with:
