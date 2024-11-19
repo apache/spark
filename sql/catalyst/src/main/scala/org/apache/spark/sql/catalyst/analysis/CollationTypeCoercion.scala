@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayAppend, ArrayContains, ArrayExcept, ArrayIntersect, ArrayJoin, ArrayPosition, ArrayRemove, ArraysOverlap, ArrayUnion, AttributeReference, CaseWhen, Cast, Coalesce, Collate, Concat, ConcatWs, Contains, CreateArray, CreateMap, CreateNamedStruct, Elt, EndsWith, EqualNullSafe, EqualTo, Expression, ExtractValue, FindInSet, GetMapValue, GreaterThan, GreaterThanOrEqual, Greatest, If, In, InSubquery, Lag, Lead, Least, LessThan, LessThanOrEqual, Levenshtein, Literal, Mask, Overlay, RaiseError, RegExpReplace, SplitPart, StartsWith, StringInstr, StringLocate, StringReplace, StringSplitSQL, StringToMap, StringTranslate, StringTrim, StringTrimLeft, StringTrimRight, SubqueryExpression, SubstringIndex, ToNumber, TryToNumber, VariableReference}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
