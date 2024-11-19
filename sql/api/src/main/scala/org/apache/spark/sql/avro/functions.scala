@@ -119,9 +119,7 @@ object functions {
    * @since 4.0.0
    */
   @Experimental
-  def schema_of_avro(
-      jsonFormatSchema: String,
-      options: java.util.Map[String, String]): Column = {
+  def schema_of_avro(jsonFormatSchema: String, options: java.util.Map[String, String]): Column = {
     Column.fnWithOptions("schema_of_avro", options.asScala.iterator, lit(jsonFormatSchema))
   }
 }
