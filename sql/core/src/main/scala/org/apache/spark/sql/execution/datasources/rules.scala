@@ -46,6 +46,29 @@ import org.apache.spark.util.ArrayImplicits._
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  object UnresolvedRelationResolution {
+    def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
+      plan match {
+        case u: UnresolvedRelation if maybeSQLFile(u) =>
+          try {
+            val ds = resolveDataSource(u)
+            Some(LogicalRelation(ds.resolveRelation()))
+          } catch {
+            case _: ClassNotFoundException => None
+            case e: Exception if !e.isInstanceOf[AnalysisException] =>
+              // the provider is valid, but failed to create a logical plan
+              u.failAnalysis(
+                errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+                messageParameters = Map("dataSourceType" -> u.multipartIdentifier.head),
+                cause = e
+              )
+          }
+        case _ =>
+          None
+      }
+    }
+  }
+
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
@@ -87,21 +110,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       } catch {
         case _: ClassNotFoundException => r
       }
-
-    case u: UnresolvedRelation if maybeSQLFile(u) =>
-      try {
-        val ds = resolveDataSource(u)
-        LogicalRelation(ds.resolveRelation())
-      } catch {
-        case _: ClassNotFoundException => u
-        case e: Exception if !e.isInstanceOf[AnalysisException] =>
-          // the provider is valid, but failed to create a logical plan
-          u.failAnalysis(
-            errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-            messageParameters = Map("dataSourceType" -> u.multipartIdentifier.head),
-            cause = e
-          )
-      }
+    case UnresolvedRelationResolution(resolvedRelation) =>
+      resolvedRelation
   }
 }
 
