@@ -342,13 +342,17 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
         // filter should use column collation
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Row(1))
 
+        checkAnswer(
+          sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = substring('A', 0, 1)"),
+          Row(1))
+
         // literal with explicit collation wins
         checkAnswer(
           sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A' collate UNICODE_CI"),
           Row(2))
 
         // two implicit collations -> errors out
-        assertThrowsImplicitMismatch(sql(s"SELECT c1 = substring('A', 0, 1) FROM $testView"))
+        assertThrowsImplicitMismatch(sql(s"SELECT c1 = c2 FROM $testView"))
 
         sql(s"ALTER VIEW $testView AS SELECT c1 COLLATE UNICODE_CI AS c1, c2 FROM $testTable")
         assertTableColumnCollation(testView, "c1", "UNICODE_CI")
