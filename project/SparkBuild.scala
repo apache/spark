@@ -1190,6 +1190,8 @@ object Hive {
     // smaller size of Xss to mock a FAILED_TO_PARSE_TOO_COMPLEX error, so we need to set for
     // hive moudle specifically.
     (Test / javaOptions) := (Test / javaOptions).value.filterNot(_.contains("Xss")),
+    // SPARK-45265: The value for `-Xss` should be consistent with the configuration value for
+    // `scalatest-maven-plugin` in `sql/hive/pom.xml`
     (Test / javaOptions) += "-Xss64m",
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.

@@ -6078,10 +6078,11 @@ def dense_rank() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Window, types
-    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], "int")
     >>> w = Window.orderBy("value")
-    >>> df.withColumn("drank", dense_rank().over(w)).show()
+    >>> df.withColumn("drank", sf.dense_rank().over(w)).show()
     +-----+-----+
     |value|drank|
     +-----+-----+
@@ -6121,10 +6122,11 @@ def rank() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Window, types
-    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], "int")
     >>> w = Window.orderBy("value")
-    >>> df.withColumn("drank", rank().over(w)).show()
+    >>> df.withColumn("drank", sf.rank().over(w)).show()
     +-----+-----+
     |value|drank|
     +-----+-----+
@@ -6157,10 +6159,11 @@ def cume_dist() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Window, types
-    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], "int")
     >>> w = Window.orderBy("value")
-    >>> df.withColumn("cd", cume_dist().over(w)).show()
+    >>> df.withColumn("cd", sf.cume_dist().over(w)).show()
     +-----+---+
     |value| cd|
     +-----+---+
@@ -6191,10 +6194,11 @@ def percent_rank() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Window, types
-    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], "int")
     >>> w = Window.orderBy("value")
-    >>> df.withColumn("pr", percent_rank().over(w)).show()
+    >>> df.withColumn("pr", sf.percent_rank().over(w)).show()
     +-----+---+
     |value| pr|
     +-----+---+
@@ -6240,7 +6244,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The label of the column to count distinct values in.
     rsd : float, optional
         The maximum allowed relative standard deviation (default = 0.05).
@@ -6259,47 +6263,46 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     --------
     Example 1: Counting distinct values in a single column DataFrame representing integers
 
-    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "int")
-    >>> df.agg(approx_count_distinct("value").alias('distinct_values')).show()
-    +---------------+
-    |distinct_values|
-    +---------------+
-    |              3|
-    +---------------+
+    >>> df.agg(sf.approx_count_distinct("value")).show()
+    +----------------------------+
+    |approx_count_distinct(value)|
+    +----------------------------+
+    |                           3|
+    +----------------------------+
 
     Example 2: Counting distinct values in a single column DataFrame representing strings
 
-    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("apple",), ("orange",), ("apple",), ("banana",)], ['fruit'])
-    >>> df.agg(approx_count_distinct("fruit").alias('distinct_fruits')).show()
-    +---------------+
-    |distinct_fruits|
-    +---------------+
-    |              3|
-    +---------------+
+    >>> df.agg(sf.approx_count_distinct("fruit")).show()
+    +----------------------------+
+    |approx_count_distinct(fruit)|
+    +----------------------------+
+    |                           3|
+    +----------------------------+
 
     Example 3: Counting distinct values in a DataFrame with multiple columns
 
-    >>> from pyspark.sql.functions import approx_count_distinct, struct
-    >>> df = spark.createDataFrame([("Alice", 1),
-    ...                             ("Alice", 2),
-    ...                             ("Bob", 3),
-    ...                             ("Bob", 3)], ["name", "value"])
-    >>> df = df.withColumn("combined", struct("name", "value"))
-    >>> df.agg(approx_count_distinct("combined").alias('distinct_pairs')).show()
-    +--------------+
-    |distinct_pairs|
-    +--------------+
-    |             3|
-    +--------------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("Alice", 1), ("Alice", 2), ("Bob", 3), ("Bob", 3)], ["name", "value"])
+    >>> df = df.withColumn("combined", sf.struct("name", "value"))
+    >>> df.agg(sf.approx_count_distinct(df.combined)).show()
+    +-------------------------------+
+    |approx_count_distinct(combined)|
+    +-------------------------------+
+    |                              3|
+    +-------------------------------+
 
     Example 4: Counting distinct values with a specified relative standard deviation
 
-    >>> from pyspark.sql.functions import approx_count_distinct
-    >>> df = spark.range(100000)
-    >>> df.agg(approx_count_distinct("id").alias('with_default_rsd'),
-    ...        approx_count_distinct("id", 0.1).alias('with_rsd_0.1')).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(100000).agg(
+    ...     sf.approx_count_distinct("id").alias('with_default_rsd'),
+    ...     sf.approx_count_distinct("id", 0.1).alias('with_rsd_0.1')
+    ... ).show()
     +----------------+------------+
     |with_default_rsd|with_rsd_0.1|
     +----------------+------------+
@@ -6331,10 +6334,10 @@ def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], "int")
     >>> df_small = spark.range(3)
-    >>> df_b = broadcast(df_small)
+    >>> df_b = sf.broadcast(df_small)
     >>> df.join(df_b, df.value == df_small.id).show()
     +-----+---+
     |value| id|
@@ -6360,7 +6363,7 @@ def coalesce(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         list of columns to work on.
 
     Returns
@@ -6370,8 +6373,9 @@ def coalesce(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> cDf = spark.createDataFrame([(None, None), (1, None), (None, 2)], ("a", "b"))
-    >>> cDf.show()
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None, None), (1, None), (None, 2)], ("a", "b"))
+    >>> df.show()
     +----+----+
     |   a|   b|
     +----+----+
@@ -6380,16 +6384,16 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     |NULL|   2|
     +----+----+
 
-    >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
-    +--------------+
-    |coalesce(a, b)|
-    +--------------+
-    |          NULL|
-    |             1|
-    |             2|
-    +--------------+
+    >>> df.select('*', sf.coalesce("a", df["b"])).show()
+    +----+----+--------------+
+    |   a|   b|coalesce(a, b)|
+    +----+----+--------------+
+    |NULL|NULL|          NULL|
+    |   1|NULL|             1|
+    |NULL|   2|             2|
+    +----+----+--------------+
 
-    >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
+    >>> df.select('*', sf.coalesce(df["a"], lit(0.0))).show()
     +----+----+----------------+
     |   a|   b|coalesce(a, 0.0)|
     +----+----+----------------+
@@ -6413,9 +6417,9 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate correlation.
-    col2 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate correlation.
 
     Returns
@@ -6425,11 +6429,16 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
     >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(corr("a", "b").alias('c')).collect()
-    [Row(c=1.0)]
+    >>> df.agg(sf.corr("a", df.b)).show()
+    +----------+
+    |corr(a, b)|
+    +----------+
+    |       1.0|
+    +----------+
     """
     return _invoke_function_over_columns("corr", col1, col2)
 
@@ -6446,9 +6455,9 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate covariance.
-    col2 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate covariance.
 
     Returns
@@ -6456,13 +6465,22 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         covariance of these two column values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.covar_samp`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> a = [1] * 10
     >>> b = [1] * 10
     >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(covar_pop("a", "b").alias('c')).collect()
-    [Row(c=0.0)]
+    >>> df.agg(sf.covar_pop("a", df.b)).show()
+    +---------------+
+    |covar_pop(a, b)|
+    +---------------+
+    |            0.0|
+    +---------------+
     """
     return _invoke_function_over_columns("covar_pop", col1, col2)
 
@@ -6479,9 +6497,9 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate covariance.
-    col2 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate covariance.
 
     Returns
@@ -6489,13 +6507,22 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         sample covariance of these two column values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.covar_pop`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> a = [1] * 10
     >>> b = [1] * 10
     >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(covar_samp("a", "b").alias('c')).collect()
-    [Row(c=0.0)]
+    >>> df.agg(sf.covar_samp("a", df.b)).show()
+    +----------------+
+    |covar_samp(a, b)|
+    +----------------+
+    |             0.0|
+    +----------------+
     """
     return _invoke_function_over_columns("covar_samp", col1, col2)
 
@@ -6544,9 +6571,9 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         first column to compute on.
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         other columns to compute on.
 
     Returns
@@ -6616,7 +6643,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to fetch first value for.
     ignorenulls : bool
         if first value is null then look for first non-null value. ``False``` by default.
@@ -6628,9 +6655,10 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5), ("Alice", None)], ("name", "age"))
     >>> df = df.orderBy(df.age)
-    >>> df.groupby("name").agg(first("age")).orderBy("name").show()
+    >>> df.groupby("name").agg(sf.first("age")).orderBy("name").show()
     +-----+----------+
     | name|first(age)|
     +-----+----------+
@@ -6640,7 +6668,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     To ignore any null values, set ``ignorenulls`` to `True`
 
-    >>> df.groupby("name").agg(first("age", ignorenulls=True)).orderBy("name").show()
+    >>> df.groupby("name").agg(sf.first("age", ignorenulls=True)).orderBy("name").show()
     +-----+----------+
     | name|first(age)|
     +-----+----------+
@@ -6666,7 +6694,7 @@ def grouping(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to check if it's aggregated.
 
     Returns
@@ -6676,8 +6704,9 @@ def grouping(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.cube("name").agg(grouping("name"), sum("age")).orderBy("name").show()
+    >>> df.cube("name").agg(sf.grouping("name"), sf.sum("age")).orderBy("name").show()
     +-----+--------------+--------+
     | name|grouping(name)|sum(age)|
     +-----+--------------+--------+
@@ -6708,7 +6737,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         columns to check for.
 
     Returns
@@ -6718,10 +6747,10 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1, "a", "a"),
-    ...                             (3, "a", "a"),
-    ...                             (4, "b", "c")], ["c1", "c2", "c3"])
-    >>> df.cube("c2", "c3").agg(grouping_id(), sum("c1")).orderBy("c2", "c3").show()
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(1, "a", "a"), (3, "a", "a"), (4, "b", "c")], ["c1", "c2", "c3"])
+    >>> df.cube("c2", "c3").agg(sf.grouping_id(), sf.sum("c1")).orderBy("c2", "c3").show()
     +----+----+-------------+-------+
     |  c2|  c3|grouping_id()|sum(c1)|
     +----+----+-------------+-------+
@@ -6754,7 +6783,7 @@ def count_min_sketch(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
     eps : :class:`~pyspark.sql.Column` or float
         relative error, must be positive
@@ -6855,9 +6884,10 @@ def input_file_name() -> Column:
     Examples
     --------
     >>> import os
+    >>> from pyspark.sql import functions as sf
     >>> path = os.path.abspath(__file__)
     >>> df = spark.read.text(path)
-    >>> df.select(input_file_name()).first()
+    >>> df.select(sf.input_file_name()).first()
     Row(input_file_name()='file:///...')
     """
     return _invoke_function("input_file_name")
@@ -6874,7 +6904,7 @@ def isnan(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -6884,14 +6914,15 @@ def isnan(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
-    >>> df.select("a", "b", isnan("a").alias("r1"), isnan(df.b).alias("r2")).show()
-    +---+---+-----+-----+
-    |  a|  b|   r1|   r2|
-    +---+---+-----+-----+
-    |1.0|NaN|false| true|
-    |NaN|2.0| true|false|
-    +---+---+-----+-----+
+    >>> df.select("*", sf.isnan("a"), sf.isnan(df.b)).show()
+    +---+---+--------+--------+
+    |  a|  b|isnan(a)|isnan(b)|
+    +---+---+--------+--------+
+    |1.0|NaN|   false|    true|
+    |NaN|2.0|    true|   false|
+    +---+---+--------+--------+
     """
     return _invoke_function_over_columns("isnan", col)
 
@@ -6907,7 +6938,7 @@ def isnull(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -6917,14 +6948,15 @@ def isnull(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, None), (None, 2)], ("a", "b"))
-    >>> df.select("a", "b", isnull("a").alias("r1"), isnull(df.b).alias("r2")).show()
-    +----+----+-----+-----+
-    |   a|   b|   r1|   r2|
-    +----+----+-----+-----+
-    |   1|NULL|false| true|
-    |NULL|   2| true|false|
-    +----+----+-----+-----+
+    >>> df.select("*", sf.isnull("a"), isnull(df.b)).show()
+    +----+----+-----------+-----------+
+    |   a|   b|(a IS NULL)|(b IS NULL)|
+    +----+----+-----------+-----------+
+    |   1|NULL|      false|       true|
+    |NULL|   2|       true|      false|
+    +----+----+-----------+-----------+
     """
     return _invoke_function_over_columns("isnull", col)
 
@@ -6948,7 +6980,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to fetch last value for.
     ignorenulls : bool
         if last value is null then look for non-null value. ``False``` by default.
@@ -6960,9 +6992,10 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5), ("Alice", None)], ("name", "age"))
     >>> df = df.orderBy(df.age.desc())
-    >>> df.groupby("name").agg(last("age")).orderBy("name").show()
+    >>> df.groupby("name").agg(sf.last("age")).orderBy("name").show()
     +-----+---------+
     | name|last(age)|
     +-----+---------+
@@ -6972,7 +7005,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     To ignore any null values, set ``ignorenulls`` to `True`
 
-    >>> df.groupby("name").agg(last("age", ignorenulls=True)).orderBy("name").show()
+    >>> df.groupby("name").agg(sf.last("age", ignorenulls=True)).orderBy("name").show()
     +-----+---------+
     | name|last(age)|
     +-----+---------+
@@ -7015,21 +7048,24 @@ def monotonically_increasing_id() -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(0, 10, 1, 2).select(sf.monotonically_increasing_id()).show()
-    +-----------------------------+
-    |monotonically_increasing_id()|
-    +-----------------------------+
-    |                            0|
-    |                            1|
-    |                            2|
-    |                            3|
-    |                            4|
-    |                   8589934592|
-    |                   8589934593|
-    |                   8589934594|
-    |                   8589934595|
-    |                   8589934596|
-    +-----------------------------+
+    >>> spark.range(0, 10, 1, 2).select(
+    ...     "*",
+    ...     sf.spark_partition_id(),
+    ...     sf.monotonically_increasing_id()).show()
+    +---+--------------------+-----------------------------+
+    | id|SPARK_PARTITION_ID()|monotonically_increasing_id()|
+    +---+--------------------+-----------------------------+
+    |  0|                   0|                            0|
+    |  1|                   0|                            1|
+    |  2|                   0|                            2|
+    |  3|                   0|                            3|
+    |  4|                   0|                            4|
+    |  5|                   1|                   8589934592|
+    |  6|                   1|                   8589934593|
+    |  7|                   1|                   8589934594|
+    |  8|                   1|                   8589934595|
+    |  9|                   1|                   8589934596|
+    +---+--------------------+-----------------------------+
     """
     return _invoke_function("monotonically_increasing_id")
 
@@ -7047,9 +7083,9 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
         first column to check.
-    col2 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or column name
         second column to return if first is NaN.
 
     Returns
@@ -7059,9 +7095,15 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
-    >>> df.select(nanvl("a", "b").alias("r1"), nanvl(df.a, df.b).alias("r2")).collect()
-    [Row(r1=1.0, r2=1.0), Row(r1=2.0, r2=2.0)]
+    >>> df.select("*", sf.nanvl("a", "b"), sf.nanvl(df.a, df.b)).show()
+    +---+---+-----------+-----------+
+    |  a|  b|nanvl(a, b)|nanvl(a, b)|
+    +---+---+-----------+-----------+
+    |1.0|NaN|        1.0|        1.0|
+    |NaN|2.0|        2.0|        2.0|
+    +---+---+-----------+-----------+
     """
     return _invoke_function_over_columns("nanvl", col1, col2)
 
@@ -7079,7 +7121,7 @@ def percentile(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str input column.
+    col : :class:`~pyspark.sql.Column` or column name
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
     frequency : :class:`~pyspark.sql.Column` or int is a positive numeric literal which
@@ -7092,28 +7134,25 @@ def percentile(
 
     Examples
     --------
-    >>> key = (col("id") % 3).alias("key")
-    >>> value = (randn(42) + key * 10).alias("value")
+    >>> from pyspark.sql import functions as sf
+    >>> key = (sf.col("id") % 3).alias("key")
+    >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
-    >>> df.select(
-    ...     percentile("value", [0.25, 0.5, 0.75], lit(1)).alias("quantiles")
-    ... ).show()
-    +--------------------+
-    |           quantiles|
-    +--------------------+
-    |[0.74419914941216...|
-    +--------------------+
+    >>> df.select(sf.percentile("value", [0.25, 0.5, 0.75], sf.lit(1))).show(truncate=False)
+    +--------------------------------------------------------+
+    |percentile(value, array(0.25, 0.5, 0.75), 1)            |
+    +--------------------------------------------------------+
+    |[0.7441991494121..., 9.9900713756..., 19.33740203080...]|
+    +--------------------------------------------------------+
 
-    >>> df.groupBy("key").agg(
-    ...     percentile("value", 0.5, lit(1)).alias("median")
-    ... ).show()
-    +---+--------------------+
-    |key|              median|
-    +---+--------------------+
-    |  0|-0.03449962216667901|
-    |  1|   9.990389751837329|
-    |  2|  19.967859769284075|
-    +---+--------------------+
+    >>> df.groupBy("key").agg(sf.percentile("value", sf.lit(0.5), sf.lit(1))).show()
+    +---+-------------------------+
+    |key|percentile(value, 0.5, 1)|
+    +---+-------------------------+
+    |  0|     -0.03449962216667901|
+    |  1|        9.990389751837329|
+    |  2|       19.967859769284075|
+    +---+-------------------------+
     """
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("percentile", col, percentage, lit(frequency))
@@ -7137,7 +7176,7 @@ def percentile_approx(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column.
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
@@ -7156,22 +7195,25 @@ def percentile_approx(
 
     Examples
     --------
-    >>> key = (col("id") % 3).alias("key")
-    >>> value = (randn(42) + key * 10).alias("value")
+    >>> from pyspark.sql import functions as sf
+    >>> key = (sf.col("id") % 3).alias("key")
+    >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
-    >>> df.select(
-    ...     percentile_approx("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles")
-    ... ).printSchema()
-    root
-     |-- quantiles: array (nullable = true)
-     |    |-- element: double (containsNull = false)
+    >>> df.select(sf.percentile_approx("value", [0.25, 0.5, 0.75], 1000000)).show(truncate=False)
+    +----------------------------------------------------------+
+    |percentile_approx(value, array(0.25, 0.5, 0.75), 1000000) |
+    +----------------------------------------------------------+
+    |[0.7264430125286..., 9.98975299938..., 19.335304783039...]|
+    +----------------------------------------------------------+
 
-    >>> df.groupBy("key").agg(
-    ...     percentile_approx("value", 0.5, lit(1000000)).alias("median")
-    ... ).printSchema()
-    root
-     |-- key: long (nullable = true)
-     |-- median: double (nullable = true)
+    >>> df.groupBy("key").agg(sf.percentile_approx("value", sf.lit(0.5), sf.lit(1000000))).show()
+    +---+--------------------------------------+
+    |key|percentile_approx(value, 0.5, 1000000)|
+    +---+--------------------------------------+
+    |  0|                  -0.03519435193070...|
+    |  1|                     9.990389751837...|
+    |  2|                    19.967859769284...|
+    +---+--------------------------------------+
     """
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
@@ -7191,7 +7233,7 @@ def approx_percentile(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column.
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
@@ -7210,23 +7252,25 @@ def approx_percentile(
 
     Examples
     --------
-    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import functions as sf
     >>> key = (sf.col("id") % 3).alias("key")
     >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
-    >>> df.select(
-    ...     sf.approx_percentile("value", [0.25, 0.5, 0.75], 1000000)
-    ... ).printSchema()
-    root
-     |-- approx_percentile(value, array(0.25, 0.5, 0.75), 1000000): array (nullable = true)
-     |    |-- element: double (containsNull = false)
+    >>> df.select(sf.approx_percentile("value", [0.25, 0.5, 0.75], 1000000)).show(truncate=False)
+    +----------------------------------------------------------+
+    |approx_percentile(value, array(0.25, 0.5, 0.75), 1000000) |
+    +----------------------------------------------------------+
+    |[0.7264430125286507, 9.98975299938167, 19.335304783039014]|
+    +----------------------------------------------------------+
 
-    >>> df.groupBy("key").agg(
-    ...     sf.approx_percentile("value", 0.5, sf.lit(1000000))
-    ... ).printSchema()
-    root
-     |-- key: long (nullable = true)
-     |-- approx_percentile(value, 0.5, 1000000): double (nullable = true)
+    >>> df.groupBy("key").agg(sf.approx_percentile("value", sf.lit(0.5), sf.lit(1000000))).show()
+    +---+--------------------------------------+
+    |key|approx_percentile(value, 0.5, 1000000)|
+    +---+--------------------------------------+
+    |  0|                  -0.03519435193070876|
+    |  1|                     9.990389751837329|
+    |  2|                    19.967859769284075|
+    +---+--------------------------------------+
     """
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))
@@ -7261,22 +7305,22 @@ def rand(seed: Optional[int] = None) -> Column:
     Example 1: Generate a random column without a seed
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand()).show() # doctest: +SKIP
-    +---+-------------------+
-    | id|               rand|
-    +---+-------------------+
-    |  0|0.14879325244215424|
-    |  1| 0.4640631044275454|
-    +---+-------------------+
+    >>> spark.range(0, 2, 1, 1).select("*", sf.rand()).show() # doctest: +SKIP
+    +---+-------------------------+
+    | id|rand(-158884697681280011)|
+    +---+-------------------------+
+    |  0|       0.9253464547887...|
+    |  1|       0.6533254118758...|
+    +---+-------------------------+
 
     Example 2: Generate a random column with a specific seed
 
-    >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand(seed=42) * 3).show()
+    >>> spark.range(0, 2, 1, 1).select("*", sf.rand(seed=42)).show()
     +---+------------------+
-    | id|              rand|
+    | id|          rand(42)|
     +---+------------------+
-    |  0|1.8575681106759028|
-    |  1|1.5288056527339444|
+    |  0| 0.619189370225...|
+    |  1|0.5096018842446...|
     +---+------------------+
     """
     if seed is not None:
@@ -7314,22 +7358,22 @@ def randn(seed: Optional[int] = None) -> Column:
     Example 1: Generate a random column without a seed
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn()).show() # doctest: +SKIP
-    +---+--------------------+
-    | id|               randn|
-    +---+--------------------+
-    |  0|-0.45011372342934214|
-    |  1|  0.6567304165329736|
-    +---+--------------------+
+    >>> spark.range(0, 2, 1, 1).select("*", sf.randn()).show() # doctest: +SKIP
+    +---+--------------------------+
+    | id|randn(3968742514375399317)|
+    +---+--------------------------+
+    |  0|      -0.47968645355788...|
+    |  1|       -0.4950952457305...|
+    +---+--------------------------+
 
     Example 2: Generate a random column with a specific seed
 
-    >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn(seed=42)).show()
+    >>> spark.range(0, 2, 1, 1).select("*", sf.randn(seed=42)).show()
     +---+------------------+
-    | id|             randn|
+    | id|         randn(42)|
     +---+------------------+
-    |  0| 2.384479054241165|
-    |  1|0.1920934041293524|
+    |  0| 2.384479054241...|
+    |  1|0.1920934041293...|
     +---+------------------+
     """
     if seed is not None:
@@ -7351,7 +7395,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the round on.
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
@@ -7407,7 +7451,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the round on.
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
@@ -7477,7 +7521,7 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
     numBits : int
         number of bits to shift.
@@ -7489,8 +7533,16 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([(21,)], ['a']).select(shiftleft('a', 1).alias('r')).collect()
-    [Row(r=42)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select("*", sf.shiftleft('id', 1)).show()
+    +---+----------------+
+    | id|shiftleft(id, 1)|
+    +---+----------------+
+    |  0|               0|
+    |  1|               2|
+    |  2|               4|
+    |  3|               6|
+    +---+----------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -7524,7 +7576,7 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
     numBits : int
         number of bits to shift.
@@ -7536,8 +7588,16 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([(42,)], ['a']).select(shiftright('a', 1).alias('r')).collect()
-    [Row(r=21)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select("*", sf.shiftright('id', 1)).show()
+    +---+-----------------+
+    | id|shiftright(id, 1)|
+    +---+-----------------+
+    |  0|                0|
+    |  1|                0|
+    |  2|                1|
+    |  3|                1|
+    +---+-----------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -7571,7 +7631,7 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
     numBits : int
         number of bits to shift.
@@ -7583,9 +7643,16 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(-42,)], ['a'])
-    >>> df.select(shiftrightunsigned('a', 1).alias('r')).collect()
-    [Row(r=9223372036854775787)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select("*", sf.shiftrightunsigned(sf.col('id') - 2, 1)).show()
+    +---+-------------------------------+
+    | id|shiftrightunsigned((id - 2), 1)|
+    +---+-------------------------------+
+    |  0|            9223372036854775807|
+    |  1|            9223372036854775807|
+    |  2|                              0|
+    |  3|                              0|
+    +---+-------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -7612,9 +7679,22 @@ def spark_partition_id() -> Column:
 
     Examples
     --------
-    >>> df = spark.range(2)
-    >>> df.repartition(1).select(spark_partition_id().alias("pid")).collect()
-    [Row(pid=0), Row(pid=0)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(10, numPartitions=5).select("*", sf.spark_partition_id()).show()
+    +---+--------------------+
+    | id|SPARK_PARTITION_ID()|
+    +---+--------------------+
+    |  0|                   0|
+    |  1|                   0|
+    |  2|                   1|
+    |  3|                   1|
+    |  4|                   2|
+    |  5|                   2|
+    |  6|                   3|
+    |  7|                   3|
+    |  8|                   4|
+    |  9|                   4|
+    +---+--------------------+
     """
     return _invoke_function("spark_partition_id")
 
@@ -7630,7 +7710,7 @@ def expr(str: str) -> Column:
 
     Parameters
     ----------
-    str : str
+    str : expression string
         expression defined in string.
 
     Returns
@@ -7640,8 +7720,9 @@ def expr(str: str) -> Column:
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([["Alice"], ["Bob"]], ["name"])
-    >>> df.select("name", expr("length(name)")).show()
+    >>> df.select("*", sf.expr("length(name)")).show()
     +-----+------------+
     | name|length(name)|
     +-----+------------+
@@ -8557,7 +8638,7 @@ def count_if(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
+def histogram_numeric(col: "ColumnOrName", nBins: Column) -> Column:
     """Computes a histogram on numeric 'col' using nb bins.
     The return value is an array of (x,y) pairs representing the centers of the
     histogram's bins. As the value of 'nb' is increased, the histogram approximation
@@ -8573,9 +8654,9 @@ def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
-    nBins : :class:`~pyspark.sql.Column` or str
+    nBins : :class:`~pyspark.sql.Column`
         number of Histogram columns.
 
     Returns
@@ -8585,17 +8666,14 @@ def histogram_numeric(col: "ColumnOrName", nBins: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.select(histogram_numeric('c2', lit(5))).show()
-    +------------------------+
-    |histogram_numeric(c2, 5)|
-    +------------------------+
-    |    [{1, 1.0}, {2, 1....|
-    +------------------------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.range(100, numPartitions=1)
+    >>> df.select(sf.histogram_numeric('id', sf.lit(5))).show(truncate=False)
+    +-----------------------------------------------------------+
+    |histogram_numeric(id, 5)                                   |
+    +-----------------------------------------------------------+
+    |[{11, 25.0}, {36, 24.0}, {59, 23.0}, {84, 25.0}, {98, 3.0}]|
+    +-----------------------------------------------------------+
     """
     return _invoke_function_over_columns("histogram_numeric", col, nBins)
 
