@@ -760,10 +760,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
     val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
-    val lineage: Array[(Long, String)] = Array(
-      (1, java.util.UUID.randomUUID.toString),
-      (2, java.util.UUID.randomUUID.toString),
-      (3, java.util.UUID.randomUUID.toString)
+    val lineage: Array[LineageItem] = Array(
+      LineageItem(1, java.util.UUID.randomUUID.toString),
+      LineageItem(2, java.util.UUID.randomUUID.toString),
+      LineageItem(3, java.util.UUID.randomUUID.toString)
     )
     val changelogWriter = fileManager.getChangeLogWriter(3, false, checkpointUniqueId)
     changelogWriter.writeLineage(lineage)

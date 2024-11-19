@@ -198,22 +198,15 @@ class RocksDBFileManager(
     // for the correctness of the decided/expected version. We might revisit this pattern
     // as we add more changelog versions in the future.
     val changelogVersion = getChangelogVersion(useColumnFamilies)
+    val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
     val changelogReader = changelogVersion match {
       case 1 =>
-        new StateStoreChangelogReaderV1(fm, changelogFile, codec)
+        new StateStoreChangelogReaderV1(fm, changelogFile, codec, enableStateStoreCheckpointIds)
       case 2 =>
-        new StateStoreChangelogReaderV2(fm, changelogFile, codec)
+        new StateStoreChangelogReaderV2(fm, changelogFile, codec, enableStateStoreCheckpointIds)
       case _ =>
         throw QueryExecutionErrors.invalidChangeLogReaderVersion(changelogVersion)
     }
-
-    // If the changelogFile is written under checkpoint v2 (checkpointUniqueId.isDefined)
-    // the first line would be the lineage. We should update the file position by
-    // reading from the lineage during the reader initialization.
-    if (checkpointUniqueId.isDefined) {
-      changelogReader.lineage
-    }
-
     changelogReader
   }
 

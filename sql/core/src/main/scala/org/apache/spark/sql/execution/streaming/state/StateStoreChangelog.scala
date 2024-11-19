@@ -81,6 +81,14 @@ object RecordType extends Enumeration {
 }
 
 /**
+ * Class for lineage item for checkpoint format V2.
+ */
+case class LineageItem(
+    version: Long,
+    checkpointUniqueId: String
+)
+
+/**
  * Base class for state store changelog writer
  * @param fm - checkpoint file manager used to manage streaming query checkpoint
  * @param file - name of file to use to write changelog
@@ -106,7 +114,7 @@ abstract class StateStoreChangelogWriter(
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
 
-  def writeLineage(lineage: Array[(Long, String)]): Unit = {
+  def writeLineage(lineage: Array[LineageItem]): Unit = {
     val lineageStr = Serialization.write(lineage)
     compressedStream.writeUTF(lineageStr)
   }
@@ -273,7 +281,8 @@ class StateStoreChangelogWriterV2(
 abstract class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
   extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])] with Logging {
 
   implicit val formats: Formats = DefaultFormats
@@ -291,12 +300,19 @@ abstract class StateStoreChangelogReader(
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
-  private def readLineage(): Array[(Long, String)] = {
+  private def readLineage(): Array[LineageItem] = {
     val lineageStr = input.readUTF()
-    Serialization.read[Array[(Long, String)]](lineageStr)
+    Serialization.read[Array[LineageItem]](lineageStr)
   }
 
-  lazy val lineage: Array[(Long, String)] = readLineage()
+  lazy val lineage: Array[LineageItem] = readLineage()
+
+  // If the changelogFile is written under checkpoint v2 (checkpointUniqueId.isDefined)
+  // the first line would be the lineage. We should update the file position by
+  // reading from the lineage during the reader initialization.
+  if (enableStateStoreCheckpointIds) {
+    lineage
+  }
 
   def version: Short
 
@@ -315,8 +331,10 @@ abstract class StateStoreChangelogReader(
 class StateStoreChangelogReaderV1(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
+  extends StateStoreChangelogReader(
+    fm, fileToRead, compressionCodec, enableStateStoreCheckpointIds) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
@@ -358,8 +376,10 @@ class StateStoreChangelogReaderV1(
 class StateStoreChangelogReaderV2(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
+  extends StateStoreChangelogReader(
+    fm, fileToRead, compressionCodec, enableStateStoreCheckpointIds) {
 
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
