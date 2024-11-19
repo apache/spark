@@ -128,18 +128,14 @@ class FunctionResolution(
       numArgs: Int,
       u: UnresolvedFunction): Expression = {
     func match {
-      case owg: SupportsOrderingWithinGroup if u.isDistinct =>
-        throw QueryCompilationErrors.distinctInverseDistributionFunctionUnsupportedError(
-          owg.prettyName
-        )
+      case owg: SupportsOrderingWithinGroup if !owg.isDistinctSupported && u.isDistinct =>
+        throw QueryCompilationErrors.distinctWithOrderingFunctionUnsupportedError(owg.prettyName)
       case owg: SupportsOrderingWithinGroup
-          if !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
-        throw QueryCompilationErrors.inverseDistributionFunctionMissingWithinGroupError(
-          owg.prettyName
-        )
-      case owg: SupportsOrderingWithinGroup
-          if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
-        throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+          if owg.isOrderingMandatory && !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
+        throw QueryCompilationErrors.functionMissingWithinGroupError(owg.prettyName)
+      case owg: Mode if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
+        // mode(expr1) within group (order by expr2) is not supported
+        throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
           owg.prettyName,
           0,
           u.orderingWithinGroup.length
@@ -149,6 +145,10 @@ class FunctionResolution(
           func.prettyName,
           "WITHIN GROUP (ORDER BY ...)"
         )
+      case listAgg: ListAgg
+        if u.isDistinct && !listAgg.isOrderCompatible(u.orderingWithinGroup) =>
+        throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+          listAgg.prettyName, listAgg.child, u.orderingWithinGroup)
       // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
       // the context of a Window clause. They do not need to be wrapped in an
       // AggregateExpression.
@@ -198,7 +198,7 @@ class FunctionResolution(
       case agg: AggregateFunction =>
         // Note: PythonUDAF does not support these advanced clauses.
         if (agg.isInstanceOf[PythonUDAF]) checkUnsupportedAggregateClause(agg, u)
-        // After parse, the inverse distribution functions not set the ordering within group yet.
+        // After parse, the functions not set the ordering within group yet.
         val newAgg = agg match {
           case owg: SupportsOrderingWithinGroup
               if !owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
