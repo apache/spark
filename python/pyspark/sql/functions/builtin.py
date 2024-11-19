@@ -7963,8 +7963,8 @@ def when(condition: Column, value: Any) -> Column:
 
     See Also
     --------
-    :func:`pyspark.sql.Column.when`
-    :func:`pyspark.sql.Column.otherwise`
+    :meth:`pyspark.sql.Column.when`
+    :meth:`pyspark.sql.Column.otherwise`
 
     Examples
     --------
