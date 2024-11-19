@@ -29,7 +29,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
 
   // Tests setup
-  private var originalSqlScriptingConfVal: String = null
+  private var originalSqlScriptingConfVal: String = _
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()

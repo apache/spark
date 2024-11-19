@@ -34,7 +34,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
 
   // Tests setup
-  private var originalSqlScriptingConfVal: String = null
+  private var originalSqlScriptingConfVal: String = _
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
