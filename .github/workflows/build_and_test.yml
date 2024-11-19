@@ -48,7 +48,7 @@ on:
           in this file, e.g., build. See precondition job below.
         required: false
         type: string
-        default: ""
+        default: "{'tpcds-1g':'true'}"
 jobs:
   precondition:
     name: Check changes
@@ -63,19 +63,13 @@ jobs:
       image_lint_url: ${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}
       image_lint_url_link: ${{ steps.infra-image-link.outputs.image_lint_url_link }}
     steps:
+      # 1.这里指定拉去apache/spark仓库的指定分支代码
       - name: Checkout Spark repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           repository: apache/spark
           ref: ${{ inputs.branch }}
-      - name: Sync the current branch with the latest in Apache Spark
-        if: github.repository != 'apache/spark'
-        run: |
-          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
-          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
       - name: Check all modules
         id: set-outputs
         run: |
