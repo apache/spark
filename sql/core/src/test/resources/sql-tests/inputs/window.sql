@@ -478,3 +478,5 @@ SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY va
 SELECT * FROM (SELECT cate, val, dense_rank() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2;
 SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r = 1;
 SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY val) as r FROM testData) where r <= 2;
+
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_daterange INTERVAL '5' days PRECEDING) AS mean FROM testData;

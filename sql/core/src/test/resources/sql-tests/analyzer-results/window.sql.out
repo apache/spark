@@ -376,23 +376,17 @@ SELECT val_date, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_da
 RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
 ORDER BY cate, val_date
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "orderSpecType" : "\"DATE\"",
-    "sqlExpr" : "\"(PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)\"",
-    "valueBoundaryType" : "\"INTERVAL DAY TO SECOND\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 47,
-    "stopIndex" : 160,
-    "fragment" : "(PARTITION BY cate ORDER BY val_date\nRANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING)"
-  } ]
-}
+Sort [cate#x ASC NULLS FIRST, val_date#x ASC NULLS FIRST], true
++- Project [val_date#x, cate#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x]
+   +- Project [val_date#x, cate#x, _w0#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x, avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x]
+      +- Window [avg(_w0#x) windowspecdefinition(cate#x, val_date#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, currentrow$(), INTERVAL '1 02:03:04.001' DAY TO SECOND)) AS avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '1 02:03:04.001' DAY TO SECOND FOLLOWING)#x], [cate#x], [val_date#x ASC NULLS FIRST]
+         +- Project [val_date#x, cate#x, cast(val_timestamp#x as double) AS _w0#x]
+            +- SubqueryAlias testdata
+               +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                     +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                        +- SubqueryAlias testData
+                           +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
 
 
 -- !query
@@ -1414,3 +1408,17 @@ Project [cate#x, val#x, r#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_daterange INTERVAL '5' days PRECEDING) AS mean FROM testData
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'INTERVAL'",
+    "hint" : ""
+  }
+}
