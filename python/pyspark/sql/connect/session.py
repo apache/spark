@@ -509,6 +509,34 @@ class SparkSession:
         _table: Optional[pa.Table] = None
         timezone: Optional[str] = None
 
+        if isinstance(data, np.ndarray):
+            if _cols is None:
+                if data.ndim == 1 or data.shape[1] == 1:
+                    _cols = ["value"]
+                else:
+                    _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
+
+            if data.ndim == 1:
+                if 1 != len(_cols):
+                    raise PySparkValueError(
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
+                            "expected_length": str(len(_cols)),
+                            "actual_length": "1",
+                        },
+                    )
+            else:
+                if data.shape[1] != len(_cols):
+                    raise PySparkValueError(
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
+                            "expected_length": str(len(_cols)),
+                            "actual_length": str(data.shape[1]),
+                        },
+                    )
+
+            data = pd.DataFrame(data, columns=_cols)
+
         if isinstance(data, pd.DataFrame):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
             # `pyspark.sql.pandas.conversion.py`. Should ideally deduplicate the logics.
@@ -623,47 +651,6 @@ class SparkSession:
                 )
                 .rename_columns(schema.names)
             )
-
-        elif isinstance(data, np.ndarray):
-            if _cols is None:
-                if data.ndim == 1 or data.shape[1] == 1:
-                    _cols = ["value"]
-                else:
-                    _cols = ["_%s" % i for i in range(1, data.shape[1] + 1)]
-
-            if data.ndim == 1:
-                if 1 != len(_cols):
-                    raise PySparkValueError(
-                        errorClass="AXIS_LENGTH_MISMATCH",
-                        messageParameters={
-                            "expected_length": str(len(_cols)),
-                            "actual_length": "1",
-                        },
-                    )
-
-                _table = pa.Table.from_arrays([pa.array(data)], _cols)
-            else:
-                if data.shape[1] != len(_cols):
-                    raise PySparkValueError(
-                        errorClass="AXIS_LENGTH_MISMATCH",
-                        messageParameters={
-                            "expected_length": str(len(_cols)),
-                            "actual_length": str(data.shape[1]),
-                        },
-                    )
-
-                _table = pa.Table.from_arrays(
-                    [pa.array(data[::, i]) for i in range(0, data.shape[1])], _cols
-                )
-
-            # The _table should already have the proper column names.
-            _cols = None
-
-            if verifySchema is not _NoValue:
-                warnings.warn(
-                    "'verifySchema' is ignored. It is not supported"
-                    " with np.ndarray input on Spark Connect."
-                )
 
         else:
             _data = list(data)
