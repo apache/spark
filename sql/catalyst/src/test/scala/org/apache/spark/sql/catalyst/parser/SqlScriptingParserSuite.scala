@@ -1961,7 +1961,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStmt.label.contains("lbl"))
   }
 
-  test("for statement no label") {
+  test("for statement - no label") {
     val sqlScriptText =
       """
         |BEGIN
@@ -1987,7 +1987,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStmt.label.isDefined)
   }
 
-  test("for statement with complex subquery") {
+  test("for statement - with complex subquery") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2015,7 +2015,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStmt.label.contains("lbl"))
   }
 
-  test("nested for statement") {
+  test("for statement - nested") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2052,7 +2052,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       head.asInstanceOf[SingleStatement].getText == "SELECT i + j")
   }
 
-  test("for statement no variable") {
+  test("for statement - no variable") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2077,7 +2077,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStmt.label.contains("lbl"))
   }
 
-  test("for statement no label no variable") {
+  test("for statement - no variable - no label") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2103,7 +2103,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStmt.label.isDefined)
   }
 
-  test("for statement with complex subquery no variable") {
+  test("for statement - no variable - with complex subquery") {
     val sqlScriptText =
       """
         |BEGIN
@@ -2131,7 +2131,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStmt.label.contains("lbl"))
   }
 
-  test("nested for statement no variable") {
+  test("for statement - no variable - nested") {
     val sqlScriptText =
       """
         |BEGIN

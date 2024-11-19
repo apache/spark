@@ -93,7 +93,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       statement: LeafStatementExec): Boolean = evaluator.evaluateLoopBooleanCondition()
   }
 
-  case class TestForStatementQuery(numberOfRows: Int, columnName: String, description: String)
+  case class MockQuery(numberOfRows: Int, columnName: String, description: String)
       extends SingleStatementExec(
         DummyLogicalPlan(),
         Origin(startIndex = Some(0), stopIndex = Some(description.length)),
@@ -709,7 +709,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement - enters body once") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(1, "intCol", "query1"),
+        query = MockQuery(1, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(TestLeafStatement("body"))),
         label = Some("for1"),
@@ -727,7 +727,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement - enters body with multiple statements multiple times") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
@@ -750,7 +750,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement - empty result") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(0, "intCol", "query1"),
+        query = MockQuery(0, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
         label = Some("for1"),
@@ -764,11 +764,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement - nested") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(
           new ForStatementExec(
-            query = TestForStatementQuery(2, "intCol1", "query2"),
+            query = MockQuery(2, "intCol1", "query2"),
             variableName = Some("y"),
             body = new CompoundBodyExec(Seq(TestLeafStatement("body"))),
             label = Some("for2"),
@@ -797,7 +797,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement no variable - enters body once") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(1, "intCol", "query1"),
+        query = MockQuery(1, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(TestLeafStatement("body"))),
         label = Some("for1"),
@@ -814,7 +814,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement no variable - enters body with multiple statements multiple times") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
@@ -833,7 +833,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement no variable - empty result") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(0, "intCol", "query1"),
+        query = MockQuery(0, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
         label = Some("for1"),
@@ -847,11 +847,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement no variable - nested") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(
           new ForStatementExec(
-            query = TestForStatementQuery(2, "intCol1", "query2"),
+            query = MockQuery(2, "intCol1", "query2"),
             variableName = None,
             body = new CompoundBodyExec(Seq(TestLeafStatement("body"))),
             label = Some("for2"),
@@ -875,7 +875,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement - iterate") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
@@ -899,7 +899,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement - leave") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
@@ -919,12 +919,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement - nested - iterate outer loop") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("outer_body"),
           new ForStatementExec(
-            query = TestForStatementQuery(2, "intCol1", "query2"),
+            query = MockQuery(2, "intCol1", "query2"),
             variableName = Some("y"),
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),
@@ -954,11 +954,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement - nested - leave outer loop") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         body = new CompoundBodyExec(Seq(
           new ForStatementExec(
-            query = TestForStatementQuery(2, "intCol", "query2"),
+            query = MockQuery(2, "intCol", "query2"),
             variableName = Some("y"),
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),
@@ -982,7 +982,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement no variable - iterate") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
@@ -1002,7 +1002,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement no variable - leave") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
@@ -1019,12 +1019,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement no variable - nested - iterate outer loop") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("outer_body"),
           new ForStatementExec(
-            query = TestForStatementQuery(2, "intCol1", "query2"),
+            query = MockQuery(2, "intCol1", "query2"),
             variableName = None,
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),
@@ -1048,11 +1048,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   test("for statement no variable - nested - leave outer loop") {
     val iter = new CompoundBodyExec(Seq(
       new ForStatementExec(
-        query = TestForStatementQuery(2, "intCol", "query1"),
+        query = MockQuery(2, "intCol", "query1"),
         variableName = None,
         body = new CompoundBodyExec(Seq(
           new ForStatementExec(
-            query = TestForStatementQuery(2, "intCol1", "query2"),
+            query = MockQuery(2, "intCol1", "query2"),
             variableName = None,
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),

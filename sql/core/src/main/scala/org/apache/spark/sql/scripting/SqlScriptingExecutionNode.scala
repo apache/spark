@@ -125,8 +125,8 @@ class SingleStatementExec(
   var isExecuted = false
 
   /**
-   * Builds a DataFrame from the parsedPlan of this SingleStatementExec
-   * @param session The SparkSession on which the parsedPlan is built
+   * Builds a DataFrame from the parsedPlan of this SingleStatementExec.
+   * @param session The SparkSession used.
    * @return
    *   The DataFrame.
    */
@@ -676,7 +676,7 @@ class ForStatementExec(
   // (variableName -> variableExpression)
   private var variablesMap: Map[String, Expression] = Map()
 
-  // compound body used for dropping variables
+  // compound body used for dropping variables while in ForState.VariableAssignment
   private var dropVariablesExec: CompoundBodyExec = null
 
   private var queryResult: Array[Row] = null
@@ -690,22 +690,23 @@ class ForStatementExec(
   }
 
   /**
-   * Loop can be interrupted by LeaveStatementExec
+   * For can be interrupted by LeaveStatementExec
    */
   private var interrupted: Boolean = false
 
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
+
       override def hasNext: Boolean = {
         val resultSize = cachedQueryResult().length
-        state == ForState.VariableCleanup ||
+        (state == ForState.VariableCleanup && dropVariablesExec.getTreeIterator.hasNext) ||
           (!interrupted && resultSize > 0 && currRow < resultSize)
       }
 
       override def next(): CompoundStatementExec = state match {
 
         case ForState.VariableAssignment =>
-          variablesMap = createVariablesMapFromRow(currRow)
+          variablesMap = createVariablesMapFromRow(cachedQueryResult()(currRow))
 
           if (!areVariablesDeclared) {
             // create and execute declare var statements
@@ -714,9 +715,12 @@ class ForStatementExec(
               .foreach(declareVarExec => declareVarExec.buildDataFrame(session).collect())
             areVariablesDeclared = true
           }
+
+          // create and execute set var statements
           variablesMap.keys.toSeq
             .map(colName => createSetVarExec(colName, variablesMap(colName)))
             .foreach(setVarExec => setVarExec.buildDataFrame(session).collect())
+
           state = ForState.Body
           body.reset()
           next()
@@ -758,17 +762,12 @@ class ForStatementExec(
           retStmt
 
         case ForState.VariableCleanup =>
-          val ret = dropVariablesExec.getTreeIterator.next()
-          if (!dropVariablesExec.getTreeIterator.hasNext) {
-            // stops execution, as at this point currRow == resultSize
-            state = ForState.VariableAssignment
-          }
-          ret
+          dropVariablesExec.getTreeIterator.next()
       }
     }
 
   /**
-   * Creates a Catalyst expression from Scala value.<br>
+   * Recursively creates a Catalyst expression from Scala value.<br>
    * See https://spark.apache.org/docs/latest/sql-ref-datatypes.html for Spark -> Scala mappings
    */
   private def createExpressionFromValue(value: Any): Expression = value match {
@@ -779,7 +778,7 @@ class ForStatementExec(
       }
       CreateMap(mapArgs, useStringTypeWhenEmpty = false)
 
-    // structs match this case
+    // structs and rows match this case
     case s: Row =>
     // arguments of CreateNamedStruct are in the format: (name1, val1, name2, val2, ...)
     val namedStructArgs = s.schema.names.toSeq.flatMap { colName =>
@@ -795,8 +794,7 @@ class ForStatementExec(
     case _ => Literal(value)
   }
 
-  private def createVariablesMapFromRow(rowIndex: Int): Map[String, Expression] = {
-    val row = cachedQueryResult()(rowIndex)
+  private def createVariablesMapFromRow(row: Row): Map[String, Expression] = {
     var variablesMap = row.schema.names.toSeq.map { colName =>
       colName -> createExpressionFromValue(row.getAs(colName))
     }.toMap
@@ -811,6 +809,9 @@ class ForStatementExec(
     variablesMap
   }
 
+  /**
+   * Create and immediately execute dropVariable exec nodes for all variables in variablesMap.
+   */
   private def dropVars(): Unit = {
     variablesMap.keys.toSeq
       .map(colName => createDropVarExec(colName))
@@ -822,6 +823,7 @@ class ForStatementExec(
     currRow += 1
     state = if (currRow < cachedQueryResult().length) ForState.VariableAssignment
     else {
+      // create compound body for dropping nodes after execution is complete
       dropVariablesExec = new CompoundBodyExec(
         variablesMap.keys.toSeq.map(colName => createDropVarExec(colName))
       )
