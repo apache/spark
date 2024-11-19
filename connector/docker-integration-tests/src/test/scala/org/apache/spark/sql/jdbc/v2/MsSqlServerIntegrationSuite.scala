@@ -177,6 +177,12 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |)
           |SELECT * FROM dummy_new limit 1""".stripMargin
     )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT TOP (1) "name" FROM "employee"  WHERE (CASE WHEN ((LOWER("name") = 'legolas') OR (LOWER("name") = 'elrond')) THEN 0 ELSE IIF((CASE WHEN ((LOWER("name") = 'gimli') OR (LOWER("name") = 'thorin')) THEN 0 ELSE IIF((CASE WHEN ((LOWER("name") = 'gandalf') OR (LOWER("name") = 'radagast')) THEN 1 ELSE IIF((LOWER("name") = 'Wizard'), 1, 0) END = 1), 1, 0) END = 1), 1, 0) END = 1)  """
+    )
+    // scalastyle:on
     df.collect()
   }
 
@@ -186,6 +192,12 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |WHERE CASE WHEN name = 'Legolas' THEN name = 'Elf' ELSE NOT (name = 'Wizard') END
           |""".stripMargin
     )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE IIF(("name" <> 'Wizard'), 1, 0) END = 1)  """
+    )
+    // scalastyle:on
     df.collect()
   }
 
@@ -195,6 +207,12 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           |WHERE CASE WHEN (name = 'Legolas') THEN (name = 'Elf') ELSE (1=1) END
           |""".stripMargin
     )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF(("name" = 'Elf'), 1, 0) ELSE 1 END = 1)  """
+    )
+    // scalastyle:on
     df.collect()
   }
 
@@ -206,6 +224,12 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
           | ELSE (name = 'Sauron') END
           |""".stripMargin
     )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE (CASE WHEN ("name" = 'Legolas') THEN IIF((CASE WHEN ("name" = 'Elf') THEN IIF(("name" = 'Elrond'), 1, 0) ELSE IIF(("name" = 'Gandalf'), 1, 0) END = 1), 1, 0) ELSE IIF(("name" = 'Sauron'), 1, 0) END = 1)  """
+    )
+    // scalastyle:on
     df.collect()
   }
 
@@ -214,9 +238,15 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
       s"""|SELECT * FROM $catalogName.employee
           |WHERE CASE WHEN (name = 'Legolas') THEN
           | CASE WHEN (name = 'Elf') THEN 'Elf' ELSE 'Wizard' END
-          | ELSE 'Sauron' END
+          | ELSE 'Sauron' END = name
           |""".stripMargin
     )
+
+    // scalastyle:off
+    assert(getExternalEngineQuery(df.queryExecution.executedPlan) ==
+      """SELECT  "dept","name","salary","bonus" FROM "employee"  WHERE ("name" IS NOT NULL) AND ((CASE WHEN "name" = 'Legolas' THEN CASE WHEN "name" = 'Elf' THEN 'Elf' ELSE 'Wizard' END ELSE 'Sauron' END) = "name")  """
+    )
+    // scalastyle:on
     df.collect()
   }
 }
