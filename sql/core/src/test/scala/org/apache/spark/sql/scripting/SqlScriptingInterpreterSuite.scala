@@ -32,6 +32,21 @@ import org.apache.spark.sql.test.SharedSparkSession
  *   are executed and output DataFrames are compared with expected outputs.
  */
 class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
+
+  // Tests setup
+  private var originalSqlScriptingConfVal: String = null
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalSqlScriptingConfVal = conf.getConfString(SQLConf.SQL_SCRIPTING_ENABLED.key)
+    conf.setConfString(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
+  }
+
+  protected override def afterAll(): Unit = {
+    conf.unsetConf(SQLConf.SQL_SCRIPTING_ENABLED.key)
+    super.afterAll()
+  }
+
   // Helpers
   private def runSqlScript(sqlText: String): Array[DataFrame] = {
     val interpreter = SqlScriptingInterpreter()
@@ -55,10 +70,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   }
 
   // Tests
-  test("select 1") {
-    verifySqlScriptResult("SELECT 1;", Seq(Seq(Row(1))))
-  }
-
   test("multi statement - simple") {
     withTable("t") {
       val sqlScript =
@@ -1122,9 +1133,12 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   test("leave compound block") {
     val sqlScriptText =
       """
-        |lbl: BEGIN
-        |  SELECT 1;
-        |  LEAVE lbl;
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    LEAVE lbl;
+        |    SELECT 2;
+        |  END;
         |END""".stripMargin
     val expected = Seq(
       Seq(Row(1)) // select
@@ -1166,9 +1180,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   test("iterate compound block - should fail") {
     val sqlScriptText =
       """
-        |lbl: BEGIN
-        |  SELECT 1;
-        |  ITERATE lbl;
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    ITERATE lbl;
+        |  END;
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
@@ -1230,9 +1246,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   test("leave with wrong label - should fail") {
     val sqlScriptText =
       """
-        |lbl: BEGIN
-        |  SELECT 1;
-        |  LEAVE randomlbl;
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    LEAVE randomlbl;
+        |  END;
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
@@ -1245,9 +1263,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   test("iterate with wrong label - should fail") {
     val sqlScriptText =
       """
-        |lbl: BEGIN
-        |  SELECT 1;
-        |  ITERATE randomlbl;
+        |BEGIN
+        |  lbl: BEGIN
+        |    SELECT 1;
+        |    ITERATE randomlbl;
+        |  END;
         |END""".stripMargin
     checkError(
       exception = intercept[SqlScriptingException] {
