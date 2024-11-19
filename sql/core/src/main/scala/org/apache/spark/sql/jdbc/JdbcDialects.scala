@@ -378,16 +378,10 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
-    def predicateToCaseWhenSQL(input: Expression): String =
+    // Some dialects do not support boolean type and this convenient util function is
+    // provided to generate a SQL statement to convert predicate to integer.
+    protected def predicateToIntSQL(input: Expression): String =
       "CASE WHEN " + inputToSQL(input) + " THEN 1 ELSE 0 END"
-
-    def predicateToIntSQL(expr: Expression): String = {
-      expr match {
-        case p: Predicate if p.name() != "ALWAYS_TRUE" && p.name() != "ALWAYS_FALSE" =>
-          predicateToCaseWhenSQL(p)
-        case p => inputToSQL(p)
-      }
-    }
 
     override def visitLiteral(literal: Literal[_]): String = {
       Option(literal.value()).map(v =>
