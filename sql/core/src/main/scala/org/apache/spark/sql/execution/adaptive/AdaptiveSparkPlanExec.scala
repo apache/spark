@@ -773,15 +773,7 @@ case class AdaptiveSparkPlanExec(
         case _ => newPlan
       }
 
-      if (!RemoveRedundantProjects.isOutputMatched(inputPlan.output, finalPlan.output)) {
-        val wrapProjectPlan = finalPlan match {
-          case e: Exchange => e.withNewChildren(ProjectExec(inputPlan.output, e.child) :: Nil)
-          case _ => ProjectExec(inputPlan.output, finalPlan)
-        }
-        Some((wrapProjectPlan, optimized))
-      } else {
-        Some((finalPlan, optimized))
-      }
+      Some((finalPlan, optimized))
     } catch {
       case e: InvalidAQEPlanException[_] =>
         logOnLevel(log"Re-optimize - ${MDC(ERROR, e.getMessage())}:\n" +

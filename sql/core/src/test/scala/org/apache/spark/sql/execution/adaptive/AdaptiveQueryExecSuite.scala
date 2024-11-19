@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_RE
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -3100,14 +3101,9 @@ class AdaptiveQueryExecSuite
 
       val plan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
       assert(plan.inputPlan.isInstanceOf[TakeOrderedAndProjectExec])
-      plan.finalPhysicalPlan match {
-        case WholeStageCodegenExec(p) =>
-          assert(p.isInstanceOf[ProjectExec])
-        case _ =>
-          fail("There should be a WholeStageCodegenExec")
-      }
+      assert(plan.finalPhysicalPlan.isInstanceOf[WindowExec])
       plan.inputPlan.output.zip(plan.finalPhysicalPlan.output).foreach { case (o1, o2) =>
-        assert(o1.semanticEquals(o2), "Different output after AQE optimization")
+        assert(o1.semanticEquals(o2), "Different output column order after AQE optimization")
       }
     }
   }

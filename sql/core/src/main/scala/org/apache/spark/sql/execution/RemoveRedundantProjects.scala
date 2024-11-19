@@ -58,7 +58,8 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
           p.mapChildren(removeProject(_, false))
         }
       case op: TakeOrderedAndProjectExec =>
-        op.mapChildren(removeProject(_, false))
+        // TakeOrderedAndProjectExec requires keep column ordering if AQE is enabled.
+        op.mapChildren(removeProject(_, conf.adaptiveExecutionEnabled))
       case a: BaseAggregateExec =>
         // BaseAggregateExec require specific column ordering when mode is Final or PartialMerge.
         // See comments in BaseAggregateExec inputAttributes method.
@@ -91,10 +92,6 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
   private def checkNullability(output: Seq[Attribute], childOutput: Seq[Attribute]): Boolean =
     output.zip(childOutput).forall { case (attr1, attr2) => attr1.nullable || !attr2.nullable }
 
-  private[sql] def isOutputMatched(output: Seq[Attribute], childOutput: Seq[Attribute]): Boolean = {
-    output.map(_.exprId.id) == childOutput.map(_.exprId.id) && checkNullability(output, childOutput)
-  }
-
   private def isRedundant(
       project: ProjectExec,
       child: SparkPlan,
@@ -106,9 +103,13 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
       case FilterExec(_, d: DataSourceV2ScanExecBase) if !d.supportsColumnar => false
       case _ =>
         if (requireOrdering) {
-          isOutputMatched(project.output, child.output)
+          project.output.map(_.exprId.id) == child.output.map(_.exprId.id) &&
+            checkNullability(project.output, child.output)
         } else {
-          isOutputMatched(project.output.sortBy(_.exprId.id), child.output.sortBy(_.exprId.id))
+          val orderedProjectOutput = project.output.sortBy(_.exprId.id)
+          val orderedChildOutput = child.output.sortBy(_.exprId.id)
+          orderedProjectOutput.map(_.exprId.id) == orderedChildOutput.map(_.exprId.id) &&
+            checkNullability(orderedProjectOutput, orderedChildOutput)
         }
     }
   }
