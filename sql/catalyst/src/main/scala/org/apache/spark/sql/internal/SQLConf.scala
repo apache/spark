@@ -3428,7 +3428,7 @@ object SQLConf {
       .doc("SQL Scripting feature is under development and its use should be done under this " +
         "feature flag. SQL Scripting enables users to write procedural SQL including control " +
         "flow and error handling.")
-      .version("3.5.0")
+      .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
