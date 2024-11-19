@@ -38,6 +38,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from pyspark._globals import _NoValue, _NoValueType
 from pyspark.conf import SparkConf
 from pyspark.util import is_remote_only
 from pyspark.sql.conf import RuntimeConfig
@@ -139,15 +140,6 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
-# In Python 3.9, the @property decorator has been made compatible with the
-# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-#
-# @classmethod + @property is also affected by a bug in Python's docstring which was backported
-# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-#
-# Python 3.9 with MyPy complains about @classmethod + @property combination. We should fix
-# it together with MyPy.
 class classproperty(property):
     """Same as Python's @property decorator, but for class attributes.
 
@@ -597,15 +589,6 @@ class SparkSession(SparkConversionMixin):
                     messageParameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # TODO(SPARK-38912): Replace classproperty with @classmethod + @property once support for
-    # Python 3.8 is dropped.
-    #
-    # In Python 3.9, the @property decorator has been made compatible with the
-    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-    #
-    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
-    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-    #
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
     builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
@@ -1283,7 +1266,7 @@ class SparkSession(SparkConversionMixin):
         data: Iterable["RowLike"],
         schema: Union[StructType, str],
         *,
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1293,7 +1276,7 @@ class SparkSession(SparkConversionMixin):
         data: "RDD[RowLike]",
         schema: Union[StructType, str],
         *,
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1302,7 +1285,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "RDD[AtomicValue]",
         schema: Union[AtomicType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1311,7 +1294,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: Iterable["AtomicValue"],
         schema: Union[AtomicType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1330,7 +1313,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1339,7 +1322,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "pa.Table",
         schema: Union[StructType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1348,7 +1331,7 @@ class SparkSession(SparkConversionMixin):
         data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike", "ArrayLike", "pa.Table"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
-        verifySchema: bool = True,
+        verifySchema: Union[_NoValueType, bool] = _NoValue,
     ) -> DataFrame:
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`,
@@ -1392,11 +1375,14 @@ class SparkSession(SparkConversionMixin):
             if ``samplingRatio`` is ``None``. This option is effective only when the input is
             :class:`RDD`.
         verifySchema : bool, optional
-            verify data types of every row against schema. Enabled by default.
-            When the input is :class:`pyarrow.Table` or when the input class is
-            :class:`pandas.DataFrame` and `spark.sql.execution.arrow.pyspark.enabled` is enabled,
-            this option is not effective. It follows Arrow type coercion. This option is not
-            supported with Spark Connect.
+            verify data types of every row against schema.
+            If not provided, createDataFrame with
+            - pyarrow.Table, verifySchema=False
+            - pandas.DataFrame with Arrow optimization, verifySchema defaults to
+            `spark.sql.execution.pandas.convertToArrowArraySafely`
+            - pandas.DataFrame without Arrow optimization, verifySchema=True
+            - regular Python instances, verifySchema=True
+            Arrow optimization is enabled/disabled via `spark.sql.execution.arrow.pyspark.enabled`.
 
             .. versionadded:: 2.1.0
 
@@ -1596,8 +1582,13 @@ class SparkSession(SparkConversionMixin):
         data: Union["RDD[Any]", Iterable[Any]],
         schema: Optional[Union[DataType, List[str]]],
         samplingRatio: Optional[float],
-        verifySchema: bool,
+        verifySchema: Union[_NoValueType, bool],
     ) -> DataFrame:
+        if verifySchema is _NoValue:
+            # createDataFrame with regular Python instances
+            # or (without Arrow optimization) createDataFrame with Pandas DataFrame
+            verifySchema = True
+
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 

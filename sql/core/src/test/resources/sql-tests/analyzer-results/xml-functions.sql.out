@@ -9,7 +9,7 @@ Project [to_xml((indent,), named_struct(a, 1, b, 2), Some(America/Los_Angeles)) 
 -- !query
 select to_xml(named_struct('time', to_timestamp('2015-08-26', 'yyyy-MM-dd')), map('timestampFormat', 'dd/MM/yyyy', 'indent', ''))
 -- !query analysis
-Project [to_xml((timestampFormat,dd/MM/yyyy), (indent,), named_struct(time, to_timestamp(2015-08-26, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), false)), Some(America/Los_Angeles)) AS to_xml(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd)))#x]
+Project [to_xml((timestampFormat,dd/MM/yyyy), (indent,), named_struct(time, to_timestamp(2015-08-26, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), true)), Some(America/Los_Angeles)) AS to_xml(named_struct(time, to_timestamp(2015-08-26, yyyy-MM-dd)))#x]
 +- OneRowRelation
 
 

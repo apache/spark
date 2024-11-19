@@ -789,7 +789,11 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
     /** @inheritdoc */
     override def enableHiveSupport(): this.type = synchronized {
       if (hiveClassesArePresent) {
+        // TODO(SPARK-50244): We now isolate artifacts added by the `ADD JAR` command. This will
+        //  break an existing Hive use case (one session adds JARs and another session uses them).
+        //  We need to decide whether/how to enable isolation for Hive.
         super.enableHiveSupport()
+          .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, false)
       } else {
         throw new IllegalArgumentException(
           "Unable to instantiate SparkSession with Hive support because " +

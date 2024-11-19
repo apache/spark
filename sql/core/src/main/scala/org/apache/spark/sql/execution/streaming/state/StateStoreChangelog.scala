@@ -24,6 +24,8 @@ import scala.util.control.NonFatal
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FSError, Path}
+import org.json4s._
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
@@ -79,6 +81,14 @@ object RecordType extends Enumeration {
 }
 
 /**
+ * Class for lineage item for checkpoint format V2.
+ */
+case class LineageItem(
+    version: Long,
+    checkpointUniqueId: String
+)
+
+/**
  * Base class for state store changelog writer
  * @param fm - checkpoint file manager used to manage streaming query checkpoint
  * @param file - name of file to use to write changelog
@@ -87,7 +97,10 @@ object RecordType extends Enumeration {
 abstract class StateStoreChangelogWriter(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec) extends Logging {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false) extends Logging {
+
+  implicit val formats: Formats = DefaultFormats
 
   private def compressStream(outputStream: DataOutputStream): DataOutputStream = {
     val compressed = compressionCodec.compressedOutputStream(outputStream)
@@ -102,10 +115,10 @@ abstract class StateStoreChangelogWriter(
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
 
-  def writeLineage(lineage: Array[(Long, String)]): Unit = {
-    val lineageStr = lineage.map { case (version, uniqueId) =>
-      s"$version:$uniqueId"
-    }.mkString(" ")
+  def writeLineage(lineage: Array[LineageItem]): Unit = {
+    assert(enableStateStoreCheckpointIds,
+      "writeLineage should only be invoked with state store checkpoint id enabled")
+    val lineageStr = Serialization.write(lineage)
     compressedStream.writeUTF(lineageStr)
   }
 
@@ -151,8 +164,10 @@ abstract class StateStoreChangelogWriter(
 class StateStoreChangelogWriterV1(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
+  extends StateStoreChangelogWriter(
+    fm, file, compressionCodec, enableStateStoreCheckpointIds) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
@@ -208,8 +223,10 @@ class StateStoreChangelogWriterV1(
 class StateStoreChangelogWriterV2(
     fm: CheckpointFileManager,
     file: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogWriter(fm, file, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
+  extends StateStoreChangelogWriter(
+    fm, file, compressionCodec, enableStateStoreCheckpointIds) {
 
   override def version: Short = 2
 
@@ -271,8 +288,11 @@ class StateStoreChangelogWriterV2(
 abstract class StateStoreChangelogReader(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
   extends NextIterator[(RecordType.Value, Array[Byte], Array[Byte])] with Logging {
+
+  implicit val formats: Formats = DefaultFormats
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
@@ -287,15 +307,14 @@ abstract class StateStoreChangelogReader(
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
-  def readLineage(): Array[(Long, String)] = {
+  private def readLineage(): Array[LineageItem] = {
+    assert(enableStateStoreCheckpointIds,
+      "readLineage should only be invoked with state store checkpoint id enabled")
     val lineageStr = input.readUTF()
-    lineageStr.split(" ").map { lineage =>
-      val Array(version, uniqueId) = lineage.split(":")
-      (version.toLong, uniqueId)
-    }
+    Serialization.read[Array[LineageItem]](lineageStr)
   }
 
-  lazy val lineage: Array[(Long, String)] = readLineage()
+  lazy val lineage: Array[LineageItem] = readLineage()
 
   def version: Short
 
@@ -314,11 +333,20 @@ abstract class StateStoreChangelogReader(
 class StateStoreChangelogReaderV1(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
+  extends StateStoreChangelogReader(
+    fm, fileToRead, compressionCodec, enableStateStoreCheckpointIds) {
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
+
+  // If the changelogFile is written under checkpoint v2 (checkpointUniqueId.isDefined)
+  // the first line would be the lineage. We should update the file position by
+  // reading from the lineage during the reader initialization.
+  if (enableStateStoreCheckpointIds) {
+    lineage
+  }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val keySize = input.readInt()
@@ -357,8 +385,10 @@ class StateStoreChangelogReaderV1(
 class StateStoreChangelogReaderV2(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec)
-  extends StateStoreChangelogReader(fm, fileToRead, compressionCodec) {
+    compressionCodec: CompressionCodec,
+    enableStateStoreCheckpointIds: Boolean = false)
+  extends StateStoreChangelogReader(
+    fm, fileToRead, compressionCodec, enableStateStoreCheckpointIds) {
 
   private def parseBuffer(input: DataInputStream): Array[Byte] = {
     val blockSize = input.readInt()
@@ -373,6 +403,13 @@ class StateStoreChangelogReaderV2(
   val changelogVersionStr = input.readUTF()
   assert(changelogVersionStr == "v2",
     s"Changelog version mismatch: $changelogVersionStr != v2")
+
+  // If the changelogFile is written under checkpoint v2 (checkpointUniqueId.isDefined)
+  // the first line would be the lineage. We should update the file position by
+  // reading from the lineage during the reader initialization.
+  if (enableStateStoreCheckpointIds) {
+    lineage
+  }
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())

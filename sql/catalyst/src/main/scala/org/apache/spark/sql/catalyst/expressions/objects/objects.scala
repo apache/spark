@@ -332,6 +332,7 @@ case class StaticInvoke(
   }
 
   override def nullable: Boolean = needNullCheck || returnNullable
+  override def nullIntolerant: Boolean = propagateNull
   override def children: Seq[Expression] = arguments
   override lazy val deterministic: Boolean = isDeterministic && arguments.forall(_.deterministic)
 
@@ -412,28 +413,6 @@ case class StaticInvoke(
     }.$functionName(${arguments.mkString(", ")}))"
 }
 
-object StaticInvoke {
-  def withNullIntolerant(
-      staticObject: Class[_],
-      dataType: DataType,
-      functionName: String,
-      arguments: Seq[Expression] = Nil,
-      inputTypes: Seq[AbstractDataType] = Nil,
-      propagateNull: Boolean = true,
-      returnNullable: Boolean = true,
-      isDeterministic: Boolean = true,
-      scalarFunction: Option[ScalarFunction[_]] = None): StaticInvoke =
-    new StaticInvoke(
-      staticObject,
-      dataType,
-      functionName,
-      arguments,
-      inputTypes,
-      propagateNull,
-      returnNullable,
-      isDeterministic, scalarFunction) with NullIntolerant
-}
-
 /**
  * Calls the specified function on an object, optionally passing arguments.  If the `targetObject`
  * expression evaluates to null then null will be returned.
@@ -470,7 +449,7 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true,
     isDeterministic: Boolean = true) extends InvokeLike {
-
+  override def nullIntolerant: Boolean = propagateNull
   lazy val argClasses = EncoderUtils.expressionJavaClasses(arguments)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(INVOKE)
@@ -575,27 +554,6 @@ case class Invoke(
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Invoke =
     copy(targetObject = newChildren.head, arguments = newChildren.tail)
-}
-
-object Invoke {
-  def withNullIntolerant(
-      targetObject: Expression,
-      functionName: String,
-      dataType: DataType,
-      arguments: Seq[Expression] = Nil,
-      methodInputTypes: Seq[AbstractDataType] = Nil,
-      propagateNull: Boolean = true,
-      returnNullable: Boolean = true,
-      isDeterministic: Boolean = true): Invoke =
-    new Invoke(
-      targetObject,
-      functionName,
-      dataType,
-      arguments,
-      methodInputTypes,
-      propagateNull,
-      returnNullable,
-      isDeterministic) with NullIntolerant
 }
 
 object NewInstance {
@@ -1737,7 +1695,7 @@ case class ExternalMapToCatalyst private(
           final Object[] $convertedValues = new Object[$length];
           int $index = 0;
           $defineEntries
-          while($entries.hasNext()) {
+          while ($entries.hasNext()) {
             $defineKeyValue
             $keyNullCheck
             $valueNullCheck

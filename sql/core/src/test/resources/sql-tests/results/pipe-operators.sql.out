@@ -637,7 +637,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 -- !query
 table t
-|> where first_value(x) over (partition by y) = 1
+|> where sum(x) over (partition by y) = 1
 -- !query schema
 struct<>
 -- !query output
@@ -651,7 +651,28 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select * from t where first_value(x) over (partition by y) = 1
+table t
+|> where sum(x) over w = 1
+   window w as (partition by y)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "table t\n|> where sum(x) over w = 1\n   window w as (partition by y)"
+  } ]
+}
+
+
+-- !query
+select * from t where sum(x) over (partition by y) = 1
 -- !query schema
 struct<>
 -- !query output
@@ -1560,12 +1581,27 @@ struct<x:int,y:string>
 -- !query
 values (0, 1) tab(x, y)
 |> union table t
+|> where x = 0
 -- !query schema
-struct<x:int,y:string>
+struct<>
 -- !query output
-0	1
-0	abc
-1	def
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'abc'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 55,
+    "fragment" : "values (0, 1) tab(x, y)\n|> union table t\n|> where x = 0"
+  } ]
+}
 
 
 -- !query
@@ -1911,53 +1947,6 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "startIndex" : 12,
     "stopIndex" : 31,
     "fragment" : "order by x sort by x"
-  } ]
-}
-
-
--- !query
-table windowTestData
-|> window w as (partition by cte order by val)
-|> select cate, sum(val) over w
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clauses" : "the WINDOW clause"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 67,
-    "fragment" : "window w as (partition by cte order by val)"
-  } ]
-}
-
-
--- !query
-table windowTestData
-|> window w as (partition by cate order by val) limit 5
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clauses" : "the WINDOW clause"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 76,
-    "fragment" : "window w as (partition by cate order by val) limit 5"
   } ]
 }
 
@@ -2438,6 +2427,238 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "expression" : "\"b\"",
     "expressionAnyValue" : "\"any_value(b)\""
+  }
+}
+
+
+-- !query
+table windowTestData
+|> select cate, sum(val) over w
+   window w as (partition by cate order by val)
+-- !query schema
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+NULL	3
+NULL	NULL
+a	2
+a	2
+a	4
+a	NULL
+b	1
+b	3
+b	6
+
+
+-- !query
+table windowTestData
+|> select cate, sum(val) over w
+   window w as (order by val_timestamp range between unbounded preceding and current row)
+-- !query schema
+struct<cate:string,sum(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+NULL	5
+NULL	NULL
+a	13
+a	5
+a	5
+a	6
+b	13
+b	5
+b	8
+
+
+-- !query
+table windowTestData
+|> select cate, val
+    window w as (partition by cate order by val)
+-- !query schema
+struct<cate:string,val:int>
+-- !query output
+NULL	3
+NULL	NULL
+a	1
+a	1
+a	2
+a	NULL
+b	1
+b	2
+b	3
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w as sum_val
+   window w as (partition by cate)
+|> select cate, val, sum_val, first_value(cate) over w
+   window w as (order by val)
+-- !query schema
+struct<cate:string,val:int,sum_val:bigint,first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
+-- !query output
+NULL	3	3	a
+NULL	NULL	3	a
+a	1	4	a
+a	1	4	a
+a	2	4	a
+a	NULL	4	a
+b	1	6	a
+b	2	6	a
+b	3	6	a
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w1, first_value(cate) over w2
+   window w1 as (partition by cate), w2 as (order by val)
+-- !query schema
+struct<cate:string,val:int,sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):string>
+-- !query output
+NULL	3	3	a
+NULL	NULL	3	a
+a	1	4	a
+a	1	4	a
+a	2	4	a
+a	NULL	4	a
+b	1	6	a
+b	2	6	a
+b	3	6	a
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w, first_value(val) over w
+   window w1 as (partition by cate order by val)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
+}
+
+
+-- !query
+(select col from st)
+|> select col.i1, sum(col.i2) over w
+   window w as (partition by col.i1 order by col.i2)
+-- !query schema
+struct<i1:int,sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+2	3
+
+
+-- !query
+table st
+|> select st.col.i1, sum(st.col.i2) over w
+   window w as (partition by st.col.i1 order by st.col.i2)
+-- !query schema
+struct<i1:int,sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+2	3
+
+
+-- !query
+table st
+|> select spark_catalog.default.st.col.i1, sum(spark_catalog.default.st.col.i2) over w
+   window w as (partition by spark_catalog.default.st.col.i1 order by spark_catalog.default.st.col.i2)
+-- !query schema
+struct<i1:int,sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+2	3
+
+
+-- !query
+table windowTestData
+|> select cate, sum(val) over val
+   window val as (partition by cate order by val)
+-- !query schema
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+-- !query output
+NULL	3
+NULL	NULL
+a	2
+a	2
+a	4
+a	NULL
+b	1
+b	3
+b	6
+
+
+-- !query
+table windowTestData
+|> select cate, sum(val) over w
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
+}
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w1, first_value(cate) over w2
+   window w1 as (partition by cate)
+   window w2 as (order by val)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w2"
+  }
+}
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w as sum_val
+   window w as (partition by cate order by val)
+|> select cate, val, sum_val, first_value(cate) over w
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
+}
+
+
+-- !query
+table windowTestData
+|> select cate, val, first_value(cate) over w as first_val
+|> select cate, val, sum(val) over w as sum_val
+   window w as (order by val)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
   }
 }
 

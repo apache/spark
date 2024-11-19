@@ -127,7 +127,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // RDD column names for user convenience.
       rddSchema.fields.map { col =>
         tableSchema.get.find(f => conf.resolver(f.name, col.name)).getOrElse {
-          throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
+          throw QueryCompilationErrors.columnNotFoundInSchemaError(
+            col.dataType, col.name, table, rddSchema.fieldNames)
         }
       }
     }
