@@ -59,6 +59,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     supportedFunctions.contains(funcName)
 
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
+    override protected def predicateToIntSQL(input: String): String =
+      "IIF(" + input + ", 1, 0)"
+    
     override def visitSortOrder(
         sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
       (sortDirection, nullOrdering) match {
