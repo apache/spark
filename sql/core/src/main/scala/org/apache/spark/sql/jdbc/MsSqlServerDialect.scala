@@ -108,7 +108,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
           // MsSqlServerDialect translates boolean literals to 1/0, no need to rewrite them.
           case "ALWAYS_TRUE" | "ALWAYS_FALSE" =>
             super.build(expr)
-          case _ => predicateToIntSQL(e)
+          case _ => predicateToIntSQL(super.build(e))
         }
         case _ => super.build(expr)
       }
