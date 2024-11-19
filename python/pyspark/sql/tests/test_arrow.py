@@ -557,57 +557,31 @@ class ArrowTestsMixin:
         with self.assertRaises(Exception):
             self.spark.createDataFrame(table, schema=schema, verifySchema=True)
 
-        # Pandas frame
-        if arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
-                # pandas DataFrame with Arrow optimization
-                pdf = pd.DataFrame(data)
-                df = self.spark.createDataFrame(pdf, schema=schema)
-                # verifySchema defaults to `spark.sql.execution.pandas.convertToArrowArraySafely`,
-                # which is false by default
-                self.assertEqual(df.collect(), expected)
-                with self.assertRaises(Exception):
-                    with self.sql_conf(
-                        {"spark.sql.execution.pandas.convertToArrowArraySafely": True}
-                    ):
-                        df = self.spark.createDataFrame(pdf, schema=schema)
-                with self.assertRaises(Exception):
-                    df = self.spark.createDataFrame(pdf, schema=schema, verifySchema=True)
-        else:
-            # pandas DataFrame without Arrow optimization
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-                pdf = pd.DataFrame(data)
-                with self.assertRaises(Exception):
-                    self.spark.createDataFrame(pdf, schema=schema)  # verifySchema defaults to True
-                df = self.spark.createDataFrame(pdf, schema=schema, verifySchema=False)
-                self.assertEqual(df.collect(), expected)
-
-        # ndarray
-        if arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
-                # ndarray with Arrow optimization
-                data_array = np.array(list(zip(data["id"], data["value"])))
-                df = self.spark.createDataFrame(data_array, schema=schema)
-                # verifySchema defaults to `spark.sql.execution.pandas.convertToArrowArraySafely`,
-                # which is false by default
-                self.assertEqual(df.collect(), expected)
-                with self.assertRaises(Exception):
-                    with self.sql_conf(
-                        {"spark.sql.execution.pandas.convertToArrowArraySafely": True}
-                    ):
-                        df = self.spark.createDataFrame(data_array, schema=schema)
-                with self.assertRaises(Exception):
-                    df = self.spark.createDataFrame(data_array, schema=schema, verifySchema=True)
-        else:
-            # ndarray without Arrow optimization
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-                data_array = np.array(list(zip(data["id"], data["value"])))
-                with self.assertRaises(Exception):
-                    self.spark.createDataFrame(
-                        data_array, schema=schema
-                    )  # verifySchema defaults to True
-                df = self.spark.createDataFrame(data_array, schema=schema, verifySchema=False)
-                self.assertEqual(df.collect(), expected)
+        # Pandas DataFrame / Numpy array
+        for from_obj in [pd.DataFrame(data), np.array(list(zip(data["id"], data["value"])))]:
+            if arrow_enabled:
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": True}):
+                    # pandas DataFrame with Arrow optimization
+                    df = self.spark.createDataFrame(from_obj, schema=schema)
+                    # verifySchema defaults to `spark.sql.execution.pandas.convertToArrowArraySafely`,
+                    # which is false by default
+                    self.assertEqual(df.collect(), expected)
+                    with self.assertRaises(Exception):
+                        with self.sql_conf(
+                            {"spark.sql.execution.pandas.convertToArrowArraySafely": True}
+                        ):
+                            df = self.spark.createDataFrame(from_obj, schema=schema)
+                    with self.assertRaises(Exception):
+                        df = self.spark.createDataFrame(from_obj, schema=schema, verifySchema=True)
+            else:
+                # pandas DataFrame without Arrow optimization
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+                    with self.assertRaises(Exception):
+                        self.spark.createDataFrame(
+                            from_obj, schema=schema
+                        )  # verifySchema defaults to True
+                    df = self.spark.createDataFrame(from_obj, schema=schema, verifySchema=False)
+                    self.assertEqual(df.collect(), expected)
 
     def _createDataFrame_toggle(self, data, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
