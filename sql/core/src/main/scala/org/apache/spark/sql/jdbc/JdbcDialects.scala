@@ -380,7 +380,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
     // Some dialects do not support boolean type and this convenient util function is
     // provided to generate a SQL statement to convert predicate to integer.
-    protected def predicateToIntSQL(input: Expression): String =
+    protected def predicateToIntSQL(input: Predicate): String =
       "CASE WHEN " + inputToSQL(input) + " THEN 1 ELSE 0 END"
 
     override def visitLiteral(literal: Literal[_]): String = {
