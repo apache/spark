@@ -236,7 +236,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages org.apache.hadoop:hadoop-aws:3.4.0
+--packages org.apache.hadoop:hadoop-aws:3.4.1
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
