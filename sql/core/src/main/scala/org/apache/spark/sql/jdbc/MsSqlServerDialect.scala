@@ -87,29 +87,28 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       expr match {
         case e: Predicate => e.name() match {
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
-            val Array(l, r) = e.children().map {
-              case p: Predicate => predicateToCaseWhenSQL(p)
-              case o => inputToSQL(o)
-            }
+            val Array(l, r) = e.children().map(inputToSQL)
             visitBinaryComparison(e.name(), l, r)
           case "CASE_WHEN" =>
             // Since MsSqlServer cannot handle boolean expressions inside
             // a CASE WHEN, it is necessary to convert those to another
             // CASE WHEN expression that will return 1 or 0 depending on
-            // the result. Exceptions are TRUE and FALSE, which already
-            // get translated to 1 and 0.
+            // the result.
             // Example:
             // In:  ... CASE WHEN a = b THEN c = d ... END
             // Out: ... CASE WHEN a = b THEN CASE WHEN c = d THEN 1 ELSE 0 END ... END = 1
             val stringArray = e.children().grouped(2).flatMap {
               case Array(whenExpression, thenExpression) =>
-                Array(inputToSQL(whenExpression), predicateToIntSQL(thenExpression))
+                Array(super.build(whenExpression), inputToSQL(thenExpression))
               case Array(elseExpression) =>
-                Array(predicateToIntSQL(elseExpression))
+                Array(inputToSQL(elseExpression))
             }.toArray
 
             visitCaseWhen(stringArray) + " = 1"
-          case _ => super.build(expr)
+          // MsSqlServerDialect translates boolean literals to 1/0, no need to rewrite them.
+          case "ALWAYS_TRUE" | "ALWAYS_FALSE" =>
+            super.build(expr)
+          case _ => predicateToIntSQL(e)
         }
         case _ => super.build(expr)
       }
