@@ -882,6 +882,7 @@ object FunctionRegistry {
     // Avro
     expression[FromAvro]("from_avro"),
     expression[ToAvro]("to_avro"),
+    expression[SchemaOfAvro]("schema_of_avro"),
 
     // Protobuf
     expression[FromProtobuf]("from_protobuf"),
