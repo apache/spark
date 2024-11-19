@@ -19,9 +19,11 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.{JString, JValue}
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.util.CollationFactory
 
 @Experimental
-case class VarcharType(length: Int) extends StringType(0, Some(length)) {
+case class VarcharType(length: Int)
+  extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, Some(length)) {
   require(length >= 0, "The length of varchar type cannot be negative.")
 
   override def equals(o: Any): Boolean = o match {
