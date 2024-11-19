@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.{SparkException, SparkNumberFormatException}
+import org.apache.spark.{SparkConf, SparkException, SparkNumberFormatException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
@@ -34,17 +34,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
 
   // Tests setup
-  private var originalSqlScriptingConfVal: String = _
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalSqlScriptingConfVal = conf.getConfString(SQLConf.SQL_SCRIPTING_ENABLED.key)
-    conf.setConfString(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
-  }
-
-  protected override def afterAll(): Unit = {
-    conf.unsetConf(SQLConf.SQL_SCRIPTING_ENABLED.key)
-    super.afterAll()
+  override protected def sparkConf: SparkConf = {
+    super.sparkConf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
   // Helpers

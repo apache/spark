@@ -29,11 +29,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
   import CatalystSqlParser._
 
   // Tests setup
-  private var originalSqlScriptingConfVal: String = _
-
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    originalSqlScriptingConfVal = conf.getConfString(SQLConf.SQL_SCRIPTING_ENABLED.key)
     conf.setConfString(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
   }
 
@@ -51,6 +48,16 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
 
   test("multi select without ; - should fail") {
     val sqlScriptText = "SELECT 1 SELECT 1"
+    val e = intercept[ParseException] {
+      parsePlan(sqlScriptText)
+    }
+    assert(e.getCondition === "PARSE_SYNTAX_ERROR")
+    assert(e.getMessage.contains("Syntax error"))
+    assert(e.getMessage.contains("SELECT"))
+  }
+
+  test("multi select with ; - should fail") {
+    val sqlScriptText = "SELECT 1; SELECT 1;"
     val e = intercept[ParseException] {
       parsePlan(sqlScriptText)
     }
