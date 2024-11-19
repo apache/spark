@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 import sys
+from typing import Optional, Sequence, Dict, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect.session import SparkSession
 
 from pyspark.loose_version import LooseVersion
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
@@ -98,3 +102,27 @@ def require_minimum_googleapis_common_protos_version() -> None:
 
 def get_python_ver() -> str:
     return "%d.%d" % sys.version_info[:2]
+
+
+class LazyConfigGetter:
+    def __init__(
+        self,
+        keys: Sequence[str],
+        session: "SparkSession",
+    ):
+        assert len(keys) > 0 and len(keys) == len(set(keys))
+        assert all(isinstance(key, str) for key in keys)
+        assert session is not None
+        self._keys = keys
+        self._session = session
+        self._values: Dict[str, Optional[str]] = {}
+
+    def __getitem__(self, key: str) -> Optional[str]:
+        assert key in self._keys
+
+        if len(self._values) == 0:
+            values = self._session._client.get_configs(*self._keys)
+            for i, value in enumerate(values):
+                self._values[self._keys[i]] = value
+
+        return self._values[key]
