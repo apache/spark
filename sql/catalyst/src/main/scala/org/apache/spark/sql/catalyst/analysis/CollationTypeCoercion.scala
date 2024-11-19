@@ -311,15 +311,15 @@ object CollationTypeCoercion {
         throw QueryCompilationErrors.explicitCollationMismatchError(
           Seq(leftStringType, rightStringType))
 
-      case (Explicit, _) | (_, Explicit) =>
-        if (left.strength == Explicit) Some(left) else Some(right)
+      case (Explicit, _) => Some(left)
+      case (_, Explicit) => Some(right)
 
       case (Implicit, Implicit) if leftStringType != rightStringType =>
         throw QueryCompilationErrors.implicitCollationMismatchError(
           Seq(leftStringType, rightStringType))
 
-      case (Implicit, _) | (_, Implicit) =>
-        if (left.strength == Implicit) Some(left) else Some(right)
+      case (Implicit, _) => Some(left)
+      case (_, Implicit) => Some(right)
 
       case (Default, Default) if leftStringType != rightStringType =>
         throw QueryCompilationErrors.implicitCollationMismatchError(
