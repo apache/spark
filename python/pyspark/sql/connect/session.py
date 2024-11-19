@@ -423,12 +423,12 @@ class SparkSession:
             infer_dict_as_struct,
             infer_array_from_first_element,
             infer_map_from_first_pair,
-            prefer_timestamp_ntz
+            prefer_timestamp_ntz,
         ) = self._client.get_configs(
             "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
             "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
             "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
-            "spark.sql.timestampType"
+            "spark.sql.timestampType",
         )
         return functools.reduce(
             _merge_type,
@@ -656,15 +656,14 @@ class SparkSession:
                     [pa.array(data[::, i]) for i in range(0, data.shape[1])], _cols
                 )
 
-            if verifySchema is _NoValue:
-                verifySchema = self._client.get_configs("spark.sql.execution.pandas.convertToArrowArraySafely")
-
-            if verifySchema:
-                schema = to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True)
-                _table = _table.cast(schema, safe=verifySchema)
-
             # The _table should already have the proper column names.
             _cols = None
+
+            if verifySchema is not _NoValue:
+                warnings.warn(
+                    "'verifySchema' is ignored. It is not supported"
+                    " with np.ndarray input on Spark Connect."
+                )
 
         else:
             _data = list(data)
