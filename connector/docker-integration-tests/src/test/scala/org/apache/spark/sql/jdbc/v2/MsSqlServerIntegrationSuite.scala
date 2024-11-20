@@ -40,7 +40,7 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
-  
+
   def getExternalEngineQuery(executedPlan: SparkPlan): String = {
     getExternalEngineRdd(executedPlan).asInstanceOf[JDBCRDD].getExternalEngineQuery
   }
