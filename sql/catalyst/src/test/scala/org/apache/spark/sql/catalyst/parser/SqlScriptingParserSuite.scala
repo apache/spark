@@ -1822,6 +1822,25 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("label" -> toSQLId("l_loop")))
   }
 
+  test("unique label names: nested for loops") {
+    val sqlScriptText =
+      """BEGIN
+        |f_loop: FOR x AS SELECT 1 DO
+        |  f_loop: FOR y AS SELECT 2 DO
+        |    SELECT 1;
+        |  END FOR;
+        |END FOR;
+        |END
+      """.stripMargin
+    val exception = intercept[SqlScriptingException] {
+      parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    }
+    checkError(
+      exception = exception,
+      condition = "LABEL_ALREADY_EXISTS",
+      parameters = Map("label" -> toSQLId("f_loop")))
+  }
+
   test("unique label names: begin-end block on the same level") {
     val sqlScriptText =
       """BEGIN
@@ -1857,10 +1876,13 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  SELECT 4;
         |UNTIL 1=1
         |END REPEAT;
+        |lbl: FOR x AS SELECT 1 DO
+        |  SELECT 5;
+        |END FOR;
         |END
       """.stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
-    assert(tree.collection.length == 4)
+    assert(tree.collection.length == 5)
     assert(tree.collection.head.isInstanceOf[CompoundBody])
     assert(tree.collection.head.asInstanceOf[CompoundBody].label.get == "lbl")
     assert(tree.collection(1).isInstanceOf[WhileStatement])
@@ -1869,6 +1891,8 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(tree.collection(2).asInstanceOf[LoopStatement].label.get == "lbl")
     assert(tree.collection(3).isInstanceOf[RepeatStatement])
     assert(tree.collection(3).asInstanceOf[RepeatStatement].label.get == "lbl")
+    assert(tree.collection(4).isInstanceOf[ForStatement])
+    assert(tree.collection(4).asInstanceOf[ForStatement].label.get == "lbl")
   }
 
   test("unique label names: nested labeled scope statements") {
@@ -1878,7 +1902,9 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
         |  lbl_1: WHILE 1=1 DO
         |    lbl_2: LOOP
         |      lbl_3: REPEAT
-        |        SELECT 4;
+        |        lbl_4: FOR x AS SELECT 1 DO
+        |          SELECT 4;
+        |        END FOR;
         |      UNTIL 1=1
         |      END REPEAT;
         |    END LOOP;
@@ -1904,6 +1930,9 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     // Repeat statement
     val repeatStatement = loopStatement.body.collection.head.asInstanceOf[RepeatStatement]
     assert(repeatStatement.label.get == "lbl_3")
+    // For statement
+    val forStatement = repeatStatement.body.collection.head.asInstanceOf[ForStatement]
+    assert(forStatement.label.get == "lbl_4")
   }
 
   test("for statement") {
