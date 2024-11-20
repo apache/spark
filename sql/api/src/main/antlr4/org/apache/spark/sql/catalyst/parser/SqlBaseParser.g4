@@ -275,7 +275,7 @@ statement
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
     | SHOW CURRENT namespace                                           #showCurrentNamespace
-    | SHOW CATALOGS (LIKE? pattern=stringLit)?                            #showCatalogs
+    | SHOW CATALOGS (LIKE? pattern=stringLit)?                         #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         identifierReference                                            #describeNamespace
@@ -287,7 +287,7 @@ statement
     | COMMENT ON TABLE identifierReference IS comment                  #commentTable
     | REFRESH TABLE identifierReference                                #refreshTable
     | REFRESH FUNCTION identifierReference                             #refreshFunction
-    | REFRESH (stringLit | .*?)                                        #refreshResource
+    | REFRESH (stringLit | UNRECOGNIZED*?)                             #refreshResource
     | CACHE LAZY? TABLE identifierReference
         (OPTIONS options=propertyList)? (AS? query)?                   #cacheTable
     | UNCACHE TABLE (IF EXISTS)? identifierReference                   #uncacheTable
@@ -297,7 +297,7 @@ statement
     | TRUNCATE TABLE identifierReference partitionSpec?                #truncateTable
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | LIST) identifier UNRECOGNIZED*?                        #manageResource
     | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
         identifierReference (USING indexType=identifier)?
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
@@ -307,24 +307,24 @@ statement
         LEFT_PAREN
         (functionArgument (COMMA functionArgument)*)?
         RIGHT_PAREN                                                    #call
-    | unsupportedHiveNativeCommands .*?                                #failNativeCommand
+    | unsupportedHiveNativeCommands UNRECOGNIZED*?                     #failNativeCommand
     ;
 
 setResetStatement
     : SET COLLATION collationName=identifier                           #setCollation
-    | SET ROLE .*?                                                     #failSetRole
+    | SET ROLE UNRECOGNIZED*?                                          #failSetRole
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
-    | SET TIME ZONE .*?                                                #setTimeZone
+    | SET TIME ZONE UNRECOGNIZED*?                                     #setTimeZone
     | SET variable assignmentList                                      #setVariable
     | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                                   #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
-    | SET configKey (EQ .*?)?                                          #setConfiguration
-    | SET .*? EQ configValue                                           #setQuotedConfiguration
-    | SET .*?                                                          #setConfiguration
+    | SET configKey (EQ UNRECOGNIZED*?)?                               #setConfiguration
+    | SET UNRECOGNIZED*? EQ configValue                                #setQuotedConfiguration
+    | SET UNRECOGNIZED*?                                               #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
-    | RESET .*?                                                        #resetConfiguration
+    | RESET UNRECOGNIZED*?                                             #resetConfiguration
     ;
 
 executeImmediate

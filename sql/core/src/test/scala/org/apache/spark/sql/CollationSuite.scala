@@ -2099,4 +2099,8 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     checkAnswer(sql("SELECT NAME FROM collations() WHERE ICU_VERSION is null"),
       Seq(Row("UTF8_BINARY"), Row("UTF8_LCASE")))
   }
+
+  test("set role") {
+    sql("set role ada;")
+  }
 }
