@@ -28,31 +28,14 @@ from pyspark.ml.tuning import ParamGridBuilder
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import rand
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-have_sklearn = True
-sklearn_requirement_message = None
-try:
-    from sklearn.datasets import load_breast_cancer  # noqa: F401
-except ImportError:
-    have_sklearn = False
-    sklearn_requirement_message = "No sklearn found"
-
-have_torch = True
-torch_requirement_message = None
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
-    torch_requirement_message = "torch is required"
-
-have_torcheval = True
-torcheval_requirement_message = None
-try:
-    import torcheval  # noqa: F401
-except ImportError:
-    have_torcheval = False
-    torcheval_requirement_message = "torcheval is required"
-
+from pyspark.testing.utils import (
+    have_sklearn,
+    sklearn_requirement_message,
+    have_torch,
+    torch_requirement_message,
+    have_torcheval,
+    torcheval_requirement_message,
+)
 
 if should_test_connect:
     import pandas as pd
@@ -205,6 +188,8 @@ class CrossValidatorTestsMixin:
             )
 
     def test_crossvalidator_on_pipeline(self):
+        from sklearn.datasets import load_breast_cancer
+
         sk_dataset = load_breast_cancer()
 
         train_dataset = self.spark.createDataFrame(
@@ -270,6 +255,8 @@ class CrossValidatorTestsMixin:
         sys.version_info > (3, 12), "SPARK-46078: Fails with dev torch with Python 3.12"
     )
     def test_crossvalidator_with_fold_col(self):
+        from sklearn.datasets import load_breast_cancer
+
         sk_dataset = load_breast_cancer()
 
         train_dataset = self.spark.createDataFrame(
