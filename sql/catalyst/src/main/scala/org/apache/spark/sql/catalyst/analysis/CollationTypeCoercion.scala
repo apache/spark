@@ -240,7 +240,6 @@ object CollationTypeCoercion {
    * so that the context can be reused later.
    */
   private def findCollationContext(expr: Expression): Option[CollationContext] = {
-
     val contextOpt = expr match {
       case _ if hasCollationContextTag(expr) =>
         Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
@@ -264,12 +263,8 @@ object CollationTypeCoercion {
       case _ if !expr.children.exists(_.dataType.existsRecursively(_.isInstanceOf[StringType])) =>
         Some(CollationContext(expr.dataType, Default))
 
-      case extract: ExtractValue =>
-        findCollationContext(extract.child)
-          .map(cc => CollationContext(extract.dataType, cc.strength))
-
       case _ =>
-        val contextWinnerOpt = expr.children
+        val contextWinnerOpt = getContextRelevantChildren(expr)
           .flatMap(findCollationContext)
           .foldLeft(Option.empty[CollationContext]) {
             case (Some(left), right) =>
@@ -289,6 +284,30 @@ object CollationTypeCoercion {
 
     contextOpt.foreach(expr.setTagValue(COLLATION_CONTEXT_TAG, _))
     contextOpt
+  }
+
+  /**
+   * Returns the children of the given expression that should be used for calculating the
+   * winning collation context.
+   */
+  private def getContextRelevantChildren(expression: Expression): Seq[Expression] = {
+    expression match {
+      // collation context for named struct should be calculated based on its values only
+      case createStruct: CreateNamedStruct =>
+        createStruct.valExprs
+
+      // collation context does not depend on the key for extracting the value
+      case extract: ExtractValue =>
+        Seq(extract.child)
+
+      // we currently don't support collation precedence for maps,
+      // as this would involve calculating them for keys and values separately
+      case _: CreateMap =>
+        Seq.empty
+
+      case _ =>
+        expression.children
+    }
   }
 
   /**
