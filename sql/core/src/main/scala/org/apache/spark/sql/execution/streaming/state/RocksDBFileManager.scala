@@ -212,7 +212,7 @@ class RocksDBFileManager(
     // changelog itself. However, since we don't record this for v1, we need to
     // rely on external arguments to make this call today. Within the reader, we verify
     // for the correctness of the decided/expected version. We might revisit this pattern
-    // as we add more changelog versions in the future.
+    // as we add more changelog versions in the future [SPARK-50360].
     val changelogVersion = getChangelogVersion(useColumnFamilies, enableStateStoreCheckpointIds)
     val changelogReader = changelogVersion match {
       case 1 =>
