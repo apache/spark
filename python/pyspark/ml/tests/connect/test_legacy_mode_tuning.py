@@ -296,7 +296,7 @@ class CrossValidatorTestsMixin:
 
 
 @unittest.skipIf(
-    not should_test_connect or not have_sklearn or have_torch or have_torcheval or is_remote_only(),
+    not should_test_connect or not have_sklearn or not have_torch or not have_torcheval or is_remote_only(),
     connect_requirement_message
     or sklearn_requirement_message
     or torch_requirement_message
