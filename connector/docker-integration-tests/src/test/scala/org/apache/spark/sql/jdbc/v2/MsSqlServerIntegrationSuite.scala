@@ -23,7 +23,7 @@ import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.{FilterExec, RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.MsSQLServerDatabaseOnDocker
