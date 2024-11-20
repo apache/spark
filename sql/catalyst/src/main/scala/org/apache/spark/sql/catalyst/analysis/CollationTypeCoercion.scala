@@ -107,6 +107,11 @@ object CollationTypeCoercion {
       val newValues = collateToSingleType(mapCreate.values)
       mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
 
+    case namedStruct: CreateNamedStruct if namedStruct.children.size % 2 == 0 =>
+      val newValues = collateToSingleType(namedStruct.valExprs)
+      val interleaved = namedStruct.nameExprs.zip(newValues).flatMap(pair => Seq(pair._1, pair._2))
+      namedStruct.withNewChildren(interleaved)
+
     case splitPart: SplitPart =>
       val Seq(str, delimiter, partNum) = splitPart.children
       val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
@@ -231,12 +236,6 @@ object CollationTypeCoercion {
    */
   private def findCollationContext(expr: Expression): Option[CollationContext] = {
 
-    def getChildren: Seq[Expression] = expr match {
-      // we don't need to consider the struct name expressions
-      case struct: CreateNamedStruct => struct.valExprs
-      case _ => expr.children
-    }
-
     val contextOpt = expr match {
       case _ if hasCollationContextTag(expr) =>
         Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
@@ -265,7 +264,7 @@ object CollationTypeCoercion {
           .map(cc => CollationContext(extract.dataType, cc.strength))
 
       case _ =>
-        val contextWinnerOpt = getChildren
+        val contextWinnerOpt = expr.children
           .flatMap(findCollationContext)
           .foldLeft(Option.empty[CollationContext]) {
             case (Some(left), right) =>
