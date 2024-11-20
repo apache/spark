@@ -386,7 +386,7 @@ abstract class JdbcDialect extends Serializable with Logging {
       case p: Predicate => predicateToIntSQL(inputToSQL(p))
       case _ => inputToSQL(input)
     }
-    
+
     protected def predicateToIntSQL(input: String): String =
       "CASE WHEN " + input + " THEN 1 ELSE 0 END"
 
