@@ -114,7 +114,7 @@ abstract class StateStoreChangelogWriter(
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
 
-  def writeLineage(stateStoreCheckpointIdLineage: Array[LineageItem]): Unit = {
+  protected def writeLineage(stateStoreCheckpointIdLineage: Array[LineageItem]): Unit = {
     assert(version >= 3,
       "writeLineage should only be invoked with state store checkpoint id enabled (version >= 3)")
     val lineageStr = Serialization.write(stateStoreCheckpointIdLineage)
@@ -283,8 +283,9 @@ class StateStoreChangelogWriterV3(
 
   override def version: Short = 3
 
+  writeVersion()
   // Also write lineage information to the changelog, it should appear
-  // in the first line for v3 because we don't write version there
+  // in the second line for v3 because the first line is the version
   writeLineage(stateStoreCheckpointIdLineage)
 }
 
@@ -328,6 +329,13 @@ abstract class StateStoreChangelogReader(
       throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
+
+  protected def verifyVersion(): Unit = {
+    // ensure that the version read is correct, also updates file position
+    val changelogVersionStr = input.readUTF()
+    assert(changelogVersionStr == s"v${version}",
+      s"Changelog version mismatch: $changelogVersionStr != v${version}")
+  }
 
   private def readLineage(): Array[LineageItem] = {
     assert(version >= 3,
@@ -410,11 +418,7 @@ class StateStoreChangelogReaderV2(
 
   override def version: Short = 2
 
-  // ensure that the version read is v2
-  val changelogVersionStr = input.readUTF()
-  assert(changelogVersionStr == s"v${version}",
-    s"Changelog version mismatch: $changelogVersionStr != v${version}")
-
+  verifyVersion()
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())
@@ -455,9 +459,12 @@ class StateStoreChangelogReaderV3(
 
   override def version: Short = 3
 
+  verifyVersion()
+
   // If the changelogFile is written when state store checkpoint unique id is enabled
-  // the first line would be the lineage. We should update the file position by
-  // reading from the lineage during the reader initialization.
+  // the first line would be the version and the second line would be the lineage.
+  // We should update the file position by reading from the lineage during
+  // the reader initialization.
   lineage
 }
 

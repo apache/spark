@@ -153,8 +153,13 @@ class RocksDBFileManager(
   @volatile private var rootDirChecked: Boolean = false
   private val versionToRocksDBFiles = new ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]]
 
+  /**
+   * Get the changelog version based on rocksDB features.
+   * @return the version of changelog
+   */
   private def getChangelogVersion(
-      useColumnFamilies: Boolean, stateStoreCheckpointIdEnabled: Boolean): Short = {
+      useColumnFamilies: Boolean,
+      stateStoreCheckpointIdEnabled: Boolean): Short = {
     (useColumnFamilies, stateStoreCheckpointIdEnabled) match {
       case (false, false) => 1
       case (true, false) => 2
