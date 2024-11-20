@@ -827,6 +827,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "colName" -> toSQLId(mapCol.name),
                 "dataType" -> toSQLType(mapCol.dataType)))
 
+          // TODO: Remove this type check once we support Variant ordering
           case o if variantColumnInSetOperation(o).isDefined =>
             val variantCol = variantColumnInSetOperation(o).get
             o.failAnalysis(
