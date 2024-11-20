@@ -17,8 +17,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.SortOrder
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -51,16 +51,19 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   extends SQLConfHelper with ColumnResolutionHelper {
 
   def apply(s: Sort): LogicalPlan = {
-    val resolvedBasic = s.order.map(resolveExpressionByPlanOutput(_, s.child))
     val resolvedWithAgg = s.child match {
-      case Filter(_, agg: Aggregate) => resolvedBasic.map(resolveColWithAgg(_, agg))
-      case _ => resolvedBasic.map(resolveColWithAgg(_, s.child))
+      case Filter(_, agg: Aggregate) => checkLcaAndResolveWithAgg(s, agg)
+      case agg: Aggregate => checkLcaAndResolveWithAgg(s, agg)
+      case other => s.order.map(resolveExpressionByPlanOutput(_, other))
     }
-    val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
+    val (missingAttrResolved, newChild) =
+      resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
     val orderByAllResolved = resolveOrderByAll(
       s.global, newChild, missingAttrResolved.map(_.asInstanceOf[SortOrder]))
     val resolvedFinal = orderByAllResolved
       .map(e => resolveColsLastResort(e).asInstanceOf[SortOrder])
+
+
     if (s.child.output == newChild.output) {
       s.copy(order = resolvedFinal)
     } else {
@@ -68,6 +71,15 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
       val newSort = s.copy(order = resolvedFinal, child = newChild)
       Project(s.child.output, newSort)
     }
+  }
+
+  private def checkLcaAndResolveWithAgg(s: Sort, agg: Aggregate): Seq[Expression] = {
+    // Because we don't support referencing a lateral alias in aggregate function
+    // and add extra aggregate expression via
+    resolveLateralColumnAlias(agg.aggregateExpressions ++ s.order)
+      .takeRight(s.order.length)
+      .map(resolveExpressionByPlanOutput(_, s.child))
+      .map(resolveColWithAgg(_, agg))
   }
 
   private def resolveOrderByAll(

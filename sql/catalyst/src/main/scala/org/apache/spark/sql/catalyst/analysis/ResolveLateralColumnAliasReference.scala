@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.WindowExpression.hasWindowExpression
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, TEMP_RESOLVED_COLUMN}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -126,7 +126,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
    * - [[pList]] of operator [[p]] contains WindowExpression, but all expressions of [[p]] are
    *   resolved, and the children of [[p]] are resolved.
    */
-  private def ruleApplicableOnOperator(p: LogicalPlan, pList: Seq[NamedExpression]): Boolean = {
+  private def ruleApplicableOnOperator(p: LogicalPlan, pList: Seq[Expression]): Boolean = {
     p.resolved ||
       (pList.exists(hasWindowExpression) && p.expressions.forall(_.resolved) && p.childrenResolved)
   }
@@ -266,6 +266,21 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
           )
         }
 
+      case sortOriginal: Sort
+        if ruleApplicableOnOperator(sortOriginal, sortOriginal.order) &&
+          sortOriginal.order.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
+        val sort @ Sort(orderList, _, _, _) = sortOriginal.mapChildren(apply0)
+        val newOrder = orderList.map {
+          _.transformWithPruning(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) {
+            case a: AggregateExpression if a.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) =>
+              throw QueryCompilationErrors.lateralColumnAliasInAggFuncUnsupportedError(
+                a.collectFirst {
+                  case lcaRef: LateralColumnAliasReference => lcaRef.nameParts
+                }.get, a)
+            case lcaRef: LateralColumnAliasReference => lcaRef.ne
+          }.asInstanceOf[SortOrder]
+        }
+        sort.copy(order = newOrder)
       case p: LogicalPlan =>
         p.mapChildren(apply0)
     }
