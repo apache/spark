@@ -765,16 +765,17 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       LineageItem(2, java.util.UUID.randomUUID.toString),
       LineageItem(3, java.util.UUID.randomUUID.toString)
     )
-    val changelogWriter = fileManager.getChangeLogWriter(3, false, checkpointUniqueId)
-    changelogWriter.writeLineage(lineage)
-    assert(changelogWriter.version === 1)
+    val changelogWriter = fileManager.getChangeLogWriter(
+      3, useColumnFamilies = false, checkpointUniqueId, Some(lineage))
+    assert(changelogWriter.version === 3)
 
     (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
     (2 to 4).foreach(j => changelogWriter.delete(j.toString))
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(3, false, checkpointUniqueId)
-    assert(changelogReader.version === 1)
+    val changelogReader = fileManager.getChangelogReader(
+      3, useColumnFamilies = false, checkpointUniqueId)
+    assert(changelogReader.version === 3)
     assert(changelogReader.lineage sameElements lineage)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
@@ -796,7 +797,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
-    val changelogWriter = fileManager.getChangeLogWriter(1, true)
+    val changelogWriter = fileManager.getChangeLogWriter(1, useColumnFamilies = true)
     assert(changelogWriter.version === 2)
     (1 to 5).foreach { i =>
       changelogWriter.put(i.toString, i.toString)
@@ -810,7 +811,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(1, true)
+    val changelogReader = fileManager.getChangelogReader(1, useColumnFamilies = true)
     assert(changelogReader.version === 2)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
@@ -838,9 +839,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       LineageItem(2, java.util.UUID.randomUUID.toString),
       LineageItem(3, java.util.UUID.randomUUID.toString)
     )
-    val changelogWriter = fileManager.getChangeLogWriter(1, true, checkpointUniqueId)
-    changelogWriter.writeLineage(lineage)
-    assert(changelogWriter.version === 2)
+    val changelogWriter = fileManager.getChangeLogWriter(
+      1, useColumnFamilies = true, checkpointUniqueId, Some(lineage))
+    assert(changelogWriter.version === 4)
     (1 to 5).foreach { i =>
       changelogWriter.put(i.toString, i.toString)
     }
@@ -853,8 +854,9 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(1, true, checkpointUniqueId)
-    assert(changelogReader.version === 2)
+    val changelogReader = fileManager.getChangelogReader(
+      1, useColumnFamilies = true, checkpointUniqueId)
+    assert(changelogReader.version === 4)
     assert(changelogReader.lineage sameElements lineage)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
