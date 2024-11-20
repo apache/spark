@@ -533,18 +533,19 @@ abstract class Catalog {
    *   catalog.update("source", Map("salary" -> lit(200)), $"salary" === 100)
    * }}}
    *
-   * @param tableName is either a qualified or unqualified name that designates a table.
-   *                  If no database identifier is provided, it refers to a table in the
-   *                  current database.
-   * @param assignments A Map of column names to Column expressions representing the updates
-   *     to be applied.
-   * @param condition the update condition
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table. If no database
+   *   identifier is provided, it refers to a table in the current database.
+   * @param assignments
+   *   A Map of column names to Column expressions representing the updates to be applied.
+   * @param condition
+   *   the update condition
    * @since 4.1.0
    */
   def updateTable(
-    tableName: String,
-    assignments: Map[String, org.apache.spark.sql.Column],
-    condition: org.apache.spark.sql.Column): Unit =
+      tableName: String,
+      assignments: Map[String, org.apache.spark.sql.Column],
+      condition: org.apache.spark.sql.Column): Unit =
     throw new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2041",
       messageParameters = Map("methodName" -> "updateTable"))
@@ -557,16 +558,16 @@ abstract class Catalog {
    *   catalog.update("source", Map("salary" -> lit(200)))
    * }}}
    *
-   * @param tableName is either a qualified or unqualified name that designates a table.
-   *                  If no database identifier is provided, it refers to a table in the
-   *                  current database.
-   * @param assignments A Map of column names to Column expressions representing the updates
-   *     to be applied.
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table. If no database
+   *   identifier is provided, it refers to a table in the current database.
+   * @param assignments
+   *   A Map of column names to Column expressions representing the updates to be applied.
    * @since 4.1.0
    */
   def updateTable(
-    tableName: String,
-    assignments: Map[String, org.apache.spark.sql.Column]): Unit =
+      tableName: String,
+      assignments: Map[String, org.apache.spark.sql.Column]): Unit =
     throw new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2041",
       messageParameters = Map("methodName" -> "updateTable"))
