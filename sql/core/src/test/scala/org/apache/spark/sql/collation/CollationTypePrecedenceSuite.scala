@@ -357,6 +357,35 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"SELECT COLLATION(elt(2, 'a' collate UTF8_LCASE, 'b' collate UNICODE))"))
   }
 
+  test("named_struct names and values") {
+    checkAnswer(
+      sql(s"SELECT named_struct('name1', 'value1', 'name2', 'value2')"),
+      Row(Row("value1", "value2")))
+
+    checkAnswer(
+      sql(s"SELECT named_struct" +
+        s"('name1' collate unicode, 'value1', 'name2' collate unicode, 'value2')"),
+      Row(Row("value1", "value2")))
+
+    checkAnswer(
+      sql(s"SELECT named_struct" +
+        s"('name1', 'value1' collate unicode, 'name2', 'value2' collate unicode)"),
+      Row(Row("value1", "value2")))
+
+    checkAnswer(
+      sql(s"SELECT named_struct('name1' collate utf8_lcase, 'value1' collate unicode," +
+        s"'name2' collate utf8_lcase, 'value2' collate unicode)"),
+      Row(Row("value1", "value2")))
+
+    assertExplicitMismatch(
+      sql(s"SELECT named_struct" +
+        s"('name1' collate unicode, 'value1', 'name2' collate utf8_lcase, 'value2')"))
+
+    assertExplicitMismatch(
+      sql(s"SELECT named_struct" +
+        s"('name1', 'value1' collate unicode, 'name2', 'value2' collate utf8_lcase)"))
+  }
+
   test("access collated map via literal") {
     val tableName = "map_with_lit"
 

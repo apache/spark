@@ -113,8 +113,9 @@ object CollationTypeCoercion {
       mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
 
     case namedStruct: CreateNamedStruct if namedStruct.children.size % 2 == 0 =>
+      val newNames = collateToSingleType(namedStruct.nameExprs)
       val newValues = collateToSingleType(namedStruct.valExprs)
-      val interleaved = namedStruct.nameExprs.zip(newValues).flatMap(pair => Seq(pair._1, pair._2))
+      val interleaved = newNames.zip(newValues).flatMap(pair => Seq(pair._1, pair._2))
       namedStruct.withNewChildren(interleaved)
 
     case splitPart: SplitPart =>
