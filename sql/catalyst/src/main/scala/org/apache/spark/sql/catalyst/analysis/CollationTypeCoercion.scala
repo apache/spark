@@ -88,6 +88,11 @@ object CollationTypeCoercion {
       val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
       regExpReplace.withNewChildren(newChildren)
 
+    case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
+      val Seq(str, len, pad) = stringPadExpr.children
+      val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
+      stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
+
     case raiseError: RaiseError =>
       val newErrorParams = raiseError.errorParms.dataType match {
         case MapType(StringType, StringType, _) => raiseError.errorParms

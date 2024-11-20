@@ -4043,23 +4043,16 @@ ki	si
 -- !query
 select rpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
-struct<rpad(utf8_binary, 8, utf8_lcase):string>
+struct<>
 -- !query output
-Hello, w
-Somethin
-SparkSQL
-aaAaAAaA
-aaAaAAaA
-aaAaAAaA
-abcabcab
-abcdcbaa
-bbAbAAbA
-efd2efd2
-kittensi
-İo İoİoİ
-İoi̇oi̇o
-İoİo İo 
-İoİoİoİo
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
+}
 
 
 -- !query
@@ -4087,23 +4080,16 @@ kittenki
 -- !query
 select rpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t5
 -- !query schema
-struct<rpad(collate(utf8_binary, utf8_binary), 8, collate(s, utf8_lcase)):string>
+struct<>
 -- !query output
-Hello, w
-Somethin
-SparkSpa
-aaAaAAaA
-aaAaAAaA
-aaAaAAaA
-abcabcab
-abcdcbaa
-bbAbAAbA
-efd2efd2
-kittenki
-İo İoİoİ
-İoİoİoİo
-İoİoİoİo
-İoİoİoİo
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
+}
 
 
 -- !query
@@ -4197,7 +4183,7 @@ kittenaa	sitTinga
 -- !query
 select rpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), rpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t5
 -- !query schema
-struct<rpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string,rpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string collate UTF8_LCASE>
+struct<rpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE,rpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string>
 -- !query output
 Hello, w	Hello, w
 Somethin	Somethin
@@ -4219,23 +4205,16 @@ kittenAa	sitTingA
 -- !query
 select lpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
-struct<lpad(utf8_binary, 8, utf8_lcase):string>
+struct<>
 -- !query output
-Hello, w
-SQLSpark
-Somethin
-aaAaAAaA
-aaAaAAaA
-aaAaAAaA
-aabcdcba
-abcababc
-bbAbAAbA
-efd2efd2
-i̇oi̇oİo
-sikitten
-İo İo İo
-İoİoİoİo
-İoİoİİo
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
+}
 
 
 -- !query
@@ -4263,23 +4242,16 @@ kikitten
 -- !query
 select lpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t5
 -- !query schema
-struct<lpad(collate(utf8_binary, utf8_binary), 8, collate(s, utf8_lcase)):string>
+struct<>
 -- !query output
-Hello, w
-Somethin
-SpaSpark
-aaAaAAaA
-aaAaAAaA
-aaAaAAaA
-aabcdcba
-abcababc
-bbAbAAbA
-efd2efd2
-kikitten
-İoİoİoİo
-İoİoİoİo
-İoİoİoİo
-İoİoİİo
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
+}
 
 
 -- !query
@@ -4373,7 +4345,7 @@ bbAbAAbA	aaaaaaaa
 -- !query
 select lpad(utf8_binary, 8, 'AaAA' collate utf8_lcase), lpad(utf8_lcase, 8, 'AAa' collate utf8_binary) from t5
 -- !query schema
-struct<lpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string,lpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string collate UTF8_LCASE>
+struct<lpad(utf8_binary, 8, collate(AaAA, utf8_lcase)):string collate UTF8_LCASE,lpad(utf8_lcase, 8, collate(AAa, utf8_binary)):string>
 -- !query output
 AaAAAabc	AAaAAabc
 AaAAAaİo	AAaAAaİo
