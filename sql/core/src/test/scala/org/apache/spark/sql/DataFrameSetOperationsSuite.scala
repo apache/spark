@@ -373,6 +373,12 @@ class DataFrameSetOperationsSuite extends QueryTest
       parameters = Map(
         "colName" -> "`v`",
         "dataType" -> "\"VARIANT\""))
+    checkError(
+      exception = intercept[AnalysisException](df.dropDuplicates()),
+      condition = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+      parameters = Map(
+        "colName" -> "`v`",
+        "dataType" -> "\"VARIANT\""))
     withTempView("tv") {
       df.createOrReplaceTempView("tv")
       checkError(
