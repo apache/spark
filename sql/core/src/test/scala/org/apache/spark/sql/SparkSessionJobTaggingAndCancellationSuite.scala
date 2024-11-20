@@ -145,6 +145,8 @@ class SparkSessionJobTaggingAndCancellationSuite
       })
 
       var realTagOneForSessionA: String = null
+      var childThread: Thread = null
+      val childThreadLock = new Semaphore(0)
 
       // Note: since tags are added in the Future threads, they don't need to be cleared in between.
       val jobA = Future {
@@ -162,9 +164,22 @@ class SparkSessionJobTaggingAndCancellationSuite
         assert(realTagOneForSessionA ==
           s"${sessionA.sessionJobTag}-thread-${sessionA.threadUuid.get()}-one")
         assert(sessionA.getTags() == Set("one"))
+
+        // Create a child thread which inherits thread-local variables and tries to interrupt
+        // the job started from the parent thread. The child thread is blocked until the main
+        // thread releases the lock.
+        childThread = new Thread {
+          override def run(): Unit = {
+            assert(childThreadLock.tryAcquire(1, 20, TimeUnit.SECONDS))
+            assert(sessionA.getTags() == Set("one"))
+            assert(sessionA.interruptTag("one").size == 1)
+          }
+        }
+        childThread.start()
         try {
           sessionA.range(1, 10000).map { i => Thread.sleep(100); i }.count()
         } finally {
+          childThread.interrupt()
           sessionA.clearTags() // clear for the case of thread reuse by another Future
         }
       }
@@ -251,14 +266,14 @@ class SparkSessionJobTaggingAndCancellationSuite
       assert(sem.tryAcquire(1, 1, TimeUnit.MINUTES))
       assert(jobEnded.intValue == 1)
 
-      // Another job cancelled. The next line cancels nothing because we're now in another thread
+      // Another job cancelled. The next line cancels nothing because we're now in another thread.
+      // The real cancel is done through unblocking a child thread, which is waiting for a lock
       assert(sessionA.interruptTag("one").isEmpty)
-      // Have to cancel it via SparkContext using the real tag
-      sessionA.sparkContext.cancelJobsWithTagWithFuture(realTagOneForSessionA, "abc")
+      childThreadLock.release()
       val eA = intercept[SparkException] {
         ThreadUtils.awaitResult(jobA, 1.minute)
       }.getCause
-      assert(eA.getMessage contains "abc")
+      assert(eA.getMessage contains "cancelled job tags one")
       assert(sem.tryAcquire(1, 1, TimeUnit.MINUTES))
       assert(jobEnded.intValue == 2)
 
