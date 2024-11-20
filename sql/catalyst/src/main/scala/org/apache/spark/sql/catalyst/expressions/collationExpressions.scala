@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.{AttributeNameParser, CollationFactory}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -56,7 +56,8 @@ object CollateExpressionBuilder extends ExpressionBuilder {
                 evalCollation.toString.toUpperCase().contains("TRIM")) {
                 throw QueryCompilationErrors.trimCollationNotEnabledError()
               }
-              Collate(e, evalCollation.toString)
+              Collate(e, scala.Left(UnresolvedCollation(
+                AttributeNameParser.parseAttributeName(evalCollation.toString))))
             }
           case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
             funcName, "collationName", StringType)
@@ -73,10 +74,9 @@ object CollateExpressionBuilder extends ExpressionBuilder {
  * This function is pass-through, it will not modify the input data.
  * Only type metadata will be updated.
  */
-case class Collate(child: Expression, collationName: String)
+case class Collate(child: Expression, collation: Either[UnresolvedCollation, ResolvedCollation])
   extends UnaryExpression with ExpectsInputTypes {
-  private val collationId = CollationFactory.collationNameToId(collationName)
-  override def dataType: DataType = StringType(collationId)
+  override def dataType: DataType = collation.merge.dataType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
@@ -88,9 +88,34 @@ case class Collate(child: Expression, collationName: String)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, (in) => in)
 
-  override def sql: String = s"$prettyName(${child.sql}, $collationName)"
+  override def sql: String = s"$prettyName(${child.sql}, $collation)"
 
-  override def toString: String = s"$prettyName($child, $collationName)"
+  override def toString: String = s"$prettyName($child, $collation)"
+}
+
+/**
+ * An expression that marks an unresolved collation name.
+ *
+ * This class is used to represent a collation name that has not yet been resolved from a fully
+ * qualified collation name. It is used during the analysis phase, where the collation name is
+ * specified but not yet validated or resolved.
+ */
+case class UnresolvedCollation(collationName: Seq[String])
+  extends LeafExpression with Unevaluable {
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+
+  override def nullable: Boolean = false
+}
+
+/**
+ * An expression that represents a resolved collation name.
+ */
+case class ResolvedCollation(collationName: String) extends LeafExpression with CodegenFallback {
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = {}
+
+  override def dataType: DataType = StringType(CollationFactory.collationNameToId(collationName))
 }
 
 // scalastyle:off line.contains.tab

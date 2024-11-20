@@ -1180,19 +1180,26 @@ public final class CollationFactory {
    * Returns the collation ID for the given collation name.
    */
   public static int collationNameToId(String collationName) throws SparkException {
-    // If collation name is given as a fully qualified name, extract the actual collation name as
-    // the last part of the [catalog].[schema].[collation_name] name.
-    long numDots = collationName.chars().filter(ch -> ch == '.').count();
-    if (numDots > 0) {
-      String[] nameParts = collationName.split("\\.");
-      // Currently only predefined collations are supported.
-      if (numDots != 2 || !CollationFactory.CATALOG.equalsIgnoreCase(nameParts[0]) ||
-          !CollationFactory.SCHEMA.equalsIgnoreCase(nameParts[1])) {
-        throw CollationFactory.Collation.CollationSpec.collationInvalidNameException(nameParts[nameParts.length - 1]);
-      }
-      return Collation.CollationSpec.collationNameToId(nameParts[2]);
-    }
     return Collation.CollationSpec.collationNameToId(collationName);
+  }
+
+  public static String resolveFullyQualifiedName(String[] collationName) throws SparkException {
+    // If collation name in `UnresolvedCollation` has only one part, then we don't need to
+    // do any name resolution and can directly resolve it to a `ResolvedCollation`.
+    if (collationName.length == 1) {
+      return collationName[0];
+    } else {
+      // Currently we only support builtin collation names with fixed catalog `SYSTEM` and
+      // schema `BUILTIN`.
+      if (collationName.length != 3
+          || !CollationFactory.CATALOG.equalsIgnoreCase(collationName[0])
+          || !CollationFactory.SCHEMA.equalsIgnoreCase(collationName[1])) {
+        // Throw exception with original (before case conversion) collation name.
+        throw CollationFactory.Collation.CollationSpec.
+            collationInvalidNameException(collationName[collationName.length - 1]);
+      }
+      return collationName[2];
+    }
   }
 
   /**
