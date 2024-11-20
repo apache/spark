@@ -302,5 +302,5 @@ object StaticSQLConf {
         "discoverable in the Python environment.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 }
