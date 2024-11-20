@@ -240,13 +240,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     }
 
     e.transformWithPruning(
-      _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN, LAZY_OUTER_REFERENCE)) {
+      _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
       case u: UnresolvedAttribute =>
         resolve(u.nameParts).getOrElse(u)
-      case u: LazyOuterReference =>
-        // If we can't resolve this outer reference, replace it with `UnresolvedOuterReference` so
-        // that we can throw a better error to mention the candidate outer columns.
-        resolve(u.nameParts).getOrElse(UnresolvedOuterReference(u.nameParts))
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
       // Aggregate but failed.
       case t: TempResolvedColumn if t.hasTried =>

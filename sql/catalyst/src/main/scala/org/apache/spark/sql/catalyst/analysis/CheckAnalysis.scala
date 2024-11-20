@@ -457,11 +457,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
 
-          case l: LazyAnalysisExpression =>
-            l.failAnalysis(
-              errorClass = "UNANALYZABLE_EXPRESSION",
-              messageParameters = Map("expr" -> toSQLExpr(l)))
-
           case _ =>
         })
 
@@ -1066,20 +1061,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         }
       case _ =>
     }
-
-    def checkUnresolvedOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = {
-      expr.plan.foreachUp(_.expressions.foreach(_.foreachUp {
-        case o: UnresolvedOuterReference =>
-          val cols = p.inputSet.toSeq.map(attr => toSQLId(attr.name)).mkString(", ")
-          o.failAnalysis(
-            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-            messageParameters = Map("objectName" -> toSQLId(o.name), "proposal" -> cols))
-        case _ =>
-      }))
-    }
-
-    // Check if there is unresolved outer attribute in the subquery plan.
-    checkUnresolvedOuterReference(plan, expr)
 
     // Validate the subquery plan.
     checkAnalysis0(expr.plan)
