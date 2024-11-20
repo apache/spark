@@ -3197,14 +3197,6 @@ object SQLConf {
       .version("4.0.0")
       .fallbackConf(Python.PYTHON_WORKER_FAULTHANLDER_ENABLED)
 
-  val PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED =
-    buildConf("spark.sql.pyspark.dataSource.staticImport.enabled")
-      .doc("When true, load all available Python data sources installed or " +
-        "discoverable in the Python environment.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val PYSPARK_PLOT_MAX_ROWS =
     buildConf("spark.sql.pyspark.plotting.max_rows")
       .doc("The visual limit on plots. If set to 1000 for top-n-based plots (pie, bar, barh), " +
@@ -5993,7 +5985,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 
   def pythonDataSourceStaticImportEnabled: Boolean =
-    getConf(PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED)
+    getConf(StaticSQLConf.PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED)
 
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 

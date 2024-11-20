@@ -295,4 +295,12 @@ object StaticSQLConf {
       .version("3.1.0")
       .stringConf
       .createWithDefault("")
+
+  val PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED =
+    buildStaticConf("spark.sql.pyspark.sources.staticImport.enabled")
+      .doc("When true, load all available Python data sources installed or " +
+        "discoverable in the Python environment.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 }
