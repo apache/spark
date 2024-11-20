@@ -283,4 +283,19 @@ case class ForStatement(
     query: SingleStatement,
     variableName: Option[String],
     body: CompoundBody,
-    label: Option[String]) extends CompoundPlanStatement
+    label: Option[String]) extends CompoundPlanStatement {
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override def children: Seq[LogicalPlan] = Seq(query, body)
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
+    assert(newChildren.length == 2)
+    ForStatement(
+      newChildren(0).asInstanceOf[SingleStatement],
+      variableName,
+      newChildren(1).asInstanceOf[CompoundBody],
+      label)
+  }
+}
