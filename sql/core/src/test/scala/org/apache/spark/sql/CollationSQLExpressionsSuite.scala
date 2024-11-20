@@ -1469,7 +1469,46 @@ class CollationSQLExpressionsSuite
     }
   }
 
-  test("Support VariantGet & TryVariantGet variant expressions with collation") {
+  test("Handle invalid JSON for TryParseJson variant expression with collation") {
+    // try_parse_json shouldn't throw an exception when the string is not valid JSON value
+    val json = "{\"a\":1,]"
+    val query = s"SELECT try_parse_json('$json');"
+    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
+      val testQuery = sql(query)
+      val testResult = testQuery.collect().map(_.toString()).mkString("")
+      assert(testResult === s"[null]")
+    }
+  }
+
+  test("Support IsVariantNull variant expressions with collation") {
+    case class IsVariantNullTestCase(
+      input: String,
+      collationName: String,
+      result: Boolean
+    )
+
+    val testCases = Seq(
+      IsVariantNullTestCase("'null'", "UTF8_BINARY", result = true),
+      IsVariantNullTestCase("'\"null\"'", "UTF8_LCASE", result = false),
+      IsVariantNullTestCase("'13'", "UNICODE", result = false),
+      IsVariantNullTestCase("null", "UNICODE_CI", result = false)
+    )
+
+    // Supported collations
+    testCases.foreach(t => {
+      val query =
+        s"""
+           |SELECT is_variant_null(parse_json(${t.input}))
+           |""".stripMargin
+      // Result & data type
+      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
+        val testQuery = sql(query)
+        checkAnswer(testQuery, Row(t.result))
+      }
+    })
+  }
+
+    test("Support VariantGet & TryVariantGet variant expressions with collation") {
     case class VariantGetTestCase(
       input: String,
       path: String,
@@ -1519,45 +1558,6 @@ class CollationSQLExpressionsSuite
         val testResult = testQuery.collect().map(_.toString()).mkString("")
         assert(testResult === "[" + t.result + "]") // can't use checkAnswer for Variant
         assert(testQuery.schema.fields.head.dataType.sameType(t.resultType))
-      }
-    })
-  }
-
-  test("Handle invalid JSON for TryParseJson variant expression with collation") {
-    // try_parse_json shouldn't throw an exception when the string is not valid JSON value
-    val json = "{\"a\":1,]"
-    val query = s"SELECT try_parse_json('$json');"
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      val testQuery = sql(query)
-      val testResult = testQuery.collect().map(_.toString()).mkString("")
-      assert(testResult === s"[null]")
-    }
-  }
-
-  test("Support IsVariantNull variant expressions with collation") {
-    case class IsVariantNullTestCase(
-      input: String,
-      collationName: String,
-      result: Boolean
-    )
-
-    val testCases = Seq(
-      IsVariantNullTestCase("'null'", "UTF8_BINARY", result = true),
-      IsVariantNullTestCase("'\"null\"'", "UTF8_LCASE", result = false),
-      IsVariantNullTestCase("'13'", "UNICODE", result = false),
-      IsVariantNullTestCase("null", "UNICODE_CI", result = false)
-    )
-
-    // Supported collations
-    testCases.foreach(t => {
-      val query =
-        s"""
-           |SELECT is_variant_null(parse_json(${t.input}))
-           |""".stripMargin
-      // Result & data type
-      withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
-        val testQuery = sql(query)
-        checkAnswer(testQuery, Row(t.result))
       }
     })
   }
