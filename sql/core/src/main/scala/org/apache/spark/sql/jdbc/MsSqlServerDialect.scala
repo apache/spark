@@ -90,7 +90,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       expr match {
         case e: Predicate => e.name() match {
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
-            val Array(l, r) = e.children().map(inputToSQLNoPredicate)
+            val Array(l, r) = e.children().map(inputToSQLNoBool)
             visitBinaryComparison(e.name(), l, r)
           case "CASE_WHEN" =>
             // Since MsSqlServer cannot handle boolean expressions inside
@@ -102,9 +102,9 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
             // Out: ... CASE WHEN a = b THEN CASE WHEN c = d THEN 1 ELSE 0 END ... END = 1
             val stringArray = e.children().grouped(2).flatMap {
               case Array(whenExpression, thenExpression) =>
-                Array(inputToSQL(whenExpression), inputToSQLNoPredicate(thenExpression))
+                Array(inputToSQL(whenExpression), inputToSQLNoBool(thenExpression))
               case Array(elseExpression) =>
-                Array(inputToSQLNoPredicate(elseExpression))
+                Array(inputToSQLNoBool(elseExpression))
             }.toArray
 
             visitCaseWhen(stringArray) + " = 1"
