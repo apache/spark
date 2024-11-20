@@ -5370,6 +5370,11 @@
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
+      "SQL_SCRIPTING" : {
+        "message" : [
+          "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
+        ]
+      },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
         "message" : [
           "Creating multiple column families with <stateStoreProvider> is not supported."

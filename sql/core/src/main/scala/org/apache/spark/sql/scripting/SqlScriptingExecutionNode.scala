@@ -136,19 +136,16 @@ class SingleStatementExec(
 }
 
 /**
- * Abstract class for all statements that contain nested statements.
- * Implements recursive iterator logic over all child execution nodes.
- * @param collection
- *   Collection of child execution nodes.
+ * Executable node for CompoundBody.
+ * @param statements
+ *   Executable nodes for nested statements within the CompoundBody.
  * @param label
- *   Label set by user or None otherwise.
+ *   Label set by user to CompoundBody or None otherwise.
  */
-abstract class CompoundNestedStatementIteratorExec(
-    collection: Seq[CompoundStatementExec],
-    label: Option[String] = None)
+class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[String] = None)
   extends NonLeafStatementExec {
 
-  private var localIterator = collection.iterator
+  private var localIterator = statements.iterator
   private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
 
   /** Used to stop the iteration in cases when LEAVE statement is encountered. */
@@ -207,8 +204,8 @@ abstract class CompoundNestedStatementIteratorExec(
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
   override def reset(): Unit = {
-    collection.foreach(_.reset())
-    localIterator = collection.iterator
+    statements.foreach(_.reset())
+    localIterator = statements.iterator
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
     stopIteration = false
   }
@@ -243,16 +240,6 @@ abstract class CompoundNestedStatementIteratorExec(
     }
   }
 }
-
-/**
- * Executable node for CompoundBody.
- * @param statements
- *   Executable nodes for nested statements within the CompoundBody.
- * @param label
- *   Label set by user to CompoundBody or None otherwise.
- */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[String] = None)
-  extends CompoundNestedStatementIteratorExec(statements, label)
 
 /**
  * Executable node for IfElseStatement.
