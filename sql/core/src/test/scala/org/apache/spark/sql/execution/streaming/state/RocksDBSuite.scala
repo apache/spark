@@ -16,6 +16,7 @@
  */
 
 package org.apache.spark.sql.execution.streaming.state
+// scalastyle:off
 
 import java.io._
 import java.nio.charset.Charset
@@ -293,7 +294,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       withDB(remoteDir, useColumnFamilies = colFamiliesEnabled,
           enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
           versionToUniqueId = versionToUniqueId) { db =>
-//        db.load(1)
+        db.load(1)
         ex = intercept[SparkException] {
           db.load(1)
         }
@@ -302,7 +303,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
             ex,
             condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
             parameters = Map(
-              "fileToRead" -> s"$remoteDir/1_${versionToUniqueId(1)}.changelog"
+              "fileToRead" -> s"$remoteDir/1.changelog"
             )
           )
         } else if (enableStateStoreCheckpointIds && !db.conf.enableChangelogCheckpointing) {
@@ -311,7 +312,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
             condition = "CANNOT_LOAD_STATE_STORE." +
               "CANNOT_GET_LATEST_SNAPSHOT_VERSION_AND_UNIQUE_ID_FROM_LINEAGE",
             parameters = Map(
-              "lineage" -> s"1:${versionToUniqueId(1)}",
+              "lineage" -> s"1:${versionToUniqueId.getOrElse(1, "")}",
               "snapshotVersionAndUniqueIds" -> s"0:"
             )
           )
@@ -896,16 +897,17 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       LineageItem(2, java.util.UUID.randomUUID.toString),
       LineageItem(3, java.util.UUID.randomUUID.toString)
     )
-    val changelogWriter = fileManager.getChangeLogWriter(3, false, checkpointUniqueId)
-    changelogWriter.writeLineage(lineage)
-    assert(changelogWriter.version === 1)
+    val changelogWriter = fileManager.getChangeLogWriter(
+      3, useColumnFamilies = false, checkpointUniqueId, Some(lineage))
+    assert(changelogWriter.version === 3)
 
     (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
     (2 to 4).foreach(j => changelogWriter.delete(j.toString))
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(3, false, checkpointUniqueId)
-    assert(changelogReader.version === 1)
+    val changelogReader = fileManager.getChangelogReader(
+      3, useColumnFamilies = false, checkpointUniqueId)
+    assert(changelogReader.version === 3)
     assert(changelogReader.lineage sameElements lineage)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
@@ -927,7 +929,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
-    val changelogWriter = fileManager.getChangeLogWriter(1, true)
+    val changelogWriter = fileManager.getChangeLogWriter(1, useColumnFamilies = true)
     assert(changelogWriter.version === 2)
     (1 to 5).foreach { i =>
       changelogWriter.put(i.toString, i.toString)
@@ -941,7 +943,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
     }
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(1, true)
+    val changelogReader = fileManager.getChangelogReader(1, useColumnFamilies = true)
     assert(changelogReader.version === 2)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
@@ -969,9 +971,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       LineageItem(2, java.util.UUID.randomUUID.toString),
       LineageItem(3, java.util.UUID.randomUUID.toString)
     )
-    val changelogWriter = fileManager.getChangeLogWriter(1, true, checkpointUniqueId)
-    changelogWriter.writeLineage(lineage)
-    assert(changelogWriter.version === 2)
+    val changelogWriter = fileManager.getChangeLogWriter(
+      1, useColumnFamilies = true, checkpointUniqueId, Some(lineage))
+    assert(changelogWriter.version === 4)
     (1 to 5).foreach { i =>
       changelogWriter.put(i.toString, i.toString)
     }
@@ -984,8 +986,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
     }
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(1, true, checkpointUniqueId)
-    assert(changelogReader.version === 2)
+    val changelogReader = fileManager.getChangelogReader(
+      1, useColumnFamilies = true, checkpointUniqueId)
+    assert(changelogReader.version === 4)
     assert(changelogReader.lineage sameElements lineage)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
@@ -2730,18 +2733,17 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
       val versionToUniqueId : mutable.Map[Long, String] = mutable.Map[Long, String]())
     extends RocksDB(dfsRootDir, conf, localRootDir, hadoopConf, loggingId,
       useColumnFamilies, enableStateStoreCheckpointIds = true) {
-    import java.util.UUID
 
     override def load(
         version: Long,
         ckptId: Option[String] = Some(""),
         readOnly: Boolean = false): RocksDB = {
 
-      if (version == 0) {
-        super.load(version, None, readOnly)
-      } else {
-        val checkpointUniqueId = versionToUniqueId
-          .getOrElseUpdate(version, UUID.randomUUID().toString)
+//      if (version == 0) {
+//        super.load(version, None, readOnly)
+//      } else {
+//        val checkpointUniqueId = versionToUniqueId
+//          .getOrElseUpdate(version, UUID.randomUUID().toString)
 //        var checkpointUniqueId = versionToUniqueId.get(version)
 //        // if checkpointUniqueId is not found, create one and put in to the map
 //        if (checkpointUniqueId.isEmpty) {
@@ -2771,17 +2773,20 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession {
         println(s"wei== versionToUniqueId for loading version: $version")
         versionToUniqueId.foreach { x => println(s"${x._1}: ${x._2}") }
 
-        super.load(version, Some(checkpointUniqueId), readOnly)
-      }
+        super.load(version, versionToUniqueId.get(version), readOnly)
+//      }
     }
 
     override def commit(): Long = {
+      val ret = super.commit()
       // loadedVersion and loadedCheckpointId got updated after commit
-      println(s"wei== commit put version: ${loadedVersion + 1} id: ${sessionStateStoreCkptId.get} ")
-      versionToUniqueId.getOrElseUpdate(loadedVersion + 1, sessionStateStoreCkptId.get)
+//      println(s"wei== commit put version: ${loadedVersion + 1} id: ${sessionStateStoreCkptId.get} ")
+//      versionToUniqueId.getOrElseUpdate(loadedVersion + 1, sessionStateStoreCkptId.get)
+      lineageManager.getLineage().foreach {
+        case LineageItem(version, id) => versionToUniqueId.getOrElseUpdate(version, id)
+      }
       println("wei== versionToUniqueId in commit")
       versionToUniqueId.foreach { x => println(s"${x._1}: ${x._2}") }
-      val ret = super.commit()
       ret
     }
   }
