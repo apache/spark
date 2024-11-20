@@ -187,6 +187,32 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
+  test("subsequent analyzer iterations correctly resolve default string types") {
+    // since concat coercion happens after resolving default types this test
+    // makes sure that we are correctly resolving the default string types
+    // in subsequent analyzer iterations
+    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+      sql(s"""
+           |CREATE TABLE $testTable
+           |USING $dataSource AS
+           |SELECT CONCAT(X'68656C6C6F', 'world') AS c1
+           |""".stripMargin)
+
+      checkAnswer(sql(s"SELECT c1 FROM $testTable"), Seq(Row("helloworld")))
+    }
+
+    // ELT is similar
+    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+      sql(s"""
+             |CREATE TABLE $testTable
+             |USING $dataSource AS
+             |SELECT ELT(1, X'68656C6C6F', 'world') AS c1
+             |""".stripMargin)
+
+      checkAnswer(sql(s"SELECT c1 FROM $testTable"), Seq(Row("hello")))
+    }
+  }
+
   // endregion
 
   // region DML tests

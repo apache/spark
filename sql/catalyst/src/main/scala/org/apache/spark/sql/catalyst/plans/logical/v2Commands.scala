@@ -459,6 +459,8 @@ trait V2CreateTableAsSelectPlan
       newQuery: LogicalPlan): V2CreateTableAsSelectPlan
 }
 
+trait V1CreateTablePlan extends LogicalPlan {}
+
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {
   def name: LogicalPlan
