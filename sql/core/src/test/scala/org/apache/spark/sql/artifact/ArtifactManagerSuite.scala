@@ -24,8 +24,8 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.api.java.UDF2
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
@@ -36,6 +36,8 @@ class ArtifactManagerSuite extends SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     val conf = super.sparkConf
     conf.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
+    conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED, true)
+    conf.set(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER, true)
   }
 
   private val artifactPath = new File("src/test/resources/artifact-tests").toPath
@@ -331,24 +333,17 @@ class ArtifactManagerSuite extends SharedSparkSession {
     }
   }
 
-  test("Add UDF as artifact") {
+  test("Added artifact can be loaded by the current SparkSession") {
     val buffer = Files.readAllBytes(artifactPath.resolve("IntSumUdf.class"))
     spark.addArtifact(buffer, "IntSumUdf.class")
 
-    val instance = artifactManager.classloader
-      .loadClass("IntSumUdf")
-      .getDeclaredConstructor()
-      .newInstance()
-      .asInstanceOf[UDF2[Long, Long, Long]]
-    spark.udf.register("intSum", instance, DataTypes.LongType)
+    spark.udf.registerJava("intSum", "IntSumUdf", DataTypes.LongType)
 
-    artifactManager.withResources {
-      val r = spark.range(5)
-        .withColumn("id2", col("id") + 1)
-        .selectExpr("intSum(id, id2)")
-        .collect()
-      assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
-    }
+    val r = spark.range(5)
+      .withColumn("id2", col("id") + 1)
+      .selectExpr("intSum(id, id2)")
+      .collect()
+    assert(r.map(_.getLong(0)).toSeq == Seq(1, 3, 5, 7, 9))
   }
 
   private def testAddArtifactToLocalSession(

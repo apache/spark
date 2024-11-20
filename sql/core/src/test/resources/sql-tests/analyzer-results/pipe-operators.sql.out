@@ -704,7 +704,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 -- !query
 table t
-|> where first_value(x) over (partition by y) = 1
+|> where sum(x) over (partition by y) = 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -716,7 +716,26 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-select * from t where first_value(x) over (partition by y) = 1
+table t
+|> where sum(x) over w = 1
+   window w as (partition by y)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE",
+  "sqlState" : "42601",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 66,
+    "fragment" : "table t\n|> where sum(x) over w = 1\n   window w as (partition by y)"
+  } ]
+}
+
+
+-- !query
+select * from t where sum(x) over (partition by y) = 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
@@ -1911,14 +1930,17 @@ Union false, false
 -- !query
 values (0, 1) tab(x, y)
 |> union table t
+|> where x = 0
 -- !query analysis
 Distinct
 +- Union false, false
-   :- Project [x#x, cast(y#x as string) AS y#x]
+   :- Project [x#x, cast(y#x as bigint) AS y#xL]
    :  +- SubqueryAlias tab
    :     +- LocalRelation [x#x, y#x]
-   +- SubqueryAlias spark_catalog.default.t
-      +- Relation spark_catalog.default.t[x#x,y#x] csv
+   +- Project [x#x, cast(y#x as bigint) AS y#xL]
+      +- Filter (x#x = 0)
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -2270,49 +2292,6 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "startIndex" : 12,
     "stopIndex" : 31,
     "fragment" : "order by x sort by x"
-  } ]
-}
-
-
--- !query
-table windowTestData
-|> window w as (partition by cte order by val)
-|> select cate, sum(val) over w
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clauses" : "the WINDOW clause"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 67,
-    "fragment" : "window w as (partition by cte order by val)"
-  } ]
-}
-
-
--- !query
-table windowTestData
-|> window w as (partition by cate order by val) limit 5
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.CLAUSE_WITH_PIPE_OPERATORS",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "clauses" : "the WINDOW clause"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 25,
-    "stopIndex" : 76,
-    "fragment" : "window w as (partition by cate order by val) limit 5"
   } ]
 }
 
@@ -2765,6 +2744,234 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "expression" : "\"b\"",
     "expressionAnyValue" : "\"any_value(b)\""
+  }
+}
+
+
+-- !query
+table windowTestData
+|> select cate, sum(val) over w
+   window w as (partition by cate order by val)
+-- !query analysis
+Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [cate#x], [val#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x]
+         +- SubqueryAlias windowtestdata
+            +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+table windowTestData
+|> select cate, sum(val) over w
+   window w as (order by val_timestamp range between unbounded preceding and current row)
+-- !query analysis
+Project [cate#x, sum(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [cate#x, val#x, val_timestamp#x, sum(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(val#x) windowspecdefinition(val_timestamp#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(val) OVER (ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [val_timestamp#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x, val_timestamp#x]
+         +- SubqueryAlias windowtestdata
+            +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+table windowTestData
+|> select cate, val
+    window w as (partition by cate order by val)
+-- !query analysis
+Project [cate#x, val#x]
++- SubqueryAlias windowtestdata
+   +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+      +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+         +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w as sum_val
+   window w as (partition by cate)
+|> select cate, val, sum_val, first_value(cate) over w
+   window w as (order by val)
+-- !query analysis
+Project [cate#x, val#x, sum_val#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [cate#x, val#x, sum_val#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [first_value(cate#x, false) windowspecdefinition(val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [val#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x, sum_val#xL]
+         +- Project [cate#x, val#x, sum_val#xL]
+            +- Project [cate#x, val#x, _we0#xL, pipeselect(_we0#xL) AS sum_val#xL]
+               +- Window [sum(val#x) windowspecdefinition(cate#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL], [cate#x]
+                  +- Project [cate#x, val#x]
+                     +- SubqueryAlias windowtestdata
+                        +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+                           +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                              +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                                 +- SubqueryAlias testData
+                                    +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w1, first_value(cate) over w2
+   window w1 as (partition by cate), w2 as (order by val)
+-- !query analysis
+Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
++- Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL, first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+   +- Window [first_value(cate#x, false) windowspecdefinition(val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value(cate) OVER (ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [val#x ASC NULLS FIRST]
+      +- Window [sum(val#x) windowspecdefinition(cate#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS sum(val) OVER (PARTITION BY cate ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL], [cate#x]
+         +- Project [cate#x, val#x]
+            +- SubqueryAlias windowtestdata
+               +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+                  +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                     +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                        +- SubqueryAlias testData
+                           +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w, first_value(val) over w
+   window w1 as (partition by cate order by val)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
+}
+
+
+-- !query
+(select col from st)
+|> select col.i1, sum(col.i2) over w
+   window w as (partition by col.i1 order by col.i2)
+-- !query analysis
+Project [i1#x, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [i1#x, _w0#x, _w1#x, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [_w1#x], [_w0#x ASC NULLS FIRST]
+      +- Project [col#x.i1 AS i1#x, col#x.i2 AS _w0#x, col#x.i1 AS _w1#x]
+         +- Project [col#x]
+            +- SubqueryAlias spark_catalog.default.st
+               +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table st
+|> select st.col.i1, sum(st.col.i2) over w
+   window w as (partition by st.col.i1 order by st.col.i2)
+-- !query analysis
+Project [i1#x, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [i1#x, _w0#x, _w1#x, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [_w1#x], [_w0#x ASC NULLS FIRST]
+      +- Project [col#x.i1 AS i1#x, col#x.i2 AS _w0#x, col#x.i1 AS _w1#x]
+         +- SubqueryAlias spark_catalog.default.st
+            +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table st
+|> select spark_catalog.default.st.col.i1, sum(spark_catalog.default.st.col.i2) over w
+   window w as (partition by spark_catalog.default.st.col.i1 order by spark_catalog.default.st.col.i2)
+-- !query analysis
+Project [i1#x, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [i1#x, _w0#x, _w1#x, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(_w0#x) windowspecdefinition(_w1#x, _w0#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(col.i2) OVER (PARTITION BY col.i1 ORDER BY col.i2 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [_w1#x], [_w0#x ASC NULLS FIRST]
+      +- Project [col#x.i1 AS i1#x, col#x.i2 AS _w0#x, col#x.i1 AS _w1#x]
+         +- SubqueryAlias spark_catalog.default.st
+            +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
+table windowTestData
+|> select cate, sum(val) over val
+   window val as (partition by cate order by val)
+-- !query analysis
+Project [cate#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
++- Project [cate#x, val#x, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL, sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL]
+   +- Window [sum(val#x) windowspecdefinition(cate#x, val#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#xL], [cate#x], [val#x ASC NULLS FIRST]
+      +- Project [cate#x, val#x]
+         +- SubqueryAlias windowtestdata
+            +- View (`windowTestData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+table windowTestData
+|> select cate, sum(val) over w
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
+}
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w1, first_value(cate) over w2
+   window w1 as (partition by cate)
+   window w2 as (order by val)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w2"
+  }
+}
+
+
+-- !query
+table windowTestData
+|> select cate, val, sum(val) over w as sum_val
+   window w as (partition by cate order by val)
+|> select cate, val, sum_val, first_value(cate) over w
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
+  }
+}
+
+
+-- !query
+table windowTestData
+|> select cate, val, first_value(cate) over w as first_val
+|> select cate, val, sum(val) over w as sum_val
+   window w as (order by val)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
+  "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "windowName" : "w"
   }
 }
 

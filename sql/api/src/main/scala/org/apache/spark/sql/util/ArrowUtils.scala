@@ -141,9 +141,12 @@ private[sql] object ArrowUtils {
       case udt: UserDefinedType[_] =>
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
       case _: VariantType =>
-        val fieldType = new FieldType(
-          nullable,
-          ArrowType.Struct.INSTANCE,
+        val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
+        // The metadata field is tagged with additional metadata so we can identify that the arrow
+        // struct actually represents a variant schema.
+        val metadataFieldType = new FieldType(
+          false,
+          toArrowType(BinaryType, timeZoneId, largeVarTypes),
           null,
           Map("variant" -> "true").asJava)
         new Field(
@@ -151,11 +154,21 @@ private[sql] object ArrowUtils {
           fieldType,
           Seq(
             toArrowField("value", BinaryType, false, timeZoneId, largeVarTypes),
-            toArrowField("metadata", BinaryType, false, timeZoneId, largeVarTypes)).asJava)
+            new Field("metadata", metadataFieldType, Seq.empty[Field].asJava)).asJava)
       case dataType =>
         val fieldType =
           new FieldType(nullable, toArrowType(dataType, timeZoneId, largeVarTypes), null)
         new Field(name, fieldType, Seq.empty[Field].asJava)
+    }
+  }
+
+  def isVariantField(field: Field): Boolean = {
+    assert(field.getType.isInstanceOf[ArrowType.Struct])
+    field.getChildren.asScala
+      .map(_.getName)
+      .asJava
+      .containsAll(Seq("value", "metadata").asJava) && field.getChildren.asScala.exists { child =>
+      child.getName == "metadata" && child.getMetadata.getOrDefault("variant", "false") == "true"
     }
   }
 
@@ -170,12 +183,7 @@ private[sql] object ArrowUtils {
         val elementField = field.getChildren().get(0)
         val elementType = fromArrowField(elementField)
         ArrayType(elementType, containsNull = elementField.isNullable)
-      case ArrowType.Struct.INSTANCE
-          if field.getMetadata.getOrDefault("variant", "") == "true"
-            && field.getChildren.asScala
-              .map(_.getName)
-              .asJava
-              .containsAll(Seq("value", "metadata").asJava) =>
+      case ArrowType.Struct.INSTANCE if isVariantField(field) =>
         VariantType
       case ArrowType.Struct.INSTANCE =>
         val fields = field.getChildren().asScala.map { child =>

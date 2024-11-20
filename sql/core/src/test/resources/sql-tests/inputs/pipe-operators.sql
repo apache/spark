@@ -228,10 +228,17 @@ table t
 |> where y = 'abc' or length(y) + sum(x) = 1;
 
 -- Window functions are not allowed in the WHERE clause (pipe operators or otherwise).
+-- (Note: to implement this behavior, perform the window function first separately in a SELECT
+-- clause and then add a pipe-operator WHERE clause referring to the result of the window function
+-- expression(s) therein).
 table t
-|> where first_value(x) over (partition by y) = 1;
+|> where sum(x) over (partition by y) = 1;
 
-select * from t where first_value(x) over (partition by y) = 1;
+table t
+|> where sum(x) over w = 1
+   window w as (partition by y);
+
+select * from t where sum(x) over (partition by y) = 1;
 
 -- Pipe operators may only refer to attributes produced as output from the directly-preceding
 -- pipe operator, not from earlier ones.
@@ -541,7 +548,8 @@ values (0, 'abc') tab(x, y)
 
 -- Union distinct with a VALUES list.
 values (0, 1) tab(x, y)
-|> union table t;
+|> union table t
+|> where x = 0;
 
 -- Union all with a table subquery on both the source and target sides.
 (select * from t)
@@ -664,15 +672,6 @@ table t
 -- ORDER BY and SORT BY are not supported at the same time.
 table t
 |> order by x sort by x;
-
--- The WINDOW clause is not supported yet.
-table windowTestData
-|> window w as (partition by cte order by val)
-|> select cate, sum(val) over w;
-
--- WINDOW and LIMIT are not supported at the same time.
-table windowTestData
-|> window w as (partition by cate order by val) limit 5;
 
 -- Aggregation operators: positive tests.
 -----------------------------------------
@@ -820,6 +819,83 @@ select 1 x, 2 y, 3 z
 -- in the GROUP BY clause.
 table other
 |> aggregate b group by a;
+
+-- WINDOW operators (within SELECT): positive tests.
+---------------------------------------------------
+
+-- SELECT with a WINDOW clause.
+table windowTestData
+|> select cate, sum(val) over w
+   window w as (partition by cate order by val);
+
+-- SELECT with RANGE BETWEEN as part of the window definition.
+table windowTestData
+|> select cate, sum(val) over w
+   window w as (order by val_timestamp range between unbounded preceding and current row);
+
+-- SELECT with a WINDOW clause not being referred in the SELECT list.
+table windowTestData
+|> select cate, val
+    window w as (partition by cate order by val);
+
+-- multiple SELECT clauses, each with a WINDOW clause (with the same window definition names).
+table windowTestData
+|> select cate, val, sum(val) over w as sum_val
+   window w as (partition by cate)
+|> select cate, val, sum_val, first_value(cate) over w
+   window w as (order by val);
+
+-- SELECT with a WINDOW clause for multiple window definitions.
+table windowTestData
+|> select cate, val, sum(val) over w1, first_value(cate) over w2
+   window w1 as (partition by cate), w2 as (order by val);
+
+-- SELECT with a WINDOW clause for multiple window functions over one window definition
+table windowTestData
+|> select cate, val, sum(val) over w, first_value(val) over w
+   window w1 as (partition by cate order by val);
+
+-- SELECT with a WINDOW clause, using struct fields.
+(select col from st)
+|> select col.i1, sum(col.i2) over w
+   window w as (partition by col.i1 order by col.i2);
+
+table st
+|> select st.col.i1, sum(st.col.i2) over w
+   window w as (partition by st.col.i1 order by st.col.i2);
+
+table st
+|> select spark_catalog.default.st.col.i1, sum(spark_catalog.default.st.col.i2) over w
+   window w as (partition by spark_catalog.default.st.col.i1 order by spark_catalog.default.st.col.i2);
+
+-- SELECT with one WINDOW definition shadowing a column name.
+table windowTestData
+|> select cate, sum(val) over val
+   window val as (partition by cate order by val);
+
+-- WINDOW operators (within SELECT): negative tests.
+---------------------------------------------------
+
+-- WINDOW without definition is not allowed in the pipe operator SELECT clause.
+table windowTestData
+|> select cate, sum(val) over w;
+
+-- Multiple WINDOW clauses are not supported in the pipe operator SELECT clause.
+table windowTestData
+|> select cate, val, sum(val) over w1, first_value(cate) over w2
+   window w1 as (partition by cate)
+   window w2 as (order by val);
+
+-- WINDOW definition cannot be referred across different pipe operator SELECT clauses.
+table windowTestData
+|> select cate, val, sum(val) over w as sum_val
+   window w as (partition by cate order by val)
+|> select cate, val, sum_val, first_value(cate) over w;
+
+table windowTestData
+|> select cate, val, first_value(cate) over w as first_val
+|> select cate, val, sum(val) over w as sum_val
+   window w as (order by val);
 
 -- Cleanup.
 -----------

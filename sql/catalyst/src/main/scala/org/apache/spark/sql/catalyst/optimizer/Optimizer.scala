@@ -334,7 +334,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         return plan
       }
       plan match {
-        case Sort(_, _, child) => child
+        case Sort(_, _, child, _) => child
         case Project(fields, child) => Project(fields, removeTopLevelSort(child))
         case other => other
       }
@@ -346,7 +346,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       case d: DynamicPruningSubquery => d
       case s @ ScalarSubquery(
         PhysicalOperation(projections, predicates, a @ Aggregate(group, _, child, _)),
-        _, _, _, _, mayHaveCountBug, _)
+        _, _, _, _, mayHaveCountBug, _, _)
         if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
           mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
         // This is a subquery with an aggregate that may suffer from a COUNT bug.
@@ -1303,7 +1303,7 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // Case 2: When a RepartitionByExpression has a child of global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
     case r @ RepartitionByExpression(
-        _, child @ (Sort(_, true, _) | _: RepartitionOperation), _, _) =>
+        _, child @ (Sort(_, true, _, _) | _: RepartitionOperation), _, _) =>
       r.withNewChildren(child.children)
     // Case 3: When a RebalancePartitions has a child of local or global Sort, Repartition or
     // RepartitionByExpression we can remove the child.
@@ -1370,11 +1370,11 @@ object CollapseWindow extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-    case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild))
+    case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild, _), _)
         if windowsCompatible(w1, w2) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
 
-    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
+    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild, _)), _)
         if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
@@ -1403,11 +1403,11 @@ object TransposeWindow extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-    case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild))
+    case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild, _), _)
       if windowsCompatible(w1, w2) =>
       Project(w1.output, w2.copy(child = w1.copy(child = grandChild)))
 
-    case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild)))
+    case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild, _)), _)
       if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
       Project(
         pl ++ w1.windowOutputSet,
@@ -1649,14 +1649,14 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  */
 object EliminateSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(_.containsPattern(SORT)) {
-    case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
+    case s @ Sort(orders, _, child, _) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
         child
       } else {
         s.copy(order = newOrders)
       }
-    case s @ Sort(_, global, child) => s.copy(child = recursiveRemoveSort(child, global))
+    case s @ Sort(_, global, child, _) => s.copy(child = recursiveRemoveSort(child, global))
     case j @ Join(originLeft, originRight, _, cond, _) if cond.forall(_.deterministic) =>
       j.copy(left = recursiveRemoveSort(originLeft, true),
         right = recursiveRemoveSort(originRight, true))
@@ -1675,7 +1675,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
       return plan
     }
     plan match {
-      case Sort(_, global, child) if canRemoveGlobalSort || !global =>
+      case Sort(_, global, child, _) if canRemoveGlobalSort || !global =>
         recursiveRemoveSort(child, canRemoveGlobalSort)
       case other if canEliminateSort(other) =>
         other.withNewChildren(other.children.map(c => recursiveRemoveSort(c, canRemoveGlobalSort)))

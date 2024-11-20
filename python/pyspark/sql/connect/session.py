@@ -50,6 +50,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 import urllib
 
+from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql.connect.logging import logger
@@ -449,7 +450,7 @@ class SparkSession:
         data: Union["pd.DataFrame", "np.ndarray", "pa.Table", Iterable[Any]],
         schema: Optional[Union[AtomicType, StructType, str, List[str], Tuple[str, ...]]] = None,
         samplingRatio: Optional[float] = None,
-        verifySchema: Optional[bool] = None,
+        verifySchema: Union[_NoValueType, bool] = _NoValue,
     ) -> "ParentDataFrame":
         assert data is not None
         if isinstance(data, DataFrame):
@@ -460,9 +461,6 @@ class SparkSession:
 
         if samplingRatio is not None:
             warnings.warn("'samplingRatio' is ignored. It is not supported with Spark Connect.")
-
-        if verifySchema is not None:
-            warnings.warn("'verifySchema' is ignored. It is not supported with Spark Connect.")
 
         _schema: Optional[Union[AtomicType, StructType]] = None
         _cols: Optional[List[str]] = None
@@ -576,7 +574,10 @@ class SparkSession:
                 "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
             )
 
-            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
+            if verifySchema is _NoValue:
+                verifySchema = safecheck == "true"
+
+            ser = ArrowStreamPandasSerializer(cast(str, timezone), verifySchema)
 
             _table = pa.Table.from_batches(
                 [
@@ -596,6 +597,9 @@ class SparkSession:
                 ).cast(arrow_schema)
 
         elif isinstance(data, pa.Table):
+            if verifySchema is _NoValue:
+                verifySchema = False
+
             prefer_timestamp_ntz = is_timestamp_ntz_preferred()
 
             (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
@@ -613,7 +617,10 @@ class SparkSession:
 
             _table = (
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
-                .cast(to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True))
+                .cast(
+                    to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True),
+                    safe=verifySchema,
+                )
                 .rename_columns(schema.names)
             )
 
@@ -652,6 +659,12 @@ class SparkSession:
             # The _table should already have the proper column names.
             _cols = None
 
+            if verifySchema is not _NoValue:
+                warnings.warn(
+                    "'verifySchema' is ignored. It is not supported"
+                    " with np.ndarray input on Spark Connect."
+                )
+
         else:
             _data = list(data)
 
@@ -683,12 +696,15 @@ class SparkSession:
                         errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
 
+            if verifySchema is _NoValue:
+                verifySchema = True
+
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
 
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
-            _table = LocalDataToArrowConversion.convert(_data, _schema)
+            _table = LocalDataToArrowConversion.convert(_data, _schema, cast(bool, verifySchema))
 
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.
@@ -1037,7 +1053,11 @@ class SparkSession:
             os.environ["SPARK_LOCAL_CONNECT"] = "1"
 
             # Configurations to be set if unset.
-            default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
+            default_conf = {
+                "spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin",
+                "spark.sql.artifact.isolation.enabled": "true",
+                "spark.sql.artifact.isolation.always.apply.classloader": "true",
+            }
 
             if "SPARK_TESTING" in os.environ:
                 # For testing, we use 0 to use an ephemeral port to allow parallel testing.
