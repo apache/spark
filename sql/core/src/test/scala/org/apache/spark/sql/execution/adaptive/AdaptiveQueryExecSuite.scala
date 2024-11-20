@@ -30,7 +30,7 @@ import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_RE
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -2802,6 +2803,26 @@ test("SPARK-44040: Fix compute stats when AggregateExec nodes above QueryStageEx
     val aggDf2 = emptyDf.agg(sum("id").as("id")).withColumn("name", lit("df2"))
     val unionDF = aggDf1.union(aggDf2)
     checkAnswer(unionDF.select("id").distinct, Seq(Row(null)))
+  }
+
+  test("SPARK-50258: Fix output column order changed issue after AQE optimization") {
+    withTable("t") {
+      sql("SELECT course, year, earnings FROM courseSales").write.saveAsTable("t")
+      val df = sql(
+        """
+          |SELECT year, course, earnings, SUM(earnings) OVER (ORDER BY year, course) AS balance
+          |FROM t ORDER BY year, course
+          |LIMIT 100
+          |""".stripMargin)
+      df.collect()
+
+      val plan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      assert(plan.inputPlan.isInstanceOf[TakeOrderedAndProjectExec])
+      assert(plan.finalPhysicalPlan.isInstanceOf[WindowExec])
+      plan.inputPlan.output.zip(plan.finalPhysicalPlan.output).foreach { case (o1, o2) =>
+        assert(o1.semanticEquals(o2), "Different output column order after AQE optimization")
+      }
+    }
   }
 }
 
