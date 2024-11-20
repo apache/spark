@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BasePredicate, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.catalyst.expressions.Hex.unhexDigits
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
@@ -281,15 +280,7 @@ object CatalogUtils {
    * @return the URI of the path
    */
   def stringToURI(str: String): URI = {
-    if (StringUtils.isEmpty(str)) {
-      throw QueryExecutionErrors.invalidLocationError(str, "INVALID_EMPTY_LOCATION")
-    }
-    try {
-      new Path(str).toUri
-    } catch {
-      case e: IllegalArgumentException =>
-        throw QueryExecutionErrors.invalidLocationError(str, "INVALID_LOCATION", e)
-    }
+    new Path(str).toUri
   }
 
   def makeQualifiedDBObjectPath(

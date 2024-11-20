@@ -2774,12 +2774,6 @@
     },
     "sqlState" : "42K0E"
   },
-  "INVALID_LOCATION" : {
-    "message" : [
-      "The location name cannot be an invalid URI, but `<location>` was given."
-    ],
-    "sqlState" : "42K05"
-  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -5374,6 +5368,11 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "SQL_SCRIPTING" : {
+        "message" : [
+          "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
         ]
       },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
