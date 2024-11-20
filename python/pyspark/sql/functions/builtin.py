@@ -1514,6 +1514,10 @@ def count(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.count_if`
+
     Examples
     --------
     Example 1: Count all rows in a DataFrame
@@ -1735,6 +1739,10 @@ def median(col: "ColumnOrName") -> Column:
     Notes
     -----
     Supports Spark Connect.
+
+    :meth:`pyspark.sql.functions.percentile`
+    :meth:`pyspark.sql.functions.approx_percentile`
+    :meth:`pyspark.sql.functions.percentile_approx`
 
     Examples
     --------
@@ -6881,6 +6889,11 @@ def input_file_name() -> Column:
     :class:`~pyspark.sql.Column`
         file names.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.input_file_block_length`
+    :meth:`pyspark.sql.functions.input_file_block_start`
+
     Examples
     --------
     >>> import os
@@ -7132,6 +7145,12 @@ def percentile(
     :class:`~pyspark.sql.Column`
         the exact `percentile` of the numeric column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.median`
+    :meth:`pyspark.sql.functions.approx_percentile`
+    :meth:`pyspark.sql.functions.percentile_approx`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -7197,6 +7216,12 @@ def percentile_approx(
     :class:`~pyspark.sql.Column`
         approximate `percentile` of the numeric column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.median`
+    :meth:`pyspark.sql.functions.percentile`
+    :meth:`pyspark.sql.functions.approx_percentile`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -7257,6 +7282,12 @@ def approx_percentile(
     -------
     :class:`~pyspark.sql.Column`
         approximate `percentile` of the numeric column.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.median`
+    :meth:`pyspark.sql.functions.percentile`
+    :meth:`pyspark.sql.functions.percentile_approx`
 
     Examples
     --------
@@ -7768,7 +7799,7 @@ def struct(
 
     Parameters
     ----------
-    cols : list, set, str or :class:`~pyspark.sql.Column`
+    cols : list, set, :class:`~pyspark.sql.Column` or column name
         column names or :class:`~pyspark.sql.Column`\\s to contain in the output struct.
 
     Returns
@@ -7776,13 +7807,21 @@ def struct(
     :class:`~pyspark.sql.Column`
         a struct type column of given columns.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.named_struct`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(struct('age', 'name').alias("struct")).collect()
-    [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
-    >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
-    [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
+    >>> df.select("*", sf.struct('age', df.name)).show()
+    +-----+---+-----------------+
+    | name|age|struct(age, name)|
+    +-----+---+-----------------+
+    |Alice|  2|       {2, Alice}|
+    |  Bob|  5|         {5, Bob}|
+    +-----+---+-----------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
@@ -7798,18 +7837,27 @@ def named_struct(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         list of columns to work on.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.struct`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([(1, 2, 3)], ['a', 'b', 'c'])
-    >>> df.select(named_struct(lit('x'), df.a, lit('y'), df.b).alias('r')).collect()
-    [Row(r=Row(x=1, y=2))]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, 2)], ['a', 'b'])
+    >>> df.select("*", sf.named_struct(sf.lit('x'), df.a, sf.lit('y'), "b")).show()
+    +---+---+------------------------+
+    |  a|  b|named_struct(x, a, y, b)|
+    +---+---+------------------------+
+    |  1|  2|                  {1, 2}|
+    +---+---+------------------------+
     """
     return _invoke_function_over_seq_of_columns("named_struct", cols)
 
@@ -7827,7 +7875,7 @@ def greatest(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols: :class:`~pyspark.sql.Column` or str
+    cols: :class:`~pyspark.sql.Column` or column name
         columns to check for greatest value.
 
     Returns
@@ -7835,11 +7883,20 @@ def greatest(*cols: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         greatest value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.least`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
-    >>> df.select(greatest(df.a, df.b, df.c).alias("greatest")).collect()
-    [Row(greatest=4)]
+    >>> df.select("*", sf.greatest(df.a, "b", df.c)).show()
+    +---+---+---+-----------------+
+    |  a|  b|  c|greatest(a, b, c)|
+    +---+---+---+-----------------+
+    |  1|  4|  3|                4|
+    +---+---+---+-----------------+
     """
     if len(cols) < 2:
         raise PySparkValueError(
@@ -7862,7 +7919,7 @@ def least(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         column names or columns to be compared
 
     Returns
@@ -7870,11 +7927,20 @@ def least(*cols: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         least value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.greatest`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
-    >>> df.select(least(df.a, df.b, df.c).alias("least")).collect()
-    [Row(least=1)]
+    >>> df.select("*", sf.least(df.a, "b", df.c)).show()
+    +---+---+---+--------------+
+    |  a|  b|  c|least(a, b, c)|
+    +---+---+---+--------------+
+    |  1|  4|  3|             1|
+    +---+---+---+--------------+
     """
     if len(cols) < 2:
         raise PySparkValueError(
@@ -7907,26 +7973,32 @@ def when(condition: Column, value: Any) -> Column:
     :class:`~pyspark.sql.Column`
         column representing when expression.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.Column.when`
+    :meth:`pyspark.sql.Column.otherwise`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.range(3)
-    >>> df.select(when(df['id'] == 2, 3).otherwise(4).alias("age")).show()
-    +---+
-    |age|
-    +---+
-    |  4|
-    |  4|
-    |  3|
-    +---+
+    >>> df.select("*", sf.when(df['id'] == 2, 3).otherwise(4)).show()
+    +---+------------------------------------+
+    | id|CASE WHEN (id = 2) THEN 3 ELSE 4 END|
+    +---+------------------------------------+
+    |  0|                                   4|
+    |  1|                                   4|
+    |  2|                                   3|
+    +---+------------------------------------+
 
-    >>> df.select(when(df.id == 2, df.id + 1).alias("age")).show()
-    +----+
-    | age|
-    +----+
-    |NULL|
-    |NULL|
-    |   3|
-    +----+
+    >>> df.select("*", sf.when(df.id == 2, df.id + 1)).show()
+    +---+------------------------------------+
+    | id|CASE WHEN (id = 2) THEN (id + 1) END|
+    +---+------------------------------------+
+    |  0|                                NULL|
+    |  1|                                NULL|
+    |  2|                                   3|
+    +---+------------------------------------+
     """
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
@@ -8208,7 +8280,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         name of column or expression
     offset : int, optional default 1
         number of row to extend
@@ -8220,14 +8292,16 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     :class:`~pyspark.sql.Column`
         value before current row based on `offset`.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.lead`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql import Window
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
     >>> df.show()
     +---+---+
     | c1| c2|
@@ -8238,8 +8312,9 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  8|
     |  b|  2|
     +---+---+
+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("previous_value", lag("c2").over(w)).show()
+    >>> df.withColumn("previous_value", sf.lag("c2").over(w)).show()
     +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
@@ -8249,7 +8324,8 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  2|          NULL|
     |  b|  8|             2|
     +---+---+--------------+
-    >>> df.withColumn("previous_value", lag("c2", 1, 0).over(w)).show()
+
+    >>> df.withColumn("previous_value", sf.lag("c2", 1, 0).over(w)).show()
     +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
@@ -8259,7 +8335,8 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  2|             0|
     |  b|  8|             2|
     +---+---+--------------+
-    >>> df.withColumn("previous_value", lag("c2", 2, -1).over(w)).show()
+
+    >>> df.withColumn("previous_value", sf.lag("c2", 2, -1).over(w)).show()
     +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
@@ -8293,7 +8370,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         name of column or expression
     offset : int, optional default 1
         number of row to extend
@@ -8305,14 +8382,16 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     :class:`~pyspark.sql.Column`
         value after current row based on `offset`.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.lag`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql import Window
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
     >>> df.show()
     +---+---+
     | c1| c2|
@@ -8323,8 +8402,9 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     |  b|  8|
     |  b|  2|
     +---+---+
+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("next_value", lead("c2").over(w)).show()
+    >>> df.withColumn("next_value", sf.lead("c2").over(w)).show()
     +---+---+----------+
     | c1| c2|next_value|
     +---+---+----------+
@@ -8334,7 +8414,8 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     |  b|  2|         8|
     |  b|  8|      NULL|
     +---+---+----------+
-    >>> df.withColumn("next_value", lead("c2", 1, 0).over(w)).show()
+
+    >>> df.withColumn("next_value", sf.lead("c2", 1, 0).over(w)).show()
     +---+---+----------+
     | c1| c2|next_value|
     +---+---+----------+
@@ -8344,7 +8425,8 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     |  b|  2|         8|
     |  b|  8|         0|
     +---+---+----------+
-    >>> df.withColumn("next_value", lead("c2", 2, -1).over(w)).show()
+
+    >>> df.withColumn("next_value", sf.lead("c2", 2, -1).over(w)).show()
     +---+---+----------+
     | c1| c2|next_value|
     +---+---+----------+
@@ -8380,7 +8462,7 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         name of column or expression
     offset : int
         number of row to use as the value
@@ -8395,12 +8477,10 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql import Window
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
     >>> df.show()
     +---+---+
     | c1| c2|
@@ -8411,8 +8491,9 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     |  b|  8|
     |  b|  2|
     +---+---+
+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("nth_value", nth_value("c2", 1).over(w)).show()
+    >>> df.withColumn("nth_value", sf.nth_value("c2", 1).over(w)).show()
     +---+---+---------+
     | c1| c2|nth_value|
     +---+---+---------+
@@ -8422,7 +8503,8 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     |  b|  2|        2|
     |  b|  8|        2|
     +---+---+---------+
-    >>> df.withColumn("nth_value", nth_value("c2", 2).over(w)).show()
+
+    >>> df.withColumn("nth_value", sf.nth_value("c2", 2).over(w)).show()
     +---+---+---------+
     | c1| c2|nth_value|
     +---+---+---------+
@@ -8448,7 +8530,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
     ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
@@ -8460,15 +8542,22 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(None, 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.select(any_value('c1'), any_value('c2')).collect()
-    [Row(any_value(c1)=None, any_value(c2)=1)]
-    >>> df.select(any_value('c1', True), any_value('c2', True)).collect()
-    [Row(any_value(c1)='a', any_value(c2)=1)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(None, 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
+    >>> df.select(sf.any_value('c1'), sf.any_value('c2')).show()
+    +-------------+-------------+
+    |any_value(c1)|any_value(c2)|
+    +-------------+-------------+
+    |         NULL|            1|
+    +-------------+-------------+
+
+    >>> df.select(sf.any_value('c1', True), sf.any_value('c2', True)).show()
+    +-------------+-------------+
+    |any_value(c1)|any_value(c2)|
+    +-------------+-------------+
+    |            a|            1|
+    +-------------+-------------+
     """
     if ignoreNulls is None:
         return _invoke_function_over_columns("any_value", col)
@@ -8489,7 +8578,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
     ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
@@ -8498,6 +8587,10 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     -------
     :class:`~pyspark.sql.Column`
         some value of `col` for a group of rows.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.last_value`
 
     Examples
     --------
@@ -8540,7 +8633,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
     ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
@@ -8549,6 +8642,10 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     -------
     :class:`~pyspark.sql.Column`
         some value of `col` for a group of rows.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.first_value`
 
     Examples
     --------
@@ -8591,13 +8688,17 @@ def count_if(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         the number of `TRUE` values for the `col`.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.count`
 
     Examples
     --------
@@ -8638,13 +8739,13 @@ def count_if(col: "ColumnOrName") -> Column:
     Example 4: Counting the number of rows where a boolean column is True
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(True,), (False,), (True,), (False,), (True,)], ["bool"])
-    >>> df.select(sf.count_if(sf.col('bool'))).show()
-    +--------------+
-    |count_if(bool)|
-    +--------------+
-    |             3|
-    +--------------+
+    >>> df = spark.createDataFrame([(True,), (False,), (True,), (False,), (True,)], ["b"])
+    >>> df.select(sf.count('b'), sf.count_if('b')).show()
+    +--------+-----------+
+    |count(b)|count_if(b)|
+    +--------+-----------+
+    |       5|          3|
+    +--------+-----------+
     """
     return _invoke_function_over_columns("count_if", col)
 
@@ -8717,12 +8818,10 @@ def ntile(n: int) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql import Window
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
     >>> df.show()
     +---+---+
     | c1| c2|
@@ -8733,8 +8832,9 @@ def ntile(n: int) -> Column:
     |  b|  8|
     |  b|  2|
     +---+---+
+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("ntile", ntile(2).over(w)).show()
+    >>> df.withColumn("ntile", sf.ntile(2).over(w)).show()
     +---+---+-----+
     | c1| c2|ntile|
     +---+---+-----+
@@ -23030,7 +23130,7 @@ def hll_sketch_agg(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
     lgConfigK : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of K, where K is the number of buckets or slots for the HllSketch
 
@@ -23039,33 +23139,29 @@ def hll_sketch_agg(
     :class:`~pyspark.sql.Column`
         The binary representation of the HllSketch.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hll_union`
+    :meth:`pyspark.sql.functions.hll_union_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_estimate`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df1 = df.agg(hll_sketch_estimate(hll_sketch_agg("value")).alias("distinct_cnt"))
-    >>> df1.show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           3|
-    +------------+
-    >>> df2 = df.agg(hll_sketch_estimate(
-    ...     hll_sketch_agg("value", lit(12))
-    ... ).alias("distinct_cnt"))
-    >>> df2.show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           3|
-    +------------+
-    >>> df3 = df.agg(hll_sketch_estimate(
-    ...     hll_sketch_agg(col("value"), lit(12))).alias("distinct_cnt"))
-    >>> df3.show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           3|
-    +------------+
+    >>> df.agg(sf.hll_sketch_estimate(sf.hll_sketch_agg("value"))).show()
+    +----------------------------------------------+
+    |hll_sketch_estimate(hll_sketch_agg(value, 12))|
+    +----------------------------------------------+
+    |                                             3|
+    +----------------------------------------------+
+
+    >>> df.agg(sf.hll_sketch_estimate(sf.hll_sketch_agg("value", 12))).show()
+    +----------------------------------------------+
+    |hll_sketch_estimate(hll_sketch_agg(value, 12))|
+    +----------------------------------------------+
+    |                                             3|
+    +----------------------------------------------+
     """
     if lgConfigK is None:
         return _invoke_function_over_columns("hll_sketch_agg", col)
@@ -23088,7 +23184,7 @@ def hll_union_agg(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
     allowDifferentLgConfigK : :class:`~pyspark.sql.Column` or bool, optional
         Allow sketches with different lgConfigK values to be merged (defaults to false).
 
@@ -23097,39 +23193,33 @@ def hll_union_agg(
     :class:`~pyspark.sql.Column`
         The binary representation of the merged HllSketch.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hll_union`
+    :meth:`pyspark.sql.functions.hll_sketch_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_estimate`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df1 = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df1 = df1.agg(hll_sketch_agg("value").alias("sketch"))
+    >>> df1 = df1.agg(sf.hll_sketch_agg("value").alias("sketch"))
     >>> df2 = spark.createDataFrame([4,5,5,6], "INT")
-    >>> df2 = df2.agg(hll_sketch_agg("value").alias("sketch"))
-    >>> df3 = df1.union(df2).agg(hll_sketch_estimate(
-    ...     hll_union_agg("sketch")
-    ... ).alias("distinct_cnt"))
-    >>> df3.drop("sketch").show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           6|
-    +------------+
-    >>> df4 = df1.union(df2).agg(hll_sketch_estimate(
-    ...     hll_union_agg("sketch", lit(False))
-    ... ).alias("distinct_cnt"))
-    >>> df4.drop("sketch").show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           6|
-    +------------+
-    >>> df5 = df1.union(df2).agg(hll_sketch_estimate(
-    ...     hll_union_agg(col("sketch"), lit(False))
-    ... ).alias("distinct_cnt"))
-    >>> df5.drop("sketch").show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           6|
-    +------------+
+    >>> df2 = df2.agg(sf.hll_sketch_agg("value").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> df3.agg(sf.hll_sketch_estimate(sf.hll_union_agg("sketch"))).show()
+    +-------------------------------------------------+
+    |hll_sketch_estimate(hll_union_agg(sketch, false))|
+    +-------------------------------------------------+
+    |                                                6|
+    +-------------------------------------------------+
+
+    >>> df3.agg(sf.hll_sketch_estimate(sf.hll_union_agg("sketch", False))).show()
+    +-------------------------------------------------+
+    |hll_sketch_estimate(hll_union_agg(sketch, false))|
+    +-------------------------------------------------+
+    |                                                6|
+    +-------------------------------------------------+
     """
     if allowDifferentLgConfigK is None:
         return _invoke_function_over_columns("hll_union_agg", col)
@@ -23147,23 +23237,29 @@ def hll_sketch_estimate(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         The estimated number of unique values for the HllSketch.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hll_union`
+    :meth:`pyspark.sql.functions.hll_union_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_agg`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df = df.agg(hll_sketch_estimate(hll_sketch_agg("value")).alias("distinct_cnt"))
-    >>> df.show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           3|
-    +------------+
+    >>> df.agg(sf.hll_sketch_estimate(sf.hll_sketch_agg("value"))).show()
+    +----------------------------------------------+
+    |hll_sketch_estimate(hll_sketch_agg(value, 12))|
+    +----------------------------------------------+
+    |                                             3|
+    +----------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -23183,8 +23279,8 @@ def hll_union(
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
     allowDifferentLgConfigK : bool, optional
         Allow sketches with different lgConfigK values to be merged (defaults to false).
 
@@ -23193,17 +23289,26 @@ def hll_union(
     :class:`~pyspark.sql.Column`
         The binary representation of the merged HllSketch.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hll_union_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_estimate`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,4),(2,5),(2,5),(3,6)], "struct<v1:int,v2:int>")
-    >>> df = df.agg(hll_sketch_agg("v1").alias("sketch1"), hll_sketch_agg("v2").alias("sketch2"))
-    >>> df = df.withColumn("distinct_cnt", hll_sketch_estimate(hll_union("sketch1", "sketch2")))
-    >>> df.drop("sketch1", "sketch2").show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           6|
-    +------------+
+    >>> df = df.agg(
+    ...     sf.hll_sketch_agg("v1").alias("sketch1"),
+    ...     sf.hll_sketch_agg("v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.hll_sketch_estimate(sf.hll_union(df.sketch1, "sketch2"))).show()
+    +-------------------------------------------------------+
+    |hll_sketch_estimate(hll_union(sketch1, sketch2, false))|
+    +-------------------------------------------------------+
+    |                                                      6|
+    +-------------------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -23827,11 +23932,28 @@ def input_file_block_length() -> Column:
 
     .. versionadded:: 3.5.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.input_file_name`
+    :meth:`pyspark.sql.functions.input_file_block_start`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.read.text("python/test_support/sql/ages_newlines.csv", lineSep=",")
-    >>> df.select(input_file_block_length().alias('r')).first()
-    Row(r=87)
+    >>> df.select(sf.input_file_block_length()).show()
+    +-------------------------+
+    |input_file_block_length()|
+    +-------------------------+
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    +-------------------------+
     """
     return _invoke_function_over_columns("input_file_block_length")
 
@@ -23843,11 +23965,28 @@ def input_file_block_start() -> Column:
 
     .. versionadded:: 3.5.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.input_file_name`
+    :meth:`pyspark.sql.functions.input_file_block_length`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.read.text("python/test_support/sql/ages_newlines.csv", lineSep=",")
-    >>> df.select(input_file_block_start().alias('r')).first()
-    Row(r=0)
+    >>> df.select(sf.input_file_block_start()).show()
+    +------------------------+
+    |input_file_block_start()|
+    +------------------------+
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    +------------------------+
     """
     return _invoke_function_over_columns("input_file_block_start")
 
