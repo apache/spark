@@ -102,10 +102,6 @@ case class CsvToStructs(
   private lazy val evaluator: CsvToStructsEvaluator = CsvToStructsEvaluator(
     options, nullableSchema, nameOfCorruptRecord, timeZoneId, requiredSchema)
 
-  override def nullSafeEval(input: Any): Any = {
-    evaluator.evaluate(input.asInstanceOf[UTF8String])
-  }
-
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[CsvToStructsEvaluator])),
     "evaluate",
