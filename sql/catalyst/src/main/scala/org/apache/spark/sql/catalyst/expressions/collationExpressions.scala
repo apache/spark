@@ -91,6 +91,8 @@ case class Collate(child: Expression, collation: Either[UnresolvedCollation, Res
   override def sql: String = s"$prettyName(${child.sql}, $collation)"
 
   override def toString: String = s"$prettyName($child, $collation)"
+
+  override def childrenResolved: Boolean = children.forall(_.resolved) && collation.merge.resolved
 }
 
 /**
@@ -105,6 +107,8 @@ case class UnresolvedCollation(collationName: Seq[String])
   override def dataType: DataType = throw new UnresolvedException("dataType")
 
   override def nullable: Boolean = false
+
+  override lazy val resolved: Boolean = false
 }
 
 /**

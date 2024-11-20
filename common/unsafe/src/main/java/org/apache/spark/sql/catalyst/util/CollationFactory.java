@@ -415,18 +415,6 @@ public final class CollationFactory {
         }
       }
 
-      /**
-       * Method for constructing errors thrown on providing invalid collation name.
-       */
-      protected static SparkException collationInvalidNameException(String collationName) {
-        Map<String, String> params = new HashMap<>();
-        final int maxSuggestions = 3;
-        params.put("collationName", collationName);
-        params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
-        return new SparkException("COLLATION_INVALID_NAME",
-          SparkException.constructMessageParams(params), null);
-      }
-
       private static int collationNameToId(String collationName) throws SparkException {
         // Collation names provided by user are treated as case-insensitive.
         String collationNameUpper = collationName.toUpperCase();
@@ -1183,24 +1171,19 @@ public final class CollationFactory {
     return Collation.CollationSpec.collationNameToId(collationName);
   }
 
-  public static String resolveFullyQualifiedName(String[] collationName) throws SparkException {
-    // If collation name in `UnresolvedCollation` has only one part, then we don't need to
-    // do any name resolution and can directly resolve it to a `ResolvedCollation`.
-    if (collationName.length == 1) {
-      return collationName[0];
-    } else {
-      // Currently we only support builtin collation names with fixed catalog `SYSTEM` and
-      // schema `BUILTIN`.
-      if (collationName.length != 3
-          || !CollationFactory.CATALOG.equalsIgnoreCase(collationName[0])
-          || !CollationFactory.SCHEMA.equalsIgnoreCase(collationName[1])) {
-        // Throw exception with original (before case conversion) collation name.
-        throw CollationFactory.Collation.CollationSpec.
-            collationInvalidNameException(collationName[collationName.length - 1]);
-      }
-      return collationName[2];
-    }
+  /**
+   * Method for constructing errors thrown on providing invalid collation name.
+   */
+  public static SparkException collationInvalidNameException(String collationName) {
+    Map<String, String> params = new HashMap<>();
+    final int maxSuggestions = 3;
+    params.put("collationName", collationName);
+    params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
+    return new SparkException("COLLATION_INVALID_NAME",
+        SparkException.constructMessageParams(params), null);
   }
+
+
 
   /**
    * Returns the fully qualified collation name for the given collation ID.
