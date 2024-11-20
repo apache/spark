@@ -62,9 +62,9 @@ jobs:
           - >-
             pyspark-core, pyspark-errors, pyspark-streaming
           - >-
-            pyspark-mllib
+            pyspark-mllib, pyspark-ml
           - >-
-            pyspark-ml, pyspark-ml-connect
+            pyspark-ml-connect
           - >-
             pyspark-connect
           - >-
