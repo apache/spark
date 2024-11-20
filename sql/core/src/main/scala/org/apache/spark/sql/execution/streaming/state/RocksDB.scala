@@ -332,7 +332,7 @@ class RocksDB(
       // currLineage contains the version -> uniqueId mapping from the previous snapshot file
       // to current version's changelog file
       versionToUniqueIdLineage = changelogReader.lineage.map {
-        case (version, uniqueId) => (version, Option(uniqueId))
+        case LineageItem(version, uniqueId) => (version, Option(uniqueId))
       }
       logInfo(log"Loading versionToUniqueIdLineage: ${MDC(LogKeys.LINEAGE,
         printLineage(versionToUniqueIdLineage))} from changelog version: ${MDC(
@@ -490,8 +490,8 @@ class RocksDB(
     // When loading from snapshot, currLineage is None because snapshot files
     // (version_uniqueId.zip) are source of truth.
     // They don't need to store lineage up to the previous version.
-    val lineage: Array[(Long, String)] = versionToUniqueIdLineage.map(x => (x._1, x._2.get)) ++
-      Array((version + 1, sessionStateStoreCkptId.get))
+    val lineage: Array[LineageItem] = versionToUniqueIdLineage.map(x => LineageItem(x._1, x._2.get)) ++
+      Array(LineageItem(version + 1, sessionStateStoreCkptId.get))
     changelogWriter.get.writeLineage(lineage)
   }
   this
@@ -1788,4 +1788,3 @@ case class AcquiredThreadInfo(
     s"[ThreadId: ${threadRef.get.map(_.getId)}$taskStr]"
   }
 }
-
