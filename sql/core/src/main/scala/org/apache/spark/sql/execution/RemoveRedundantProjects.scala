@@ -58,8 +58,8 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
           p.mapChildren(removeProject(_, false))
         }
       case op: TakeOrderedAndProjectExec =>
-        // TakeOrderedAndProjectExec requires keep column ordering if AQE is enabled.
-        op.mapChildren(removeProject(_, conf.adaptiveExecutionEnabled))
+        val requireColOrdering = conf.adaptiveExecutionEnabled && op.projectList == op.child.output
+        op.mapChildren(removeProject(_, requireColOrdering))
       case a: BaseAggregateExec =>
         // BaseAggregateExec require specific column ordering when mode is Final or PartialMerge.
         // See comments in BaseAggregateExec inputAttributes method.
