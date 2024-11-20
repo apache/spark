@@ -134,10 +134,12 @@ class SparkSession private(
   private[sql] lazy val sessionJobTag = s"spark-session-$sessionUUID"
 
   /**
-   * A UUID that is unique on the thread level. Used by managedJobTags to make sure that the same
-   * use tag do not overlap in the underlying SparkContext/SQLExecution.
+   * A UUID that is unique on the thread level. Used by managedJobTags to make sure that a same
+   * tag from two threads does not overlap in the underlying SparkContext/SQLExecution.
    */
-  private[sql] lazy val threadUuid = new ThreadLocal[String] {
+  private[sql] lazy val threadUuid = new InheritableThreadLocal[String] {
+    override def childValue(parent: String): String = parent
+
     override def initialValue(): String = UUID.randomUUID().toString
   }
 
