@@ -481,4 +481,4 @@ SELECT * FROM (SELECT cate, val, row_number() OVER(PARTITION BY cate ORDER BY va
 
 SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '5' DAY PRECEDING) AS mean FROM testData;
 SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING) AS mean FROM testData;
-SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' PRECEDING) AS mean FROM testData;
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING) AS mean FROM testData;

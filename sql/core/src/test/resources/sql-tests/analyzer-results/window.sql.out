@@ -1454,24 +1454,23 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' PRECEDING) AS mean FROM testData
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING) AS mean FROM testData
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"DATE '2024-01-01'\"",
-    "inputType" : "\"DATE\"",
-    "paramIndex" : "first",
-    "requiredType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
-    "sqlExpr" : "\"(- DATE '2024-01-01')\""
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "exprType" : "\"DATE\"",
+    "location" : "lower",
+    "sqlExpr" : "\"RANGE BETWEEN DATE '2024-01-01' FOLLOWING AND CURRENT ROW\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 75,
-    "stopIndex" : 101,
-    "fragment" : "DATE '2024-01-01' PRECEDING"
+    "startIndex" : 33,
+    "stopIndex" : 102,
+    "fragment" : "(partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING)"
   } ]
 }
