@@ -19,8 +19,8 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
@@ -35,6 +35,11 @@ sealed trait CompoundStatementExec extends Logging {
    * Example: DropVariable statements are automatically created at the end of each compound.
    */
   val isInternal: Boolean = false
+
+  /**
+   * Whether the statement originates from the SQL statement that returns the result.
+   */
+  val isResult: Boolean = false
 
   /**
    * Reset execution of the current node.
@@ -122,6 +127,8 @@ class SingleStatementExec(
    */
   var isExecuted = false
 
+  override val isResult: Boolean = parsedPlan.isInstanceOf[Project]
+
   /**
    * Get the SQL query text corresponding to this statement.
    * @return
@@ -130,6 +137,17 @@ class SingleStatementExec(
   def getText: String = {
     assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+  }
+
+  /**
+   * Builds a DataFrame from the parsedPlan of this SingleStatementExec,
+   * logging Origin.sqlText if it exists
+   * @param session The SparkSession on which the parsedPlan is built
+   * @return
+   *   The DataFrame.
+   */
+  def buildDataFrame(session: SparkSession): DataFrame = {
+    Dataset.ofRows(session, parsedPlan)
   }
 
   override def reset(): Unit = isExecuted = false

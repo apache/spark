@@ -390,6 +390,10 @@ class SparkSession private(
     Dataset.ofRows(self, logicalPlan)
   }
 
+  private def executeSqlScript(): Unit = {
+
+  }
+
 
   /* ------------------------- *
    |  Catalog-related methods  |
