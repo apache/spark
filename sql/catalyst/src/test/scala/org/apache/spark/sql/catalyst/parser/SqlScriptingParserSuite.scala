@@ -39,6 +39,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     super.afterAll()
   }
 
+  // Tests
   test("single select") {
     val sqlScriptText = "SELECT 1;"
     val statement = parsePlan(sqlScriptText)
