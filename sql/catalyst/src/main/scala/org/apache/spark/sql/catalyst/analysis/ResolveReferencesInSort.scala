@@ -56,14 +56,11 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
       case agg: Aggregate => resolveWithAggAndLCA(s, agg)
       case other => s.order.map(resolveExpressionByPlanOutput(_, other))
     }
-    val (missingAttrResolved, newChild) =
-      resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
+    val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
     val orderByAllResolved = resolveOrderByAll(
       s.global, newChild, missingAttrResolved.map(_.asInstanceOf[SortOrder]))
     val resolvedFinal = orderByAllResolved
       .map(e => resolveColsLastResort(e).asInstanceOf[SortOrder])
-
-
     if (s.child.output == newChild.output) {
       s.copy(order = resolvedFinal)
     } else {
