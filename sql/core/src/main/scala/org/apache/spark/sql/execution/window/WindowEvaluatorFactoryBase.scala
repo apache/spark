@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.util.collection.Utils
 
 trait WindowEvaluatorFactoryBase {
@@ -101,7 +102,7 @@ trait WindowEvaluatorFactoryBase {
         val boundExpr = (expr.dataType, boundOffset.dataType) match {
           case (DateType, IntegerType) => DateAdd(expr, boundOffset)
           case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(expr, boundOffset)
-          case (DateType, _: DayTimeIntervalType) =>
+          case (DateType, DayTimeIntervalType(DAY, DAY)) =>
             DateAdd(expr, ExtractANSIIntervalDays(boundOffset))
           case (TimestampType | TimestampNTZType, CalendarIntervalType) =>
             TimeAdd(expr, boundOffset, Some(timeZone))
