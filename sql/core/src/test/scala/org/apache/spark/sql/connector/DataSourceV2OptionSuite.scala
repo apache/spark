@@ -18,14 +18,15 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CommandResult, OverwriteByExpression, OverwritePartitionsDynamic}
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
-import org.apache.spark.sql.execution.{CommandResultExec, QueryExecution}
+import org.apache.spark.sql.execution.CommandResultExec
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.util.QueryExecutionListener
 
 class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
+  import testImplicits._
 
   private val catalogAndNamespace = "testcat.ns1.ns2."
 
@@ -64,7 +65,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrame Read") {
+  test("SPARK-50286: Propagate options for DataFrameReader") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
@@ -120,31 +121,58 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrame Append") {
+  test("SPARK-50286: Propagate options for DataFrameWriter Append") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
-      withListener {
-        sql("VALUES (1, 'a'), (2, 'b')")
-          .withColumnRenamed("col1", "id")
-          .withColumnRenamed("col2", "data")
+      val captured = withQueryExecutionsCaptured(spark) {
+        Seq(1 -> "a", 2 -> "b").toDF("id", "data")
+          .write
+          .option("write.split-size", "10")
+          .mode("append")
+          .saveAsTable(t1)
+      }
+      assert(captured.size === 1)
+      val qe = captured.head
+      var collected = qe.optimizedPlan.collect {
+        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+          assert(writeOptions("write.split-size") == "10")
+      }
+      assert (collected.size == 1)
+
+      collected = qe.executedPlan.collect {
+        case AppendDataExec(_, _, write) =>
+          val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
+          assert(append.info.options.get("write.split-size") === "10")
+      }
+      assert (collected.size == 1)
+    }
+  }
+
+  test("SPARK-50286: Propagate options for DataFrameWriterV2 Append") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      val captured = withQueryExecutionsCaptured(spark) {
+        Seq(1 -> "a", 2 -> "b").toDF("id", "data")
           .writeTo(t1)
           .option("write.split-size", "10")
           .append()
-      } { qe =>
-        var collected = qe.optimizedPlan.collect {
-          case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _) =>
-            assert(writeOptions("write.split-size") == "10")
-        }
-        assert (collected.size == 1)
-
-        collected = qe.executedPlan.collect {
-          case AppendDataExec(_, _, write) =>
-            val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
-            assert(append.info.options.get("write.split-size") === "10")
-        }
-        assert (collected.size == 1)
       }
+      assert(captured.size === 1)
+      val qe = captured.head
+      var collected = qe.optimizedPlan.collect {
+        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+          assert(writeOptions("write.split-size") == "10")
+      }
+      assert (collected.size == 1)
+
+      collected = qe.executedPlan.collect {
+        case AppendDataExec(_, _, write) =>
+          val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
+          assert(append.info.options.get("write.split-size") === "10")
+      }
+      assert (collected.size == 1)
     }
   }
 
@@ -178,33 +206,32 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrame OverwritePartitions") {
+  test("SPARK-50286: Propagate options for DataFrameWriterV2 OverwritePartitions") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
 
-      withListener {
-        sql("VALUES (3, 'c'), (4, 'd')")
-          .withColumnRenamed("col1", "id")
-          .withColumnRenamed("col2", "data")
+      val captured = withQueryExecutionsCaptured(spark) {
+        Seq(3 -> "c", 4 -> "d").toDF("id", "data")
           .writeTo(t1)
           .option("write.split-size", "10")
           .overwritePartitions()
-      } { qe =>
-        var collected = qe.optimizedPlan.collect {
-          case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, writeOptions, _, _) =>
-            assert(writeOptions("write.split-size") === "10")
-        }
-        assert (collected.size == 1)
-
-        collected = qe.executedPlan.collect {
-          case OverwritePartitionsDynamicExec(_, _, write) =>
-            val dynOverwrite = write.toBatch.asInstanceOf[InMemoryBaseTable#DynamicOverwrite]
-            assert(dynOverwrite.info.options.get("write.split-size") === "10")
-        }
-        assert (collected.size == 1)
       }
+      assert(captured.size === 1)
+      val qe = captured.head
+      var collected = qe.optimizedPlan.collect {
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, writeOptions, _, _) =>
+          assert(writeOptions("write.split-size") === "10")
+      }
+      assert (collected.size == 1)
+
+      collected = qe.executedPlan.collect {
+        case OverwritePartitionsDynamicExec(_, _, write) =>
+          val dynOverwrite = write.toBatch.asInstanceOf[InMemoryBaseTable#DynamicOverwrite]
+          assert(dynOverwrite.info.options.get("write.split-size") === "10")
+      }
+      assert (collected.size == 1)
     }
   }
 
@@ -239,52 +266,75 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
     }
   }
 
-  test("SPARK-50286: Propagate options for DataFrame Overwrite") {
+  test("SPARK-50286: Propagate options for DataFrameWriter Overwrite") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string)")
+      val captured = withQueryExecutionsCaptured(spark) {
+        Seq(1 -> "a", 2 -> "b").toDF("id", "data")
+          .write
+          .option("write.split-size", "10")
+          .mode("overwrite")
+          .saveAsTable(t1)
+      }
+      assert(captured.size === 2)
+
+      var qe = captured.head
+      var collected = qe.optimizedPlan.collect {
+        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+          assert(writeOptions("write.split-size") == "10")
+      }
+      assert (collected.size == 1)
+
+      collected = qe.executedPlan.collect {
+        case AppendDataExec(_, _, write) =>
+          val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
+          assert(append.info.options.get("write.split-size") === "10")
+      }
+      assert (collected.size == 1)
+
+      qe = captured.last
+      collected = qe.optimizedPlan.collect {
+        case ReplaceTableAsSelect(_, _, _, _, writeOptions, _, _) =>
+          assert(writeOptions("write.split-size") == "10")
+      }
+      assert (collected.size == 1)
+
+      collected = qe.executedPlan.collect {
+        case ReplaceTableAsSelectExec(_, _, _, _, _, writeOptions, _, _) =>
+          assert(writeOptions("write.split-size") == "10")
+      }
+      assert (collected.size == 1)
+    }
+  }
+
+  test("SPARK-50286: Propagate options for DataFrameWriterV2 Overwrite") {
     val t1 = s"${catalogAndNamespace}table"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b')")
 
-      withListener {
-        sql("VALUES (3, 'c'), (4, 'd')")
-          .withColumnRenamed("col1", "id")
-          .withColumnRenamed("col2", "data")
+      val captured = withQueryExecutionsCaptured(spark) {
+        Seq(3 -> "c", 4 -> "d").toDF("id", "data")
           .writeTo(t1)
           .option("write.split-size", "10")
           .overwrite(lit(true))
-      } { qe =>
-        var collected = qe.optimizedPlan.collect {
-          case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _) =>
-            assert(writeOptions("write.split-size") === "10")
-        }
-        assert (collected.size == 1)
-
-        collected = qe.executedPlan.collect {
-          case OverwriteByExpressionExec(_, _, write) =>
-            val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
-            assert(append.info.options.get("write.split-size") === "10")
-        }
-        assert (collected.size == 1)
       }
-    }
-  }
+      assert(captured.size === 1)
+      val qe = captured.head
 
-  def withListener(action: => Unit)(callback: QueryExecution => Unit): Unit = {
-    var executedQe: Option[QueryExecution] = None
-    val listener = new QueryExecutionListener {
-      override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = throw e
+      var collected = qe.optimizedPlan.collect {
+        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _) =>
+          assert(writeOptions("write.split-size") === "10")
+      }
+      assert (collected.size == 1)
 
-      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit =
-        executedQe = Some(qe)
-    }
-    spark.listenerManager.register(listener)
-    try {
-      action
-      sparkContext.listenerBus.waitUntilEmpty()
-      // forward the qe to the scalatest thread otherwise assertion failure won't fail the test
-      callback(executedQe.getOrElse(fail("query may be failed")))
-    } finally {
-      spark.listenerManager.unregister(listener)
+      collected = qe.executedPlan.collect {
+        case OverwriteByExpressionExec(_, _, write) =>
+          val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
+          assert(append.info.options.get("write.split-size") === "10")
+      }
+      assert (collected.size == 1)
     }
   }
 }
