@@ -994,6 +994,7 @@ class Dataset[T] private[sql](
     )
   }
 
+  /** @inheritdoc */
   def argument(): Column = {
     val tableExpr = FunctionTableSubqueryArgumentExpression(logicalPlan)
     Column(tableExpr)

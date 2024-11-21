@@ -1700,6 +1700,15 @@ abstract class Dataset[T] extends Serializable {
   def transpose(): Dataset[Row]
 
   /**
+   * Converts the DataFrame into a `Column` object for use with table-valued functions (TVFs)
+   * or user-defined table functions (UDTFs).
+   *
+   * @group typedrel
+   * @since 4.0.0
+   */
+  def argument(): Column
+
+  /**
    * Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.
    *
    * The `scalar()` method is useful for extracting a `Column` object that represents a scalar

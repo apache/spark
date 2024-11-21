@@ -6476,6 +6476,39 @@ class DataFrame:
         """
         ...
 
+    def argument(self) -> Column:
+        """
+        Converts the DataFrame into a `Column` object for use with table-valued functions (TVFs)
+        or user-defined table functions (UDTFs).
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Column`
+            A `Column` object representing the DataFrame.
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> from pyspark.sql.functions import udtf
+        >>>
+        >>> @udtf(returnType="a: int")
+        ... class TestUDTF:
+        ...     def eval(self, row: Row):
+        ...         if row[0] > 5:
+        ...             yield row[0],
+        >>> df = spark.range(8)
+        >>> TestUDTF(df.argument()).show()
+        +---+
+        |  a|
+        +---+
+        |  6|
+        |  7|
+        +---+
+        """
+        ...
+
     def scalar(self) -> Column:
         """
         Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.

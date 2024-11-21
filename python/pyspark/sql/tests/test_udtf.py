@@ -1024,6 +1024,19 @@ class BaseUDTFTestsMixin:
             [Row(a=6), Row(a=7)],
         )
 
+    def test_df_argument(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                if row["id"] > 5:
+                    yield row["id"],
+
+        func = udtf(TestUDTF, returnType="a: int")
+        df = self.spark.range(8)
+        self.assertEqual(
+            func(df.argument()).collect(),
+            [Row(a=6), Row(a=7)],
+        )
+
     def udtf_for_table_argument(self):
         class TestUDTF:
             def eval(self, row: Row):

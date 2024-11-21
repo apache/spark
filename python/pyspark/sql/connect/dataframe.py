@@ -1784,6 +1784,12 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def argument(self) -> Column:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "argument()"},
+        )
+
     def scalar(self) -> Column:
         # TODO(SPARK-50134): Implement this method
         raise PySparkNotImplementedError(

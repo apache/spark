@@ -588,6 +588,11 @@ class Dataset[T] private[sql] (
   // TODO(SPARK-50134): Support scalar Subquery API in Spark Connect
   // scalastyle:off not.implemented.error.usage
   /** @inheritdoc */
+  def argument(): Column = {
+    ???
+  }
+
+  /** @inheritdoc */
   def scalar(): Column = {
     ???
   }
