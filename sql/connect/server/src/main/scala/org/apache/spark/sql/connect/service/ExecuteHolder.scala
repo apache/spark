@@ -295,7 +295,7 @@ private[connect] class ExecuteHolder(
   def operationId: String = key.operationId
 }
 
-private object ExecuteHolder extends Logging {
+private object ExecuteHolder {
   private def collectAllObservationAndPlanIds(
       planOrMessage: GeneratedMessage,
       collected: mutable.Map[String, Long] = mutable.Map.empty): mutable.Map[String, Long] = {
