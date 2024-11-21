@@ -146,7 +146,7 @@ class SparkSession private(
   /**
    * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
    * Real tag have the current session ID attached:
-   *   tag1" -> s"spark-session-$sessionUUID-thread-$threadUuid-tag1
+   *   tag1 -> spark-session-$sessionUUID-thread-$threadUuid-tag1
    *
    */
   @transient
