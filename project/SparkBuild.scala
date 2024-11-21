@@ -89,9 +89,9 @@ object BuildCommons {
 
   // Google Protobuf version used for generating the protobuf.
   // SPARK-41247: needs to be consistent with `protobuf.version` in `pom.xml`.
-  val protoVersion = "3.25.5"
+  val protoVersion = "4.28.3"
   // GRPC version used for Spark Connect.
-  val grpcVersion = "1.62.2"
+  val grpcVersion = "1.67.1"
 }
 
 object SparkBuild extends PomBuild {
@@ -411,7 +411,7 @@ object SparkBuild extends PomBuild {
   /* Sql-api ANTLR generation settings */
   enable(SqlApi.settings)(sqlApi)
 
-  /* Spark SQL Core console settings */
+  /* Spark SQL Core settings */
   enable(SQL.settings)(sql)
 
   /* Hive console settings */
@@ -1148,29 +1148,31 @@ object SqlApi {
 }
 
 object SQL {
+  import BuildCommons.protoVersion
   lazy val settings = Seq(
-    (console / initialCommands) :=
-      """
-        |import org.apache.spark.SparkContext
-        |import org.apache.spark.sql.SQLContext
-        |import org.apache.spark.sql.catalyst.analysis._
-        |import org.apache.spark.sql.catalyst.dsl._
-        |import org.apache.spark.sql.catalyst.errors._
-        |import org.apache.spark.sql.catalyst.expressions._
-        |import org.apache.spark.sql.catalyst.plans.logical._
-        |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.util._
-        |import org.apache.spark.sql.execution
-        |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.types._
-        |
-        |val sc = new SparkContext("local[*]", "dev-shell")
-        |val sqlContext = new SQLContext(sc)
-        |import sqlContext.implicits._
-        |import sqlContext._
-      """.stripMargin,
-    (console / cleanupCommands) := "sc.stop()"
-  )
+    // Setting version for the protobuf compiler. This has to be propagated to every sub-project
+    // even if the project is not using it.
+    PB.protocVersion := BuildCommons.protoVersion,
+    // For some reason the resolution from the imported Maven build does not work for some
+    // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value
+    )
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
 }
 
 object Hive {
@@ -1181,28 +1183,21 @@ object Hive {
     // Hive tests need higher metaspace size
     (Test / javaOptions) := (Test / javaOptions).value.filterNot(_.contains("MaxMetaspaceSize")),
     (Test / javaOptions) += "-XX:MaxMetaspaceSize=2g",
+    // SPARK-45265: HivePartitionFilteringSuite addPartitions related tests generate supper long
+    // direct sql against derby server, which may cause stack overflow error when derby do sql
+    // parsing.
+    // We need to increase the Xss for the test. Meanwhile, QueryParsingErrorsSuite requires a
+    // smaller size of Xss to mock a FAILED_TO_PARSE_TOO_COMPLEX error, so we need to set for
+    // hive moudle specifically.
+    (Test / javaOptions) := (Test / javaOptions).value.filterNot(_.contains("Xss")),
+    // SPARK-45265: The value for `-Xss` should be consistent with the configuration value for
+    // `scalatest-maven-plugin` in `sql/hive/pom.xml`
+    (Test / javaOptions) += "-Xss64m",
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
     scalacOptions := (scalacOptions map { currentOpts: Seq[String] =>
       currentOpts.filterNot(_ == "-deprecation")
     }).value,
-    (console / initialCommands) :=
-      """
-        |import org.apache.spark.SparkContext
-        |import org.apache.spark.sql.catalyst.analysis._
-        |import org.apache.spark.sql.catalyst.dsl._
-        |import org.apache.spark.sql.catalyst.errors._
-        |import org.apache.spark.sql.catalyst.expressions._
-        |import org.apache.spark.sql.catalyst.plans.logical._
-        |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.util._
-        |import org.apache.spark.sql.execution
-        |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.hive._
-        |import org.apache.spark.sql.hive.test.TestHive._
-        |import org.apache.spark.sql.hive.test.TestHive.implicits._
-        |import org.apache.spark.sql.types._""".stripMargin,
-    (console / cleanupCommands) := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
@@ -1388,6 +1383,7 @@ trait SharedUnidocSettings {
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka-clients-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.matches(""".*kafka_2\..*-0\.10.*""")))
       .map(_.filterNot(_.data.getCanonicalPath.contains("apache-rat")))
+      .map(_.filterNot(_.data.getCanonicalPath.contains("connect-shims")))
   }
 
   val unidocSourceBase = settingKey[String]("Base URL of source links in Scaladoc.")
@@ -1728,7 +1724,7 @@ object TestSettings {
     (Test / testOptions) += Tests.Argument(TestFrameworks.ScalaTest, "-W", "120", "300"),
     (Test / testOptions) += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "net.aichler" % "jupiter-interface" % "0.11.1" % "test",
+    libraryDependencies += "com.github.sbt.junit" % "jupiter-interface" % "0.13.1" % "test",
     // `parallelExecutionInTest` controls whether test suites belonging to the same SBT project
     // can run in parallel with one another. It does NOT control whether tests execute in parallel
     // within the same JVM (which is controlled by `testForkedParallel`) or whether test cases

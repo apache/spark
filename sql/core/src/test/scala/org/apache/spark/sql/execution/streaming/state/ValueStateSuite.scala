@@ -44,6 +44,7 @@ case class TestClass(var id: Long, var name: String)
 class ValueStateSuite extends StateVariableSuiteBase {
 
   import StateStoreTestsHelper._
+  import testImplicits._
 
   test("Implicit key operations") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
@@ -52,7 +53,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val stateName = "testState"
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        TTLConfig.NONE)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -95,7 +97,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
         stringEncoder, TimeMode.None())
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -122,9 +125,9 @@ class ValueStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val testState1: ValueState[Long] = handle.getValueState[Long](
-        "testState1", Encoders.scalaLong)
+        "testState1", TTLConfig.NONE)
       val testState2: ValueState[Long] = handle.getValueState[Long](
-        "testState2", Encoders.scalaLong)
+        "testState2", TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)
@@ -168,7 +171,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
 
       val cfName = "$testState"
       val ex = intercept[SparkUnsupportedOperationException] {
-        handle.getValueState[Long](cfName, Encoders.scalaLong)
+        handle.getValueState[Long](cfName, TTLConfig.NONE)
       }
       checkError(
         ex,
@@ -207,7 +210,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val testState: ValueState[Double] = handle.getValueState[Double]("testState",
-        Encoders.scalaDouble)
+        Encoders.scalaDouble, TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(1.0)
       assert(testState.get().equals(1.0))
@@ -233,7 +236,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState",
-        Encoders.scalaLong)
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(1L)
       assert(testState.get().equals(1L))
@@ -259,7 +262,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
-        Encoders.product[TestClass])
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(TestClass(1, "testcase1"))
       assert(testState.get().equals(TestClass(1, "testcase1")))
@@ -285,7 +288,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         stringEncoder, TimeMode.None())
 
       val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass]("testState",
-        Encoders.bean(classOf[POJOTestClass]))
+         Encoders.bean(classOf[POJOTestClass]), TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(new POJOTestClass("testcase1", 1))
       assert(testState.get().equals(new POJOTestClass("testcase1", 1)))
@@ -303,7 +306,6 @@ class ValueStateSuite extends StateVariableSuiteBase {
       assert(testState.get() === null)
     }
   }
-
 
   test(s"test Value state TTL") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
@@ -361,7 +363,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("test negative or zero TTL duration throws error") {
+  test("test null or zero TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
@@ -369,7 +371,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
         stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
 
-      Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
+      Seq(null, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)
         val ex = intercept[SparkUnsupportedOperationException] {
           handle.getValueState[String]("testState", Encoders.STRING, ttlConfig)

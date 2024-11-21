@@ -114,7 +114,7 @@ trait SQLQueryTestHelper extends Logging {
          | _: DescribeColumnCommand
          | _: DescribeRelation
          | _: DescribeColumn => true
-    case PhysicalOperation(_, _, Sort(_, true, _)) => true
+    case PhysicalOperation(_, _, Sort(_, true, _, _)) => true
     case _ => plan.children.iterator.exists(isSemanticallySorted)
   }
 
@@ -185,8 +185,8 @@ trait SQLQueryTestHelper extends Logging {
    */
   protected trait PgSQLTest
 
-  /** Trait that indicates ANSI-related tests with the ANSI mode enabled. */
-  protected trait AnsiTest
+  /** Trait that indicates Non-ANSI-related tests with the ANSI mode disabled. */
+  protected trait NonAnsiTest
 
   /** Trait that indicates an analyzer test that shows the analyzed plan string as output. */
   protected trait AnalyzerTest extends TestCase {
@@ -214,10 +214,10 @@ trait SQLQueryTestHelper extends Logging {
   }
 
   /** An ANSI-related test case. */
-  protected case class AnsiTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest {
+  protected case class NonAnsiTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with NonAnsiTest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
-      AnsiAnalyzerTestCase(newName, inputFile, newResultFile)
+      NonAnsiAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
   /** An analyzer test that shows the analyzed plan string as output. */
@@ -290,9 +290,9 @@ trait SQLQueryTestHelper extends Logging {
   protected case class RegularAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String)
     extends AnalyzerTest
-  protected case class AnsiAnalyzerTestCase(
+  protected case class NonAnsiAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String)
-    extends AnalyzerTest with AnsiTest
+    extends AnalyzerTest with NonAnsiTest
   protected case class PgSQLAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String)
     extends AnalyzerTest with PgSQLTest

@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Datet
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   private lazy val numberFormatter = {
     val value = right.eval()
@@ -273,7 +274,9 @@ object ToCharacterBuilder extends ExpressionBuilder {
 }
 
 case class ToCharacter(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
   private lazy val numberFormatter = {
     val value = right.eval()
     if (value != null) {
