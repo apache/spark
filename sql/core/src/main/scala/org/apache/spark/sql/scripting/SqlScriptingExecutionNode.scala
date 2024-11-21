@@ -131,7 +131,6 @@ class SingleStatementExec(
    *   The DataFrame.
    */
   def buildDataFrame(session: SparkSession): DataFrame = {
-      isExecuted = true
       Dataset.ofRows(session, parsedPlan)
   }
 
@@ -684,6 +683,7 @@ class ForStatementExec(
   private def cachedQueryResult(): Array[Row] = {
     if (!isResultCacheValid) {
       queryResult = query.buildDataFrame(session).collect()
+      query.isExecuted = true
       isResultCacheValid = true
     }
     queryResult
