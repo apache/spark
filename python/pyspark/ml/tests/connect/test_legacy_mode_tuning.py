@@ -37,6 +37,22 @@ except ImportError:
     have_sklearn = False
     sklearn_requirement_message = "No sklearn found"
 
+have_torch = True
+torch_requirement_message = None
+try:
+    import torch  # noqa: F401
+except ImportError:
+    have_torch = False
+    torch_requirement_message = "torch is required"
+
+have_torcheval = True
+torcheval_requirement_message = None
+try:
+    import torcheval  # noqa: F401
+except ImportError:
+    have_torcheval = False
+    torcheval_requirement_message = "torcheval is required"
+
 
 if should_test_connect:
     import pandas as pd
@@ -280,9 +296,15 @@ class CrossValidatorTestsMixin:
 
 
 @unittest.skipIf(
-    not should_test_connect or not have_sklearn or is_remote_only(),
+    not should_test_connect
+    or not have_sklearn
+    or not have_torch
+    or not have_torcheval
+    or is_remote_only(),
     connect_requirement_message
     or sklearn_requirement_message
+    or torch_requirement_message
+    or torcheval_requirement_message
     or "pyspark-connect cannot test classic Spark",
 )
 class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
