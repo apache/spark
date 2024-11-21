@@ -17,9 +17,9 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{PrefixKeyScanStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{MapState, TTLConfig}
@@ -35,6 +35,7 @@ import org.apache.spark.util.NextIterator
  * @param valEncoder - SQL encoder for state variable
  * @param ttlConfig  - the ttl configuration (time to live duration etc.)
  * @param batchTimestampMs - current batch processing timestamp.
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam K - type of key for map state variable
  * @tparam V - type of value for map state variable
  * @return - instance of MapState of type [K,V] that can be used to store state persistently
@@ -43,10 +44,11 @@ class MapStateImplWithTTL[K, V](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    userKeyEnc: Encoder[K],
-    valEncoder: Encoder[V],
+    userKeyEnc: ExpressionEncoder[Any],
+    valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long)
+    batchTimestampMs: Long,
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends CompositeKeyTTLStateImpl[K](stateName, store,
     keyExprEnc, userKeyEnc, batchTimestampMs)
   with MapState[K, V] with Logging {
@@ -80,7 +82,7 @@ class MapStateImplWithTTL[K, V](
 
     if (retRow != null) {
       if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        stateTypesEncoder.decodeValue(retRow)
+        stateTypesEncoder.decodeValue(retRow).asInstanceOf[V]
       } else {
         null.asInstanceOf[V]
       }
@@ -106,6 +108,7 @@ class MapStateImplWithTTL[K, V](
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
     val encodedCompositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.put(encodedCompositeKey, encodedValue, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
 
     upsertTTLForStateKey(ttlExpirationMs, encodedGroupingKey, encodedUserKey)
   }
@@ -122,7 +125,9 @@ class MapStateImplWithTTL[K, V](
         if (iter.hasNext) {
           val currentRowPair = iter.next()
           val key = stateTypesEncoder.decodeCompositeKey(currentRowPair.key)
+            .asInstanceOf[K]
           val value = stateTypesEncoder.decodeValue(currentRowPair.value)
+            .asInstanceOf[V]
           (key, value)
         } else {
           finished = true
@@ -149,6 +154,9 @@ class MapStateImplWithTTL[K, V](
     StateStoreErrors.requireNonNullStateValue(key, stateName)
     val compositeKey = stateTypesEncoder.encodeCompositeKey(key)
     store.remove(compositeKey, stateName)
+    // Note that for mapState, the rows are flattened. So we count the number of rows removed
+    // proportional to the number of keys in the map per grouping key.
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
   }
 
   /** Remove this state. */
@@ -184,6 +192,7 @@ class MapStateImplWithTTL[K, V](
       if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
         store.remove(compositeKeyRow, stateName)
         numRemovedElements += 1
+        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
       }
     }
     numRemovedElements
@@ -205,7 +214,7 @@ class MapStateImplWithTTL[K, V](
     val retRow = store.get(encodedCompositeKey, stateName)
 
     if (retRow != null) {
-      val resState = stateTypesEncoder.decodeValue(retRow)
+      val resState = stateTypesEncoder.decodeValue(retRow).asInstanceOf[V]
       Some(resState)
     } else {
       None
@@ -223,7 +232,9 @@ class MapStateImplWithTTL[K, V](
     // ttlExpiration
     Option(retRow).flatMap { row =>
       val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(row)
-      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(row), expiration))
+      ttlExpiration.map { expiration =>
+        (stateTypesEncoder.decodeValue(row).asInstanceOf[V], expiration)
+      }
     }
   }
 
@@ -245,7 +256,7 @@ class MapStateImplWithTTL[K, V](
             0, keyExprEnc.schema.length)) {
             val userKey = stateTypesEncoder.decodeUserKey(
               nextTtlValue.userKey)
-            nextValue = Some(userKey, nextTtlValue.expirationMs)
+            nextValue = Some(userKey.asInstanceOf[K], nextTtlValue.expirationMs)
           }
         }
         nextValue.isDefined

@@ -605,6 +605,10 @@ class Column(ParentColumn):
         jc = self._jc.over(window._jspec)
         return Column(jc)
 
+    def outer(self) -> ParentColumn:
+        jc = self._jc.outer()
+        return Column(jc)
+
     def __nonzero__(self) -> None:
         raise PySparkValueError(
             errorClass="CANNOT_CONVERT_COLUMN_INTO_BOOL",

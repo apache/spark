@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.util.CharsetProvider
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1466,7 +1466,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("fmt"),
-          "inputType" -> toSQLType(StringTypeWithCaseAccentSensitivity),
+          "inputType" -> toSQLType(StringTypeWithCollation),
           "inputExpr" -> toSQLExpr(wrongFmt)
         )
       )
@@ -1905,7 +1905,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // exceptional cases
     intercept[java.util.regex.PatternSyntaxException] {
       evaluateWithoutCodegen(ParseUrl(Seq(Literal("http://spark.apache.org/path?"),
-        Literal("QUERY"), Literal("???"))))
+        Literal("QUERY"), Literal("???"))).replacement)
     }
 
     // arguments checking
@@ -1956,7 +1956,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "inputType" -> "\"INT\"")))
 
     // Test escaping of arguments
-    GenerateUnsafeProjection.generate(ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))) :: Nil)
+    GenerateUnsafeProjection.generate(
+      ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))).replacement :: Nil)
   }
 
   test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {

@@ -22,13 +22,13 @@ from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql.types import Row
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.errors import PySparkTypeError
-from pyspark.errors.exceptions.connect import AnalysisException
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
 if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.column import Column
+    from pyspark.errors.exceptions.connect import AnalysisException
 
 
 class SparkConnectErrorTests(SparkConnectSQLTestCase):

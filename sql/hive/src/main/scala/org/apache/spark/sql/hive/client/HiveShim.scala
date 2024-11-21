@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{IMetaStoreClient, PartitionDropOptions, TableType}
@@ -32,7 +33,7 @@ import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Funct
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
-import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
+import org.apache.hadoop.hive.ql.plan.{AddPartitionDesc, DynamicPartitionCtx}
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -42,15 +43,16 @@ import org.apache.spark.internal.LogKeys.{CONFIG, CONFIG2, CONFIG3}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, IntegralTypeExpression, StringType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * A shim that defines the interface between [[HiveClientImpl]] and the underlying Hive library used
@@ -161,8 +163,7 @@ private[client] sealed abstract class Shim {
 
   def createPartitions(
       hive: Hive,
-      dbName: String,
-      tableName: String,
+      table: Table,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit
 
@@ -196,7 +197,7 @@ private[client] sealed abstract class Shim {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit
+      hiveTable: Table): Unit
 
   def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit
 
@@ -258,6 +259,8 @@ private[client] class Shim_v2_0 extends Shim with Logging {
   // txnId can be 0 unless isAcid == true
   protected lazy val txnIdInLoadDynamicPartitions: JLong = 0L
 
+  protected lazy val wildcard: String = ".*"
+
   override def getMSC(hive: Hive): IMetaStoreClient = hive.getMSC
 
   private lazy val loadPartitionMethod =
@@ -318,11 +321,10 @@ private[client] class Shim_v2_0 extends Shim with Logging {
 
   override def createPartitions(
       hive: Hive,
-      dbName: String,
-      tableName: String,
+      table: Table,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
-    val addPartitionDesc = new AddPartitionDesc(dbName, tableName, ignoreIfExists)
+    val addPartitionDesc = new AddPartitionDesc(table.getDbName, table.getTableName, ignoreIfExists)
     parts.zipWithIndex.foreach { case (s, i) =>
       addPartitionDesc.addPartition(
         s.spec.asJava, s.storage.locationUri.map(CatalogUtils.URIToString).orNull)
@@ -504,8 +506,9 @@ private[client] class Shim_v2_0 extends Shim with Logging {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = {
+      hiveTable: Table): Unit = {
     recordHiveCall()
+    val listBucketingEnabled = hiveTable.isStoredAsSubDirectories
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, listBucketingEnabled: JBoolean, isAcid, txnIdInLoadDynamicPartitions)
   }
@@ -819,13 +822,13 @@ private[client] class Shim_v2_0 extends Shim with Logging {
         Some(s"$value ${op.symbol} $name")
 
       case Contains(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
-        Some(s"$name like " + (("\".*" + value.drop(1)).dropRight(1) + ".*\""))
+        Some(s"$name like " + (("\"" + wildcard + value.drop(1)).dropRight(1) + wildcard + "\""))
 
       case StartsWith(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
-        Some(s"$name like " + (value.dropRight(1) + ".*\""))
+        Some(s"$name like " + (value.dropRight(1) + wildcard + "\""))
 
       case EndsWith(ExtractAttribute(SupportedAttribute(name)), ExtractableLiteral(value)) =>
-        Some(s"$name like " + ("\".*" + value.drop(1)))
+        Some(s"$name like " + ("\"" + wildcard + value.drop(1)))
 
       case And(expr1, expr2) if useAdvanced =>
         val converted = convert(expr1) ++ convert(expr2)
@@ -1096,8 +1099,9 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = {
+      hiveTable: Table): Unit = {
     recordHiveCall()
+    val listBucketingEnabled = hiveTable.isStoredAsSubDirectories
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, listBucketingEnabled: JBoolean, isAcid, txnIdInLoadDynamicPartitions,
       hasFollowingStatsTask, AcidUtils.Operation.NOT_ACID)
@@ -1262,7 +1266,7 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       partSpec: JMap[String, String],
       replace: Boolean,
       numDP: Int,
-      listBucketingEnabled: Boolean): Unit = {
+      hiveTable: Table): Unit = {
     val loadFileType = if (replace) {
       clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
     } else {
@@ -1278,3 +1282,261 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
 }
 
 private[client] class Shim_v3_1 extends Shim_v3_0
+
+private[client] class Shim_v4_0 extends Shim_v3_1 {
+  private lazy val clazzLoadFileType = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.ql.plan.LoadTableDesc$LoadFileType")
+  private lazy val clazzLoadTableDesc = getClass.getClassLoader.loadClass(
+    "org.apache.hadoop.hive.ql.plan.LoadTableDesc")
+  private lazy val clazzPartitionDetails =
+    Utils.classForName("org.apache.hadoop.hive.ql.exec.Utilities$PartitionDesc")
+
+  override protected lazy val wildcard: String = "%"
+
+  private lazy val alterTableMethod =
+    findMethod(
+      classOf[Hive],
+      "alterTable",
+      classOf[String],
+      classOf[Table],
+      classOf[EnvironmentContext],
+      JBoolean.TYPE)
+  private lazy val loadTableMethod =
+    findMethod(
+      classOf[Hive],
+      "loadTable",
+      classOf[Path],
+      classOf[String],
+      clazzLoadFileType,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      classOf[JLong],
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val addPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "addPartitions",
+      classOf[JList[Partition]],
+      JBoolean.TYPE,
+      JBoolean.TYPE) // needResults
+  private lazy val alterPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "alterPartitions",
+      classOf[String],
+      classOf[JList[Partition]],
+      classOf[EnvironmentContext],
+      JBoolean.TYPE)
+  private lazy val loadPartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "loadPartition",
+      classOf[Path],
+      classOf[Table],
+      classOf[JMap[String, String]],
+      clazzLoadFileType,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      classOf[JLong],
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadDynamicPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "loadDynamicPartitions",
+      clazzLoadTableDesc,
+      JInteger.TYPE, // numLB number of buckets
+      JBoolean.TYPE, // isAcid true if this is an ACID operation
+      JLong.TYPE, // writeId, can be 0 unless isAcid == true
+      JInteger.TYPE, // stmtId
+      JBoolean.TYPE, // resetStatistics
+      classOf[AcidUtils.Operation],
+      classOf[JMap[Path, clazzPartitionDetails.type]])
+  private lazy val renamePartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "renamePartition",
+      classOf[Table],
+      classOf[JMap[String, String]],
+      classOf[Partition],
+      JLong.TYPE)
+
+  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
+    recordHiveCall()
+    val transactional = false
+    alterTableMethod.invoke(
+      hive,
+      tableName,
+      table,
+      environmentContextInAlterTable,
+      transactional: JBoolean
+    )
+  }
+
+  override def loadTable(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      replace: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    val loadFileType = if (replace) {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
+    } else {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
+    }
+    assert(loadFileType.isDefined)
+    recordHiveCall()
+    val resetStatistics = false
+    val isDirectInsert = false
+    loadTableMethod.invoke(
+      hive,
+      loadPath,
+      tableName,
+      loadFileType.get,
+      isSrcLocal: JBoolean,
+      isSkewedStoreAsSubdir,
+      isAcidIUDoperation,
+      resetStatistics,
+      writeIdInLoadTableOrPartition,
+      stmtIdInLoadTableOrPartition: JInteger,
+      replace: JBoolean,
+      isDirectInsert: JBoolean)
+  }
+
+  override def alterPartitions(
+      hive: Hive,
+      tableName: String,
+      newParts: JList[Partition]): Unit = {
+    recordHiveCall()
+    val transactional: JBoolean = false
+    alterPartitionsMethod.invoke(
+      hive,
+      tableName,
+      newParts,
+      environmentContextInAlterTable,
+      transactional)
+  }
+
+  override def createPartitions(
+      hive: Hive,
+      table: Table,
+      parts: Seq[CatalogTablePartition],
+      ignoreIfExists: Boolean): Unit = {
+    val partitions = parts.map(HiveClientImpl.toHivePartition(_, table).getTPartition).asJava
+    recordHiveCall()
+    val needResults = false
+    addPartitionsMethod.invoke(hive, partitions, ignoreIfExists, needResults: JBoolean)
+  }
+
+  override def loadPartition(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    recordHiveCall()
+    val table = hive.getTable(tableName)
+    val loadFileType = if (replace) {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
+    } else {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
+    }
+    assert(loadFileType.isDefined)
+    val inheritLocation: JBoolean = false
+    val isDirectInsert: JBoolean = false
+    recordHiveCall()
+    loadPartitionMethod.invoke(
+      hive,
+      loadPath,
+      table,
+      partSpec,
+      loadFileType.get,
+      inheritTableSpecs: JBoolean,
+      inheritLocation,
+      isSkewedStoreAsSubdir: JBoolean,
+      isSrcLocal: JBoolean,
+      isAcid,
+      hasFollowingStatsTask,
+      writeIdInLoadTableOrPartition,
+      stmtIdInLoadTableOrPartition,
+      replace: JBoolean,
+      isDirectInsert
+    )
+  }
+
+  override def loadDynamicPartitions(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      numDP: Int,
+      hiveTable: Table): Unit = {
+    import org.apache.hadoop.hive.ql.exec.Utilities
+    val loadFileType = if (replace) {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
+    } else {
+      clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("KEEP_EXISTING"))
+    }
+    assert(loadFileType.isDefined)
+
+    val useAppendForLoad: JBoolean = false
+    val loadTableDesc = clazzLoadTableDesc
+      .getConstructor(
+        classOf[Path],
+        classOf[Table],
+        JBoolean.TYPE,
+        JBoolean.TYPE,
+        classOf[JMap[String, String]])
+      .newInstance(
+        loadPath,
+        hiveTable,
+        replace: JBoolean,
+        useAppendForLoad,
+        partSpec)
+    val ctx = new DynamicPartitionCtx()
+    ctx.setRootPath(loadPath)
+    ctx.setNumDPCols(numDP)
+    ctx.setPartSpec(partSpec)
+
+    val fullDPSpecs = classOf[Utilities].getMethod(
+      "getFullDPSpecs",
+      classOf[Configuration],
+      classOf[DynamicPartitionCtx],
+      classOf[java.util.Map[String, java.util.List[Path]]])
+    recordHiveCall()
+    val resetPartitionStats: JBoolean = false
+    loadDynamicPartitionsMethod.invoke(
+      hive,
+      loadTableDesc,
+      listBucketingLevel,
+      isAcid,
+      writeIdInLoadTableOrPartition,
+      stmtIdInLoadTableOrPartition,
+      resetPartitionStats,
+      AcidUtils.Operation.NOT_ACID,
+      fullDPSpecs.invoke(null, hive.getConf, ctx, null)
+    )
+  }
+
+  override def renamePartition(
+      hive: Hive,
+      table: Table,
+      oldPartSpec: JMap[String, String],
+      newPart: Partition): Unit = {
+    recordHiveCall()
+    renamePartitionMethod.invoke(hive, table, oldPartSpec, newPart, writeIdInLoadTableOrPartition)
+  }
+}

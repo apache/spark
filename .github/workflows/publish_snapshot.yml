@@ -28,7 +28,7 @@ on:
         description: 'list of branches to publish (JSON)'
         required: true
         # keep in sync with default value of strategy matrix 'branch'
-        default: '["master", "branch-3.5", "branch-3.4"]'
+        default: '["master", "branch-3.5"]'
 
 jobs:
   publish-snapshot:
@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
       matrix:
         # keep in sync with default value of workflow_dispatch input 'branch'
-        branch: ${{ fromJSON( inputs.branch || '["master", "branch-3.5", "branch-3.4"]' ) }}
+        branch: ${{ fromJSON( inputs.branch || '["master", "branch-3.5"]' ) }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -52,13 +52,13 @@ jobs:
         restore-keys: |
           snapshot-maven-
     - name: Install Java 8 for branch-3.x
-      if: matrix.branch == 'branch-3.5' || matrix.branch == 'branch-3.4'
+      if: matrix.branch == 'branch-3.5'
       uses: actions/setup-java@v4
       with:
         distribution: temurin
         java-version: 8
     - name: Install Java 17
-      if: matrix.branch != 'branch-3.5' && matrix.branch != 'branch-3.4'
+      if: matrix.branch != 'branch-3.5'
       uses: actions/setup-java@v4
       with:
         distribution: temurin

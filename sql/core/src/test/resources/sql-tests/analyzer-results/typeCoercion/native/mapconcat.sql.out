@@ -117,13 +117,23 @@ SELECT
     map_concat(int_string_map1, tinyint_map2) istt_map
 FROM various_maps
 -- !query analysis
-Project [map_concat(cast(tinyint_map1#x as map<smallint,smallint>), smallint_map2#x) AS ts_map#x, map_concat(cast(smallint_map1#x as map<int,int>), int_map2#x) AS si_map#x, map_concat(cast(int_map1#x as map<bigint,bigint>), bigint_map2#x) AS ib_map#x, map_concat(cast(bigint_map1#x as map<decimal(20,0),decimal(20,0)>), cast(decimal_map2#x as map<decimal(20,0),decimal(20,0)>)) AS bd_map#x, map_concat(cast(decimal_map1#x as map<double,double>), cast(float_map2#x as map<double,double>)) AS df_map#x, map_concat(string_map1#x, cast(date_map2#x as map<string,string>)) AS std_map#x, map_concat(cast(timestamp_map1#x as map<string,string>), string_map2#x) AS tst_map#x, map_concat(string_map1#x, cast(int_map2#x as map<string,string>)) AS sti_map#x, map_concat(int_string_map1#x, cast(tinyint_map2#x as map<int,string>)) AS istt_map#x]
-+- SubqueryAlias various_maps
-   +- View (`various_maps`, [boolean_map1#x, boolean_map2#x, tinyint_map1#x, tinyint_map2#x, smallint_map1#x, smallint_map2#x, int_map1#x, int_map2#x, bigint_map1#x, bigint_map2#x, decimal_map1#x, decimal_map2#x, double_map1#x, double_map2#x, float_map1#x, float_map2#x, date_map1#x, date_map2#x, timestamp_map1#x, timestamp_map2#x, string_map1#x, string_map2#x, array_map1#x, array_map2#x, ... 6 more fields])
-      +- Project [cast(boolean_map1#x as map<boolean,boolean>) AS boolean_map1#x, cast(boolean_map2#x as map<boolean,boolean>) AS boolean_map2#x, cast(tinyint_map1#x as map<tinyint,tinyint>) AS tinyint_map1#x, cast(tinyint_map2#x as map<tinyint,tinyint>) AS tinyint_map2#x, cast(smallint_map1#x as map<smallint,smallint>) AS smallint_map1#x, cast(smallint_map2#x as map<smallint,smallint>) AS smallint_map2#x, cast(int_map1#x as map<int,int>) AS int_map1#x, cast(int_map2#x as map<int,int>) AS int_map2#x, cast(bigint_map1#x as map<bigint,bigint>) AS bigint_map1#x, cast(bigint_map2#x as map<bigint,bigint>) AS bigint_map2#x, cast(decimal_map1#x as map<decimal(19,0),decimal(19,0)>) AS decimal_map1#x, cast(decimal_map2#x as map<decimal(19,0),decimal(19,0)>) AS decimal_map2#x, cast(double_map1#x as map<double,double>) AS double_map1#x, cast(double_map2#x as map<double,double>) AS double_map2#x, cast(float_map1#x as map<float,float>) AS float_map1#x, cast(float_map2#x as map<float,float>) AS float_map2#x, cast(date_map1#x as map<date,date>) AS date_map1#x, cast(date_map2#x as map<date,date>) AS date_map2#x, cast(timestamp_map1#x as map<timestamp,timestamp>) AS timestamp_map1#x, cast(timestamp_map2#x as map<timestamp,timestamp>) AS timestamp_map2#x, cast(string_map1#x as map<string,string>) AS string_map1#x, cast(string_map2#x as map<string,string>) AS string_map2#x, cast(array_map1#x as map<array<string>,array<string>>) AS array_map1#x, cast(array_map2#x as map<array<string>,array<string>>) AS array_map2#x, ... 6 more fields]
-         +- Project [boolean_map1#x, boolean_map2#x, tinyint_map1#x, tinyint_map2#x, smallint_map1#x, smallint_map2#x, int_map1#x, int_map2#x, bigint_map1#x, bigint_map2#x, decimal_map1#x, decimal_map2#x, double_map1#x, double_map2#x, float_map1#x, float_map2#x, date_map1#x, date_map2#x, timestamp_map1#x, timestamp_map2#x, string_map1#x, string_map2#x, array_map1#x, array_map2#x, ... 6 more fields]
-            +- SubqueryAlias various_maps
-               +- LocalRelation [boolean_map1#x, boolean_map2#x, tinyint_map1#x, tinyint_map2#x, smallint_map1#x, smallint_map2#x, int_map1#x, int_map2#x, bigint_map1#x, bigint_map2#x, decimal_map1#x, decimal_map2#x, double_map1#x, double_map2#x, float_map1#x, float_map2#x, date_map1#x, date_map2#x, timestamp_map1#x, timestamp_map2#x, string_map1#x, string_map2#x, array_map1#x, array_map2#x, ... 6 more fields]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "(\"MAP<STRING, STRING>\" or \"MAP<DATE, DATE>\")",
+    "functionName" : "`map_concat`",
+    "sqlExpr" : "\"map_concat(string_map1, date_map2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 257,
+    "stopIndex" : 290,
+    "fragment" : "map_concat(string_map1, date_map2)"
+  } ]
+}
 
 
 -- !query

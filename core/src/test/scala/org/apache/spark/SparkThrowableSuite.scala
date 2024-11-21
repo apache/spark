@@ -47,7 +47,7 @@ class SparkThrowableSuite extends SparkFunSuite {
    }}}
    */
   private val regenerateCommand = "SPARK_GENERATE_GOLDEN_FILES=1 build/sbt " +
-    "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error classes match with document\\\"\""
+    "\"core/testOnly *SparkThrowableSuite -- -t \\\"Error conditions are correctly formatted\\\"\""
 
   private val errorJsonFilePath = getWorkspaceFilePath(
     "common", "utils", "src", "main", "resources", "error", "error-conditions.json")

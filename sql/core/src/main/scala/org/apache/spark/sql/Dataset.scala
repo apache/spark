@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder, StructEncoder}
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{ScalarSubquery => ScalarSubqueryExpr, _}
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -58,11 +58,11 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf}
+import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, ExpressionColumnNode, MergeIntoWriterImpl, SQLConf}
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
@@ -95,9 +95,9 @@ private[sql] object Dataset {
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame =
     sparkSession.withActive {
       val qe = sparkSession.sessionState.executePlan(logicalPlan)
-      qe.assertAnalyzed()
-      new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
-  }
+      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
+    }
 
   def ofRows(
       sparkSession: SparkSession,
@@ -106,8 +106,8 @@ private[sql] object Dataset {
     sparkSession.withActive {
       val qe = new QueryExecution(
         sparkSession, logicalPlan, shuffleCleanupMode = shuffleCleanupMode)
-      qe.assertAnalyzed()
-      new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
+      if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+      new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
     }
 
   /** A variant of ofRows that allows passing in a tracker so we can track query parsing time. */
@@ -119,8 +119,8 @@ private[sql] object Dataset {
     : DataFrame = sparkSession.withActive {
     val qe = new QueryExecution(
       sparkSession, logicalPlan, tracker, shuffleCleanupMode = shuffleCleanupMode)
-    qe.assertAnalyzed()
-    new Dataset[Row](qe, RowEncoder.encoderFor(qe.analyzed.schema))
+    if (!qe.isLazyAnalysis) qe.assertAnalyzed()
+    new Dataset[Row](qe, () => RowEncoder.encoderFor(qe.analyzed.schema))
   }
 }
 
@@ -214,10 +214,9 @@ private[sql] object Dataset {
 @Stable
 class Dataset[T] private[sql](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
-    @DeveloperApi @Unstable @transient val encoder: Encoder[T])
+    @transient encoderGenerator: () => Encoder[T])
   extends api.Dataset[T] {
   type DS[U] = Dataset[U]
-  type RGD = RelationalGroupedDataset
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
@@ -231,10 +230,16 @@ class Dataset[T] private[sql](
   // A globally unique id of this Dataset.
   private[sql] val id = Dataset.curId.getAndIncrement()
 
-  queryExecution.assertAnalyzed()
+  if (!queryExecution.isLazyAnalysis) {
+    queryExecution.assertAnalyzed()
+  }
 
   // Note for Spark contributors: if adding or updating any action in `Dataset`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
+
+  private[sql] def this(queryExecution: QueryExecution, encoder: Encoder[T]) = {
+    this(queryExecution, () => encoder)
+  }
 
   def this(sparkSession: SparkSession, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
     this(sparkSession.sessionState.executePlan(logicalPlan), encoder)
@@ -245,14 +250,20 @@ class Dataset[T] private[sql](
   }
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
-    val plan = queryExecution.commandExecuted
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
-      val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
-      dsIds.add(id)
-      plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
+    if (queryExecution.isLazyAnalysis) {
+      queryExecution.logical
+    } else {
+      val plan = queryExecution.commandExecuted
+      if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+        val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
+        dsIds.add(id)
+        plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
+      }
+      plan
     }
-    plan
   }
+
+  @DeveloperApi @Unstable @transient lazy val encoder: Encoder[T] = encoderGenerator()
 
   /**
    * Expose the encoder as implicit so it can be used to construct new Dataset objects that have
@@ -573,7 +584,8 @@ class Dataset[T] private[sql](
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
-      EventTimeWatermark(UnresolvedAttribute(eventTime), parsedDelay, logicalPlan))
+      EventTimeWatermark(util.UUID.randomUUID(), UnresolvedAttribute(eventTime),
+        parsedDelay, logicalPlan))
   }
 
   /** @inheritdoc */
@@ -980,6 +992,20 @@ class Dataset[T] private[sql](
       Seq.empty,
       logicalPlan
     )
+  }
+
+  /** @inheritdoc */
+  def scalar(): Column = {
+    Column(ExpressionColumnNode(
+      ScalarSubqueryExpr(SubExprUtils.removeLazyOuterReferences(logicalPlan),
+        hasExplicitOuterRefs = true)))
+  }
+
+  /** @inheritdoc */
+  def exists(): Column = {
+    Column(ExpressionColumnNode(
+      Exists(SubExprUtils.removeLazyOuterReferences(logicalPlan),
+        hasExplicitOuterRefs = true)))
   }
 
   /** @inheritdoc */
@@ -1649,7 +1675,7 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def inputFiles: Array[String] = {
     val files: Seq[String] = queryExecution.optimizedPlan.collect {
-      case LogicalRelation(fsBasedRelation: FileRelation, _, _, _) =>
+      case LogicalRelationWithTable(fsBasedRelation: FileRelation, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
         fr.inputFiles

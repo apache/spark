@@ -42,7 +42,7 @@ struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS BIGINT) END:bigint>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS FLOAT) END:double>
 -- !query output
 1.0
 
@@ -66,7 +66,7 @@ struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS DECIMAL(10,0)) END:
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS STRING) END:bigint>
 -- !query output
 1
 
@@ -202,7 +202,7 @@ struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS BIGINT) END:bigint
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS FLOAT) END:double>
 -- !query output
 1.0
 
@@ -226,7 +226,7 @@ struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS DECIMAL(10,0)) END
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS STRING) END:bigint>
 -- !query output
 1
 
@@ -362,7 +362,7 @@ struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS BIGINT) END:bigint>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS FLOAT) END:double>
 -- !query output
 1.0
 
@@ -386,7 +386,7 @@ struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS DECIMAL(10,0)) END:deci
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS STRING) END:bigint>
 -- !query output
 1
 
@@ -522,7 +522,7 @@ struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS BIGINT) END:bigint>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS FLOAT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS FLOAT) END:double>
 -- !query output
 1.0
 
@@ -546,7 +546,7 @@ struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS DECIMAL(10,0)) END:d
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS STRING) END:bigint>
 -- !query output
 1
 
@@ -650,7 +650,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS TINYINT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS TINYINT) END:double>
 -- !query output
 1.0
 
@@ -658,7 +658,7 @@ struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS TINYINT) END:float>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS SMALLINT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS SMALLINT) END:double>
 -- !query output
 1.0
 
@@ -666,7 +666,7 @@ struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS SMALLINT) END:float>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS INT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS INT) END:double>
 -- !query output
 1.0
 
@@ -674,7 +674,7 @@ struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS INT) END:float>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS BIGINT) END:float>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS BIGINT) END:double>
 -- !query output
 1.0
 
@@ -706,7 +706,7 @@ struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS DECIMAL(10,0)) END:do
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS STRING) END:double>
 -- !query output
 1.0
 
@@ -866,7 +866,7 @@ struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS DECIMAL(10,0)) END:d
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS STRING) END:double>
 -- !query output
 1.0
 
@@ -1026,9 +1026,9 @@ struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS DECIMAL(10,0)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS STRING) END:double>
 -- !query output
-1
+1.0
 
 
 -- !query
@@ -1130,7 +1130,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as tinyint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS TINYINT) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS TINYINT) END:bigint>
 -- !query output
 1
 
@@ -1138,7 +1138,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS TINYINT) END:string>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as smallint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS SMALLINT) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS SMALLINT) END:bigint>
 -- !query output
 1
 
@@ -1146,7 +1146,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS SMALLINT) END:string
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as int) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS INT) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS INT) END:bigint>
 -- !query output
 1
 
@@ -1154,7 +1154,7 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS INT) END:string>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as bigint) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BIGINT) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BIGINT) END:bigint>
 -- !query output
 1
 
@@ -1162,25 +1162,25 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BIGINT) END:string>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as float) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS FLOAT) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS FLOAT) END:double>
 -- !query output
-1
+1.0
 
 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as double) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DOUBLE) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DOUBLE) END:double>
 -- !query output
-1
+1.0
 
 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DECIMAL(10,0)) END:string>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DECIMAL(10,0)) END:double>
 -- !query output
-1
+1.0
 
 
 -- !query
@@ -1194,65 +1194,65 @@ struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS STRING) END:string>
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2' as binary) END FROM t
 -- !query schema
-struct<>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BINARY) END:binary>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "dataType" : "[\"STRING\", \"BINARY\"]",
-    "functionName" : "`casewhen`",
-    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BINARY) END\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 73,
-    "fragment" : "CASE WHEN true THEN cast(1 as string) ELSE cast('2' as binary) END"
-  } ]
-}
+1
 
 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as boolean) END FROM t
 -- !query schema
-struct<>
+struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BOOLEAN) END:boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "dataType" : "[\"STRING\", \"BOOLEAN\"]",
-    "functionName" : "`casewhen`",
-    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BOOLEAN) END\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 72,
-    "fragment" : "CASE WHEN true THEN cast(1 as string) ELSE cast(2 as boolean) END"
-  } ]
-}
+true
 
 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00.0' as timestamp) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END:string>
+struct<>
 -- !query output
-1
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 96,
+    "fragment" : "CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00.0' as timestamp) END"
+  } ]
+}
 
 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00' as date) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2017-12-11 09:30:00 AS DATE) END:string>
+struct<>
 -- !query output
-1
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 89,
+    "fragment" : "CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00' as date) END"
+  } ]
+}
 
 
 -- !query
@@ -1426,25 +1426,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<>
+struct<CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS STRING) END:binary>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "dataType" : "[\"BINARY\", \"STRING\"]",
-    "functionName" : "`casewhen`",
-    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS STRING) END\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 73,
-    "fragment" : "CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as string) END"
-  } ]
-}
+1
 
 
 -- !query
@@ -1698,25 +1682,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<>
+struct<CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS STRING) END:boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "dataType" : "[\"BOOLEAN\", \"STRING\"]",
-    "functionName" : "`casewhen`",
-    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS STRING) END\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 72,
-    "fragment" : "CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as string) END"
-  } ]
-}
+true
 
 
 -- !query
@@ -1970,7 +1938,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS STRING) END:timestamp>
 -- !query output
 2017-12-12 09:30:00
 
@@ -2210,7 +2178,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as string) END FROM t
 -- !query schema
-struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS STRING) END:string>
+struct<CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS STRING) END:date>
 -- !query output
 2017-12-12
 

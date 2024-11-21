@@ -2120,7 +2120,7 @@ class DDLParserSuite extends AnalysisTest {
         |ON target.col1 = source.col1""".stripMargin
     checkError(
       exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0008",
+      condition = "MERGE_WITHOUT_WHEN",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,

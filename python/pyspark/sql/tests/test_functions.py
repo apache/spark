@@ -333,6 +333,75 @@ class FunctionsTestsMixin:
         rndn2 = df.select("key", F.randn(0)).collect()
         self.assertEqual(sorted(rndn1), sorted(rndn2))
 
+    def test_try_parse_url(self):
+        df = self.spark.createDataFrame(
+            [("https://spark.apache.org/path?query=1", "QUERY", "query")],
+            ["url", "part", "key"],
+        )
+        actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
+        self.assertEqual(actual, [Row("1")])
+        df = self.spark.createDataFrame(
+            [("inva lid://spark.apache.org/path?query=1", "QUERY", "query")],
+            ["url", "part", "key"],
+        )
+        actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
+        self.assertEqual(actual, [Row(None)])
+
+    def test_try_make_timestamp(self):
+        data = [(2024, 5, 22, 10, 30, 0)]
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.try_make_timestamp(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        ).collect()
+        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30))])
+
+        data = [(2024, 13, 22, 10, 30, 0)]
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.try_make_timestamp(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        ).collect()
+        self.assertEqual(actual, [Row(None)])
+
+    def test_try_make_timestamp_ltz(self):
+        # use local timezone here to avoid flakiness
+        data = [(2024, 5, 22, 10, 30, 0, datetime.datetime.now().astimezone().tzinfo.__str__())]
+        df = self.spark.createDataFrame(
+            data, ["year", "month", "day", "hour", "minute", "second", "timezone"]
+        )
+        actual = df.select(
+            F.try_make_timestamp_ltz(
+                df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone
+            )
+        ).collect()
+        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 0))])
+
+        # use local timezone here to avoid flakiness
+        data = [(2024, 13, 22, 10, 30, 0, datetime.datetime.now().astimezone().tzinfo.__str__())]
+        df = self.spark.createDataFrame(
+            data, ["year", "month", "day", "hour", "minute", "second", "timezone"]
+        )
+        actual = df.select(
+            F.try_make_timestamp_ltz(
+                df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone
+            )
+        ).collect()
+        self.assertEqual(actual, [Row(None)])
+
+    def test_try_make_timestamp_ntz(self):
+        data = [(2024, 5, 22, 10, 30, 0)]
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.try_make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        ).collect()
+        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30))])
+
+        data = [(2024, 13, 22, 10, 30, 0)]
+        df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
+        actual = df.select(
+            F.try_make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
+        ).collect()
+        self.assertEqual(actual, [Row(None)])
+
     def test_string_functions(self):
         string_functions = [
             "upper",
@@ -382,6 +451,11 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
         actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
         self.assertEqual([Row("UNICODE")], actual)
+
+    def test_try_make_interval(self):
+        df = self.spark.createDataFrame([(2147483647,)], ["num"])
+        actual = df.select(F.isnull(F.try_make_interval("num"))).collect()
+        self.assertEqual([Row(True)], actual)
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
@@ -1239,7 +1313,7 @@ class FunctionsTestsMixin:
         import numpy as np
 
         arr_dtype_to_spark_dtypes = [
-            ("int8", [("b", "array<smallint>")]),
+            ("int8", [("b", "array<tinyint>")]),
             ("int16", [("b", "array<smallint>")]),
             ("int32", [("b", "array<int>")]),
             ("int64", [("b", "array<bigint>")]),
@@ -1262,6 +1336,52 @@ class FunctionsTestsMixin:
                 "dtype": "uint64",
             },
         )
+
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_bool_ndarray(self):
+        import numpy as np
+
+        for arr in [
+            np.array([], np.bool_),
+            np.array([True, False], np.bool_),
+            np.array([1, 0, 3], np.bool_),
+        ]:
+            self.assertEqual(
+                [("a", "array<boolean>")],
+                self.spark.range(1).select(F.lit(arr).alias("a")).dtypes,
+            )
+
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_str_ndarray(self):
+        import numpy as np
+
+        for arr in [
+            np.array([], np.str_),
+            np.array(["a"], np.str_),
+            np.array([1, 2, 3], np.str_),
+        ]:
+            self.assertEqual(
+                [("a", "array<string>")],
+                self.spark.range(1).select(F.lit(arr).alias("a")).dtypes,
+            )
+
+    @unittest.skipIf(not have_numpy, "NumPy not installed")
+    def test_empty_ndarray(self):
+        import numpy as np
+
+        arr_dtype_to_spark_dtypes = [
+            ("int8", [("b", "array<tinyint>")]),
+            ("int16", [("b", "array<smallint>")]),
+            ("int32", [("b", "array<int>")]),
+            ("int64", [("b", "array<bigint>")]),
+            ("float32", [("b", "array<float>")]),
+            ("float64", [("b", "array<double>")]),
+        ]
+        for t, expected_spark_dtypes in arr_dtype_to_spark_dtypes:
+            arr = np.array([]).astype(t)
+            self.assertEqual(
+                expected_spark_dtypes, self.spark.range(1).select(F.lit(arr).alias("b")).dtypes
+            )
 
     def test_binary_math_function(self):
         funcs, expected = zip(
@@ -1628,6 +1748,21 @@ class FunctionsTestsMixin:
         # The random seed is optional.
         result = df.select(uniform(F.lit(10), F.lit(20)).alias("x")).selectExpr("x > 5").collect()
         self.assertEqual([Row(True)], result)
+
+    def test_string_validation(self):
+        df = self.spark.createDataFrame([("abc",)], ["a"])
+        # test is_valid_utf8
+        result_is_valid_utf8 = df.select(F.is_valid_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r=True)], result_is_valid_utf8)
+        # test make_valid_utf8
+        result_make_valid_utf8 = df.select(F.make_valid_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_make_valid_utf8)
+        # test validate_utf8
+        result_validate_utf8 = df.select(F.validate_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_validate_utf8)
+        # test try_validate_utf8
+        result_try_validate_utf8 = df.select(F.try_validate_utf8(df.a).alias("r")).collect()
+        self.assertEqual([Row(r="abc")], result_try_validate_utf8)
 
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):

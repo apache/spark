@@ -66,10 +66,6 @@ private[sql] object UpCastRule {
 
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
 
-    case (udt: UserDefinedType[_], toType) => canUpCast(udt.sqlType, toType)
-
-    case (fromType, udt: UserDefinedType[_]) => canUpCast(fromType, udt.sqlType)
-
     case _ => false
   }
 
