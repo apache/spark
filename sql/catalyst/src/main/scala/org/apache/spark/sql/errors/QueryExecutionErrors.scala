@@ -2067,7 +2067,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "autoBroadcastJoinThreshold" -> SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key,
         "driverMemory" -> SparkLauncher.DRIVER_MEMORY,
         "analyzeTblMsg" -> analyzeTblMsg),
-      cause = oe.getCause)
+      cause = oe)
   }
 
   def executeCodePathUnsupportedError(execName: String): SparkUnsupportedOperationException = {
