@@ -460,7 +460,7 @@ class NumpyHelper:
         return [start + step * i for i in range(num)]
 
 
-def spark_connect_only(func: Union[Callable, property]) -> Union[Callable, property]:
+def remote_only(func: Union[Callable, property]) -> Union[Callable, property]:
     """
     Decorator to mark a function or method as only available in Spark Connect.
 
@@ -469,8 +469,8 @@ def spark_connect_only(func: Union[Callable, property]) -> Union[Callable, prope
     if isinstance(func, property):
         # If it's a property, we need to set the attribute on the getter function
         getter_func = func.fget
-        getter_func._spark_connect_only = True  # type: ignore[union-attr]
+        getter_func._remote_only = True  # type: ignore[union-attr]
         return property(getter_func)
     else:
-        func._spark_connect_only = True  # type: ignore[attr-defined]
+        func._remote_only = True  # type: ignore[attr-defined]
         return func

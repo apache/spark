@@ -69,7 +69,7 @@ class ConnectCompatibilityTestsMixin:
             if (
                 inspect.isfunction(method) or isinstance(method, functools._lru_cache_wrapper)
             ) and not name.startswith("_"):
-                if getattr(method, "_spark_connect_only", False):
+                if getattr(method, "_remote_only", False):
                     methods[name] = None
                 else:
                     methods[name] = method
