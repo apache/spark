@@ -1786,6 +1786,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         else:
             return DataFrame(self._jdf.transpose(), self.sparkSession)
 
+    def argument(self) -> Column:
+        return Column(self._jdf.argument())
+
     def scalar(self) -> Column:
         return Column(self._jdf.scalar())
 
