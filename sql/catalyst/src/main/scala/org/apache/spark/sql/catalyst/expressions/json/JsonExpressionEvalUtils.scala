@@ -161,15 +161,21 @@ case class StructsToJsonEvaluator(
   }
 }
 
-case class JsonTupleEvaluator(
-    fieldExpressionsLength: Int,
-    constantFields: Int) {
+case class JsonTupleEvaluator(foldableFieldNames: IndexedSeq[Option[String]]) {
 
   import SharedFactory._
 
   // if processing fails this shared value will be returned
   @transient private lazy val nullRow: Seq[InternalRow] =
-    new GenericInternalRow(Array.ofDim[Any](fieldExpressionsLength)) :: Nil
+    new GenericInternalRow(Array.ofDim[Any](foldableFieldNames.length)) :: Nil
+
+  // and count the number of foldable fields, we'll use this later to optimize evaluation
+  @transient lazy val constantFields: Int = foldableFieldNames.count(_ != null)
+
+  // expose for codegen
+  def foldableFieldName(index: Int): Option[String] = {
+    foldableFieldNames(index)
+  }
 
   private def parseRow(parser: JsonParser, fieldNames: Array[String]): Seq[InternalRow] = {
     // only objects are supported

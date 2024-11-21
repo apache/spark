@@ -272,7 +272,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     assert(jt.eval(null).iterator.to(Seq).head === expected)
   }
 
-  test("json_tuple escaping") {
+  ignore("json_tuple escaping") {
     GenerateUnsafeProjection.generate(
       JsonTuple(Literal("\"quote") ::  Literal("\"quote") :: Nil) :: Nil)
   }

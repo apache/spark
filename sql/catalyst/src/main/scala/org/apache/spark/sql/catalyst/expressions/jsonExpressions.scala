@@ -464,9 +464,6 @@ case class JsonTuple(children: Seq[Expression])
     }.toIndexedSeq
   }
 
-  // and count the number of foldable fields, we'll use this later to optimize evaluation
-  @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
-
   override def nullable: Boolean = {
     // a row is always returned
     false
@@ -495,19 +492,18 @@ case class JsonTuple(children: Seq[Expression])
   }
 
   @transient
-  private lazy val evaluator: JsonTupleEvaluator = JsonTupleEvaluator(
-    fieldExpressions.length, constantFields)
+  private lazy val evaluator: JsonTupleEvaluator = JsonTupleEvaluator(foldableFieldNames)
 
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
 
     // evaluate the field names as String rather than UTF8String to
     // optimize lookups from the json token, which is also a String
-    val fieldNames = if (constantFields == fieldExpressions.length) {
+    val fieldNames = if (evaluator.constantFields == fieldExpressions.length) {
       // typically the user will provide the field names as foldable expressions
       // so we can use the cached copy
       foldableFieldNames.map(_.orNull)
-    } else if (constantFields == 0) {
+    } else if (evaluator.constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
       fieldExpressions.map { expr =>
         Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
@@ -525,22 +521,25 @@ case class JsonTuple(children: Seq[Expression])
     evaluator.evaluate(json, fieldNames.toArray)
   }
 
-  private def genFieldNamesCode(ctx: CodegenContext, fieldNamesTerm: String): String = {
+  private def genFieldNamesCode(
+      ctx: CodegenContext,
+      refEvaluator: String,
+      fieldNamesTerm: String): String = {
     // evaluate the field names as String rather than UTF8String to
     // optimize lookups from the json token, which is also a String
-    val (fieldNamesEval, setFieldNames) = if (constantFields == fieldExpressions.length) {
+    val (fieldNamesEval, setFieldNames) = if (evaluator.constantFields == fieldExpressions.length) {
       // typically the user will provide the field names as foldable expressions
       // so we can use the cached copy
       val s = foldableFieldNames.zipWithIndex.map {
         case (v, i) =>
-          if (v.isDefined) {
-            s"$fieldNamesTerm[$i] = \"${v.get}\";"
+          if (v != null && v.isDefined) {
+            s"$fieldNamesTerm[$i] = (String) $refEvaluator.foldableFieldName($i).get();"
           } else {
             s"$fieldNamesTerm[$i] = null;"
           }
       }
       (Seq.empty[ExprCode], s)
-    } else if (constantFields == 0) {
+    } else if (evaluator.constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
       val f = fieldExpressions.map(_.genCode(ctx))
       val s = f.zipWithIndex.map {
@@ -571,7 +570,7 @@ case class JsonTuple(children: Seq[Expression])
           (Some(f), s)
         case ((v: Option[String], _), i) =>
           val s = if (v.isDefined) {
-            s"$fieldNamesTerm[$i] = \"${v.get}\";"
+            s"$fieldNamesTerm[$i] = (String) $refEvaluator.foldableFieldName($i).get();"
           } else {
             s"$fieldNamesTerm[$i] = null;"
           }
@@ -591,7 +590,7 @@ case class JsonTuple(children: Seq[Expression])
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
     val jsonEval = jsonExpr.genCode(ctx)
     val fieldNamesTerm = ctx.freshName("fieldNames")
-    val fieldNamesCode = genFieldNamesCode(ctx, fieldNamesTerm)
+    val fieldNamesCode = genFieldNamesCode(ctx, refEvaluator, fieldNamesTerm)
     val resultTerm = ctx.freshName("result")
     val classTagClz = classOf[ClassTag[InternalRow]].getName
     val wrapperClz = classOf[mutable.ArraySeq[_]].getName
