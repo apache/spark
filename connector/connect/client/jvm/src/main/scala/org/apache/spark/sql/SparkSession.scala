@@ -386,7 +386,7 @@ class SparkSession private[sql] (
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
-    val value = execute(plan)
+    val value = executeInternal(plan)
     new SparkResult(value, allocator, encoder, timeZoneId)
   }
 
@@ -396,7 +396,7 @@ class SparkSession private[sql] (
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     // .foreach forces that the iterator is consumed and closed
-    execute(plan).foreach(_ => ())
+    executeInternal(plan).foreach(_ => ())
   }
 
   @Since("4.0.0")
@@ -405,18 +405,18 @@ class SparkSession private[sql] (
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toSeq forces that the iterator is consumed and closed. On top, ignore all
     // progress messages.
-    execute(plan).filter(!_.hasExecutionProgress).toSeq
+    executeInternal(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
   /**
    * The real `execute` method that calls into `SparkConnectClient`.
    *
-   * Here we inject a lazy map to process registered observed metrics, so consumers of the returned
-   * iterator does not need to worry about it.
+   * Here we inject a lazy map to process registered observed metrics, so consumers of the
+   * returned iterator does not need to worry about it.
    *
-   * Please make sure all `execute` overrides call this method.
+   * Please make sure all `execute` methods call this method.
    */
-  private[sql] def execute(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] = {
+  private[sql] def executeInternal(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] = {
     client
       .execute(plan)
       .map { response =>

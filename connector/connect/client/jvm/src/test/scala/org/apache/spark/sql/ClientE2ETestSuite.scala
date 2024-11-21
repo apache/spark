@@ -1548,36 +1548,37 @@ class ClientE2ETestSuite
   }
 
   for (collectFunc <- Seq(
-    ("collect", (df: DataFrame) => df.collect()),
-    ("collectAsList", (df: DataFrame) => df.collectAsList()),
-    ("collectResult", (df: DataFrame) => df.collectResult().length),
-    ("write", (df: DataFrame) => df.write.format("noop").mode("append").save())))
-  test("Observation.get is blocked until the query is finished, " +
-    s"collect using method ${collectFunc._1}") {
-    val df = spark.range(99).withColumn("extra", col("id") - 1)
-    val ob1 = new Observation("ob1")
-    val ob2 = new Observation("ob2")
-    val observedDf = df.observe(ob1, min("id"), avg("id"), max("id"))
-    val observedObservedDf = observedDf.observe(ob2, min("extra"), avg("extra"), max("extra"))
-    // Start new threads to get observations
-    val future1 = Future(ob1.get)(ExecutionContext.global)
-    val future2 = Future(ob2.get)(ExecutionContext.global)
-    // make sure the threads are blocked right now
-    val e1 = intercept[java.util.concurrent.TimeoutException] {
-      SparkThreadUtils.awaitResult(future1, 2.seconds)
+      ("collect", (df: DataFrame) => df.collect()),
+      ("collectAsList", (df: DataFrame) => df.collectAsList()),
+      ("collectResult", (df: DataFrame) => df.collectResult().length),
+      ("write", (df: DataFrame) => df.write.format("noop").mode("append").save())))
+    test(
+      "Observation.get is blocked until the query is finished, " +
+        s"collect using method ${collectFunc._1}") {
+      val df = spark.range(99).withColumn("extra", col("id") - 1)
+      val ob1 = new Observation("ob1")
+      val ob2 = new Observation("ob2")
+      val observedDf = df.observe(ob1, min("id"), avg("id"), max("id"))
+      val observedObservedDf = observedDf.observe(ob2, min("extra"), avg("extra"), max("extra"))
+      // Start new threads to get observations
+      val future1 = Future(ob1.get)(ExecutionContext.global)
+      val future2 = Future(ob2.get)(ExecutionContext.global)
+      // make sure the threads are blocked right now
+      val e1 = intercept[java.util.concurrent.TimeoutException] {
+        SparkThreadUtils.awaitResult(future1, 2.seconds)
+      }
+      assert(e1.getMessage.contains("timed out after"))
+      val e2 = intercept[java.util.concurrent.TimeoutException] {
+        SparkThreadUtils.awaitResult(future2, 2.seconds)
+      }
+      assert(e2.getMessage.contains("timed out after"))
+      collectFunc._2(observedObservedDf)
+      // make sure the threads are unblocked after the query is finished
+      val metrics1 = SparkThreadUtils.awaitResult(future1, 5.seconds)
+      assert(metrics1 === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
+      val metrics2 = SparkThreadUtils.awaitResult(future2, 5.seconds)
+      assert(metrics2 === Map("min(extra)" -> -1, "avg(extra)" -> 48, "max(extra)" -> 97))
     }
-    assert(e1.getMessage.contains("timed out after"))
-    val e2 = intercept[java.util.concurrent.TimeoutException] {
-      SparkThreadUtils.awaitResult(future2, 2.seconds)
-    }
-    assert(e2.getMessage.contains("timed out after"))
-    collectFunc._2(observedObservedDf)
-    // make sure the threads are unblocked after the query is finished
-    val metrics1 = SparkThreadUtils.awaitResult(future1, 5.seconds)
-    assert(metrics1 === Map("min(id)" -> 0, "avg(id)" -> 49, "max(id)" -> 98))
-    val metrics2 = SparkThreadUtils.awaitResult(future2, 5.seconds)
-    assert(metrics2 === Map("min(extra)" -> -1, "avg(extra)" -> 48, "max(extra)" -> 97))
-  }
 
   test("SPARK-48852: trim function on a string column returns correct results") {
     val session: SparkSession = spark
