@@ -31,7 +31,7 @@ struct<c1:int,c2:string>
 
 -- !query
 SELECT *
-FROM   (SELECT * FROM t1
+FROM   (SELECT * FROM t1 where c1 = 1
         UNION ALL
         SELECT * FROM t2
         UNION ALL
@@ -52,8 +52,8 @@ org.apache.spark.SparkNumberFormatException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 1,
-    "stopIndex" : 120,
-    "fragment" : "SELECT *\nFROM   (SELECT * FROM t1\n        UNION ALL\n        SELECT * FROM t2\n        UNION ALL\n        SELECT * FROM t2)"
+    "stopIndex" : 133,
+    "fragment" : "SELECT *\nFROM   (SELECT * FROM t1 where c1 = 1\n        UNION ALL\n        SELECT * FROM t2\n        UNION ALL\n        SELECT * FROM t2)"
   } ]
 }
 
