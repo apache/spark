@@ -93,6 +93,7 @@ private[spark] abstract class RestSubmissionServer(
    */
   private def doStart(startPort: Int): (Server, Int) = {
     val threadPool = new QueuedThreadPool(masterConf.get(MASTER_REST_SERVER_MAX_THREADS))
+    threadPool.setName(getClass().getSimpleName())
     threadPool.setDaemon(true)
     val server = new Server(threadPool)
 
