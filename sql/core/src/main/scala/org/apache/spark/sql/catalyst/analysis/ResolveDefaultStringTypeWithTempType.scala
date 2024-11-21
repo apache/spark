@@ -34,24 +34,17 @@ import org.apache.spark.sql.types.{DataType, StringType, StructType}
  * [[TemporaryStringType]] object in cases where the old type and new are equal and thus would
  * not change the plan after transformation.
  */
-class ResolveDefaultStringType(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
+class ResolveDefaultStringTypeWithTempType(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val newPlan = if (isDDLCommand(plan)) {
+    if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
       val newType = stringTypeForDMLCommand
-      transformPlan(plan, SQLConf.get.defaultStringType)
-    }
-
-    if (!replaceWithTempType || newPlan.fastEquals(plan)) {
-      newPlan
-    } else {
-      // Due to how tree transformations work and StringType object being equal to
-      // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
-      // to ensure the correct results for occurrences of default string type.
-      ResolveDefaultStringTypeWithoutTempType.apply(newPlan)
+      transformPlan(plan, newType)
     }
   }
+
+  override def requiresRestart: Boolean = true
 
   private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType
 
@@ -154,8 +147,20 @@ class ResolveDefaultStringType(replaceWithTempType: Boolean) extends Rule[Logica
 
   private def replaceDefaultStringType(dataType: DataType, newType: StringType): DataType = {
     dataType.transformRecursively {
-      case currentType if isDefaultStringType(currentType) =>
-        if (replaceWithTempType && currentType == newType) TemporaryStringType() else newType
+      case currentType: StringType if isDefaultStringType(currentType) =>
+        if (replaceWithTempType && currentType == newType) {
+          getTemporaryStringType(currentType)
+        } else {
+          newType
+        }
+    }
+  }
+
+  private def getTemporaryStringType(forType: StringType): StringType = {
+    if (forType.collationId == 0) {
+      TemporaryStringType(1)
+    } else {
+      TemporaryStringType(0)
     }
   }
 
@@ -172,13 +177,12 @@ class ResolveDefaultStringType(replaceWithTempType: Boolean) extends Rule[Logica
   }
 }
 
-case object ResolveDefaultStringType
-  extends ResolveDefaultStringType(replaceWithTempType = true) {}
+case object ResolveDefaultStringTypeWithTempType
+  extends ResolveDefaultStringTypeWithTempType(replaceWithTempType = true) {}
 
 case object ResolveDefaultStringTypeWithoutTempType
-  extends ResolveDefaultStringType(replaceWithTempType = false) {}
+  extends ResolveDefaultStringTypeWithTempType(replaceWithTempType = false) {}
 
-case class TemporaryStringType(override val collationId: Int =
-    SQLConf.get.defaultStringType.collationId)
+case class TemporaryStringType(override val collationId: Int)
   extends StringType(collationId) {}
 
