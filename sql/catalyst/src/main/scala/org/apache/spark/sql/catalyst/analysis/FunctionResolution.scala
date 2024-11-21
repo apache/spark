@@ -133,8 +133,9 @@ class FunctionResolution(
       case owg: SupportsOrderingWithinGroup
           if owg.isOrderingMandatory && !owg.orderingFilled && u.orderingWithinGroup.isEmpty =>
         throw QueryCompilationErrors.functionMissingWithinGroupError(owg.prettyName)
-      case owg: Mode if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
-        // mode(expr1) within group (order by expr2) is not supported
+      case owg: SupportsOrderingWithinGroup
+          if owg.orderingFilled && u.orderingWithinGroup.nonEmpty =>
+        // e.g mode(expr1) within group (order by expr2) is not supported
         throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
           owg.prettyName,
           0,
