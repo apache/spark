@@ -744,7 +744,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "statement1",
       "statement2",
       "DropVariable", // drop for query var intCol
-      "DropVariable", // drop for loop var x
+      "DropVariable" // drop for loop var x
     ))
   }
 
@@ -791,7 +791,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "DropVariable", // drop for query var intCol1
       "DropVariable", // drop for loop var y
       "DropVariable", // drop for query var intCol
-      "DropVariable", // drop for loop var x
+      "DropVariable" // drop for loop var x
     ))
   }
 
@@ -808,7 +808,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
-      "DropVariable", // drop for query var intCol
+      "DropVariable" // drop for query var intCol
     ))
   }
 
@@ -827,7 +827,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "statement1", "statement2", "statement1", "statement2",
-      "DropVariable", // drop for query var intCol
+      "DropVariable" // drop for query var intCol
     ))
   }
 
@@ -869,7 +869,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "DropVariable", // drop for query var intCol1
       "body", "body",
       "DropVariable", // drop for query var intCol1
-      "DropVariable", // drop for query var intCol
+      "DropVariable" // drop for query var intCol
     ))
   }
 
@@ -893,7 +893,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "statement1",
       "lbl1",
       "DropVariable", // drop for query var intCol
-      "DropVariable", // drop for loop var x
+      "DropVariable" // drop for loop var x
     ))
   }
 
@@ -945,7 +945,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "body1",
       "lbl1",
       "DropVariable", // drop for query var intCol
-      "DropVariable", // drop for loop var x
+      "DropVariable" // drop for loop var x
     ))
   }
 
@@ -990,7 +990,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "statement1", "lbl1", "statement1", "lbl1",
-      "DropVariable", // drop for query var intCol
+      "DropVariable" // drop for query var intCol
     ))
   }
 
@@ -1036,7 +1036,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "outer_body", "body1", "lbl1", "outer_body", "body1", "lbl1",
-      "DropVariable", // drop for query var intCol
+      "DropVariable" // drop for query var intCol
     ))
   }
 
@@ -1056,9 +1056,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),
               new LeaveStatementExec("lbl1"),
-              TestLeafStatement("body2"))),
+              TestLeafStatement("body2")))
           )
-        )),
+        ))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq

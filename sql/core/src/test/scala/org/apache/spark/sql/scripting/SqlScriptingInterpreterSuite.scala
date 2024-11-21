@@ -1568,7 +1568,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1612,7 +1612,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1623,7 +1623,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | CREATE TABLE t (int_column INT, map_column MAP<STRING, INT>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
+          | CREATE TABLE t (int_column INT, map_column MAP<STRING, INT>,
+          | struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
           | INSERT INTO t VALUES
           |  (1, MAP('a', 1), STRUCT('John', 25), ARRAY('apricot', 'quince')),
           |  (2, MAP('b', 2), STRUCT('Jane', 30), ARRAY('plum', 'pear'));
@@ -1657,7 +1658,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1669,7 +1670,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         """
           |BEGIN
           | CREATE TABLE t
-          | (int_column INT, struct_column STRUCT<num: INT, struct2: STRUCT<struct3: STRUCT<name: STRING>>>);
+          | (int_column INT,
+          | struct_column STRUCT<num: INT, struct2: STRUCT<struct3: STRUCT<name: STRING>>>);
           | INSERT INTO t VALUES
           |  (1, STRUCT(1, STRUCT(STRUCT("one")))),
           |  (2, STRUCT(2, STRUCT(STRUCT("two"))));
@@ -1689,7 +1691,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(Row(2, Row(Row("two"))))), // select struct_column
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1720,7 +1722,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(Map("b" -> Map(2 -> Map(true -> 20))))), // select map_column
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1752,7 +1754,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(Array(Seq(Seq(7, 8), Seq(9, 10)), Seq(Seq(11, 12))))), // array_column
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1771,7 +1773,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin
 
       val expected = Seq(
-        Seq.empty[Row], // create table
+        Seq.empty[Row] // create table
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -1806,7 +1808,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row("fourth")), // select x.stringCol
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2032,7 +2034,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // insert
         Seq.empty[Row], // insert
         Seq(Row(3)), // select y.intCol2
-        Seq(Row(3)), // select intCol2
+        Seq(Row(3)) // select intCol2
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2068,7 +2070,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(3)), // select y.intCol2
         Seq(Row(3)), // select intCol2
         Seq.empty[Row], // drop outer var
-        Seq.empty[Row], // drop outer var
+        Seq.empty[Row] // drop outer var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2097,7 +2099,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1.0)), // select doubleCol
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2131,7 +2133,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(2.0)), // select doubleCol
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2142,7 +2144,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | CREATE TABLE t (int_column INT, map_column MAP<STRING, INT>, struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
+          | CREATE TABLE t (int_column INT, map_column MAP<STRING, INT>,
+          | struct_column STRUCT<name: STRING, age: INT>, array_column ARRAY<STRING>);
           | INSERT INTO t VALUES
           |  (1, MAP('a', 1), STRUCT('John', 25), ARRAY('apricot', 'quince')),
           |  (2, MAP('b', 2), STRUCT('Jane', 30), ARRAY('plum', 'pear'));
@@ -2166,7 +2169,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2177,8 +2180,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
       val sqlScript =
         """
           |BEGIN
-          | CREATE TABLE t
-          | (int_column INT, struct_column STRUCT<num: INT, struct2: STRUCT<struct3: STRUCT<name: STRING>>>);
+          | CREATE TABLE t (int_column INT,
+          | struct_column STRUCT<num: INT, struct2: STRUCT<struct3: STRUCT<name: STRING>>>);
           | INSERT INTO t VALUES
           |  (1, STRUCT(1, STRUCT(STRUCT("one")))),
           |  (2, STRUCT(2, STRUCT(STRUCT("two"))));
@@ -2194,7 +2197,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(Row(1, Row(Row("one"))))), // select struct_column
         Seq(Row(Row(2, Row(Row("two"))))), // select struct_column
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2221,7 +2224,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(Map("a" -> Map(1 -> Map(false -> 10))))), // select map_column
         Seq(Row(Map("b" -> Map(2 -> Map(true -> 20))))), // select map_column
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2249,7 +2252,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row(Seq(Seq(Seq(1, 2), Seq(3, 4)), Seq(Seq(5, 6))))), // array_column
         Seq(Row(Array(Seq(Seq(7, 8), Seq(9, 10)), Seq(Seq(11, 12))))), // array_column
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2268,7 +2271,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin
 
       val expected = Seq(
-        Seq.empty[Row], // create table
+        Seq.empty[Row] // create table
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2298,7 +2301,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq(Row("third")), // select stringCol
         Seq(Row("fourth")), // select stringCol
         Seq.empty[Row], // drop local var
-        Seq.empty[Row], // drop local var
+        Seq.empty[Row] // drop local var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2325,7 +2328,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
         Seq(Row("first")), // select stringCol
-        Seq(Row("second")), // select stringCol
+        Seq(Row("second")) // select stringCol
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2498,7 +2501,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // create table
         Seq.empty[Row], // insert
         Seq.empty[Row], // insert
-        Seq(Row(3)), // select intCol2
+        Seq(Row(3)) // select intCol2
       )
       verifySqlScriptResult(sqlScript, expected)
     }
@@ -2530,7 +2533,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // insert
         Seq(Row(3)), // select intCol2
         Seq(Row(3)), // select intCol2
-        Seq.empty[Row], // drop outer var
+        Seq.empty[Row] // drop outer var
       )
       verifySqlScriptResult(sqlScript, expected)
     }
