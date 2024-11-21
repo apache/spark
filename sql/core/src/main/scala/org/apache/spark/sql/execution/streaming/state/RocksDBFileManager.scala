@@ -157,7 +157,7 @@ class RocksDBFileManager(
    * Get the changelog version based on rocksDB features.
    * @return the version of changelog
    */
-  private def getChangelogVersion(
+  private def getChangelogWriterVersion(
       useColumnFamilies: Boolean,
       stateStoreCheckpointIdEnabled: Boolean): Short = {
     (useColumnFamilies, stateStoreCheckpointIdEnabled) match {
@@ -182,7 +182,8 @@ class RocksDBFileManager(
     }
 
     val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
-    val changelogVersion = getChangelogVersion(useColumnFamilies, enableStateStoreCheckpointIds)
+    val changelogVersion = getChangelogWriterVersion(
+      useColumnFamilies, enableStateStoreCheckpointIds)
     val changelogWriter = changelogVersion match {
       case 1 =>
         new StateStoreChangelogWriterV1(fm, changelogFile, codec)
@@ -210,34 +211,7 @@ class RocksDBFileManager(
       useColumnFamilies: Boolean = false,
       checkpointUniqueId: Option[String] = None): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
-
-    val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
-
-    // Note that ideally we should get the version for the reader from the
-    // changelog itself. However, since we don't record this for v1, we need to
-    // rely on external arguments to make this call today. Within the reader, we verify
-    // for the correctness of the decided/expected version. We might revisit this pattern
-    // as we add more changelog versions in the future [SPARK-50360].
-    val changelogVersion = getChangelogVersion(useColumnFamilies, enableStateStoreCheckpointIds)
-    val changelogReader = changelogVersion match {
-      case 1 =>
-        new StateStoreChangelogReaderV1(fm, changelogFile, codec)
-      case 2 =>
-        new StateStoreChangelogReaderV2(fm, changelogFile, codec)
-      case 3 =>
-        assert(enableStateStoreCheckpointIds,
-          "StateStoreChangelogReaderV3 should only be initialized when " +
-            "state store checkpoint unique id is enabled")
-        new StateStoreChangelogReaderV3(fm, changelogFile, codec)
-      case 4 =>
-        assert(enableStateStoreCheckpointIds,
-          "StateStoreChangelogReaderV4 should only be initialized when " +
-            "state store checkpoint unique id is enabled")
-        new StateStoreChangelogReaderV4(fm, changelogFile, codec)
-      case _ =>
-        throw QueryExecutionErrors.invalidChangeLogReaderVersion(changelogVersion)
-    }
-    changelogReader
+    new StateStoreChangelogReaderFactory(fm, changelogFile, codec).constructChangelogReader()
   }
 
   /**

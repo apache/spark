@@ -274,6 +274,16 @@ class StateStoreChangelogWriterV2(
   }
 }
 
+/**
+ * Write changes to the key value state store instance to a changelog file.
+ * There are 2 types of records, put and delete.
+ * A put record is written as: | key length | key content | value length | value content |
+ * A delete record is written as: | key length | key content | -1 |
+ * Write an Int -1 to signal the end of file.
+ * The overall changelog format is: | put record | delete record | ... | put record | -1 |
+ * V3 is a extension of V1 for writing changelogs with version
+ * in the first line and lineage in the second line.
+ */
 class StateStoreChangelogWriterV3(
      fm: CheckpointFileManager,
      file: Path,
@@ -289,6 +299,18 @@ class StateStoreChangelogWriterV3(
   writeLineage(stateStoreCheckpointIdLineage)
 }
 
+/**
+ * Write changes to the key value state store instance to a changelog file.
+ * There are 3 types of data records, put, merge and delete.
+ * A put record or merge record is written as: | record type | key length
+ *    | key content | value length | value content | -1 |
+ * A delete record is written as: | record type | key length | key content | -1
+ * Write an EOF_RECORD to signal the end of file.
+ * The overall changelog format is:  version | put record | delete record
+ *                                   | ... | put record | eof record |
+ * V4 is a extension of V2 for writing changelogs with version
+ * in the first line and lineage in the second line.
+ */
 class StateStoreChangelogWriterV4(
      fm: CheckpointFileManager,
      file: Path,
@@ -301,6 +323,59 @@ class StateStoreChangelogWriterV4(
   // Also write lineage information to the changelog, it should appear
   // in the second line for v4 because the first line is the version
   writeLineage(stateStoreCheckpointIdLineage)
+}
+
+/**
+ * A factory class for constructing state store readers by reading the first line
+ * of the change log file, which stores the version.
+ * Note that for changelog version 1, there is no version written.
+ * @param fm - checkpoint file manager used to manage streaming query checkpoint
+ * @param fileToRead - name of file to use to read changelog
+ * @param compressionCodec - de-compression method using for reading changelog file
+ */
+class StateStoreChangelogReaderFactory(
+    fm: CheckpointFileManager,
+    fileToRead: Path,
+    compressionCodec: CompressionCodec) {
+
+  private def decompressStream(inputStream: DataInputStream): DataInputStream = {
+    val compressed = compressionCodec.compressedInputStream(inputStream)
+    new DataInputStream(compressed)
+  }
+
+  private val sourceStream = try {
+    fm.open(fileToRead)
+  } catch {
+    case f: FileNotFoundException =>
+      throw QueryExecutionErrors.failedToReadStreamingStateFileError(fileToRead, f)
+  }
+  protected val input: DataInputStream = decompressStream(sourceStream)
+
+  private def readVersion(): Short = {
+    val versionStr = input.readUTF()
+    // Versions in the first line are prefixed with "v", e.g. "v2"
+    // Since there is no version written for version 1,
+    // return 1 if first line doesn't start with "v"
+    if (!versionStr.startsWith("v")) {
+      1
+    } else {
+      versionStr.stripPrefix("v").toShort
+    }
+  }
+
+  /**
+   * Construct the change log reader based on the version stored in changelog file
+   * @return StateStoreChangelogReader
+   */
+  def constructChangelogReader(): StateStoreChangelogReader = {
+    readVersion() match {
+      case 1 => new StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec)
+      case 2 => new StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec)
+      case 3 => new StateStoreChangelogReaderV3(fm, fileToRead, compressionCodec)
+      case 4 => new StateStoreChangelogReaderV4(fm, fileToRead, compressionCodec)
+      case version => throw QueryExecutionErrors.invalidChangeLogReaderVersion(version)
+    }
+  }
 }
 
 /**
@@ -451,6 +526,15 @@ class StateStoreChangelogReaderV2(
   }
 }
 
+/**
+ * Read an iterator of change record from the changelog file.
+ * A record is represented by tuple(recordType: RecordType.Value,
+ *  key: Array[Byte], value: Array[Byte])
+ * A put record is returned as a tuple(recordType, key, value)
+ * A delete record is return as a tuple(recordType, key, null)
+ * V3 is a extension of V1 for reading changelogs with version
+ * in the first line and lineage in the second line.
+ */
 class StateStoreChangelogReaderV3(
      fm: CheckpointFileManager,
      fileToRead: Path,
@@ -468,6 +552,15 @@ class StateStoreChangelogReaderV3(
   lineage
 }
 
+/**
+ * Read an iterator of change record from the changelog file.
+ * A record is represented by tuple(recordType: RecordType.Value,
+ * key: Array[Byte], value: Array[Byte])
+ * A put or merge record is returned as a tuple(recordType, key, value)
+ * A delete record is return as a tuple(recordType, key, null)
+ * V4 is a extension of V2 for reading changelogs with version
+ * in the first line and lineage in the second line.
+ */
 class StateStoreChangelogReaderV4(
      fm: CheckpointFileManager,
      fileToRead: Path,
