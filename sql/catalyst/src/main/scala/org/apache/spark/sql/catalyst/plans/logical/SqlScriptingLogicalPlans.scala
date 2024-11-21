@@ -290,7 +290,7 @@ case class ForStatement(
   override def children: Seq[LogicalPlan] = Seq(query, body)
 
   override protected def withNewChildrenInternal(
-    newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = newChildren match {
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = newChildren match {
     case IndexedSeq(query: SingleStatement, body: CompoundBody) =>
       ForStatement(query, variableName, body, label)
   }
