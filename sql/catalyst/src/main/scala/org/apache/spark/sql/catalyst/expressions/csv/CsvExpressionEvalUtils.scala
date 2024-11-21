@@ -27,6 +27,9 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, NullType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * The expression `CsvToStructs` will utilize the `Invoke` to call it, support codegen.
+ */
 case class CsvToStructsEvaluator(
     options: Map[String, String],
     nullableSchema: StructType,
@@ -37,14 +40,13 @@ case class CsvToStructsEvaluator(
   // This converts parsed rows to the desired output by the given schema.
   @transient
   private lazy val converter = (rows: Iterator[InternalRow]) => {
-    if (rows.hasNext) {
-      val result = rows.next()
-      // CSV's parser produces one record only.
-      assert(!rows.hasNext)
-      result
-    } else {
+    if (!rows.hasNext) {
       throw SparkException.internalError("Expected one row from CSV parser.")
     }
+    val result = rows.next()
+    // CSV's parser produces one record only.
+    assert(!rows.hasNext)
+    result
   }
 
   @transient
