@@ -163,8 +163,8 @@ class OptimizerLoggingSuite extends PlanTest {
       val query = input.select($"a", $"b").where(inSetPredicate)
       val analyzed = query.analyze
 
-      assert(query.toString.contains("INSET (values with unresolved data types)"))
-      assert(analyzed.toString.contains("INSET"))
+      assert(query.toString.contains("'a INSET (values with unresolved data types)"))
+      assert(analyzed.toString.contains("INSET 1, 2"))
       assert(!analyzed.toString.contains("unresolved"))
     }
   }
