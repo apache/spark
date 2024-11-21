@@ -63,7 +63,12 @@ from pyspark.sql.types import (
     _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
+from pyspark.sql.utils import (
+    is_timestamp_ntz_preferred,
+    to_str,
+    try_remote_session_classmethod,
+    remote_only,
+)
 from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -550,6 +555,7 @@ class SparkSession(SparkConversionMixin):
                 return session
 
         # Spark Connect-specific API
+        @remote_only
         def create(self) -> "SparkSession":
             """Creates a new SparkSession. Can only be used in the context of Spark Connect
             and will throw an exception otherwise.
@@ -2067,6 +2073,7 @@ class SparkSession(SparkConversionMixin):
 
     # SparkConnect-specific API
     @property
+    @remote_only
     def client(self) -> "SparkConnectClient":
         """
         Gives access to the Spark Connect client. In normal cases this is not necessary to be used
@@ -2090,6 +2097,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.client"},
         )
 
+    @remote_only
     def addArtifacts(
         self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
     ) -> None:
@@ -2125,6 +2133,7 @@ class SparkSession(SparkConversionMixin):
 
     addArtifact = addArtifacts
 
+    @remote_only
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:
         """
         Register a progress handler to be called when a progress update is received from the server.
@@ -2153,6 +2162,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.registerProgressHandler"},
         )
 
+    @remote_only
     def removeProgressHandler(self, handler: "ProgressHandler") -> None:
         """
         Remove a progress handler that was previously registered.
@@ -2169,6 +2179,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.removeProgressHandler"},
         )
 
+    @remote_only
     def clearProgressHandlers(self) -> None:
         """
         Clear all registered progress handlers.
@@ -2180,6 +2191,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.clearProgressHandlers"},
         )
 
+    @remote_only
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
         Copy file from local to cloud storage file system.
@@ -2208,6 +2220,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
 
+    @remote_only
     def interruptAll(self) -> List[str]:
         """
         Interrupt all operations of this session currently running on the connected server.
@@ -2228,6 +2241,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptAll"},
         )
 
+    @remote_only
     def interruptTag(self, tag: str) -> List[str]:
         """
         Interrupt all operations of this session with the given operation tag.
@@ -2248,6 +2262,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptTag"},
         )
 
+    @remote_only
     def interruptOperation(self, op_id: str) -> List[str]:
         """
         Interrupt an operation of this session with the given operationId.
@@ -2268,6 +2283,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptOperation"},
         )
 
+    @remote_only
     def addTag(self, tag: str) -> None:
         """
         Add a tag to be assigned to all the operations started by this thread in this session.
@@ -2292,6 +2308,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.addTag"},
         )
 
+    @remote_only
     def removeTag(self, tag: str) -> None:
         """
         Remove a tag previously added to be assigned to all the operations started by this thread in
@@ -2309,6 +2326,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.removeTag"},
         )
 
+    @remote_only
     def getTags(self) -> Set[str]:
         """
         Get the tags that are currently set to be assigned to all the operations started by this
@@ -2326,6 +2344,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.getTags"},
         )
 
+    @remote_only
     def clearTags(self) -> None:
         """
         Clear the current thread's operation tags.

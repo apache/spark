@@ -35,23 +35,6 @@ from typing import (
 )
 from itertools import zip_longest
 
-have_scipy = False
-have_numpy = False
-try:
-    import scipy  # noqa: F401
-
-    have_scipy = True
-except ImportError:
-    # No SciPy, but that's okay, we'll skip those tests
-    pass
-try:
-    import numpy as np  # noqa: F401
-
-    have_numpy = True
-except ImportError:
-    # No NumPy, but that's okay, we'll skip those tests
-    pass
-
 from pyspark import SparkConf
 from pyspark.errors import PySparkAssertionError, PySparkException, PySparkTypeError
 from pyspark.errors.exceptions.captured import CapturedException
@@ -66,6 +49,38 @@ from pyspark.sql.functions import col, when
 __all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
 
 SPARK_HOME = _find_spark_home()
+
+
+def have_package(name: str) -> bool:
+    try:
+        import importlib
+
+        importlib.import_module(name)
+        return True
+    except Exception:
+        return False
+
+
+have_numpy = have_package("numpy")
+numpy_requirement_message = None if have_numpy else "No module named 'numpy'"
+
+have_scipy = have_package("scipy")
+scipy_requirement_message = None if have_scipy else "No module named 'scipy'"
+
+have_sklearn = have_package("sklearn")
+sklearn_requirement_message = None if have_sklearn else "No module named 'sklearn'"
+
+have_torch = have_package("torch")
+torch_requirement_message = None if have_torch else "No module named 'torch'"
+
+have_torcheval = have_package("torcheval")
+torcheval_requirement_message = None if have_torcheval else "No module named 'torcheval'"
+
+have_deepspeed = have_package("deepspeed")
+deepspeed_requirement_message = None if have_deepspeed else "No module named 'deepspeed'"
+
+have_plotly = have_package("plotly")
+plotly_requirement_message = None if have_plotly else "No module named 'plotly'"
 
 
 def read_int(b):
