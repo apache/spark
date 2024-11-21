@@ -206,7 +206,7 @@ public interface StagingTableCatalog extends TableCatalog {
   /**
    * @return An Array of commit metrics that are supported by the catalog. This is analogous to
    *        {@link Write#supportedCustomMetrics()}. The corresponding
-   *        {@link StagedTableWithCommitMetrics#reportDriverMetrics()} method must be called to
+   *        {@link StagedTable#reportDriverMetrics()} method must be called to
    *        retrieve the actual metric values after a commit. The methods are not in the same class
    *        because the supported metrics are required before the staged table object is created
    *        and only the staged table object can capture the write metrics during the commit.

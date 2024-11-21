@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.util
 
 import org.apache.spark.sql.QueryTest.withPhysicalPlansCaptured
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagedTableWithCommitMetrics, StagingInMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
@@ -39,7 +39,7 @@ class StagingInMemoryTableCatalogWithMetrics extends StagingInMemoryTableCatalog
   private class TestStagedTableWithMetric(
       ident: Identifier,
       delegateTable: InMemoryTable
-  ) extends TestStagedTable(ident, delegateTable) with StagedTableWithCommitMetrics {
+  ) extends TestStagedTable(ident, delegateTable) with StagedTable {
 
     private var stagedChangesCommitted = false
 

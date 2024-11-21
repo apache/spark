@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagedTableWithCommitMetrics, StagingTableCatalog, Table, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
@@ -649,16 +649,19 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       qe.assertCommandExecuted()
 
       table match {
-        case st: StagedTableWithCommitMetrics =>
+        case st: StagedTable =>
           st.commitStagedChanges()
 
-          for (taskMetric <- st.reportDriverMetrics) {
-              metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
-          }
+          catalog match {
+            case stagingTableCatalog: StagingTableCatalog
+                if stagingTableCatalog.supportedCustomMetrics().nonEmpty =>
+              for (taskMetric <- st.reportDriverMetrics) {
+                metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
+              }
 
-          val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-        case st: StagedTable => st.commitStagedChanges()
+              val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+              SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+          }
         case _ =>
       }
 

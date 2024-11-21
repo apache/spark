@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.TableSpec
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagedTableWithCommitMetrics, StagingTableCatalog, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SQLExecution
@@ -99,17 +99,15 @@ case class AtomicReplaceTableExec(
 
   private def commitOrAbortStagedChanges(staged: StagedTable): Unit = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
-      staged match {
-        case st: StagedTableWithCommitMetrics =>
-          st.commitStagedChanges()
+      staged.commitStagedChanges()
 
-          for (taskMetric <- st.reportDriverMetrics) {
-            metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
-          }
+      if (catalog.supportedCustomMetrics().nonEmpty) {
+        for (taskMetric <- staged.reportDriverMetrics) {
+          metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
+        }
 
-          val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
-        case st: StagedTable => st.commitStagedChanges()
+        val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
       }
     })(catchBlock = {
       staged.abortStagedChanges()
