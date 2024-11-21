@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import scala.collection.mutable.ListBuffer
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
@@ -238,8 +236,6 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
       // Run until fix point or the max number of iterations as specified in the strategy.
       while (continue) {
-        val effectiveRules = new ListBuffer[Rule[TreeType]]()
-
         curPlan = batch.rules.foldLeft(curPlan) {
           case (plan, rule) =>
             val startTime = System.nanoTime()
@@ -250,7 +246,6 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             if (effective) {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
-              effectiveRules.addOne(rule)
               planChangeLogger.logRule(rule.ruleName, plan, result)
               // Run the plan changes validation after each rule.
               if (fullValidation || lightweightValidation) {
@@ -308,7 +303,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           continue = false
         }
 
-        if (curPlan.fastEquals(lastPlan) && !effectiveRules.exists(_.requiresRestart)) {
+        if (curPlan.fastEquals(lastPlan)) {
           logTrace(
             s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
           continue = false

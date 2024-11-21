@@ -17,9 +17,9 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql._
+import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDefaultStringTypeWithoutTempType, ResolveDefaultStringTypeWithTempType, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -204,11 +204,6 @@ abstract class BaseSessionStateBuilder(
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        // Due to how tree transformations work and StringType object being equal to
-        // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
-        // to ensure the correct results for occurrences of default string type.
-        ResolveDefaultStringTypeWithTempType +:
-        ResolveDefaultStringTypeWithoutTempType +:
         new ResolveSessionCatalog(this.catalogManager) +:
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:

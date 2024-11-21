@@ -217,8 +217,11 @@ object CollationTypeCoercion {
    */
   private def findLeastCommonStringType(expressions: Seq[Expression]): Option[StringType] = {
     if (!expressions.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
+      // if there are no collations return None
       return None
     } else if (expressions.exists(e => SchemaUtils.hasDefaultStringType(e.dataType))) {
+      // if there are default string types, return None as they need to be resolved
+      // first in [[ResolveDefaultStringTypes]]
       return None
     }
 

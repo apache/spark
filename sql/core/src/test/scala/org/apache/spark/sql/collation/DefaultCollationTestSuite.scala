@@ -174,6 +174,27 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
+  test("ctas with inline table") {
+    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+      sql(s"""
+           |CREATE TABLE $testTable USING $dataSource AS
+           |SELECT c1, c1 = 'A' as c2 FROM VALUES ('a'), ('A') AS vals(c1)
+           |""".stripMargin)
+
+      assertTableColumnCollation(testTable, "c1", "UTF8_BINARY")
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2"), Seq(Row(1)))
+    }
+
+    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+      sql(s"""
+           |CREATE TABLE $testTable USING $dataSource AS
+           |SELECT c1 as c2 FROM VALUES ('a' = 'A') AS vals(c1)
+           |""".stripMargin)
+
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2"), Seq(Row(0)))
+    }
+  }
+
   test("add column") {
     withSessionCollationAndTable("UTF8_LCASE", testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING COLLATE UTF8_LCASE) USING $dataSource")
