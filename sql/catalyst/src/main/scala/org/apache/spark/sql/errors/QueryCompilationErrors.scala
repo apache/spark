@@ -3856,15 +3856,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       )
     )
   }
-  def ambiguousLateralColumnAliasError(nameParts: Seq[String], numOfMatches: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
-      messageParameters = Map(
-        "name" -> toSQLId(nameParts),
-        "n" -> numOfMatches.toString
-      )
-    )
-  }
 
   def lateralColumnAliasInAggFuncUnsupportedError(
       lcaNameParts: Seq[String], aggExpr: Expression): Throwable = {

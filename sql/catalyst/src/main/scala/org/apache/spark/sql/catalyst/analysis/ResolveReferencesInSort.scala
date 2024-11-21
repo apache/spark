@@ -53,8 +53,7 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   def apply(s: Sort): LogicalPlan = {
     val resolvedWithAgg = s.child match {
       case Filter(_, agg: Aggregate) => resolveWithAggAndLCA(s, agg)
-      case agg: Aggregate => resolveWithAggAndLCA(s, agg)
-      case other => s.order.map(resolveExpressionByPlanOutput(_, other))
+      case other => resolveWithAggAndLCA(s, other)
     }
     val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
     val orderByAllResolved = resolveOrderByAll(
@@ -70,10 +69,15 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
     }
   }
 
-  private def resolveWithAggAndLCA(s: Sort, agg: Aggregate): Seq[Expression] = {
+  private def resolveWithAggAndLCA(s: Sort, agg: LogicalPlan): Seq[Expression] = {
     // Because we don't support referencing a lateral alias in aggregate function
     // and the sort might contains such a lateral alias which will be append to aggregate later
-    resolveLateralColumnAlias(agg.aggregateExpressions ++ s.order)
+    val lcaCandidates = agg match {
+      case a: Aggregate => a.aggregateExpressions
+      case p: Project => p.projectList
+      case _ => Nil
+    }
+    resolveLateralColumnAlias(lcaCandidates ++ s.order)
       .takeRight(s.order.length)
       .map(resolveExpressionByPlanOutput(_, s.child))
       .map(resolveColWithAgg(_, agg))

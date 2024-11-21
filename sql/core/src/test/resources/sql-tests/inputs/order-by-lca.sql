@@ -7,3 +7,4 @@ SELECT max(id) AS id2 FROM range(4) ORDER BY cast(id2 as string);
 SELECT max(id) AS id FROM range(4) ORDER BY id;
 SELECT max(id) AS id2 FROM range(4) ORDER BY id2;
 SELECT max(id) AS id2 FROM range(4) ORDER BY id2 / 2;
+SELECT id % 2 AS id, id / 2 AS id FROM range(4) ORDER BY id;

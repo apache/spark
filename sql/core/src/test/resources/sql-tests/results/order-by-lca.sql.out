@@ -104,3 +104,19 @@ SELECT max(id) AS id2 FROM range(4) ORDER BY id2 / 2
 struct<id2:bigint>
 -- !query output
 3
+
+
+-- !query
+SELECT id % 2 AS id, id / 2 AS id FROM range(4) ORDER BY id
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+  "sqlState" : "42702",
+  "messageParameters" : {
+    "n" : "2",
+    "name" : "`id`"
+  }
+}
