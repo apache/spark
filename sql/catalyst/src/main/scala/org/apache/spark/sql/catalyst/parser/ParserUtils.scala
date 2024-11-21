@@ -64,12 +64,13 @@ object ParserUtils extends SparkParserUtils {
   }
 
   /** Get all the text which comes after the given rule. */
-  def remainder(ctx: ParserRuleContext): String = remainder(ctx.getStop)
+  def remainder(ctx: ParserRuleContext, parentCtx: ParserRuleContext): String =
+    remainder(ctx.getStop, parentCtx)
 
   /** Get all the text which comes after the given token. */
-  def remainder(token: Token): String = {
+  def remainder(token: Token, parentCtx: ParserRuleContext): String = {
     val stream = token.getInputStream
-    val interval = Interval.of(token.getStopIndex + 1, stream.size() - 1)
+    val interval = Interval.of(token.getStopIndex + 1, parentCtx.getStop.getStopIndex)
     stream.getText(interval)
   }
 

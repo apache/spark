@@ -184,15 +184,20 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("remainder") {
-    assert(remainder(setConfContext) == "")
-    assert(remainder(showFuncContext) == "")
-    assert(remainder(descFuncContext) == "")
-    assert(remainder(showDbsContext) == "")
+    assert(remainder(setConfContext, setConfContext) == "")
+    assert(remainder(showFuncContext, showFuncContext) == "")
+    assert(remainder(descFuncContext, descFuncContext) == "")
+    assert(remainder(showDbsContext, showDbsContext) == "")
 
-    assert(remainder(setConfContext.SET.getSymbol) == " example.setting.name=setting.value")
-    assert(remainder(showFuncContext.FUNCTIONS.getSymbol) == " foo.bar")
-    assert(remainder(descFuncContext.EXTENDED.getSymbol) == " bar")
-    assert(remainder(showDbsContext.LIKE.getSymbol) == " 'identifier_with_wildcards'")
+    assert(
+      remainder(setConfContext.SET.getSymbol, setConfContext)
+        == " example.setting.name=setting.value"
+    )
+    assert(remainder(showFuncContext.FUNCTIONS.getSymbol, showFuncContext) == " foo.bar")
+    assert(remainder(descFuncContext.EXTENDED.getSymbol, descFuncContext) == " bar")
+    assert(
+      remainder(showDbsContext.LIKE.getSymbol, showDbsContext) == " 'identifier_with_wildcards'"
+    )
   }
 
   test("string") {

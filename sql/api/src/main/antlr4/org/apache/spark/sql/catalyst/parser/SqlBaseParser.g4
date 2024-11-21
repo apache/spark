@@ -287,7 +287,7 @@ statement
     | COMMENT ON TABLE identifierReference IS comment                  #commentTable
     | REFRESH TABLE identifierReference                                #refreshTable
     | REFRESH FUNCTION identifierReference                             #refreshFunction
-    | REFRESH (stringLit | UNRECOGNIZED*?)                             #refreshResource
+    | REFRESH (stringLit | unrecognizedText?)                          #refreshResource
     | CACHE LAZY? TABLE identifierReference
         (OPTIONS options=propertyList)? (AS? query)?                   #cacheTable
     | UNCACHE TABLE (IF EXISTS)? identifierReference                   #uncacheTable
@@ -297,7 +297,7 @@ statement
     | TRUNCATE TABLE identifierReference partitionSpec?                #truncateTable
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier UNRECOGNIZED*?                        #manageResource
+    | op=(ADD | LIST) identifier unrecognizedText?                     #manageResource
     | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
         identifierReference (USING indexType=identifier)?
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
@@ -307,24 +307,28 @@ statement
         LEFT_PAREN
         (functionArgument (COMMA functionArgument)*)?
         RIGHT_PAREN                                                    #call
-    | unsupportedHiveNativeCommands UNRECOGNIZED*?                     #failNativeCommand
+    | unsupportedHiveNativeCommands unrecognizedText?                  #failNativeCommand
     ;
 
 setResetStatement
     : SET COLLATION collationName=identifier                           #setCollation
-    | SET ROLE UNRECOGNIZED*?                                          #failSetRole
+    | SET ROLE unrecognizedText?                                       #failSetRole
     | SET TIME ZONE interval                                           #setTimeZone
     | SET TIME ZONE timezone                                           #setTimeZone
-    | SET TIME ZONE UNRECOGNIZED*?                                     #setTimeZone
+    | SET TIME ZONE unrecognizedText?                                  #setTimeZone
     | SET variable assignmentList                                      #setVariable
     | SET variable LEFT_PAREN multipartIdentifierList RIGHT_PAREN EQ
         LEFT_PAREN query RIGHT_PAREN                                   #setVariable
     | SET configKey EQ configValue                                     #setQuotedConfiguration
-    | SET configKey (EQ UNRECOGNIZED*?)?                               #setConfiguration
-    | SET UNRECOGNIZED*? EQ configValue                                #setQuotedConfiguration
-    | SET UNRECOGNIZED*?                                               #setConfiguration
+    | SET configKey (EQ unrecognizedText?)?                            #setConfiguration
+    | SET unrecognizedText? EQ configValue                             #setQuotedConfiguration
+    | SET unrecognizedText?                                            #setConfiguration
     | RESET configKey                                                  #resetQuotedConfiguration
-    | RESET UNRECOGNIZED*?                                             #resetConfiguration
+    | RESET unrecognizedText?                                          #resetConfiguration
+    ;
+
+unrecognizedText
+    : UNRECOGNIZED*                                                   #unrecognizedStatement
     ;
 
 executeImmediate

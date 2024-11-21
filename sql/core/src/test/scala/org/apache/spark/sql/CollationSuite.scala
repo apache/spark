@@ -2100,7 +2100,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       Seq(Row("UTF8_BINARY"), Row("UTF8_LCASE")))
   }
 
-  test("set role") {
-    sql("set role ada;")
+  test("set") {
+    sql("set;")
   }
 }
