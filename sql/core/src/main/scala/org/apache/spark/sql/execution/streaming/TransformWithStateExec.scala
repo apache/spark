@@ -410,6 +410,9 @@ case class TransformWithStateExec(
   // operator specific metrics
   override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
     Seq(
+      // metrics around initial state
+      StatefulOperatorCustomSumMetric("initialStateProcessingTimeMs",
+        "Number of milliseconds taken to process all initial state"),
       // metrics around state variables
       StatefulOperatorCustomSumMetric("numValueStateVars", "Number of value state variables"),
       StatefulOperatorCustomSumMetric("numListStateVars", "Number of list state variables"),
@@ -655,6 +658,8 @@ case class TransformWithStateExec(
     statefulProcessor.init(outputMode, timeMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
 
+    val initialStateProcTimeMs = longMetric("initialStateProcessingTimeMs")
+    val initialStateStartTimeNs = System.nanoTime
     // Check if is first batch
     // Only process initial states for first batch
     if (processorHandle.getQueryInfo().getBatchId == 0) {
@@ -667,6 +672,7 @@ case class TransformWithStateExec(
           processInitialStateRows(keyRow.asInstanceOf[UnsafeRow], valueRowIter)
       }
     }
+    initialStateProcTimeMs += NANOSECONDS.toMillis(System.nanoTime - initialStateStartTimeNs)
 
     processDataWithPartition(childDataIterator, store, processorHandle)
   }
