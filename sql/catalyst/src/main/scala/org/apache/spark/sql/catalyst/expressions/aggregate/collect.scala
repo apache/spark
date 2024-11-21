@@ -388,10 +388,9 @@ case class ListAgg(
   override def checkInputDataTypes(): TypeCheckResult = {
     val matchInputTypes = super.checkInputDataTypes()
     if (matchInputTypes.isFailure) {
-      return matchInputTypes
-    }
-    if (!delimiter.foldable) {
-      return DataTypeMismatch(
+      matchInputTypes
+    } else if (!delimiter.foldable) {
+      DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("delimiter"),
@@ -399,8 +398,7 @@ case class ListAgg(
           "inputExpr" -> toSQLExpr(delimiter)
         )
       )
-    }
-    if (delimiter.dataType == NullType) {
+    } else if (delimiter.dataType == NullType) {
       // null is the default empty delimiter so type is not important
       TypeCheckSuccess
     } else {
@@ -417,25 +415,44 @@ case class ListAgg(
     }
   }
 
+  /**
+   * Sort buffer according orderExpressions.
+   * If orderExpressions is empty them returns buffer as is.
+   * The format of buffer is determined by [[noNeedSaveOrderValue]]
+   * @return sorted buffer containing only child's values
+   */
   private[this] def sortBuffer(buffer: mutable.ArrayBuffer[Any]): mutable.ArrayBuffer[Any] = {
     if (!orderingFilled) {
+      // without order return as is.
       return buffer
     }
     if (noNeedSaveOrderValue) {
-      val ascendingOrdering = PhysicalDataType.ordering(orderExpressions.head.dataType)
+      // Here the buffer has structure [childValue0, childValue1, ...]
+      // and we want to sort it by childValues
+      val sortOrderExpression = orderExpressions.head
+      val ascendingOrdering = PhysicalDataType.ordering(sortOrderExpression.dataType)
       val ordering =
-        if (orderExpressions.head.direction == Ascending) ascendingOrdering
+        if (sortOrderExpression.direction == Ascending) ascendingOrdering
         else ascendingOrdering.reverse
       buffer.sorted(ordering)
     } else {
+      // Here the buffer has structure
+      // [[childValue, orderValue0, orderValue1, ...],
+      //  [childValue, orderValue0, orderValue1, ...],
+      //  ...]
+      // and we want to sort it by tuples (orderValue0, orderValue1, ...)
       buffer
         .asInstanceOf[mutable.ArrayBuffer[InternalRow]]
         .sorted(bufferOrdering)
-        // drop order values after sort
+        // drop orderValues after sort
         .map(_.get(0, child.dataType))
     }
   }
 
+  /**
+   * @return ordering by (orderValue0, orderValue1, ...)
+   *         for InternalRow with format [childValue, orderValue0, orderValue1, ...]
+   */
   private[this] def bufferOrdering: Ordering[InternalRow] = {
     val bufferSortOrder = orderExpressions.zipWithIndex.map {
       case (originalOrder, i) =>
@@ -446,6 +463,7 @@ case class ListAgg(
     }
     new InterpretedOrdering(bufferSortOrder)
   }
+
   private[this] def concatSkippingNulls(buffer: mutable.ArrayBuffer[Any]): Any = {
     val delimiterValue = getDelimiterValue
     dataType match {
