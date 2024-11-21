@@ -1025,16 +1025,12 @@ class BaseUDTFTestsMixin:
         )
 
     def test_df_argument(self):
-        class TestUDTF:
-            def eval(self, row: Row):
-                if row["id"] > 5:
-                    yield row["id"],
-
-        func = udtf(TestUDTF, returnType="a: int")
+        func = self.udtf_for_table_argument()
         df = self.spark.range(8)
-        self.assertEqual(
-            func(df.argument()).collect(),
-            [Row(a=6), Row(a=7)],
+        self.spark.udtf.register("test_udtf", func)
+        assertDataFrameEqual(
+            func(df.argument()),
+            self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))"),
         )
 
     def udtf_for_table_argument(self):

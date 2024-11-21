@@ -1785,6 +1785,7 @@ class DataFrame(ParentDataFrame):
         )
 
     def argument(self) -> Column:
+        # TODO(SPARK-50393): Implement this method
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
             messageParameters={"feature": "argument()"},

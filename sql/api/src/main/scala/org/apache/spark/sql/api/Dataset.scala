@@ -1700,8 +1700,8 @@ abstract class Dataset[T] extends Serializable {
   def transpose(): Dataset[Row]
 
   /**
-   * Converts the DataFrame into a `Column` object for use with table-valued functions (TVFs)
-   * or user-defined table functions (UDTFs).
+   * Converts the DataFrame into a `Column` object for use with table-valued functions (TVFs) or
+   * user-defined table functions (UDTFs).
    *
    * @group typedrel
    * @since 4.0.0

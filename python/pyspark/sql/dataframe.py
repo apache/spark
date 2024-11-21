@@ -6499,7 +6499,7 @@ class DataFrame:
         ...         if row[0] > 5:
         ...             yield row[0],
         >>> df = spark.range(8)
-        >>> TestUDTF(df.argument()).show()
+        >>> TestUDTF(df.argument()).show()  # doctest: +SKIP
         +---+
         |  a|
         +---+

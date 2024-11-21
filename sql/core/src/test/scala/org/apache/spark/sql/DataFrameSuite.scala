@@ -282,6 +282,10 @@ class DataFrameSuite extends QueryTest
       Row("1", 1) :: Nil)
   }
 
+  test("df.argument") {
+    assert(spark.range(1).argument().isInstanceOf[Column])
+  }
+
   test("filterExpr") {
     val res = testData.collect().filter(_.getInt(0) > 90).toSeq
     checkAnswer(testData.filter("key > 90"), res)

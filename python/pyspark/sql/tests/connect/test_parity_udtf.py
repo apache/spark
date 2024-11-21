@@ -76,7 +76,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     def test_udtf_access_spark_session(self):
         super().test_udtf_access_spark_session()
 
-    @unittest.skip("Spark Connect does not support df.argument()")
+    @unittest.skip("TODO(SPARK-50393): support df.argument() in Spark Connect")
     def test_df_argument(self):
         super().test_df_argument()
 
