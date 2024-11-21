@@ -20,11 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -104,6 +104,12 @@ object CollationTypeCoercion {
       val newKeys = collateToSingleType(mapCreate.keys)
       val newValues = collateToSingleType(mapCreate.values)
       mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
+
+    case namedStruct: CreateNamedStruct if namedStruct.children.size % 2 == 0 =>
+      val newNames = collateToSingleType(namedStruct.nameExprs)
+      val newValues = collateToSingleType(namedStruct.valExprs)
+      val interleaved = newNames.zip(newValues).flatMap(pair => Seq(pair._1, pair._2))
+      namedStruct.withNewChildren(interleaved)
 
     case splitPart: SplitPart =>
       val Seq(str, delimiter, partNum) = splitPart.children
@@ -232,6 +238,8 @@ object CollationTypeCoercion {
       case _ if hasCollationContextTag(expr) =>
         Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
 
+      // if `expr` doesn't have a string in its dataType then it doesn't
+      // have the collation context either
       case _ if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
         None
 
@@ -244,15 +252,13 @@ object CollationTypeCoercion {
       case _: Literal =>
         Some(CollationContext(expr.dataType, Default))
 
-      case extract: ExtractValue =>
-        findCollationContext(extract.child)
-          .map(cc => CollationContext(extract.dataType, cc.strength))
-
-      case _ if expr.children.isEmpty =>
+      // if it does have a string type but none of its children do
+      // then the collation context strength is default
+      case _ if !expr.children.exists(_.dataType.existsRecursively(_.isInstanceOf[StringType])) =>
         Some(CollationContext(expr.dataType, Default))
 
       case _ =>
-        expr.children
+        val contextWinnerOpt = getContextRelevantChildren(expr)
           .flatMap(findCollationContext)
           .foldLeft(Option.empty[CollationContext]) {
             case (Some(left), right) =>
@@ -260,10 +266,42 @@ object CollationTypeCoercion {
             case (None, right) =>
               Some(right)
           }
+
+        contextWinnerOpt.map { context =>
+          if (hasStringType(expr.dataType)) {
+            CollationContext(expr.dataType, context.strength)
+          } else {
+            context
+          }
+        }
     }
 
     contextOpt.foreach(expr.setTagValue(COLLATION_CONTEXT_TAG, _))
     contextOpt
+  }
+
+  /**
+   * Returns the children of the given expression that should be used for calculating the
+   * winning collation context.
+   */
+  private def getContextRelevantChildren(expression: Expression): Seq[Expression] = {
+    expression match {
+      // collation context for named struct should be calculated based on its values only
+      case createStruct: CreateNamedStruct =>
+        createStruct.valExprs
+
+      // collation context does not depend on the key for extracting the value
+      case extract: ExtractValue =>
+        Seq(extract.child)
+
+      // we currently don't support collation precedence for maps,
+      // as this would involve calculating them for keys and values separately
+      case _: CreateMap =>
+        Seq.empty
+
+      case _ =>
+        expression.children
+    }
   }
 
   /**
@@ -290,18 +328,18 @@ object CollationTypeCoercion {
         throw QueryCompilationErrors.explicitCollationMismatchError(
           Seq(leftStringType, rightStringType))
 
-      case (Explicit, _) | (_, Explicit) =>
-        if (left.strength == Explicit) Some(left) else Some(right)
+      case (Explicit, _) => Some(left)
+      case (_, Explicit) => Some(right)
 
       case (Implicit, Implicit) if leftStringType != rightStringType =>
         throw QueryCompilationErrors.implicitCollationMismatchError(
           Seq(leftStringType, rightStringType))
 
-      case (Implicit, _) | (_, Implicit) =>
-        if (left.strength == Implicit) Some(left) else Some(right)
+      case (Implicit, _) => Some(left)
+      case (_, Implicit) => Some(right)
 
       case (Default, Default) if leftStringType != rightStringType =>
-        throw QueryCompilationErrors.explicitCollationMismatchError(
+        throw QueryCompilationErrors.implicitCollationMismatchError(
           Seq(leftStringType, rightStringType))
 
       case _ =>

@@ -131,19 +131,20 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCompoundOrSingleStatement(
-      ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
+      ctx: CompoundOrSingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_ENABLED)) {
+        throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
+      }
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
-      val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        Some(java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)))
+      visitSingleStatement(ctx.singleStatement())
     }
   }
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
     val labelCtx = new SqlScriptingLabelContext()
-    visitBeginEndCompoundBlockImpl(ctx.beginEndCompoundBlock(), labelCtx)
+    visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = true, labelCtx)
   }
 
   private def visitCompoundBodyImpl(

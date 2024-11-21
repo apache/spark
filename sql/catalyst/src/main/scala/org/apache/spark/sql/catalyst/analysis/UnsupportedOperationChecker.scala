@@ -484,14 +484,14 @@ object UnsupportedOperationChecker extends Logging {
 
         case Offset(_, _) => throwError("Offset is not supported on streaming DataFrames/Datasets")
 
-        case Sort(_, _, _) if !containsCompleteData(subPlan) =>
+        case Sort(_, _, _, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
             "aggregated DataFrame/Dataset in Complete output mode")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
-        case Window(windowExpression, _, _, child) if child.isStreaming =>
+        case Window(windowExpression, _, _, child, _) if child.isStreaming =>
           val (windowFuncList, columnNameList, windowSpecList) = windowExpression.flatMap { e =>
             e.collect {
               case we: WindowExpression =>
