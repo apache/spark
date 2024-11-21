@@ -548,7 +548,8 @@ values (0, 'abc') tab(x, y)
 
 -- Union distinct with a VALUES list.
 values (0, 1) tab(x, y)
-|> union table t;
+|> union table t
+|> where x = 0;
 
 -- Union all with a table subquery on both the source and target sides.
 (select * from t)

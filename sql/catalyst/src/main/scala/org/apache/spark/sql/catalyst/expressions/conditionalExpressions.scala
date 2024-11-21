@@ -337,11 +337,11 @@ case class CaseWhen(
 
     // This generates code like:
     //   caseWhenResultState = caseWhen_1(i);
-    //   if(caseWhenResultState != -1) {
+    //   if (caseWhenResultState != -1) {
     //     continue;
     //   }
     //   caseWhenResultState = caseWhen_2(i);
-    //   if(caseWhenResultState != -1) {
+    //   if (caseWhenResultState != -1) {
     //     continue;
     //   }
     //   ...

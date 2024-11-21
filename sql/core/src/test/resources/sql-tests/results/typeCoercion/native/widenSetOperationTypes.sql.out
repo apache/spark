@@ -46,7 +46,7 @@ struct<CAST(1 AS TINYINT):bigint>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):float>
+struct<CAST(1 AS TINYINT):double>
 -- !query output
 1.0
 2.0
@@ -73,7 +73,7 @@ struct<CAST(1 AS TINYINT):decimal(10,0)>
 -- !query
 SELECT cast(1 as tinyint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS TINYINT):string>
+struct<CAST(1 AS TINYINT):bigint>
 -- !query output
 1
 2
@@ -226,7 +226,7 @@ struct<CAST(1 AS SMALLINT):bigint>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):float>
+struct<CAST(1 AS SMALLINT):double>
 -- !query output
 1.0
 2.0
@@ -253,7 +253,7 @@ struct<CAST(1 AS SMALLINT):decimal(10,0)>
 -- !query
 SELECT cast(1 as smallint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS SMALLINT):string>
+struct<CAST(1 AS SMALLINT):bigint>
 -- !query output
 1
 2
@@ -406,7 +406,7 @@ struct<CAST(1 AS INT):bigint>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS INT):float>
+struct<CAST(1 AS INT):double>
 -- !query output
 1.0
 2.0
@@ -433,7 +433,7 @@ struct<CAST(1 AS INT):decimal(10,0)>
 -- !query
 SELECT cast(1 as int) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS INT):string>
+struct<CAST(1 AS INT):bigint>
 -- !query output
 1
 2
@@ -586,7 +586,7 @@ struct<CAST(1 AS BIGINT):bigint>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):float>
+struct<CAST(1 AS BIGINT):double>
 -- !query output
 1.0
 2.0
@@ -613,7 +613,7 @@ struct<CAST(1 AS BIGINT):decimal(20,0)>
 -- !query
 SELECT cast(1 as bigint) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS BIGINT):string>
+struct<CAST(1 AS BIGINT):bigint>
 -- !query output
 1
 2
@@ -730,7 +730,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<CAST(1 AS FLOAT):double>
 -- !query output
 1.0
 2.0
@@ -739,7 +739,7 @@ struct<CAST(1 AS FLOAT):float>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<CAST(1 AS FLOAT):double>
 -- !query output
 1.0
 2.0
@@ -748,7 +748,7 @@ struct<CAST(1 AS FLOAT):float>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<CAST(1 AS FLOAT):double>
 -- !query output
 1.0
 2.0
@@ -757,7 +757,7 @@ struct<CAST(1 AS FLOAT):float>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):float>
+struct<CAST(1 AS FLOAT):double>
 -- !query output
 1.0
 2.0
@@ -793,10 +793,10 @@ struct<CAST(1 AS FLOAT):double>
 -- !query
 SELECT cast(1 as float) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS FLOAT):string>
+struct<CAST(1 AS FLOAT):double>
 -- !query output
 1.0
-2
+2.0
 
 
 -- !query
@@ -973,10 +973,10 @@ struct<CAST(1 AS DOUBLE):double>
 -- !query
 SELECT cast(1 as double) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS DOUBLE):string>
+struct<CAST(1 AS DOUBLE):double>
 -- !query output
 1.0
-2
+2.0
 
 
 -- !query
@@ -1153,10 +1153,10 @@ struct<CAST(1 AS DECIMAL(10,0)):decimal(10,0)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(1 AS DECIMAL(10,0)):string>
+struct<CAST(1 AS DECIMAL(10,0)):double>
 -- !query output
-1
-2
+1.0
+2.0
 
 
 -- !query
@@ -1270,7 +1270,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as tinyint) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<CAST(1 AS STRING):bigint>
 -- !query output
 1
 2
@@ -1279,7 +1279,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as smallint) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<CAST(1 AS STRING):bigint>
 -- !query output
 1
 2
@@ -1288,7 +1288,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as int) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<CAST(1 AS STRING):bigint>
 -- !query output
 1
 2
@@ -1297,7 +1297,7 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as bigint) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<CAST(1 AS STRING):bigint>
 -- !query output
 1
 2
@@ -1306,28 +1306,28 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as float) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<CAST(1 AS STRING):double>
 -- !query output
-1
+1.0
 2.0
 
 
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as double) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<CAST(1 AS STRING):double>
 -- !query output
-1
+1.0
 2.0
 
 
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as decimal(10, 0)) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<CAST(1 AS STRING):double>
 -- !query output
-1
-2
+1.0
+2.0
 
 
 -- !query
@@ -1342,73 +1342,66 @@ struct<CAST(1 AS STRING):string>
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t
 -- !query schema
-struct<>
+struct<CAST(1 AS STRING):binary>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "columnOrdinalNumber" : "first",
-    "dataType1" : "\"BINARY\"",
-    "dataType2" : "\"STRING\"",
-    "hint" : "",
-    "operator" : "UNION",
-    "tableOrdinalNumber" : "second"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 71,
-    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast('2' as binary) FROM t"
-  } ]
-}
+1
+2
 
 
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t
 -- !query schema
-struct<>
+struct<CAST(1 AS STRING):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "columnOrdinalNumber" : "first",
-    "dataType1" : "\"BOOLEAN\"",
-    "dataType2" : "\"STRING\"",
-    "hint" : "",
-    "operator" : "UNION",
-    "tableOrdinalNumber" : "second"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 70,
-    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast(2 as boolean) FROM t"
-  } ]
-}
+true
 
 
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<>
 -- !query output
-1
-2017-12-11 09:30:00
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast('2017-12-11 09:30:00.0' as timestamp) FROM t"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as string) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t
 -- !query schema
-struct<CAST(1 AS STRING):string>
+struct<>
 -- !query output
-1
-2017-12-11
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'1'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast(1 as string) FROM t UNION SELECT cast('2017-12-11 09:30:00' as date) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -1603,28 +1596,10 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<>
+struct<CAST(1 AS BINARY):binary>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
-  "sqlState" : "42825",
-  "messageParameters" : {
-    "columnOrdinalNumber" : "first",
-    "dataType1" : "\"STRING\"",
-    "dataType2" : "\"BINARY\"",
-    "hint" : "",
-    "operator" : "UNION",
-    "tableOrdinalNumber" : "second"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 71,
-    "fragment" : "SELECT cast('1' as binary) FROM t UNION SELECT cast(2 as string) FROM t"
-  } ]
-}
+1
+2
 
 
 -- !query
@@ -1911,17 +1886,14 @@ SELECT cast(1 as boolean) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
-  "sqlState" : "42825",
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
   "messageParameters" : {
-    "columnOrdinalNumber" : "first",
-    "dataType1" : "\"STRING\"",
-    "dataType2" : "\"BOOLEAN\"",
-    "hint" : "",
-    "operator" : "UNION",
-    "tableOrdinalNumber" : "second"
+    "expression" : "'2'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BOOLEAN\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2214,10 +2186,25 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(2017-12-12 09:30:00.0 AS TIMESTAMP):string>
+struct<>
 -- !query output
-2
-2017-12-12 09:30:00
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'2'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00.0' as timestamp) FROM t UNION SELECT cast(2 as string) FROM t"
+  } ]
+}
 
 
 -- !query
@@ -2484,10 +2471,25 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as string) FROM t
 -- !query schema
-struct<CAST(2017-12-12 09:30:00 AS DATE):string>
+struct<>
 -- !query output
-2
-2017-12-12
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'2'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 87,
+    "fragment" : "SELECT cast('2017-12-12 09:30:00' as date) FROM t UNION SELECT cast(2 as string) FROM t"
+  } ]
+}
 
 
 -- !query

@@ -62,6 +62,8 @@ jobs:
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
       image_lint_url: ${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}
       image_lint_url_link: ${{ steps.infra-image-link.outputs.image_lint_url_link }}
+      image_sparkr_url: ${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}
+      image_sparkr_url_link: ${{ steps.infra-image-link.outputs.image_sparkr_url_link }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -154,6 +156,14 @@ jobs:
         IMG_NAME="apache-spark-ci-image-lint:${{ inputs.branch }}-${{ github.run_id }}"
         IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
         echo "image_lint_url=$IMG_URL" >> $GITHUB_OUTPUT
+    - name: Generate infra image URL (SparkR)
+      id: infra-image-sparkr-outputs
+      run: |
+        # Convert to lowercase to meet Docker repo name requirement
+        REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        IMG_NAME="apache-spark-ci-image-sparkr:${{ inputs.branch }}-${{ github.run_id }}"
+        IMG_URL="ghcr.io/$REPO_OWNER/$IMG_NAME"
+        echo "image_sparkr_url=$IMG_URL" >> $GITHUB_OUTPUT
     - name: Link the docker images
       id: infra-image-link
       run: |
@@ -162,9 +172,11 @@ jobs:
         if [[ "${{ inputs.branch }}" == 'branch-3.5' ]]; then
           echo "image_docs_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
           echo "image_lint_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
+          echo "image_sparkr_url_link=${{ steps.infra-image-outputs.outputs.image_url }}" >> $GITHUB_OUTPUT
         else
           echo "image_docs_url_link=${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}" >> $GITHUB_OUTPUT
           echo "image_lint_url_link=${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}" >> $GITHUB_OUTPUT
+          echo "image_sparkr_url_link=${{ steps.infra-image-sparkr-outputs.outputs.image_sparkr_url }}" >> $GITHUB_OUTPUT
         fi
 
   # Build: build Spark and run the tests for specified modules.
@@ -405,6 +417,17 @@ jobs:
             ${{ needs.precondition.outputs.image_lint_url }}
           # Use the infra image cache to speed up
           cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-lint-cache:${{ inputs.branch }}
+      - name: Build and push (SparkR)
+        if: hashFiles('dev/spark-test-image/sparkr/Dockerfile') != ''
+        id: docker_build_sparkr
+        uses: docker/build-push-action@v6
+        with:
+          context: ./dev/spark-test-image/sparkr/
+          push: true
+          tags: |
+            ${{ needs.precondition.outputs.image_sparkr_url }}
+          # Use the infra image cache to speed up
+          cache-from: type=registry,ref=ghcr.io/apache/spark/apache-spark-github-action-image-sparkr-cache:${{ inputs.branch }}
 
 
   pyspark:
@@ -564,7 +587,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     container:
-      image: ${{ needs.precondition.outputs.image_url }}
+      image: ${{ needs.precondition.outputs.image_sparkr_url_link }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -671,8 +694,12 @@ jobs:
       run: |
         python3.11 -m pip install 'black==23.9.1' 'protobuf==5.28.3' 'mypy==1.8.0' 'mypy-protobuf==3.3.0'
         python3.11 -m pip list
-    - name: Python CodeGen check
+    - name: Python CodeGen check for branch-3.5
+      if: inputs.branch == 'branch-3.5'
       run: ./dev/connect-check-protos.py
+    - name: Python CodeGen check
+      if: inputs.branch != 'branch-3.5'
+      run: ./dev/check-protos.py
 
   # Static analysis
   lint:

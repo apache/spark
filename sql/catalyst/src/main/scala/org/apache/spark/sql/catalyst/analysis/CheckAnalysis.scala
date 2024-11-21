@@ -598,7 +598,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
             throw QueryCompilationErrors.unpivotValueDataTypeMismatchError(up.values.get)
 
-          case Sort(orders, _, _) =>
+          case Sort(orders, _, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
                 order.failAnalysis(
@@ -607,7 +607,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               }
             }
 
-          case Window(_, partitionSpec, _, _) =>
+          case Window(_, partitionSpec, _, _, _) =>
             // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
             // for `partitionSpec` here because `orderSpec` has the type check itself.
             partitionSpec.foreach { p =>
