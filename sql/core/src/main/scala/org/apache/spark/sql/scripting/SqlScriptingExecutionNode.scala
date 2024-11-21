@@ -791,6 +791,7 @@ class ForStatementExec(
     case a: collection.Seq[_] =>
       val arrayArgs = a.toSeq.map(createExpressionFromValue(_))
       CreateArray(arrayArgs, useStringTypeWhenEmpty = false)
+
     case _ => Literal(value)
   }
 

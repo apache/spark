@@ -350,8 +350,8 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   private def visitForStatementImpl(
-    ctx: ForStatementContext,
-    labelCtx: SqlScriptingLabelContext): ForStatement = {
+      ctx: ForStatementContext,
+      labelCtx: SqlScriptingLabelContext): ForStatement = {
     val labelText = labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
 
     val queryCtx = ctx.query()

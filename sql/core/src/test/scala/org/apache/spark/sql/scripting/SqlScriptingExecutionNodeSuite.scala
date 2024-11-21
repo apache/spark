@@ -20,7 +20,7 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{DropVariable, LeafNode, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
@@ -118,7 +118,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       case leaveStmt: LeaveStatementExec => leaveStmt.label
       case iterateStmt: IterateStatementExec => iterateStmt.label
       case forStmt: ForStatementExec => forStmt.label.get
-      case _: SingleStatementExec => "SingleStatementExec"
+      case dropStmt: SingleStatementExec if dropStmt.parsedPlan.isInstanceOf[DropVariable]
+        => "DropVariable"
       case _ => fail("Unexpected statement type")
     }
 
@@ -711,16 +712,16 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(1, "intCol", "query1"),
         variableName = Some("x"),
-        body = new CompoundBodyExec(Seq(TestLeafStatement("body"))),
         label = Some("for1"),
-        session = spark
+        session = spark,
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
-      "SingleStatementExec", // drop local var
-      "SingleStatementExec" // drop local var
+      "DropVariable", // drop for query var intCol
+      "DropVariable" // drop for loop var x
     ))
   }
 
@@ -729,11 +730,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
-        body = new CompoundBodyExec(Seq(
-          TestLeafStatement("statement1"),
-          TestLeafStatement("statement2"))),
         label = Some("for1"),
-        session = spark
+        session = spark,
+        body = new CompoundBodyExec(
+          Seq(TestLeafStatement("statement1"), TestLeafStatement("statement2"))
+        )
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -742,8 +743,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "statement2",
       "statement1",
       "statement2",
-      "SingleStatementExec", // drop local var
-      "SingleStatementExec", // drop local var
+      "DropVariable", // drop for query var intCol
+      "DropVariable", // drop for loop var x
     ))
   }
 
@@ -752,9 +753,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(0, "intCol", "query1"),
         variableName = Some("x"),
-        body = new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
         label = Some("for1"),
-        session = spark
+        session = spark,
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -766,31 +767,31 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
+        label = Some("for1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           new ForStatementExec(
             query = MockQuery(2, "intCol1", "query2"),
             variableName = Some("y"),
-            body = new CompoundBodyExec(Seq(TestLeafStatement("body"))),
             label = Some("for2"),
-            session = spark
+            session = spark,
+            body = new CompoundBodyExec(Seq(TestLeafStatement("body")))
           )
-        )),
-        label = Some("for1"),
-        session = spark
+        ))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
       "body",
-      "SingleStatementExec", // drop inner local var
-      "SingleStatementExec", // drop inner local var
+      "DropVariable", // drop for query var intCol1
+      "DropVariable", // drop for loop var y
       "body",
       "body",
-      "SingleStatementExec", // drop inner local var
-      "SingleStatementExec", // drop inner local var
-      "SingleStatementExec", // drop outer local var
-      "SingleStatementExec", // drop outer local var
+      "DropVariable", // drop for query var intCol1
+      "DropVariable", // drop for loop var y
+      "DropVariable", // drop for query var intCol
+      "DropVariable", // drop for loop var x
     ))
   }
 
@@ -799,15 +800,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(1, "intCol", "query1"),
         variableName = None,
-        body = new CompoundBodyExec(Seq(TestLeafStatement("body"))),
         label = Some("for1"),
-        session = spark
+        session = spark,
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
-      "SingleStatementExec", // drop local var
+      "DropVariable", // drop for query var intCol
     ))
   }
 
@@ -816,17 +817,17 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
+        label = Some("for1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
-          TestLeafStatement("statement2"))),
-        label = Some("for1"),
-        session = spark
+          TestLeafStatement("statement2")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "statement1", "statement2", "statement1", "statement2",
-      "SingleStatementExec", // drop local var
+      "DropVariable", // drop for query var intCol
     ))
   }
 
@@ -835,9 +836,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(0, "intCol", "query1"),
         variableName = None,
-        body = new CompoundBodyExec(Seq(TestLeafStatement("body1"))),
         label = Some("for1"),
-        session = spark
+        session = spark,
+        body = new CompoundBodyExec(Seq(TestLeafStatement("body1")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -849,26 +850,26 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
+        label = Some("for1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           new ForStatementExec(
             query = MockQuery(2, "intCol1", "query2"),
             variableName = None,
-            body = new CompoundBodyExec(Seq(TestLeafStatement("body"))),
             label = Some("for2"),
-            session = spark
+            session = spark,
+            body = new CompoundBodyExec(Seq(TestLeafStatement("body")))
           )
-        )),
-        label = Some("for1"),
-        session = spark
+        ))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body", "body",
-      "SingleStatementExec", // drop inner local var
+      "DropVariable", // drop for query var intCol1
       "body", "body",
-      "SingleStatementExec", // drop inner local var
-      "SingleStatementExec", // drop outer local var
+      "DropVariable", // drop for query var intCol1
+      "DropVariable", // drop for query var intCol
     ))
   }
 
@@ -877,12 +878,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
+        label = Some("lbl1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
           new IterateStatementExec("lbl1"),
-          TestLeafStatement("statement2"))),
-        label = Some("lbl1"),
-        session = spark
+          TestLeafStatement("statement2")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -891,8 +892,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "lbl1",
       "statement1",
       "lbl1",
-      "SingleStatementExec", // drop local var
-      "SingleStatementExec", // drop local var
+      "DropVariable", // drop for query var intCol
+      "DropVariable", // drop for loop var x
     ))
   }
 
@@ -901,19 +902,16 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
+        label = Some("lbl1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
           new LeaveStatementExec("lbl1"),
-          TestLeafStatement("statement2"))),
-        label = Some("lbl1"),
-        session = spark
+          TestLeafStatement("statement2")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "statement1",
-      "lbl1"
-    ))
+    assert(statements === Seq("statement1", "lbl1"))
   }
 
   test("for statement - nested - iterate outer loop") {
@@ -921,21 +919,21 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
+        label = Some("lbl1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("outer_body"),
           new ForStatementExec(
             query = MockQuery(2, "intCol1", "query2"),
             variableName = Some("y"),
+            label = Some("lbl2"),
+            session = spark,
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),
               new IterateStatementExec("lbl1"),
-              TestLeafStatement("body2"))),
-            label = Some("lbl2"),
-            session = spark
+              TestLeafStatement("body2")))
           )
-        )),
-        label = Some("lbl1"),
-        session = spark
+        ))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -946,8 +944,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       "outer_body",
       "body1",
       "lbl1",
-      "SingleStatementExec", // drop local var
-      "SingleStatementExec", // drop local var
+      "DropVariable", // drop for query var intCol
+      "DropVariable", // drop for loop var x
     ))
   }
 
@@ -956,27 +954,24 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
+        label = Some("lbl1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           new ForStatementExec(
             query = MockQuery(2, "intCol", "query2"),
             variableName = Some("y"),
+            label = Some("lbl2"),
+            session = spark,
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),
               new LeaveStatementExec("lbl1"),
-              TestLeafStatement("body2"))),
-            label = Some("lbl2"),
-            session = spark
+              TestLeafStatement("body2")))
           )
-        )),
-        label = Some("lbl1"),
-        session = spark
+        ))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
-    assert(statements === Seq(
-      "body1",
-      "lbl1"
-    ))
+    assert(statements === Seq("body1", "lbl1"))
   }
 
   test("for statement no variable - iterate") {
@@ -984,18 +979,18 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
+        label = Some("lbl1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
           new IterateStatementExec("lbl1"),
-          TestLeafStatement("statement2"))),
-        label = Some("lbl1"),
-        session = spark
+          TestLeafStatement("statement2")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "statement1", "lbl1", "statement1", "lbl1",
-      "SingleStatementExec", // drop local var
+      "DropVariable", // drop for query var intCol
     ))
   }
 
@@ -1004,12 +999,12 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
+        label = Some("lbl1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("statement1"),
           new LeaveStatementExec("lbl1"),
-          TestLeafStatement("statement2"))),
-        label = Some("lbl1"),
-        session = spark
+          TestLeafStatement("statement2")))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
@@ -1021,27 +1016,27 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
+        label = Some("lbl1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           TestLeafStatement("outer_body"),
           new ForStatementExec(
             query = MockQuery(2, "intCol1", "query2"),
             variableName = None,
+            label = Some("lbl2"),
+            session = spark,
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),
               new IterateStatementExec("lbl1"),
-              TestLeafStatement("body2"))),
-            label = Some("lbl2"),
-            session = spark
+              TestLeafStatement("body2")))
           )
-        )),
-        label = Some("lbl1"),
-        session = spark
+        ))
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "outer_body", "body1", "lbl1", "outer_body", "body1", "lbl1",
-      "SingleStatementExec", // drop local var
+      "DropVariable", // drop for query var intCol
     ))
   }
 
@@ -1050,20 +1045,20 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       new ForStatementExec(
         query = MockQuery(2, "intCol", "query1"),
         variableName = None,
+        label = Some("lbl1"),
+        session = spark,
         body = new CompoundBodyExec(Seq(
           new ForStatementExec(
             query = MockQuery(2, "intCol1", "query2"),
             variableName = None,
+            label = Some("lbl2"),
+            session = spark,
             body = new CompoundBodyExec(Seq(
               TestLeafStatement("body1"),
               new LeaveStatementExec("lbl1"),
               TestLeafStatement("body2"))),
-            label = Some("lbl2"),
-            session = spark
           )
         )),
-        label = Some("lbl1"),
-        session = spark
       )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
