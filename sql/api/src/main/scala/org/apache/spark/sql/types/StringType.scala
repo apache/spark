@@ -30,9 +30,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private[spark] (val collationId: Int, val maxLength: Option[Int] = None)
-    extends AtomicType
-    with Serializable {
+class StringType private[spark] (val collationId: Int) extends AtomicType with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -86,7 +84,8 @@ class StringType private[spark] (val collationId: Int, val maxLength: Option[Int
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case s: StringType => s.collationId == collationId && s.maxLength == maxLength
+      case CharType(_) | VarcharType(_) => false
+      case s: StringType => s.collationId == collationId
       case _ => false
     }
   }
@@ -107,7 +106,7 @@ class StringType private[spark] (val collationId: Int, val maxLength: Option[Int
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, None) {
+case object StringType extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {

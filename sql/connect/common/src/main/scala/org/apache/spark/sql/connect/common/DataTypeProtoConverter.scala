@@ -190,15 +190,11 @@ object DataTypeProtoConverter {
       case s: StringType =>
         proto.DataType
           .newBuilder()
-          .setString({
-            val builder = proto.DataType.String
+          .setString(
+            proto.DataType.String
               .newBuilder()
               .setCollation(CollationFactory.fetchCollation(s.collationId).collationName)
-            (s.maxLength match {
-              case Some(length) => builder.setMaxLength(length)
-              case None => builder
-            }).build()
-          })
+              .build())
           .build()
 
       case DateType => ProtoDataTypes.DateType

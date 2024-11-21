@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 
 @Experimental
 case class VarcharType(length: Int)
-    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, Some(length)) {
+    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID) {
   require(length >= 0, "The length of varchar type cannot be negative.")
 
   override def equals(o: Any): Boolean = o match {
