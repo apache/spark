@@ -369,28 +369,28 @@ class AstBuilder extends DataTypeAstBuilder
       ctx: RuleContext, label: String, isIterate: Boolean): Boolean = {
     ctx match {
       case c: BeginEndCompoundBlockContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label) =>
-        if (isIterate) {
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => if (isIterate) {
           throw SqlScriptingErrors.invalidIterateLabelUsageForCompound(CurrentOrigin.get, label)
         }
         true
       case c: WhileStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case c: RepeatStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case c: LoopStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case c: ForStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case _ => false
     }
   }
