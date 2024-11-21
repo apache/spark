@@ -42,7 +42,7 @@ import sys
 
 import numpy as np
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
 from pyspark.errors.utils import _with_origin
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 from pyspark.sql import Column
@@ -255,6 +255,17 @@ col.__doc__ = pysparkfuncs.col.__doc__
 
 
 column = col
+
+
+def outer(colOrExprSQL: Union[Column, str]) -> Column:
+    # TODO(SPARK-50134): Implement this method
+    raise PySparkNotImplementedError(
+        errorClass="NOT_IMPLEMENTED",
+        messageParameters={"feature": "outer()"},
+    )
+
+
+outer.__doc__ = pysparkfuncs.outer.__doc__
 
 
 def lit(col: Any) -> Column:
