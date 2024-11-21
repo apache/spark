@@ -333,7 +333,7 @@ case class ListAgg(
     copy(orderExpressions = orderingWithinGroup)
 
   override protected lazy val bufferElementType: DataType = {
-    if (noNeedSaveOrderValue) {
+    if (!needSaveOrderValue) {
       child.dataType
     } else {
       StructType(
@@ -342,8 +342,8 @@ case class ListAgg(
       )
     }
   }
-  /** Indicates that the result of [[child]] is enough for evaluation  */
-  private lazy val noNeedSaveOrderValue: Boolean = isOrderCompatible(orderExpressions)
+  /** Indicates that the result of [[child]] is not enough for evaluation  */
+  lazy val needSaveOrderValue: Boolean = !isOrderCompatible(orderExpressions)
 
   def this(child: Expression) =
     this(child, Literal(null), Nil, 0, 0)
@@ -418,7 +418,7 @@ case class ListAgg(
   /**
    * Sort buffer according orderExpressions.
    * If orderExpressions is empty them returns buffer as is.
-   * The format of buffer is determined by [[noNeedSaveOrderValue]]
+   * The format of buffer is determined by [[needSaveOrderValue]]
    * @return sorted buffer containing only child's values
    */
   private[this] def sortBuffer(buffer: mutable.ArrayBuffer[Any]): mutable.ArrayBuffer[Any] = {
@@ -426,7 +426,7 @@ case class ListAgg(
       // without order return as is.
       return buffer
     }
-    if (noNeedSaveOrderValue) {
+    if (!needSaveOrderValue) {
       // Here the buffer has structure [childValue0, childValue1, ...]
       // and we want to sort it by childValues
       val sortOrderExpression = orderExpressions.head
@@ -494,7 +494,7 @@ case class ListAgg(
   override def update(buffer: ArrayBuffer[Any], input: InternalRow): ArrayBuffer[Any] = {
     val value = child.eval(input)
     if (value != null) {
-      val v = if (noNeedSaveOrderValue) {
+      val v = if (!needSaveOrderValue) {
         convertToBufferElement(value)
       } else {
         InternalRow.fromSeq(convertToBufferElement(value) +: evalOrderValues(input))
@@ -516,9 +516,9 @@ case class ListAgg(
    * Utility func to check if given order is defined and different from [[child]].
    *
    * @see [[QueryCompilationErrors.functionAndOrderExpressionMismatchError]]
-   * @see [[noNeedSaveOrderValue]]
+   * @see [[needSaveOrderValue]]
    */
-  def isOrderCompatible(someOrder: Seq[SortOrder]): Boolean = {
+  private[this] def isOrderCompatible(someOrder: Seq[SortOrder]): Boolean = {
     if (someOrder.isEmpty) {
       return true
     }

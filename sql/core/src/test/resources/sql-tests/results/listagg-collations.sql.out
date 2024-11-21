@@ -44,7 +44,7 @@ SELECT listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
   "sqlState" : "42822",
@@ -52,12 +52,5 @@ org.apache.spark.sql.AnalysisException
     "functionArgs" : "\"collate(c1, utf8_lcase)\"",
     "functionName" : "`listagg`",
     "orderExpr" : "\"collate(c1, utf8_binary)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 93,
-    "fragment" : "listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE utf8_binary)"
-  } ]
+  }
 }

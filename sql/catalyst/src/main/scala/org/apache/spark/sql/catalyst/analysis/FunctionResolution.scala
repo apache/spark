@@ -146,10 +146,6 @@ class FunctionResolution(
           func.prettyName,
           "WITHIN GROUP (ORDER BY ...)"
         )
-      case listAgg: ListAgg
-        if u.isDistinct && !listAgg.isOrderCompatible(u.orderingWithinGroup) =>
-        throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
-          listAgg.prettyName, listAgg.child, u.orderingWithinGroup)
       // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
       // the context of a Window clause. They do not need to be wrapped in an
       // AggregateExpression.
