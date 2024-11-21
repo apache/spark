@@ -408,6 +408,14 @@ class SparkSession private[sql] (
     execute(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
+  /**
+   * The real `execute` method that calls into `SparkConnectClient`.
+   *
+   * Here we inject a lazy map to process registered observed metrics, so consumers of the returned
+   * iterator does not need to worry about it.
+   *
+   * Please make sure all `execute` overrides call this method.
+   */
   private[sql] def execute(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] = {
     client
       .execute(plan)
