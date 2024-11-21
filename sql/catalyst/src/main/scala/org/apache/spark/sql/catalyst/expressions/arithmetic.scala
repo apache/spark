@@ -116,7 +116,6 @@ case class UnaryMinus(
   group = "math_funcs")
 case class UnaryPositive(child: Expression)
   extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
-  override def nullIntolerant: Boolean = true
 
   override def prettyName: String = "positive"
 
