@@ -965,7 +965,7 @@
       },
       "RANGE_FRAME_INVALID_TYPE" : {
         "message" : [
-          "The data type <orderSpecType> used in the order specification does not match the data type <valueBoundaryType> which is used in the range frame."
+          "The data type <orderSpecType> used in the order specification does not support the data type <valueBoundaryType> which is used in the range frame."
         ]
       },
       "RANGE_FRAME_MULTI_ORDER" : {
@@ -5552,6 +5552,12 @@
     },
     "sqlState" : "42902"
   },
+  "UNSUPPORTED_PARTITION_TRANSFORM" : {
+    "message" : [
+      "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
       "The save mode <saveMode> is not supported for:"
@@ -7088,11 +7094,6 @@
   "_LEGACY_ERROR_TEMP_2066" : {
     "message" : [
       "Invalid namespace name: <namespace>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2067" : {
-    "message" : [
-      "Unsupported partition transform: <transform>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2068" : {
