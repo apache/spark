@@ -130,7 +130,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           .write
           .option("write.split-size", "10")
           .mode("append")
-          .saveAsTable(t1)
+          .insertInto(t1)
       }
       assert(captured.size === 1)
       val qe = captured.head
@@ -275,34 +275,21 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
           .write
           .option("write.split-size", "10")
           .mode("overwrite")
-          .saveAsTable(t1)
+          .insertInto(t1)
       }
-      assert(captured.size === 2)
+      assert(captured.size === 1)
 
-      var qe = captured.head
+      val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _) =>
-          assert(writeOptions("write.split-size") == "10")
+        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _) =>
+          assert(writeOptions("write.split-size") === "10")
       }
       assert (collected.size == 1)
 
       collected = qe.executedPlan.collect {
-        case AppendDataExec(_, _, write) =>
-          val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
+        case OverwriteByExpressionExec(_, _, write) =>
+          val append = write.toBatch.asInstanceOf[InMemoryBaseTable#TruncateAndAppend]
           assert(append.info.options.get("write.split-size") === "10")
-      }
-      assert (collected.size == 1)
-
-      qe = captured.last
-      collected = qe.optimizedPlan.collect {
-        case ReplaceTableAsSelect(_, _, _, _, writeOptions, _, _) =>
-          assert(writeOptions("write.split-size") == "10")
-      }
-      assert (collected.size == 1)
-
-      collected = qe.executedPlan.collect {
-        case ReplaceTableAsSelectExec(_, _, _, _, _, writeOptions, _, _) =>
-          assert(writeOptions("write.split-size") == "10")
       }
       assert (collected.size == 1)
     }
