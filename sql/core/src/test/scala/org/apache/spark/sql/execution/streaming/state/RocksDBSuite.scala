@@ -128,8 +128,10 @@ trait AlsoTestWithChangelogCheckpointingEnabled
     }
   }
 
-  def testWithEncodingTypes(testName: String, testTags: Tag*)
-                           (testBody: => Any): Unit = {
+  def testWithEncodingTypes(
+      testName: String,
+      testTags: Tag*)
+      (testBody: => Any): Unit = {
     Seq("unsaferow", "avro").foreach { encoding =>
       super.test(testName + s" (encoding = $encoding)", testTags: _*) {
         // in case tests have any code that needs to execute before every test
