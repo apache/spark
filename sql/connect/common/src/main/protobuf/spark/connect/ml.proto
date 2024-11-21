@@ -30,56 +30,70 @@ option java_package = "org.apache.spark.connect.proto";
 message MlCommand {
   oneof command {
     Fit fit = 1;
-    FetchModelAttr fetch_model_attr = 2;
-    DeleteModel delete_model = 3;
+    FetchAttr fetch_attr = 2;
+    Delete delete = 3;
     Writer write = 4;
     Reader read = 5;
   }
 
   // Command for estimator.fit(dataset)
   message Fit {
+    // Estimator information
     MlOperator estimator = 1;
+    // parameters of the Estimator
     MlParams params = 2;
+    // the training dataset
     Relation dataset = 3;
   }
 
-  // Command to delete a cached model.
-  message DeleteModel {
-    ModelRef model_ref = 1;
+  // Command to delete the cached object which could be a model
+  // or summary evaluated by a model
+  message Delete {
+    ObjectRef obj_ref = 1;
   }
 
   // Command to write ML operator
   message Writer {
-    // It could be a cached model or an estimator or evaluator.
+    // It could be an estimator/evaluator or the cached model
     oneof type {
+      // Estimator or evaluator
       MlOperator operator = 1;
-      ModelRef model_ref = 2;
+      // The cached model
+      ObjectRef obj_ref = 2;
     }
+    // The parameters of operator which could be estimator/evaluator or a cached model
     MlParams params = 3;
+    // Save the ML instance to the path
     string path = 4;
+    // Overwrites if the output path already exists.
     bool should_overwrite = 5;
+    // The options of the writer
     map<string, string> options = 6;
   }
 
   // Command to load ML operator.
   message Reader {
-    string clazz = 1;
+    // ML operator information
+    MlOperator operator = 1;
+    // Load the ML instance from the input path
     string path = 2;
   }
 }
 
-// The response of MlCommand
-message MlCommandResponse {
-  oneof response_type {
+// The result of MlCommand
+message MlCommandResult {
+  oneof result_type {
+    // The result of the attribute
     Param param = 1;
+    // Operator information
     MlOperatorInfo operator_info = 2;
   }
 
-  // Represent an operator info
+  // Represents an operator info
   message MlOperatorInfo {
     oneof type {
-      // cached model
-      ModelRef model_ref = 1;
+      // The cached object which could be a model or summary evaluated by a model
+      ObjectRef obj_ref = 1;
       // Operator name
       string name = 2;
     }

@@ -1148,26 +1148,6 @@ class SparkConnectClient(object):
                     },
                 )
 
-    def execute_ml(self, req: pb2.ExecutePlanRequest) -> Optional[pb2.MlCommandResponse]:
-        """
-        Execute the ML command request and return ML response result
-        Parameters
-        ----------
-        req : pb2.ExecutePlanRequest
-            Proto representation of the plan.
-        """
-        logger.info("Execute ML")
-        try:
-            for attempt in self._retrying():
-                with attempt:
-                    for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                        if b.HasField("ml_command_result"):
-                            return b.ml_command_result
-
-            raise PySparkValueError(errorClass="UNKNOWN_RESPONSE")
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
-
     def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
         """
         return if two plans have the same semantics.
@@ -1495,6 +1475,8 @@ class SparkConnectClient(object):
                         b.checkpoint_command_result.relation
                     )
                 }
+            if b.HasField("ml_command_result"):
+                yield {"ml_command_result": b.ml_command_result}
 
         try:
             if self._use_reattachable_execute:
@@ -1944,31 +1926,32 @@ class SparkConnectClient(object):
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
-    def add_ml_model(self, model_id: str) -> None:
-        if not hasattr(self.thread_local, "ml_models"):
-            self.thread_local.ml_models = set()
-        self.thread_local.ml_models.add(model_id)
+    def add_ml_cache(self, cache_id: str) -> None:
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
+        self.thread_local.ml_caches.add(cache_id)
 
-    def remove_ml_model(self, model_id: str) -> None:
-        if not hasattr(self.thread_local, "ml_models"):
-            self.thread_local.ml_models = set()
+    def remove_ml_cache(self, cache_id: str) -> None:
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
 
-        if model_id in self.thread_local.ml_models:
-            self._delete_ml_model(model_id)
+        if cache_id in self.thread_local.ml_caches:
+            self._delete_ml_cache(cache_id)
 
-    def _delete_ml_model(self, model_id: str) -> None:
-        # try best to delete the model
+    def _delete_ml_cache(self, cache_id: str) -> None:
+        # try best to delete the cache
         try:
-            req = self._execute_plan_request_with_metadata()
-            req.plan.ml_command.delete_model.model_ref.CopyFrom(pb2.ModelRef(id=model_id))
-            self.execute_ml(req)
+            command = pb2.Command()
+            command.ml_command.delete.obj_ref.CopyFrom(pb2.ObjectRef(id=cache_id))
+            self.execute_command(command)
         except Exception:
             pass
 
     def _cleanup_ml(self) -> None:
-        if not hasattr(self.thread_local, "ml_models"):
-            self.thread_local.ml_models = set()
+        if not hasattr(self.thread_local, "ml_caches"):
+            self.thread_local.ml_caches = set()
 
+        self.disable_reattachable_execute()
         # Todo add a pattern to delete all model in one command
-        for model_id in self.thread_local.ml_models:
-            self._delete_ml_model(model_id)
+        for model_id in self.thread_local.ml_caches:
+            self._delete_ml_cache(model_id)

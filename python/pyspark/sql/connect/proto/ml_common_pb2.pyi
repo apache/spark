@@ -51,9 +51,7 @@ else:
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
 class MlParams(google.protobuf.message.Message):
-    """MlParams stores param settings for
-    ML Estimator / Transformer / Evaluator
-    """
+    """MlParams stores param settings for ML Estimator / Transformer / Evaluator"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -83,7 +81,7 @@ class MlParams(google.protobuf.message.Message):
     def params(
         self,
     ) -> google.protobuf.internal.containers.MessageMap[builtins.str, global___Param]:
-        """user-supplied params"""
+        """User-supplied params"""
     def __init__(
         self,
         *,
@@ -94,6 +92,10 @@ class MlParams(google.protobuf.message.Message):
 global___MlParams = MlParams
 
 class Param(google.protobuf.message.Message):
+    """Represents the parameter type of the ML instance, or the returned value
+    of the attribute
+    """
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     LITERAL_FIELD_NUMBER: builtins.int
@@ -164,22 +166,24 @@ class MlOperator(google.protobuf.message.Message):
         ESTIMATOR: MlOperator._OperatorType.ValueType  # 1
         TRANSFORMER: MlOperator._OperatorType.ValueType  # 2
         EVALUATOR: MlOperator._OperatorType.ValueType  # 3
+        MODEL: MlOperator._OperatorType.ValueType  # 4
 
     class OperatorType(_OperatorType, metaclass=_OperatorTypeEnumTypeWrapper): ...
     UNSPECIFIED: MlOperator.OperatorType.ValueType  # 0
     ESTIMATOR: MlOperator.OperatorType.ValueType  # 1
     TRANSFORMER: MlOperator.OperatorType.ValueType  # 2
     EVALUATOR: MlOperator.OperatorType.ValueType  # 3
+    MODEL: MlOperator.OperatorType.ValueType  # 4
 
     NAME_FIELD_NUMBER: builtins.int
     UID_FIELD_NUMBER: builtins.int
     TYPE_FIELD_NUMBER: builtins.int
     name: builtins.str
-    """The name of the ML operator."""
+    """The qualified name of the ML operator."""
     uid: builtins.str
-    """unique id of the operator"""
+    """Unique id of the ML operator"""
     type: global___MlOperator.OperatorType.ValueType
-    """represent what the ml operator is"""
+    """Represents what the ML operator is"""
     def __init__(
         self,
         *,
@@ -193,14 +197,16 @@ class MlOperator(google.protobuf.message.Message):
 
 global___MlOperator = MlOperator
 
-class ModelRef(google.protobuf.message.Message):
-    """represents a reference to the `Model` instance on the server side."""
+class ObjectRef(google.protobuf.message.Message):
+    """Represents a reference to THE cached object which could be a model
+    or summary evaluated by a model
+    """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     ID_FIELD_NUMBER: builtins.int
     id: builtins.str
-    """The ID is used to lookup the model instance on the server side."""
+    """The ID is used to lookup the object on the server side."""
     def __init__(
         self,
         *,
@@ -208,7 +214,7 @@ class ModelRef(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
 
-global___ModelRef = ModelRef
+global___ObjectRef = ObjectRef
 
 class Vector(google.protobuf.message.Message):
     """See pyspark.ml.linalg.Vector"""

@@ -79,16 +79,18 @@ def try_remote_fit(f: FuncT) -> FuncT:
             estimator = pb2.MlOperator(
                 name=self._java_obj, uid=self.uid, type=pb2.MlOperator.ESTIMATOR
             )
-            fit_cmd = pb2.MlCommand.Fit(
-                estimator=estimator,
-                params=serialize_ml_params(self, client),
-                dataset=input,
+            command = pb2.Command()
+            command.ml_command.fit.CopyFrom(
+                pb2.MlCommand.Fit(
+                    estimator=estimator,
+                    params=serialize_ml_params(self, client),
+                    dataset=input,
+                )
             )
-            req = client._execute_plan_request_with_metadata()
-            req.plan.ml_command.fit.CopyFrom(fit_cmd)
-            model_info = deserialize(client.execute_ml(req))
-            client.add_ml_model(model_info.model_ref.id)
-            return model_info.model_ref.id
+            (_, properties, _) = client.execute_command(command)
+            model_info = deserialize(properties)
+            client.add_ml_cache(model_info.obj_ref.id)
+            return model_info.obj_ref.id
         else:
             return f(self, dataset)
 
@@ -145,15 +147,16 @@ def try_remote_call(f: FuncT) -> FuncT:
             session = SparkSession.getActiveSession()
             assert session is not None
             assert isinstance(self._java_obj, str)
-            get_attribute = pb2.FetchModelAttr(
-                model_ref=pb2.ModelRef(id=self._java_obj),
-                method=name,
-                args=serialize(session.client, *args),
+            command = pb2.Command()
+            command.ml_command.fetch_attr.CopyFrom(
+                pb2.FetchAttr(
+                    obj_ref=pb2.ObjectRef(id=self._java_obj),
+                    method=name,
+                    args=serialize(session.client, *args),
+                )
             )
-            req = session.client._execute_plan_request_with_metadata()
-            req.plan.ml_command.fetch_model_attr.CopyFrom(get_attribute)
-
-            return deserialize(session.client.execute_ml(req))
+            (_, properties, _) = session.client.execute_command(command)
+            return deserialize(properties)
         else:
             return f(self, name, *args)
 
@@ -179,7 +182,7 @@ def try_remote_del(f: FuncT) -> FuncT:
 
                     session = SparkSession.getActiveSession()
                     if session is not None:
-                        session.client.remove_ml_model(model_id)
+                        session.client.remove_ml_cache(model_id)
                         return
                 except Exception:
                     # SparkSession's down.

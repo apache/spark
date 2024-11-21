@@ -2412,9 +2412,25 @@ class SparkConnectPlanner(
         handleRemoveCachedRemoteRelationCommand(command.getRemoveCachedRemoteRelationCommand)
       case proto.Command.CommandTypeCase.MERGE_INTO_TABLE_COMMAND =>
         handleMergeIntoTableCommand(command.getMergeIntoTableCommand)
+      case proto.Command.CommandTypeCase.ML_COMMAND =>
+        handleMlCommand(command.getMlCommand, responseObserver)
 
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
+  }
+
+  private def handleMlCommand(
+      command: proto.MlCommand,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    val result = MLHandler.handleMlCommand(sessionHolder, command)
+    executeHolder.eventsManager.postFinished()
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setServerSideSessionId(sessionHolder.serverSessionId)
+        .setMlCommandResult(result)
+        .build())
   }
 
   private def handleSqlCommand(

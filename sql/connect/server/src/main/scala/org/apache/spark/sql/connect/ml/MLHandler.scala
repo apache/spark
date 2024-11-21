@@ -21,12 +21,11 @@ import scala.jdk.CollectionConverters.CollectionHasAsScala
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.Model
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.MLWritable
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
-import org.apache.spark.sql.connect.ml.MLUtils.loadModel
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -78,7 +77,7 @@ private object ModelAttributeHelper {
       sessionHolder: SessionHolder,
       modelId: String,
       method: Option[String] = None,
-      args: Array[proto.FetchModelAttr.Args] = Array.empty): ModelAttributeHelper = {
+      args: Array[proto.FetchAttr.Args] = Array.empty): ModelAttributeHelper = {
     val tmp = deserializeMethodArguments(args, sessionHolder)
     val argValues = tmp.map(_._1)
     val argClasses = tmp.map(_._2)
@@ -86,10 +85,11 @@ private object ModelAttributeHelper {
   }
 }
 
+// MLHandler is a utility to group all ML operations
 object MLHandler extends Logging {
   def handleMlCommand(
       sessionHolder: SessionHolder,
-      mlCommand: proto.MlCommand): proto.MlCommandResponse = {
+      mlCommand: proto.MlCommand): proto.MlCommandResult = {
 
     val mlCache = sessionHolder.mlCache
 
@@ -100,38 +100,38 @@ object MLHandler extends Logging {
         assert(estimatorProto.getType == proto.MlOperator.OperatorType.ESTIMATOR)
 
         val dataset = MLUtils.parseRelationProto(fitCmd.getDataset, sessionHolder)
-        val estimator = MLUtils.getEstimator(fitCmd)
+        val estimator = MLUtils.getEstimator(estimatorProto, Some(fitCmd.getParams))
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val id = mlCache.register(model)
-        proto.MlCommandResponse
+        proto.MlCommandResult
           .newBuilder()
           .setOperatorInfo(
-            proto.MlCommandResponse.MlOperatorInfo
+            proto.MlCommandResult.MlOperatorInfo
               .newBuilder()
-              .setModelRef(proto.ModelRef.newBuilder().setId(id)))
+              .setObjRef(proto.ObjectRef.newBuilder().setId(id)))
           .build()
 
-      case proto.MlCommand.CommandCase.FETCH_MODEL_ATTR =>
-        val args = mlCommand.getFetchModelAttr.getArgsList.asScala.toArray
+      case proto.MlCommand.CommandCase.FETCH_ATTR =>
+        val args = mlCommand.getFetchAttr.getArgsList.asScala.toArray
         val helper = ModelAttributeHelper(
           sessionHolder,
-          mlCommand.getFetchModelAttr.getModelRef.getId,
-          Option(mlCommand.getFetchModelAttr.getMethod),
+          mlCommand.getFetchAttr.getObjRef.getId,
+          Option(mlCommand.getFetchAttr.getMethod),
           args)
         val param = Serializer.serializeParam(helper.getAttribute)
-        proto.MlCommandResponse
+        proto.MlCommandResult
           .newBuilder()
           .setParam(param)
           .build()
 
-      case proto.MlCommand.CommandCase.DELETE_MODEL =>
-        val modelId = mlCommand.getDeleteModel.getModelRef.getId
+      case proto.MlCommand.CommandCase.DELETE =>
+        val modelId = mlCommand.getDelete.getObjRef.getId
         var result = false
         if (!modelId.contains(".")) {
           mlCache.remove(modelId)
           result = true
         }
-        proto.MlCommandResponse
+        proto.MlCommandResult
           .newBuilder()
           .setParam(
             proto.Param
@@ -142,52 +142,66 @@ object MLHandler extends Logging {
 
       case proto.MlCommand.CommandCase.WRITE =>
         mlCommand.getWrite.getTypeCase match {
-          case proto.MlCommand.Writer.TypeCase.MODEL_REF => // save a model
-            val modelId = mlCommand.getWrite.getModelRef.getId
+          case proto.MlCommand.Writer.TypeCase.OBJ_REF => // save a model
+            val modelId = mlCommand.getWrite.getObjRef.getId
             val model = mlCache.get(modelId)
             val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
             MLUtils.setInstanceParams(copiedModel, mlCommand.getWrite.getParams)
 
             copiedModel match {
-              case m: MLWritable =>
-                val writer = if (mlCommand.getWrite.getShouldOverwrite) {
-                  m.write.overwrite()
-                } else {
-                  m.write
-                }
-                val path = mlCommand.getWrite.getPath
-                val options = mlCommand.getWrite.getOptionsMap
-                options.forEach((k, v) => writer.option(k, v))
-                writer.save(path)
+              case m: MLWritable => MLUtils.write(m, mlCommand.getWrite)
               case _ => throw new RuntimeException("Failed to handle model.save")
             }
-            proto.MlCommandResponse.newBuilder().build()
 
           // save an estimator/evaluator/transformer
           case proto.MlCommand.Writer.TypeCase.OPERATOR =>
-            throw new RuntimeException("Support it later")
+            val writer = mlCommand.getWrite
+            if (writer.getOperator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
+              val estimator = MLUtils.getEstimator(writer.getOperator, Some(writer.getParams))
+              estimator match {
+                case m: MLWritable => MLUtils.write(m, mlCommand.getWrite)
+                case _ => throw new RuntimeException("Failed to handle Estimator.save")
+              }
+            } else {
+              throw new RuntimeException(
+                s"Unsupported writting for ${writer.getOperator.getName}")
+            }
+
           case _ => throw new RuntimeException("Unsupported operator")
         }
+        proto.MlCommandResult.newBuilder().build()
 
       case proto.MlCommand.CommandCase.READ =>
-        val clazz = mlCommand.getRead.getClazz
+        val operator = mlCommand.getRead.getOperator
+        val name = operator.getName
         val path = mlCommand.getRead.getPath
-        val model = loadModel(clazz, path)
-        model match {
-          case _: Model[_] =>
-            val id = mlCache.register(model)
-            proto.MlCommandResponse
-              .newBuilder()
-              .setOperatorInfo(
-                proto.MlCommandResponse.MlOperatorInfo
-                  .newBuilder()
-                  .setModelRef(proto.ModelRef.newBuilder().setId(id))
-                  .setUid(model.uid)
-                  .setParams(Serializer.serializeParams(model)))
-              .build()
 
-          case _ =>
-            throw new UnsupportedOperationException(f"Unsupported loading $clazz")
+        if (operator.getType == proto.MlOperator.OperatorType.MODEL) {
+          val model = MLUtils.load(name, path).asInstanceOf[Model[_]]
+          val id = mlCache.register(model)
+          proto.MlCommandResult
+            .newBuilder()
+            .setOperatorInfo(
+              proto.MlCommandResult.MlOperatorInfo
+                .newBuilder()
+                .setObjRef(proto.ObjectRef.newBuilder().setId(id))
+                .setUid(model.uid)
+                .setParams(Serializer.serializeParams(model)))
+            .build()
+
+        } else if (operator.getType == proto.MlOperator.OperatorType.ESTIMATOR) {
+          val estimator = MLUtils.load(name, path).asInstanceOf[Estimator[_]]
+          proto.MlCommandResult
+            .newBuilder()
+            .setOperatorInfo(
+              proto.MlCommandResult.MlOperatorInfo
+                .newBuilder()
+                .setName(name)
+                .setUid(estimator.uid)
+                .setParams(Serializer.serializeParams(estimator)))
+            .build()
+        } else {
+          throw new UnsupportedOperationException(s"Unsupported reading for ${name}")
         }
 
       case _ => throw new UnsupportedOperationException("Unsupported ML command")
@@ -197,11 +211,11 @@ object MLHandler extends Logging {
   def transformMLRelation(relation: proto.MlRelation, sessionHolder: SessionHolder): DataFrame = {
     relation.getMlTypeCase match {
       // Ml transform
-      case proto.MlRelation.MlTypeCase.ML_TRANSFORM =>
-        relation.getMlTransform.getOperatorCase match {
+      case proto.MlRelation.MlTypeCase.TRANSFORM =>
+        relation.getTransform.getOperatorCase match {
           // transform for a new ML transformer
           case proto.MlRelation.Transform.OperatorCase.TRANSFORMER =>
-            val transformProto = relation.getMlTransform
+            val transformProto = relation.getTransform
             assert(
               transformProto.getTransformer.getType ==
                 proto.MlOperator.OperatorType.TRANSFORMER)
@@ -210,20 +224,20 @@ object MLHandler extends Logging {
             transformer.transform(dataset)
 
           // transform on a cached model
-          case proto.MlRelation.Transform.OperatorCase.MODEL_REF =>
+          case proto.MlRelation.Transform.OperatorCase.OBJ_REF =>
             val helper =
-              ModelAttributeHelper(sessionHolder, relation.getMlTransform.getModelRef.getId, None)
-            helper.transform(relation.getMlTransform)
+              ModelAttributeHelper(sessionHolder, relation.getTransform.getObjRef.getId, None)
+            helper.transform(relation.getTransform)
 
           case _ => throw new IllegalArgumentException("Unsupported ml operator")
         }
 
       // Get the model attribute
-      case proto.MlRelation.MlTypeCase.MODEL_ATTR =>
+      case proto.MlRelation.MlTypeCase.FETCH_ATTR =>
         val helper = ModelAttributeHelper(
           sessionHolder,
-          relation.getModelAttr.getModelRef.getId,
-          Option(relation.getModelAttr.getMethod))
+          relation.getFetchAttr.getObjRef.getId,
+          Option(relation.getFetchAttr.getMethod))
         helper.getAttribute.asInstanceOf[DataFrame]
 
       case _ =>

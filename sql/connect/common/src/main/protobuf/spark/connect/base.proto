@@ -39,7 +39,6 @@ message Plan {
   oneof op_type {
     Relation root = 1;
     Command command = 2;
-    MlCommand ml_command = 3;
   }
 }
 
@@ -387,7 +386,7 @@ message ExecutePlanResponse {
     CheckpointCommandResult checkpoint_command_result = 19;
 
     // ML command response
-    MlCommandResponse ml_command_result = 100;
+    MlCommandResult ml_command_result = 20;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;

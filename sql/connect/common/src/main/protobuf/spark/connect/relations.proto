@@ -111,15 +111,15 @@ message Relation {
 // Relation to represent ML world
 message MlRelation {
   oneof ml_type {
-    Transform ml_transform = 1;
-    FetchModelAttr model_attr = 2;
+    Transform transform = 1;
+    FetchAttr fetch_attr = 2;
   }
   // Relation to represent transform(input) of the operator
   // which could be a cached model or a new transformer
   message Transform {
     oneof operator {
-      // Could be a model reference
-      ModelRef model_ref = 1;
+      // Object reference
+      ObjectRef obj_ref = 1;
       // Could be an ML transformer like VectorAssembler
       MlOperator transformer = 2;
     }
@@ -130,13 +130,14 @@ message MlRelation {
   }
 }
 
-// Message for fetching model attribute. It can be representing to a Relation or a ML command
+// Message for fetching attribute from object on the server side.
+// FetchAttr can be represented as a Relation or a ML command
 // Eg, model.coefficients, model.summary.weightedPrecision
 // or model.summary.roc which returns a DataFrame
-message FetchModelAttr {
-  // (Required) reference to the server model object or
-  // the intermediate attribute of the model eg, "model.summary"
-  ModelRef model_ref = 1;
+message FetchAttr {
+  // (Required) reference to the object on the server side or
+  // the intermediate attribute of the model. eg, "model.summary"
+  ObjectRef obj_ref = 1;
   // (Required) the method name. Eg, "coefficients" of the model
   // and "weightedPrecision" of "model.summary"
   string method = 2;

@@ -36,10 +36,10 @@ class _ModelTransformRelationPlan(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
-        plan.ml_relation.ml_transform.input.CopyFrom(self._child.plan(session))
-        plan.ml_relation.ml_transform.model_ref.CopyFrom(pb2.ModelRef(id=self._model_id))
+        plan.ml_relation.transform.input.CopyFrom(self._child.plan(session))
+        plan.ml_relation.transform.obj_ref.CopyFrom(pb2.ObjectRef(id=self._model_id))
         if self._ml_params is not None:
-            plan.ml_relation.ml_transform.params.CopyFrom(self._ml_params)
+            plan.ml_relation.transform.params.CopyFrom(self._ml_params)
 
         return plan
 
@@ -58,12 +58,12 @@ class _TransformerRelationPlan(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
-        plan.ml_relation.ml_transform.input.CopyFrom(self._child.plan(session))
-        plan.ml_relation.ml_transform.transformer.CopyFrom(
+        plan.ml_relation.transform.input.CopyFrom(self._child.plan(session))
+        plan.ml_relation.transform.transformer.CopyFrom(
             pb2.MlOperator(name=self._name, uid=self._uid, type=pb2.MlOperator.TRANSFORMER)
         )
         if self._ml_params is not None:
-            plan.ml_relation.ml_transform.params.CopyFrom(self._ml_params)
+            plan.ml_relation.transform.params.CopyFrom(self._ml_params)
         return plan
 
 
@@ -79,8 +79,6 @@ class _ModelAttributeRelationPlan(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         plan = self._create_proto_relation()
-        plan.ml_relation.model_attr.model_ref.CopyFrom(
-            pb2.ml_common_pb2.ModelRef(id=self._model_id)
-        )
-        plan.ml_relation.model_attr.method = self._method
+        plan.ml_relation.fetch_attr.obj_ref.CopyFrom(pb2.ObjectRef(id=self._model_id))
+        plan.ml_relation.fetch_attr.method = self._method
         return plan

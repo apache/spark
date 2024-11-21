@@ -25,9 +25,10 @@ import scala.jdk.CollectionConverters.{IterableHasAsScala, MapHasAsScala}
 import org.apache.commons.lang3.reflect.MethodUtils.{invokeMethod, invokeStaticMethod}
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.{Estimator, Model, Transformer}
+import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.ml.param.Params
+import org.apache.spark.ml.util.MLWritable
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -154,38 +155,38 @@ object MLUtils {
   }
 
   /**
-   * Get the Estimator instance according to the fit command
+   * Get the Estimator instance according to the proto information
    *
-   * @param fit
-   *   command
+   * @param operator
+   *   MlOperator information
+   * @param params
+   *   The optional parameters of the estiamtor
    * @return
-   *   an Estimator
+   *   the estimator
    */
-  def getEstimator(fit: proto.MlCommand.Fit): Estimator[_] = {
+  def getEstimator(operator: proto.MlOperator, params: Option[proto.MlParams]): Estimator[_] = {
     // TODO support plugin
     // Get the estimator according to the fit command
-    val name = fit.getEstimator.getName
+    val name = operator.getName
     if (estimators.isEmpty || !estimators.contains(name)) {
       throw new RuntimeException(s"Failed to find estimator: $name")
     }
-    val uid = fit.getEstimator.getUid
+    val uid = operator.getUid
     val estimator: Estimator[_] = estimators(name)
       .getConstructor(classOf[String])
       .newInstance(uid)
       .asInstanceOf[Estimator[_]]
 
     // Set parameters for the estimator
-    val params = fit.getParams
-    MLUtils.setInstanceParams(estimator, params)
+    params.foreach(p => MLUtils.setInstanceParams(estimator, p))
     estimator
   }
 
-  def loadModel(className: String, path: String): Model[_] = {
+  def load(className: String, path: String): Object = {
     // scalastyle:off classforname
     val clazz = Class.forName(className)
     // scalastyle:on classforname
-    val model = invokeStaticMethod(clazz, "load", path)
-    model.asInstanceOf[Model[_]]
+    invokeStaticMethod(clazz, "load", path)
   }
 
   /**
@@ -213,6 +214,9 @@ object MLUtils {
     transformer
   }
 
+  // Since we're using reflection way to get the attribute, in order not to
+  // leave a security hole, we define an allowed attribute list that can be accessed.
+  // The attributes could be retrieved from the corresponding python class
   private lazy val ALLOWED_ATTRIBUTES = HashSet(
     "toString",
     "numFeatures",
@@ -272,6 +276,18 @@ object MLUtils {
       ALLOWED_ATTRIBUTES.contains(methodName),
       s"$methodName is not allowed to be accessed.")
     invokeMethod(obj, methodName, args, parameterTypes)
+  }
+
+  def write(instance: MLWritable, writeProto: proto.MlCommand.Writer): Unit = {
+    val writer = if (writeProto.getShouldOverwrite) {
+      instance.write.overwrite()
+    } else {
+      instance.write
+    }
+    val path = writeProto.getPath
+    val options = writeProto.getOptionsMap
+    options.forEach((k, v) => writer.option(k, v))
+    writer.save(path)
   }
 
 }

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, List, TYPE_CHECKING, Mapping, Optional
+from typing import Any, List, TYPE_CHECKING, Mapping, Dict
 
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.linalg import (
@@ -73,9 +73,9 @@ def serialize(client: "SparkConnectClient", *args: Any) -> List[Any]:
     result = []
     for arg in args:
         if isinstance(arg, RemoteDataFrame):
-            result.append(pb2.FetchModelAttr.Args(input=arg._plan.plan(client)))
+            result.append(pb2.FetchAttr.Args(input=arg._plan.plan(client)))
         else:
-            result.append(pb2.FetchModelAttr.Args(param=serialize_param(arg, client)))
+            result.append(pb2.FetchAttr.Args(param=serialize_param(arg, client)))
     return result
 
 
@@ -88,7 +88,6 @@ def deserialize_param(param: pb2.Param) -> Any:
         if vector.HasField("dense"):
             return Vectors.dense(vector.dense.value)
         raise ValueError("TODO, support sparse vector")
-
     if param.HasField("matrix"):
         matrix = param.matrix
         # TODO support sparse matrix
@@ -103,14 +102,15 @@ def deserialize_param(param: pb2.Param) -> Any:
     raise ValueError("Unsupported param type")
 
 
-def deserialize(ml_command_result: Optional[pb2.MlCommandResponse]) -> Any:
-    assert ml_command_result is not None
+def deserialize(ml_command_result_properties: Dict[str, Any]) -> Any:
+    ml_command_result = ml_command_result_properties["ml_command_result"]
     if ml_command_result.HasField("operator_info"):
         return ml_command_result.operator_info
 
     if ml_command_result.HasField("param"):
         return deserialize_param(ml_command_result.param)
-    raise ValueError()
+
+    raise ValueError("Unsupported result type")
 
 
 def serialize_ml_params(instance: "Params", client: "SparkConnectClient") -> pb2.MlParams:

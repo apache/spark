@@ -638,13 +638,13 @@ class MlRelation(google.protobuf.message.Message):
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        MODEL_REF_FIELD_NUMBER: builtins.int
+        OBJ_REF_FIELD_NUMBER: builtins.int
         TRANSFORMER_FIELD_NUMBER: builtins.int
         INPUT_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
         @property
-        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ModelRef:
-            """Could be a model reference"""
+        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
+            """Object reference"""
         @property
         def transformer(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
             """Could be an ML transformer like VectorAssembler"""
@@ -657,7 +657,7 @@ class MlRelation(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ModelRef | None = ...,
+            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
             transformer: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
             input: global___Relation | None = ...,
             params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
@@ -667,8 +667,8 @@ class MlRelation(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "input",
                 b"input",
-                "model_ref",
-                b"model_ref",
+                "obj_ref",
+                b"obj_ref",
                 "operator",
                 b"operator",
                 "params",
@@ -682,8 +682,8 @@ class MlRelation(google.protobuf.message.Message):
             field_name: typing_extensions.Literal[
                 "input",
                 b"input",
-                "model_ref",
-                b"model_ref",
+                "obj_ref",
+                b"obj_ref",
                 "operator",
                 b"operator",
                 "params",
@@ -694,40 +694,41 @@ class MlRelation(google.protobuf.message.Message):
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["operator", b"operator"]
-        ) -> typing_extensions.Literal["model_ref", "transformer"] | None: ...
+        ) -> typing_extensions.Literal["obj_ref", "transformer"] | None: ...
 
-    ML_TRANSFORM_FIELD_NUMBER: builtins.int
-    MODEL_ATTR_FIELD_NUMBER: builtins.int
+    TRANSFORM_FIELD_NUMBER: builtins.int
+    FETCH_ATTR_FIELD_NUMBER: builtins.int
     @property
-    def ml_transform(self) -> global___MlRelation.Transform: ...
+    def transform(self) -> global___MlRelation.Transform: ...
     @property
-    def model_attr(self) -> global___FetchModelAttr: ...
+    def fetch_attr(self) -> global___FetchAttr: ...
     def __init__(
         self,
         *,
-        ml_transform: global___MlRelation.Transform | None = ...,
-        model_attr: global___FetchModelAttr | None = ...,
+        transform: global___MlRelation.Transform | None = ...,
+        fetch_attr: global___FetchAttr | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "ml_transform", b"ml_transform", "ml_type", b"ml_type", "model_attr", b"model_attr"
+            "fetch_attr", b"fetch_attr", "ml_type", b"ml_type", "transform", b"transform"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "ml_transform", b"ml_transform", "ml_type", b"ml_type", "model_attr", b"model_attr"
+            "fetch_attr", b"fetch_attr", "ml_type", b"ml_type", "transform", b"transform"
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["ml_type", b"ml_type"]
-    ) -> typing_extensions.Literal["ml_transform", "model_attr"] | None: ...
+    ) -> typing_extensions.Literal["transform", "fetch_attr"] | None: ...
 
 global___MlRelation = MlRelation
 
-class FetchModelAttr(google.protobuf.message.Message):
-    """Message for fetching model attribute. It can be representing to a Relation or a ML command
+class FetchAttr(google.protobuf.message.Message):
+    """Message for fetching attribute from object on the server side.
+    FetchAttr can be represented as a Relation or a ML command
     Eg, model.coefficients, model.summary.weightedPrecision
     or model.summary.roc which returns a DataFrame
     """
@@ -765,13 +766,13 @@ class FetchModelAttr(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["args_type", b"args_type"]
         ) -> typing_extensions.Literal["param", "input"] | None: ...
 
-    MODEL_REF_FIELD_NUMBER: builtins.int
+    OBJ_REF_FIELD_NUMBER: builtins.int
     METHOD_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
     @property
-    def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ModelRef:
-        """(Required) reference to the server model object or
-        the intermediate attribute of the model eg, "model.summary"
+    def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
+        """(Required) reference to the object on the server side or
+        the intermediate attribute of the model. eg, "model.summary"
         """
     method: builtins.str
     """(Required) the method name. Eg, "coefficients" of the model
@@ -781,27 +782,27 @@ class FetchModelAttr(google.protobuf.message.Message):
     def args(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-        global___FetchModelAttr.Args
+        global___FetchAttr.Args
     ]:
         """(Optional) the parameters of the method"""
     def __init__(
         self,
         *,
-        model_ref: pyspark.sql.connect.proto.ml_common_pb2.ModelRef | None = ...,
+        obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
         method: builtins.str = ...,
-        args: collections.abc.Iterable[global___FetchModelAttr.Args] | None = ...,
+        args: collections.abc.Iterable[global___FetchAttr.Args] | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["model_ref", b"model_ref"]
+        self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "args", b"args", "method", b"method", "model_ref", b"model_ref"
+            "args", b"args", "method", b"method", "obj_ref", b"obj_ref"
         ],
     ) -> None: ...
 
-global___FetchModelAttr = FetchModelAttr
+global___FetchAttr = FetchAttr
 
 class Unknown(google.protobuf.message.Message):
     """Used for testing purposes only."""

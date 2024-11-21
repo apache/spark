@@ -63,11 +63,14 @@ class MlCommand(google.protobuf.message.Message):
         PARAMS_FIELD_NUMBER: builtins.int
         DATASET_FIELD_NUMBER: builtins.int
         @property
-        def estimator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator: ...
+        def estimator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
+            """Estimator information"""
         @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
+        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
+            """parameters of the Estimator"""
         @property
-        def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
+        def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """the training dataset"""
         def __init__(
             self,
             *,
@@ -88,24 +91,26 @@ class MlCommand(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    class DeleteModel(google.protobuf.message.Message):
-        """Command to delete a cached model."""
+    class Delete(google.protobuf.message.Message):
+        """Command to delete the cached object which could be a model
+        or summary evaluated by a model
+        """
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        MODEL_REF_FIELD_NUMBER: builtins.int
+        OBJ_REF_FIELD_NUMBER: builtins.int
         @property
-        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ModelRef: ...
+        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef: ...
         def __init__(
             self,
             *,
-            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ModelRef | None = ...,
+            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions.Literal["model_ref", b"model_ref"]
+            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
         ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["model_ref", b"model_ref"]
+            self, field_name: typing_extensions.Literal["obj_ref", b"obj_ref"]
         ) -> None: ...
 
     class Writer(google.protobuf.message.Message):
@@ -131,28 +136,34 @@ class MlCommand(google.protobuf.message.Message):
             ) -> None: ...
 
         OPERATOR_FIELD_NUMBER: builtins.int
-        MODEL_REF_FIELD_NUMBER: builtins.int
+        OBJ_REF_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
         PATH_FIELD_NUMBER: builtins.int
         SHOULD_OVERWRITE_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
         @property
-        def operator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator: ...
+        def operator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
+            """Estimator or evaluator"""
         @property
-        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ModelRef: ...
+        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
+            """The cached model"""
         @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
+        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
+            """The parameters of operator which could be estimator/evaluator or a cached model"""
         path: builtins.str
+        """Save the ML instance to the path"""
         should_overwrite: builtins.bool
+        """Overwrites if the output path already exists."""
         @property
         def options(
             self,
-        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]: ...
+        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+            """The options of the writer"""
         def __init__(
             self,
             *,
             operator: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
-            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ModelRef | None = ...,
+            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
             params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
             path: builtins.str = ...,
             should_overwrite: builtins.bool = ...,
@@ -161,21 +172,14 @@ class MlCommand(google.protobuf.message.Message):
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "model_ref",
-                b"model_ref",
-                "operator",
-                b"operator",
-                "params",
-                b"params",
-                "type",
-                b"type",
+                "obj_ref", b"obj_ref", "operator", b"operator", "params", b"params", "type", b"type"
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "model_ref",
-                b"model_ref",
+                "obj_ref",
+                b"obj_ref",
                 "operator",
                 b"operator",
                 "options",
@@ -192,38 +196,44 @@ class MlCommand(google.protobuf.message.Message):
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["type", b"type"]
-        ) -> typing_extensions.Literal["operator", "model_ref"] | None: ...
+        ) -> typing_extensions.Literal["operator", "obj_ref"] | None: ...
 
     class Reader(google.protobuf.message.Message):
         """Command to load ML operator."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        CLAZZ_FIELD_NUMBER: builtins.int
+        OPERATOR_FIELD_NUMBER: builtins.int
         PATH_FIELD_NUMBER: builtins.int
-        clazz: builtins.str
+        @property
+        def operator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlOperator:
+            """ML operator information"""
         path: builtins.str
+        """Load the ML instance from the input path"""
         def __init__(
             self,
             *,
-            clazz: builtins.str = ...,
+            operator: pyspark.sql.connect.proto.ml_common_pb2.MlOperator | None = ...,
             path: builtins.str = ...,
         ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["operator", b"operator"]
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["clazz", b"clazz", "path", b"path"]
+            self, field_name: typing_extensions.Literal["operator", b"operator", "path", b"path"]
         ) -> None: ...
 
     FIT_FIELD_NUMBER: builtins.int
-    FETCH_MODEL_ATTR_FIELD_NUMBER: builtins.int
-    DELETE_MODEL_FIELD_NUMBER: builtins.int
+    FETCH_ATTR_FIELD_NUMBER: builtins.int
+    DELETE_FIELD_NUMBER: builtins.int
     WRITE_FIELD_NUMBER: builtins.int
     READ_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
-    def fetch_model_attr(self) -> pyspark.sql.connect.proto.relations_pb2.FetchModelAttr: ...
+    def fetch_attr(self) -> pyspark.sql.connect.proto.relations_pb2.FetchAttr: ...
     @property
-    def delete_model(self) -> global___MlCommand.DeleteModel: ...
+    def delete(self) -> global___MlCommand.Delete: ...
     @property
     def write(self) -> global___MlCommand.Writer: ...
     @property
@@ -232,8 +242,8 @@ class MlCommand(google.protobuf.message.Message):
         self,
         *,
         fit: global___MlCommand.Fit | None = ...,
-        fetch_model_attr: pyspark.sql.connect.proto.relations_pb2.FetchModelAttr | None = ...,
-        delete_model: global___MlCommand.DeleteModel | None = ...,
+        fetch_attr: pyspark.sql.connect.proto.relations_pb2.FetchAttr | None = ...,
+        delete: global___MlCommand.Delete | None = ...,
         write: global___MlCommand.Writer | None = ...,
         read: global___MlCommand.Reader | None = ...,
     ) -> None: ...
@@ -242,10 +252,10 @@ class MlCommand(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "command",
             b"command",
-            "delete_model",
-            b"delete_model",
-            "fetch_model_attr",
-            b"fetch_model_attr",
+            "delete",
+            b"delete",
+            "fetch_attr",
+            b"fetch_attr",
             "fit",
             b"fit",
             "read",
@@ -259,10 +269,10 @@ class MlCommand(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "command",
             b"command",
-            "delete_model",
-            b"delete_model",
-            "fetch_model_attr",
-            b"fetch_model_attr",
+            "delete",
+            b"delete",
+            "fetch_attr",
+            b"fetch_attr",
             "fit",
             b"fit",
             "read",
@@ -273,29 +283,27 @@ class MlCommand(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> (
-        typing_extensions.Literal["fit", "fetch_model_attr", "delete_model", "write", "read"] | None
-    ): ...
+    ) -> typing_extensions.Literal["fit", "fetch_attr", "delete", "write", "read"] | None: ...
 
 global___MlCommand = MlCommand
 
-class MlCommandResponse(google.protobuf.message.Message):
-    """The response of MlCommand"""
+class MlCommandResult(google.protobuf.message.Message):
+    """The result of MlCommand"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class MlOperatorInfo(google.protobuf.message.Message):
-        """Represent an operator info"""
+        """Represents an operator info"""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        MODEL_REF_FIELD_NUMBER: builtins.int
+        OBJ_REF_FIELD_NUMBER: builtins.int
         NAME_FIELD_NUMBER: builtins.int
         UID_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
         @property
-        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ModelRef:
-            """cached model"""
+        def obj_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ObjectRef:
+            """The cached object which could be a model or summary evaluated by a model"""
         name: builtins.str
         """Operator name"""
         uid: builtins.str
@@ -304,7 +312,7 @@ class MlCommandResponse(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ModelRef | None = ...,
+            obj_ref: pyspark.sql.connect.proto.ml_common_pb2.ObjectRef | None = ...,
             name: builtins.str = ...,
             uid: builtins.str = ...,
             params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
@@ -312,16 +320,16 @@ class MlCommandResponse(google.protobuf.message.Message):
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "model_ref", b"model_ref", "name", b"name", "params", b"params", "type", b"type"
+                "name", b"name", "obj_ref", b"obj_ref", "params", b"params", "type", b"type"
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "model_ref",
-                b"model_ref",
                 "name",
                 b"name",
+                "obj_ref",
+                b"obj_ref",
                 "params",
                 b"params",
                 "type",
@@ -332,34 +340,36 @@ class MlCommandResponse(google.protobuf.message.Message):
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["type", b"type"]
-        ) -> typing_extensions.Literal["model_ref", "name"] | None: ...
+        ) -> typing_extensions.Literal["obj_ref", "name"] | None: ...
 
     PARAM_FIELD_NUMBER: builtins.int
     OPERATOR_INFO_FIELD_NUMBER: builtins.int
     @property
-    def param(self) -> pyspark.sql.connect.proto.ml_common_pb2.Param: ...
+    def param(self) -> pyspark.sql.connect.proto.ml_common_pb2.Param:
+        """The result of the attribute"""
     @property
-    def operator_info(self) -> global___MlCommandResponse.MlOperatorInfo: ...
+    def operator_info(self) -> global___MlCommandResult.MlOperatorInfo:
+        """Operator information"""
     def __init__(
         self,
         *,
         param: pyspark.sql.connect.proto.ml_common_pb2.Param | None = ...,
-        operator_info: global___MlCommandResponse.MlOperatorInfo | None = ...,
+        operator_info: global___MlCommandResult.MlOperatorInfo | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "operator_info", b"operator_info", "param", b"param", "response_type", b"response_type"
+            "operator_info", b"operator_info", "param", b"param", "result_type", b"result_type"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "operator_info", b"operator_info", "param", b"param", "response_type", b"response_type"
+            "operator_info", b"operator_info", "param", b"param", "result_type", b"result_type"
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["response_type", b"response_type"]
+        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
     ) -> typing_extensions.Literal["param", "operator_info"] | None: ...
 
-global___MlCommandResponse = MlCommandResponse
+global___MlCommandResult = MlCommandResult
