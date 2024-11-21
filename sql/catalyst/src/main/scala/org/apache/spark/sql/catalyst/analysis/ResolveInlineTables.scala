@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.EvaluateUnresolvedInlineTable
-import org.apache.spark.sql.catalyst.expressions.EvalHelper
+import org.apache.spark.sql.catalyst.expressions.{EvalHelper, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.AlwaysProcess
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[ResolvedInlineTable]].
@@ -29,8 +30,16 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(AlwaysProcess.fn, ruleId) {
-      case table: UnresolvedInlineTable if table.expressionsResolved =>
+      case table: UnresolvedInlineTable if canResolveInlineTable(table) =>
         EvaluateUnresolvedInlineTable.evaluateUnresolvedInlineTable(table)
     }
+  }
+
+  def canResolveInlineTable(table: UnresolvedInlineTable): Boolean = {
+    table.expressionsResolved && !table.expressions.exists(hasUnresolvedStringType)
+  }
+
+  private def hasUnresolvedStringType(expression: Expression): Boolean = {
+    expression.exists(e => SchemaUtils.hasDefaultStringType(e.dataType))
   }
 }

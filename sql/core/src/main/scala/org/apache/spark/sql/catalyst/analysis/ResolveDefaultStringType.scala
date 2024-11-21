@@ -18,15 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StringType}
-
-
-case class TemporaryStringType(
-    override val collationId: Int = SQLConf.get.defaultStringType.collationId)
-  extends StringType(collationId) {}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 
 /**
  * Resolves default string types in DDL commands. For DML commands, the default string type is
@@ -40,12 +36,20 @@ case class TemporaryStringType(
  */
 class ResolveDefaultStringType(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (isDefaultSessionCollationUsed) {
-      plan
-    } else if (isDDLCommand(plan)) {
+    val newPlan = if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
+      val newType = stringTypeForDMLCommand
       transformPlan(plan, SQLConf.get.defaultStringType)
+    }
+
+    if (!replaceWithTempType || newPlan.fastEquals(plan)) {
+      newPlan
+    } else {
+      // Due to how tree transformations work and StringType object being equal to
+      // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
+      // to ensure the correct results for occurrences of default string type.
+      ResolveDefaultStringTypeWithoutTempType.apply(newPlan)
     }
   }
 
@@ -56,20 +60,35 @@ class ResolveDefaultStringType(replaceWithTempType: Boolean) extends Rule[Logica
    * UTF8_BINARY).
    */
   private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
-    StringType(0)
+    StringType("UTF8_BINARY")
 
-  private def isDDLCommand(plan: LogicalPlan): Boolean = plan match {
-    case _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
+  /** Returns the default string type that should be used in DML commands. */
+  private def stringTypeForDMLCommand: StringType =
+    if (isDefaultSessionCollationUsed) {
+      StringType("UTF8_BINARY")
+    } else {
+      SQLConf.get.defaultStringType
+    }
+
+  private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
+    case _: CreateTable | _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
     case _ => isCreateOrAlterPlan(plan)
   }
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
-    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs | _: V1CreateTablePlan => true
+    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
     case _ => false
   }
 
   private def transformDDL(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
+      case createTable: CreateTable =>
+        val newType = stringTypeForDDLCommand(createTable)
+        val newSchema = replaceDefaultStringType(createTable.tableDesc.schema, newType)
+          .asInstanceOf[StructType]
+        val withNewSchema = createTable.copy(createTable.tableDesc.copy(schema = newSchema))
+        transformPlan(withNewSchema, newType)
+
       case p if isCreateOrAlterPlan(p) =>
         val newType = stringTypeForDDLCommand(p)
         transformPlan(p, newType)
@@ -152,3 +171,14 @@ class ResolveDefaultStringType(replaceWithTempType: Boolean) extends Rule[Logica
     }
   }
 }
+
+case object ResolveDefaultStringType
+  extends ResolveDefaultStringType(replaceWithTempType = true) {}
+
+case object ResolveDefaultStringTypeWithoutTempType
+  extends ResolveDefaultStringType(replaceWithTempType = false) {}
+
+case class TemporaryStringType(override val collationId: Int =
+    SQLConf.get.defaultStringType.collationId)
+  extends StringType(collationId) {}
+

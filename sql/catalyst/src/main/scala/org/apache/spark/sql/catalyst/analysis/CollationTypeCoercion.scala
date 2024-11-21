@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveS
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -178,9 +178,14 @@ object CollationTypeCoercion {
    * if expression has StringType in the first place.
    */
   def castStringType(expr: Expression, st: StringType): Expression = {
-    castStringType(expr.dataType, st)
-      .map(dt => Cast(expr, dt))
-      .getOrElse(expr)
+    castStringType(expr.dataType, st) match {
+      case Some(dt) => expr match {
+        case lit: Literal => lit.copy(dataType = dt)
+        case cast: Cast => cast.copy(dataType = dt)
+        case _ => Cast(expr, dt)
+      }
+      case _ => expr
+    }
   }
 
   private def castStringType(inType: DataType, castType: StringType): Option[DataType] = {

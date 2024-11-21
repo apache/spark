@@ -316,11 +316,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveProcedures ::
       BindProcedures ::
       ResolveTableSpec ::
-      // Due to how tree transformations work and StringType object being equal to
-      // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
-      // to ensure the correct results for occurrences of default string type.
-      new ResolveDefaultStringType(replaceWithTempType = true) ::
-      new ResolveDefaultStringType(replaceWithTempType = false) ::
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::

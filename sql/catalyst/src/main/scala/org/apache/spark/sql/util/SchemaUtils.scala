@@ -305,6 +305,14 @@ private[spark] object SchemaUtils {
   }
 
   /**
+   * Checks if a given data type has a default string type (StringType object),
+   * which should be resolved to a specific string type in the analyzer.
+   */
+  def hasDefaultStringType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.eq(StringType))
+  }
+
+  /**
    * Replaces any collated string type with non collated StringType
    * recursively in the given data type.
    */
