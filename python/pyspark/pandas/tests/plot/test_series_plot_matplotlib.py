@@ -25,7 +25,7 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
-from pyspark.testing.pandasutils import have_matplotlib, matplotlib_requirement_message
+from pyspark.testing.utils import have_matplotlib, matplotlib_requirement_message
 
 if have_matplotlib:
     import matplotlib
