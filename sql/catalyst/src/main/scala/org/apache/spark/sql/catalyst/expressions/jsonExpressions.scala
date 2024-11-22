@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io._
 
-import scala.collection.mutable
-import scala.reflect.ClassTag
+import scala.collection.immutable.ArraySeq
 import scala.util.parsing.combinator.RegexParsers
 
 import com.fasterxml.jackson.core._
@@ -597,24 +596,18 @@ case class JsonTuple(children: Seq[Expression])
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
     val refFoldableFieldNames = ctx.addReferenceObj("foldableFieldNames", foldableFieldNames)
+    val wrapperClass = classOf[Seq[_]].getName
     val jsonEval = jsonExpr.genCode(ctx)
     val fieldNamesTerm = ctx.freshName("fieldNames")
     val fieldNamesCode = genFieldNamesCode(ctx, refFoldableFieldNames, fieldNamesTerm)
-    val resultTerm = ctx.freshName("result")
-    val classTagClz = classOf[ClassTag[InternalRow]].getName
-    val immutableArraySeqClz = classOf[scala.collection.immutable.ArraySeq[_]].getName
-    val mutableArraySeqClz = classOf[mutable.ArraySeq[_]].getName
+    val fieldNamesClz = classOf[ArraySeq[_]].getName
     ev.copy(code =
       code"""
          |${jsonEval.code}
          |$fieldNamesCode
-         |InternalRow[] $resultTerm = (InternalRow[]) $refEvaluator.evaluate(
-         |  ${jsonEval.value},
-         |  new $immutableArraySeqClz.ofRef($fieldNamesTerm)
-         |).toArray($classTagClz$$.MODULE$$.apply(InternalRow.class));
          |boolean ${ev.isNull} = false;
-         |$mutableArraySeqClz<InternalRow> ${ev.value} =
-         |  $mutableArraySeqClz$$.MODULE$$.make($resultTerm);
+         |$wrapperClass<InternalRow> ${ev.value} = $refEvaluator.evaluate(
+         |  ${jsonEval.value}, new $fieldNamesClz.ofRef($fieldNamesTerm));
          |""".stripMargin)
   }
 
