@@ -78,82 +78,16 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
       // Create cache key using store ID to avoid collisions
-      val avroEncCacheKey = s"${getRunId}_${stateStoreId.operatorId}_" +
+      val avroEncCacheKey = s"${getRunId(hadoopConf)}_${stateStoreId.operatorId}_" +
         s"${stateStoreId.partitionId}_$colFamilyName"
 
-      def avroEnc = stateStoreEncoding match {
-        case "avro" => Some(
-          RocksDBStateStoreProvider.avroEncoderMap.get(
-            avroEncCacheKey,
-            new java.util.concurrent.Callable[AvroEncoder] {
-              override def call(): AvroEncoder = getAvroEnc(keyStateEncoderSpec, valueSchema)
-            }
-          )
-        )
-        case "unsaferow" => None
-      }
+      val avroEnc = getAvroEnc(
+        stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
 
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
           Some(newColFamilyId), avroEnc), RocksDBStateEncoder.getValueEncoder(valueSchema,
           useMultipleValuesPerKey, avroEnc)))
-    }
-
-    private def getRunId: String = {
-      val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
-      if (runId != null) {
-        runId
-      } else {
-        assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
-        UUID.randomUUID().toString
-      }
-    }
-
-    private def getAvroSerializer(schema: StructType): AvroSerializer = {
-      val avroType = SchemaConverters.toAvroType(schema)
-      new AvroSerializer(schema, avroType, nullable = false)
-    }
-
-    private def getAvroDeserializer(schema: StructType): AvroDeserializer = {
-      val avroType = SchemaConverters.toAvroType(schema)
-      val avroOptions = AvroOptions(Map.empty)
-      new AvroDeserializer(avroType, schema,
-        avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
-        avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
-    }
-
-    private def getAvroEnc(
-        keyStateEncoderSpec: KeyStateEncoderSpec,
-        valueSchema: StructType
-    ): AvroEncoder = {
-      val valueSerializer = getAvroSerializer(valueSchema)
-      val valueDeserializer = getAvroDeserializer(valueSchema)
-      val keySchema = keyStateEncoderSpec match {
-        case NoPrefixKeyStateEncoderSpec(schema) =>
-          schema
-        case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
-          StructType(schema.take(numColsPrefixKey))
-        case RangeKeyScanStateEncoderSpec(schema, orderingOrdinals) =>
-          val remainingSchema = {
-            0.until(schema.length).diff(orderingOrdinals).map { ordinal =>
-              schema(ordinal)
-            }
-          }
-          StructType(remainingSchema)
-      }
-      val suffixKeySchema = keyStateEncoderSpec match {
-        case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
-          Some(StructType(schema.drop(numColsPrefixKey)))
-        case _ => None
-      }
-      AvroEncoder(
-        getAvroSerializer(keySchema),
-        getAvroDeserializer(keySchema),
-        valueSerializer,
-        valueDeserializer,
-        suffixKeySchema.map(getAvroSerializer),
-        suffixKeySchema.map(getAvroDeserializer)
-      )
     }
 
     override def get(key: UnsafeRow, colFamilyName: String): UnsafeRow = {
@@ -454,10 +388,17 @@ private[sql] class RocksDBStateStoreProvider
       defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
     }
 
+    val colFamilyName = StateStore.DEFAULT_COL_FAMILY_NAME
+    // Create cache key using store ID to avoid collisions
+    val avroEncCacheKey = s"${getRunId(hadoopConf)}_${stateStoreId.operatorId}_" +
+      s"${stateStoreId.partitionId}_$colFamilyName"
+    val avroEnc = getAvroEnc(
+      stateStoreEncoding, avroEncCacheKey, keyStateEncoderSpec, valueSchema)
+
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
-        useColumnFamilies, defaultColFamilyId),
-        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
+        useColumnFamilies, defaultColFamilyId, avroEnc),
+        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey, avroEnc)))
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -680,6 +621,82 @@ object RocksDBStateStoreProvider {
       .build[String, AvroEncoder]()
 
     new NonFateSharingCache(guavaCache)
+  }
+
+  def getAvroEnc(
+      stateStoreEncoding: String,
+      avroEncCacheKey: String,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      valueSchema: StructType): Option[AvroEncoder] = {
+
+    stateStoreEncoding match {
+      case "avro" => Some(
+        RocksDBStateStoreProvider.avroEncoderMap.get(
+          avroEncCacheKey,
+          new java.util.concurrent.Callable[AvroEncoder] {
+            override def call(): AvroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
+          }
+        )
+      )
+      case "unsaferow" => None
+    }
+  }
+
+  private def getRunId(hadoopConf: Configuration): String = {
+    val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
+    if (runId != null) {
+      runId
+    } else {
+      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
+      UUID.randomUUID().toString
+    }
+  }
+
+  private def getAvroSerializer(schema: StructType): AvroSerializer = {
+    val avroType = SchemaConverters.toAvroType(schema)
+    new AvroSerializer(schema, avroType, nullable = false)
+  }
+
+  private def getAvroDeserializer(schema: StructType): AvroDeserializer = {
+    val avroType = SchemaConverters.toAvroType(schema)
+    val avroOptions = AvroOptions(Map.empty)
+    new AvroDeserializer(avroType, schema,
+      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
+  }
+
+  private def createAvroEnc(
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      valueSchema: StructType
+  ): AvroEncoder = {
+    val valueSerializer = getAvroSerializer(valueSchema)
+    val valueDeserializer = getAvroDeserializer(valueSchema)
+    val keySchema = keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(schema) =>
+        schema
+      case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
+        StructType(schema.take(numColsPrefixKey))
+      case RangeKeyScanStateEncoderSpec(schema, orderingOrdinals) =>
+        val remainingSchema = {
+          0.until(schema.length).diff(orderingOrdinals).map { ordinal =>
+            schema(ordinal)
+          }
+        }
+        StructType(remainingSchema)
+    }
+    val suffixKeySchema = keyStateEncoderSpec match {
+      case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
+        Some(StructType(schema.drop(numColsPrefixKey)))
+      case _ => None
+    }
+    AvroEncoder(
+      getAvroSerializer(keySchema),
+      getAvroDeserializer(keySchema),
+      valueSerializer,
+      valueDeserializer,
+      suffixKeySchema.map(getAvroSerializer),
+      suffixKeySchema.map(getAvroDeserializer)
+    )
   }
 
   // Native operation latencies report as latency in microseconds
