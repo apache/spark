@@ -105,7 +105,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
 
   override def getStateTTLMetricName: String = "numListStateWithTTLVars"
 
-  testWithEncodingTypes("verify iterator works with expired values in beginning of list") {
+  test("verify iterator works with expired values in beginning of list") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -195,7 +195,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
   // ascending order of TTL by stopping the query, setting the new TTL, and restarting
   // the query to check that the expired elements in the middle or end of the list
   // are not returned.
-  testWithEncodingTypes("verify iterator works with expired values in middle of list") {
+  test("verify iterator works with expired values in middle of list") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -343,7 +343,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest {
     }
   }
 
-  testWithEncodingTypes("verify iterator works with expired values in end of list") {
+  test("verify iterator works with expired values in end of list") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {

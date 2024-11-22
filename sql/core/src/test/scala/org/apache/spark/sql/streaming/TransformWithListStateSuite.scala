@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, AlsoTestWithEncodingTypes, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
 case class InputRow(key: String, action: String, value: String)
@@ -127,10 +127,11 @@ class ToggleSaveAndEmitProcessor
 }
 
 class TransformWithListStateSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithChangelogCheckpointingEnabled
+  with AlsoTestWithEncodingTypes {
   import testImplicits._
 
-  testWithEncodingTypes("test appending null value in list state throw exception") {
+  test("test appending null value in list state throw exception") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -150,7 +151,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("test putting null value in list state throw exception") {
+  test("test putting null value in list state throw exception") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -170,7 +171,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("test putting null list in list state throw exception") {
+  test("test putting null list in list state throw exception") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -190,7 +191,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("test appending null list in list state throw exception") {
+  test("test appending null list in list state throw exception") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -210,7 +211,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("test putting empty list in list state throw exception") {
+  test("test putting empty list in list state throw exception") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -230,7 +231,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("test appending empty list in list state throw exception") {
+  test("test appending empty list in list state throw exception") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -250,7 +251,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("test list state correctness") {
+  test("test list state correctness") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -307,7 +308,7 @@ class TransformWithListStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("test ValueState And ListState in Processor") {
+  test("test ValueState And ListState in Processor") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 

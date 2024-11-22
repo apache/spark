@@ -182,7 +182,7 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
 
   override def getStateTTLMetricName: String = "numMapStateWithTTLVars"
 
-  testWithEncodingTypes("validate state is evicted with multiple user keys") {
+  test("validate state is evicted with multiple user keys") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -224,7 +224,7 @@ class TransformWithMapStateTTLSuite extends TransformWithStateTTLTest {
     }
   }
 
-  testWithEncodingTypes("verify iterator doesn't return expired keys") {
+  test("verify iterator doesn't return expired keys") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {

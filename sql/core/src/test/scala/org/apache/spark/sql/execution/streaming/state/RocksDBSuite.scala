@@ -141,25 +141,6 @@ trait AlsoTestWithChangelogCheckpointingEnabled
     }
   }
 
-  def testWithEncodingTypes(
-      testName: String,
-      testTags: Tag*)
-      (testBody: => Any): Unit = {
-    Seq("unsaferow", "avro").foreach { encoding =>
-      super.test(testName + s" (encoding = $encoding)", testTags: _*) {
-        // in case tests have any code that needs to execute before every test
-        // super.beforeEach()
-        withSQLConf(
-          SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key ->
-            encoding) {
-          testBody
-        }
-        // in case tests have any code that needs to execute after every test
-        // super.afterEach()
-      }
-    }
-  }
-
   def testWithColumnFamilies(
       testName: String,
       testMode: TestMode,

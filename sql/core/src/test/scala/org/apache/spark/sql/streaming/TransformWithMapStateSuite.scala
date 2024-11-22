@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, AlsoTestWithEncodingTypes, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
 case class InputMapRow(key: String, action: String, value: (String, String))
@@ -81,7 +81,8 @@ class TestMapStateProcessor
  * operators such as transformWithState.
  */
 class TransformWithMapStateSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithChangelogCheckpointingEnabled
+  with AlsoTestWithEncodingTypes  {
   import testImplicits._
 
   private def testMapStateWithNullUserKey(inputMapRow: InputMapRow): Unit = {
@@ -110,7 +111,7 @@ class TransformWithMapStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("Test retrieving value with non-existing user key") {
+  test("Test retrieving value with non-existing user key") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -129,12 +130,12 @@ class TransformWithMapStateSuite extends StreamTest
   }
 
   Seq("getValue", "containsKey", "updateValue", "removeKey").foreach { mapImplFunc =>
-    testWithEncodingTypes(s"Test $mapImplFunc with null user key") {
+    test(s"Test $mapImplFunc with null user key") {
       testMapStateWithNullUserKey(InputMapRow("k1", mapImplFunc, (null, "")))
     }
   }
 
-  testWithEncodingTypes("Test put value with null value") {
+  test("Test put value with null value") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
 
@@ -158,7 +159,7 @@ class TransformWithMapStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("Test map state correctness") {
+  test("Test map state correctness") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName) {
       val inputData = MemoryStream[InputMapRow]
@@ -219,7 +220,7 @@ class TransformWithMapStateSuite extends StreamTest
     }
   }
 
-  testWithEncodingTypes("transformWithMapState - batch should succeed") {
+  test("transformWithMapState - batch should succeed") {
     val inputData = Seq(
       InputMapRow("k1", "updateValue", ("v1", "10")),
       InputMapRow("k1", "getValue", ("v1", "")))
