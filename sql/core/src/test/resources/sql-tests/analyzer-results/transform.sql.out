@@ -786,8 +786,8 @@ FROM(
 SELECT (b + 1) AS result
 ORDER BY result
 -- !query analysis
-Sort [result#x ASC NULLS FIRST], true
-+- Project [(cast(b#x as double) + cast(1 as double)) AS result#x]
+Sort [result#xL ASC NULLS FIRST], true
++- Project [(cast(b#x as bigint) + cast(1 as bigint)) AS result#xL]
    +- SubqueryAlias t
       +- ScriptTransformation cat, [a#x, b#x], ScriptInputOutputSchema(List(),List(),None,None,List(),List(),None,None,false)
          +- Aggregate [a#x], [a#x, sum(b#x) AS sum(b)#xL]

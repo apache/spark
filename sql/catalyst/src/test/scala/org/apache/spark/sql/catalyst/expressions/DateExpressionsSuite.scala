@@ -436,10 +436,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf((SQLConf.ANSI_ENABLED.key, "true")) {
       checkErrorInExpression[SparkIllegalArgumentException](
         DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
-        "_LEGACY_ERROR_TEMP_2000",
-        Map("message" ->
-          "Cannot add hours, minutes or seconds, milliseconds, microseconds to a date",
-          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+        "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION",
+        Map("ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
 
     withSQLConf((SQLConf.ANSI_ENABLED.key, "false")) {

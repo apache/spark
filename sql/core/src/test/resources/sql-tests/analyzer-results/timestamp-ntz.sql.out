@@ -9,28 +9,28 @@ Project [2016-12-31 00:12:00 AS TIMESTAMP_NTZ '2016-12-31 00:12:00'#x, 2016-12-3
 -- !query
 select to_timestamp_ntz(null), to_timestamp_ntz('2016-12-31 00:12:00'), to_timestamp_ntz('2016-12-31', 'yyyy-MM-dd')
 -- !query analysis
-Project [to_timestamp_ntz(cast(null as string), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(NULL)#x, to_timestamp_ntz(2016-12-31 00:12:00, None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(2016-12-31 00:12:00)#x, to_timestamp_ntz(2016-12-31, Some(yyyy-MM-dd), TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(2016-12-31, yyyy-MM-dd)#x]
+Project [to_timestamp_ntz(cast(null as string), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(NULL)#x, to_timestamp_ntz(2016-12-31 00:12:00, None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(2016-12-31 00:12:00)#x, to_timestamp_ntz(2016-12-31, Some(yyyy-MM-dd), TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(2016-12-31, yyyy-MM-dd)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_timestamp_ntz(to_date(null)), to_timestamp_ntz(to_date('2016-12-31'))
 -- !query analysis
-Project [to_timestamp_ntz(to_date(cast(null as string), None, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_date(NULL))#x, to_timestamp_ntz(to_date(2016-12-31, None, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_date(2016-12-31))#x]
+Project [to_timestamp_ntz(to_date(cast(null as string), None, Some(America/Los_Angeles), true), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(to_date(NULL))#x, to_timestamp_ntz(to_date(2016-12-31, None, Some(America/Los_Angeles), true), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(to_date(2016-12-31))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_timestamp_ntz(to_timestamp_ltz(null)), to_timestamp_ntz(to_timestamp_ltz('2016-12-31 00:12:00'))
 -- !query analysis
-Project [to_timestamp_ntz(to_timestamp_ltz(cast(null as string), None, TimestampType, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_timestamp_ltz(NULL))#x, to_timestamp_ntz(to_timestamp_ltz(2016-12-31 00:12:00, None, TimestampType, Some(America/Los_Angeles), false), None, TimestampNTZType, Some(America/Los_Angeles), false) AS to_timestamp_ntz(to_timestamp_ltz(2016-12-31 00:12:00))#x]
+Project [to_timestamp_ntz(to_timestamp_ltz(cast(null as string), None, TimestampType, Some(America/Los_Angeles), true), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(to_timestamp_ltz(NULL))#x, to_timestamp_ntz(to_timestamp_ltz(2016-12-31 00:12:00, None, TimestampType, Some(America/Los_Angeles), true), None, TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(to_timestamp_ltz(2016-12-31 00:12:00))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678)
 -- !query analysis
-Project [make_timestamp_ntz(2021, 7, 11, 6, 30, cast(45.678 as decimal(16,6)), None, Some(America/Los_Angeles), false, TimestampNTZType) AS make_timestamp_ntz(2021, 7, 11, 6, 30, 45.678)#x]
+Project [make_timestamp_ntz(2021, 7, 11, 6, 30, cast(45.678 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampNTZType) AS make_timestamp_ntz(2021, 7, 11, 6, 30, 45.678)#x]
 +- OneRowRelation
 
 
@@ -60,7 +60,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007)
 -- !query analysis
-Project [make_timestamp_ntz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), None, Some(America/Los_Angeles), false, TimestampNTZType) AS make_timestamp_ntz(2021, 7, 11, 6, 30, 60.007)#x]
+Project [make_timestamp_ntz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampNTZType) AS make_timestamp_ntz(2021, 7, 11, 6, 30, 60.007)#x]
 +- OneRowRelation
 
 

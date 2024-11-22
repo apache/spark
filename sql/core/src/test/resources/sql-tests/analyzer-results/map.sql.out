@@ -2,7 +2,7 @@
 -- !query
 select element_at(map(1, 'a', 2, 'b'), 5)
 -- !query analysis
-Project [element_at(map(1, a, 2, b), 5, None, false) AS element_at(map(1, a, 2, b), 5)#x]
+Project [element_at(map(1, a, 2, b), 5, None, true) AS element_at(map(1, a, 2, b), 5)#x]
 +- OneRowRelation
 
 

@@ -315,7 +315,7 @@ WHERE  t1c + 5 = (SELECT max(t2e)
                   FROM   t2)
 -- !query analysis
 Project [t1a#x, t1b#x, t1g#x]
-+- Filter (cast((t1c#x + 5) as float) = scalar-subquery#x [])
++- Filter (cast((t1c#x + 5) as double) = cast(scalar-subquery#x [] as double))
    :  +- Aggregate [max(t2e#x) AS max(t2e)#x]
    :     +- SubqueryAlias t2
    :        +- View (`t2`, [t2a#x, t2b#x, t2c#x, t2d#xL, t2e#x, t2f#x, t2g#x, t2h#x, t2i#x])

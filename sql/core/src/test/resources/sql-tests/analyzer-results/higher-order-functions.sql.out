@@ -171,7 +171,7 @@ Project [aggregate(ys#x, named_struct(sum, 0, n, 0), lambdafunction(named_struct
 -- !query
 select transform(zs, z -> aggregate(z, 1, (acc, val) -> acc * val * size(z))) as v from nested
 -- !query analysis
-Project [transform(zs#x, lambdafunction(aggregate(lambda z#x, 1, lambdafunction(((lambda acc#x * lambda val#x) * size(lambda z#x, true)), lambda acc#x, lambda val#x, false), lambdafunction(lambda id#x, lambda id#x, false)), lambda z#x, false)) AS v#x]
+Project [transform(zs#x, lambdafunction(aggregate(lambda z#x, 1, lambdafunction(((lambda acc#x * lambda val#x) * size(lambda z#x, false)), lambda acc#x, lambda val#x, false), lambdafunction(lambda id#x, lambda id#x, false)), lambda z#x, false)) AS v#x]
 +- SubqueryAlias nested
    +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
@@ -211,7 +211,7 @@ Project [reduce(ys#x, named_struct(sum, 0, n, 0), lambdafunction(named_struct(co
 -- !query
 select transform(zs, z -> reduce(z, 1, (acc, val) -> acc * val * size(z))) as v from nested
 -- !query analysis
-Project [transform(zs#x, lambdafunction(reduce(lambda z#x, 1, lambdafunction(((lambda acc#x * lambda val#x) * size(lambda z#x, true)), lambda acc#x, lambda val#x, false), lambdafunction(lambda id#x, lambda id#x, false)), lambda z#x, false)) AS v#x]
+Project [transform(zs#x, lambdafunction(reduce(lambda z#x, 1, lambdafunction(((lambda acc#x * lambda val#x) * size(lambda z#x, false)), lambda acc#x, lambda val#x, false), lambdafunction(lambda id#x, lambda id#x, false)), lambda z#x, false)) AS v#x]
 +- SubqueryAlias nested
    +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
@@ -247,7 +247,7 @@ Project [exists(cast(null as array<int>), lambdafunction((lambda y#x > 30), lamb
 -- !query
 select zip_with(ys, zs, (a, b) -> a + size(b)) as v from nested
 -- !query analysis
-Project [zip_with(ys#x, zs#x, lambdafunction((lambda a#x + size(lambda b#x, true)), lambda a#x, lambda b#x, false)) AS v#x]
+Project [zip_with(ys#x, zs#x, lambdafunction((lambda a#x + size(lambda b#x, false)), lambda a#x, lambda b#x, false)) AS v#x]
 +- SubqueryAlias nested
    +- View (`nested`, [x#x, ys#x, zs#x])
       +- Project [cast(x#x as int) AS x#x, cast(ys#x as array<int>) AS ys#x, cast(zs#x as array<array<int>>) AS zs#x]
