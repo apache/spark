@@ -34,7 +34,6 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkAttributeError,
     PySparkValueError,
-    PySparkNotImplementedError,
 )
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import enum_to_value
@@ -458,13 +457,6 @@ class Column(ParentColumn):
             )
 
         return Column(WindowExpression(windowFunction=self._expr, windowSpec=window))
-
-    def outer(self) -> ParentColumn:
-        # TODO(SPARK-50134): Implement this method
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "outer()"},
-        )
 
     def isin(self, *cols: Any) -> ParentColumn:
         if len(cols) == 1 and isinstance(cols[0], (list, set)):

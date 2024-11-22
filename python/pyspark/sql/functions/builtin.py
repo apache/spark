@@ -328,6 +328,32 @@ column = col
 
 
 @_try_remote_functions
+def outer(colOrExprSQL: Union[Column, str]) -> Column:
+    """
+    Mark a column or an expression as it could contain outer references.
+
+    .. versionadded:: 4.0.0
+
+    See Also
+    --------
+    pyspark.sql.dataframe.DataFrame.scalar
+    pyspark.sql.dataframe.DataFrame.exists
+
+    Parameters
+    ----------
+    colOrExprSQL : :class:`~pyspark.sql.Column` or str
+        Target column or SQL expression to mark as outer.
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    if isinstance(colOrExprSQL, str):
+        arg = colOrExprSQL
+    else:
+        arg = _to_java_column(colOrExprSQL)
+    return _invoke_function("outer", arg)
+
+
+@_try_remote_functions
 def asc(col: "ColumnOrName") -> Column:
     """
     Returns a sort expression for the target column in ascending order.
