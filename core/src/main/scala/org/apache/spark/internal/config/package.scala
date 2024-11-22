@@ -2000,6 +2000,13 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val MASTER_REST_SERVER_VIRTUAL_THREADS =
+    ConfigBuilder("spark.master.rest.virtualThread.enabled")
+      .doc("If true, Spark master tries to use Java 21 virtual thread for REST API.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")
     .intConf

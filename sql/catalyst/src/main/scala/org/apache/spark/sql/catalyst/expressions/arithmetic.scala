@@ -115,8 +115,7 @@ case class UnaryMinus(
   since = "1.5.0",
   group = "math_funcs")
 case class UnaryPositive(child: Expression)
-  extends RuntimeReplaceable with ImplicitCastInputTypes {
-  override def nullIntolerant: Boolean = true
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
   override def prettyName: String = "positive"
 
@@ -128,11 +127,8 @@ case class UnaryPositive(child: Expression)
 
   override lazy val replacement: Expression = child
 
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): UnaryPositive =
-    copy(newChildren.head)
-
-  override def children: Seq[Expression] = child :: Nil
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
 }
 
 /**

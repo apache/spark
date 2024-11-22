@@ -3995,9 +3995,15 @@
     ],
     "sqlState" : "42K03"
   },
-  "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION" : {
+  "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
-      "Aggregate function <expr> is not allowed when using the pipe operator |> SELECT clause; please use the pipe operator |> AGGREGATE clause instead"
+      "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "Aggregate function <expr> is not allowed when using the pipe operator |> <clause> clause; please use the pipe operator |> AGGREGATE clause instead."
     ],
     "sqlState" : "0A000"
   },
