@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.net.URI
 import java.nio.file.{Files, Paths}
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -581,17 +582,26 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
    */
   private[sql] def withLocalConnectServer[T](f: => T): T = {
     synchronized {
+      lazy val isAPIModeConnect = Option(System.getProperty("spark.api.mode"))
+        .exists(_.toLowerCase(Locale.ROOT) == "connect")
       val remoteString = sparkOptions
         .get("spark.remote")
         .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
         .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
+        .orElse {
+          if (isAPIModeConnect) {
+            Option(System.getProperty("spark.master")).orElse(sys.env.get("MASTER"))
+          } else {
+            None
+          }
+        }
 
       val maybeConnectScript =
         Option(System.getenv("SPARK_HOME")).map(Paths.get(_, "sbin", "start-connect-server.sh"))
 
       if (server.isEmpty &&
-        remoteString.exists(_.startsWith("local")) &&
-        maybeConnectScript.exists(Files.exists(_))) {
+        maybeConnectScript.exists(Files.exists(_)) &&
+        (remoteString.exists(_.startsWith("local")) || isAPIModeConnect)) {
         server = Some {
           val args =
             Seq(maybeConnectScript.get.toString, "--master", remoteString.get) ++ sparkOptions
