@@ -417,7 +417,7 @@ case class ListAgg(
 
   /**
    * Sort buffer according orderExpressions.
-   * If orderExpressions is empty them returns buffer as is.
+   * If orderExpressions is empty then returns buffer as is.
    * The format of buffer is determined by [[needSaveOrderValue]]
    * @return sorted buffer containing only child's values
    */
@@ -472,7 +472,7 @@ case class ListAgg(
         ByteArray.concatWS(delimiterValue.asInstanceOf[Array[Byte]], inputs.toSeq: _*)
       case _: StringType =>
         val inputs = buffer.filter(_ != null).map(_.asInstanceOf[UTF8String])
-        UTF8String.fromString(inputs.mkString(delimiterValue.toString))
+        UTF8String.concatWs(delimiterValue.asInstanceOf[UTF8String], inputs.toSeq : _*)
     }
   }
 

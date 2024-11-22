@@ -1565,12 +1565,6 @@
     ],
     "sqlState" : "42710"
   },
-  "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH" : {
-    "message" : [
-      "The arguments <functionArgs> of the function <functionName> do not match to ordering within group <orderExpr> when use DISTINCT."
-    ],
-    "sqlState" : "42822"
-  },
   "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
     "message" : [
       "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
@@ -3355,6 +3349,11 @@
       "DISTINCT_UNSUPPORTED" : {
         "message" : [
           "The function does not support DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "MISMATCH_WITH_DISTINCT_INPUT": {
+        "message": [
+          "Function <funcName> is invoked with DISTINCT. The WITHIN GROUP ordering expressions must be picked from the function inputs, but got <orderingExpr>."
         ]
       },
       "WITHIN_GROUP_MISSING" : {

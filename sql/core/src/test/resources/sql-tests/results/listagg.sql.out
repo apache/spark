@@ -341,12 +341,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
-  "sqlState" : "42822",
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
+  "sqlState" : "42K0K",
   "messageParameters" : {
-    "functionArgs" : "\"a\"",
-    "functionName" : "`listagg`",
-    "orderExpr" : "\"b\""
+    "funcName" : "`listagg`",
+    "orderingExpr" : "\"b\""
   }
 }
 
@@ -358,11 +357,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
-  "sqlState" : "42822",
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
+  "sqlState" : "42K0K",
   "messageParameters" : {
-    "functionArgs" : "\"a\"",
-    "functionName" : "`listagg`",
-    "orderExpr" : "\"a\", \"b\""
+    "funcName" : "`listagg`",
+    "orderingExpr" : "\"a\", \"b\""
   }
 }

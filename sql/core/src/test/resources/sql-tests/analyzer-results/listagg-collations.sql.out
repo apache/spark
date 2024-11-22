@@ -49,11 +49,10 @@ SELECT listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "FUNCTION_AND_ORDER_EXPRESSION_MISMATCH",
-  "sqlState" : "42822",
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
+  "sqlState" : "42K0K",
   "messageParameters" : {
-    "functionArgs" : "\"collate(c1, utf8_lcase)\"",
-    "functionName" : "`listagg`",
-    "orderExpr" : "\"collate(c1, utf8_binary)\""
+    "funcName" : "`listagg`",
+    "orderingExpr" : "\"collate(c1, utf8_binary)\""
   }
 }
