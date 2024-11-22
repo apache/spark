@@ -459,7 +459,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> children.map(child => toSQLType(child.dataType)).("[", ", ", "]")
+          "dataType" -> children.map(child => toSQLType(child.dataType)).mkString("[", ", ", "]")
         )
       )
     } else {
@@ -487,7 +487,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def toString: String = s"$value IN ${list.("(", ",", ")")}"
+  override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
     if (list.isEmpty && !legacyNullInEmptyBehavior) {
