@@ -142,7 +142,11 @@ class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql(s"SELECT avg(bonus) AS dept, dept, avg(salary) " +
         s"FROM $testTable GROUP BY dept ORDER BY dept"),
-      Row(1100, 1, 9500.0) :: Row(1200, 6, 12000) :: Row(1250, 2, 11000) :: Nil
+      if (lcaEnabled) {
+        Row(1100, 1, 9500.0) :: Row(1200, 6, 12000) :: Row(1250, 2, 11000) :: Nil
+      } else {
+        Row(1100, 1, 9500.0) :: Row(1250, 2, 11000) :: Row(1200, 6, 12000) :: Nil
+      }
     )
 
     checkAnswer(
