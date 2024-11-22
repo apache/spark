@@ -382,19 +382,24 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         assert session is not None, "Spark Connect session must be provided."
 
         def outer(ff: Callable) -> Callable:
+            thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
             session_client_thread_local_attrs = [
                 (attr, copy.deepcopy(value))
                 for (
                     attr,
                     value,
-                ) in session.client.thread_local.__dict__.items()  # type: ignore[union-attr]
+                ) in thread_local.__dict__.items()
             ]
 
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
-                    setattr(session.client.thread_local, attr, value)  # type: ignore[union-attr]
+                    setattr(
+                        session.client.thread_local,  # type: ignore[union-attr, operator]
+                        attr,
+                        value,
+                    )
                 return ff(*args, **kwargs)
 
             return inner
@@ -489,7 +494,8 @@ class InheritableThread(threading.Thread):
             def copy_local_properties(*a: Any, **k: Any) -> Any:
                 # Set tags in child thread.
                 assert hasattr(self, "_tags")
-                session.client.thread_local.tags = self._tags  # type: ignore[union-attr, has-type]
+                thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
+                thread_local.tags = self._tags  # type: ignore[has-type]
                 return target(*a, **k)
 
             super(InheritableThread, self).__init__(
@@ -523,9 +529,10 @@ class InheritableThread(threading.Thread):
         if is_remote():
             # Spark Connect
             assert hasattr(self, "_session")
-            if not hasattr(self._session.client.thread_local, "tags"):
-                self._session.client.thread_local.tags = set()
-            self._tags = set(self._session.client.thread_local.tags)
+            thread_local = self._session.client.thread_local  # type: ignore[union-attr, operator]
+            if not hasattr(thread_local, "tags"):
+                thread_local.tags = set()
+            self._tags = set(thread_local.tags)
         else:
             # Non Spark Connect
             from pyspark import SparkContext

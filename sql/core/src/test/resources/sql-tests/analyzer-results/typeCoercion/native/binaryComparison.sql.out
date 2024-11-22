@@ -10,271 +10,583 @@ CreateViewCommand `t`, SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
 -- !query
 SELECT cast(1 as binary) = '1' FROM t
 -- !query analysis
-Project [(cast(1 as binary) = cast(1 as binary)) AS (CAST(1 AS BINARY) = 1)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) > '2' FROM t
 -- !query analysis
-Project [(cast(1 as binary) > cast(2 as binary)) AS (CAST(1 AS BINARY) > 2)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) >= '2' FROM t
 -- !query analysis
-Project [(cast(1 as binary) >= cast(2 as binary)) AS (CAST(1 AS BINARY) >= 2)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) < '2' FROM t
 -- !query analysis
-Project [(cast(1 as binary) < cast(2 as binary)) AS (CAST(1 AS BINARY) < 2)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) <= '2' FROM t
 -- !query analysis
-Project [(cast(1 as binary) <= cast(2 as binary)) AS (CAST(1 AS BINARY) <= 2)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) <> '2' FROM t
 -- !query analysis
-Project [NOT (cast(1 as binary) = cast(2 as binary)) AS (NOT (CAST(1 AS BINARY) = 2))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) = cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as binary) = cast(cast(null as string) as binary)) AS (CAST(1 AS BINARY) = CAST(NULL AS STRING))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) > cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as binary) > cast(cast(null as string) as binary)) AS (CAST(1 AS BINARY) > CAST(NULL AS STRING))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) >= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as binary) >= cast(cast(null as string) as binary)) AS (CAST(1 AS BINARY) >= CAST(NULL AS STRING))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) < cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as binary) < cast(cast(null as string) as binary)) AS (CAST(1 AS BINARY) < CAST(NULL AS STRING))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) <= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as binary) <= cast(cast(null as string) as binary)) AS (CAST(1 AS BINARY) <= CAST(NULL AS STRING))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) <> cast(null as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as binary) = cast(cast(null as string) as binary)) AS (NOT (CAST(1 AS BINARY) = CAST(NULL AS STRING)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '1' = cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(1 as binary) = cast(1 as binary)) AS (1 = CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 30,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' > cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(2 as binary) > cast(1 as binary)) AS (2 > CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 30,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' >= cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(2 as binary) >= cast(1 as binary)) AS (2 >= CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 31,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' < cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(2 as binary) < cast(1 as binary)) AS (2 < CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 30,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' <= cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(2 as binary) <= cast(1 as binary)) AS (2 <= CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 31,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' <> cast(1 as binary) FROM t
 -- !query analysis
-Project [NOT (cast(2 as binary) = cast(1 as binary)) AS (NOT (2 = CAST(1 AS BINARY)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 31,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) = cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as binary) = cast(1 as binary)) AS (CAST(NULL AS STRING) = CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 47,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) > cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as binary) > cast(1 as binary)) AS (CAST(NULL AS STRING) > CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 47,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) >= cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as binary) >= cast(1 as binary)) AS (CAST(NULL AS STRING) >= CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 48,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) < cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as binary) < cast(1 as binary)) AS (CAST(NULL AS STRING) < CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 47,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) <= cast(1 as binary) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as binary) <= cast(1 as binary)) AS (CAST(NULL AS STRING) <= CAST(1 AS BINARY))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 48,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) <> cast(1 as binary) FROM t
 -- !query analysis
-Project [NOT (cast(cast(null as string) as binary) = cast(1 as binary)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS BINARY)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 48,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as tinyint) = '1' FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) = cast(1 as tinyint)) AS (CAST(1 AS TINYINT) = 1)#x]
+Project [(cast(cast(1 as tinyint) as bigint) = cast(1 as bigint)) AS (CAST(1 AS TINYINT) = 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -285,7 +597,7 @@ Project [(cast(1 as tinyint) = cast(1 as tinyint)) AS (CAST(1 AS TINYINT) = 1)#x
 -- !query
 SELECT cast(1 as tinyint) > '2' FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) > cast(2 as tinyint)) AS (CAST(1 AS TINYINT) > 2)#x]
+Project [(cast(cast(1 as tinyint) as bigint) > cast(2 as bigint)) AS (CAST(1 AS TINYINT) > 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -296,7 +608,7 @@ Project [(cast(1 as tinyint) > cast(2 as tinyint)) AS (CAST(1 AS TINYINT) > 2)#x
 -- !query
 SELECT cast(1 as tinyint) >= '2' FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) >= cast(2 as tinyint)) AS (CAST(1 AS TINYINT) >= 2)#x]
+Project [(cast(cast(1 as tinyint) as bigint) >= cast(2 as bigint)) AS (CAST(1 AS TINYINT) >= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -307,7 +619,7 @@ Project [(cast(1 as tinyint) >= cast(2 as tinyint)) AS (CAST(1 AS TINYINT) >= 2)
 -- !query
 SELECT cast(1 as tinyint) < '2' FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) < cast(2 as tinyint)) AS (CAST(1 AS TINYINT) < 2)#x]
+Project [(cast(cast(1 as tinyint) as bigint) < cast(2 as bigint)) AS (CAST(1 AS TINYINT) < 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -318,7 +630,7 @@ Project [(cast(1 as tinyint) < cast(2 as tinyint)) AS (CAST(1 AS TINYINT) < 2)#x
 -- !query
 SELECT cast(1 as tinyint) <= '2' FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) <= cast(2 as tinyint)) AS (CAST(1 AS TINYINT) <= 2)#x]
+Project [(cast(cast(1 as tinyint) as bigint) <= cast(2 as bigint)) AS (CAST(1 AS TINYINT) <= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -329,7 +641,7 @@ Project [(cast(1 as tinyint) <= cast(2 as tinyint)) AS (CAST(1 AS TINYINT) <= 2)
 -- !query
 SELECT cast(1 as tinyint) <> '2' FROM t
 -- !query analysis
-Project [NOT (cast(1 as tinyint) = cast(2 as tinyint)) AS (NOT (CAST(1 AS TINYINT) = 2))#x]
+Project [NOT (cast(cast(1 as tinyint) as bigint) = cast(2 as bigint)) AS (NOT (CAST(1 AS TINYINT) = 2))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -340,7 +652,7 @@ Project [NOT (cast(1 as tinyint) = cast(2 as tinyint)) AS (NOT (CAST(1 AS TINYIN
 -- !query
 SELECT cast(1 as tinyint) = cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) = cast(cast(null as string) as tinyint)) AS (CAST(1 AS TINYINT) = CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as tinyint) as bigint) = cast(cast(null as string) as bigint)) AS (CAST(1 AS TINYINT) = CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -351,7 +663,7 @@ Project [(cast(1 as tinyint) = cast(cast(null as string) as tinyint)) AS (CAST(1
 -- !query
 SELECT cast(1 as tinyint) > cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) > cast(cast(null as string) as tinyint)) AS (CAST(1 AS TINYINT) > CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as tinyint) as bigint) > cast(cast(null as string) as bigint)) AS (CAST(1 AS TINYINT) > CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -362,7 +674,7 @@ Project [(cast(1 as tinyint) > cast(cast(null as string) as tinyint)) AS (CAST(1
 -- !query
 SELECT cast(1 as tinyint) >= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) >= cast(cast(null as string) as tinyint)) AS (CAST(1 AS TINYINT) >= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as tinyint) as bigint) >= cast(cast(null as string) as bigint)) AS (CAST(1 AS TINYINT) >= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -373,7 +685,7 @@ Project [(cast(1 as tinyint) >= cast(cast(null as string) as tinyint)) AS (CAST(
 -- !query
 SELECT cast(1 as tinyint) < cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) < cast(cast(null as string) as tinyint)) AS (CAST(1 AS TINYINT) < CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as tinyint) as bigint) < cast(cast(null as string) as bigint)) AS (CAST(1 AS TINYINT) < CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -384,7 +696,7 @@ Project [(cast(1 as tinyint) < cast(cast(null as string) as tinyint)) AS (CAST(1
 -- !query
 SELECT cast(1 as tinyint) <= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) <= cast(cast(null as string) as tinyint)) AS (CAST(1 AS TINYINT) <= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as tinyint) as bigint) <= cast(cast(null as string) as bigint)) AS (CAST(1 AS TINYINT) <= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -395,7 +707,7 @@ Project [(cast(1 as tinyint) <= cast(cast(null as string) as tinyint)) AS (CAST(
 -- !query
 SELECT cast(1 as tinyint) <> cast(null as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as tinyint) = cast(cast(null as string) as tinyint)) AS (NOT (CAST(1 AS TINYINT) = CAST(NULL AS STRING)))#x]
+Project [NOT (cast(cast(1 as tinyint) as bigint) = cast(cast(null as string) as bigint)) AS (NOT (CAST(1 AS TINYINT) = CAST(NULL AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -406,7 +718,7 @@ Project [NOT (cast(1 as tinyint) = cast(cast(null as string) as tinyint)) AS (NO
 -- !query
 SELECT '1' = cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) = cast(1 as tinyint)) AS (1 = CAST(1 AS TINYINT))#x]
+Project [(cast(1 as bigint) = cast(cast(1 as tinyint) as bigint)) AS (1 = CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -417,7 +729,7 @@ Project [(cast(1 as tinyint) = cast(1 as tinyint)) AS (1 = CAST(1 AS TINYINT))#x
 -- !query
 SELECT '2' > cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(2 as tinyint) > cast(1 as tinyint)) AS (2 > CAST(1 AS TINYINT))#x]
+Project [(cast(2 as bigint) > cast(cast(1 as tinyint) as bigint)) AS (2 > CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -428,7 +740,7 @@ Project [(cast(2 as tinyint) > cast(1 as tinyint)) AS (2 > CAST(1 AS TINYINT))#x
 -- !query
 SELECT '2' >= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(2 as tinyint) >= cast(1 as tinyint)) AS (2 >= CAST(1 AS TINYINT))#x]
+Project [(cast(2 as bigint) >= cast(cast(1 as tinyint) as bigint)) AS (2 >= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -439,7 +751,7 @@ Project [(cast(2 as tinyint) >= cast(1 as tinyint)) AS (2 >= CAST(1 AS TINYINT))
 -- !query
 SELECT '2' < cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(2 as tinyint) < cast(1 as tinyint)) AS (2 < CAST(1 AS TINYINT))#x]
+Project [(cast(2 as bigint) < cast(cast(1 as tinyint) as bigint)) AS (2 < CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -450,7 +762,7 @@ Project [(cast(2 as tinyint) < cast(1 as tinyint)) AS (2 < CAST(1 AS TINYINT))#x
 -- !query
 SELECT '2' <= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(2 as tinyint) <= cast(1 as tinyint)) AS (2 <= CAST(1 AS TINYINT))#x]
+Project [(cast(2 as bigint) <= cast(cast(1 as tinyint) as bigint)) AS (2 <= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -461,7 +773,7 @@ Project [(cast(2 as tinyint) <= cast(1 as tinyint)) AS (2 <= CAST(1 AS TINYINT))
 -- !query
 SELECT '2' <> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [NOT (cast(2 as tinyint) = cast(1 as tinyint)) AS (NOT (2 = CAST(1 AS TINYINT)))#x]
+Project [NOT (cast(2 as bigint) = cast(cast(1 as tinyint) as bigint)) AS (NOT (2 = CAST(1 AS TINYINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -472,7 +784,7 @@ Project [NOT (cast(2 as tinyint) = cast(1 as tinyint)) AS (NOT (2 = CAST(1 AS TI
 -- !query
 SELECT cast(null as string) = cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as tinyint) = cast(1 as tinyint)) AS (CAST(NULL AS STRING) = CAST(1 AS TINYINT))#x]
+Project [(cast(cast(null as string) as bigint) = cast(cast(1 as tinyint) as bigint)) AS (CAST(NULL AS STRING) = CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -483,7 +795,7 @@ Project [(cast(cast(null as string) as tinyint) = cast(1 as tinyint)) AS (CAST(N
 -- !query
 SELECT cast(null as string) > cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as tinyint) > cast(1 as tinyint)) AS (CAST(NULL AS STRING) > CAST(1 AS TINYINT))#x]
+Project [(cast(cast(null as string) as bigint) > cast(cast(1 as tinyint) as bigint)) AS (CAST(NULL AS STRING) > CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -494,7 +806,7 @@ Project [(cast(cast(null as string) as tinyint) > cast(1 as tinyint)) AS (CAST(N
 -- !query
 SELECT cast(null as string) >= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as tinyint) >= cast(1 as tinyint)) AS (CAST(NULL AS STRING) >= CAST(1 AS TINYINT))#x]
+Project [(cast(cast(null as string) as bigint) >= cast(cast(1 as tinyint) as bigint)) AS (CAST(NULL AS STRING) >= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -505,7 +817,7 @@ Project [(cast(cast(null as string) as tinyint) >= cast(1 as tinyint)) AS (CAST(
 -- !query
 SELECT cast(null as string) < cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as tinyint) < cast(1 as tinyint)) AS (CAST(NULL AS STRING) < CAST(1 AS TINYINT))#x]
+Project [(cast(cast(null as string) as bigint) < cast(cast(1 as tinyint) as bigint)) AS (CAST(NULL AS STRING) < CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -516,7 +828,7 @@ Project [(cast(cast(null as string) as tinyint) < cast(1 as tinyint)) AS (CAST(N
 -- !query
 SELECT cast(null as string) <= cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as tinyint) <= cast(1 as tinyint)) AS (CAST(NULL AS STRING) <= CAST(1 AS TINYINT))#x]
+Project [(cast(cast(null as string) as bigint) <= cast(cast(1 as tinyint) as bigint)) AS (CAST(NULL AS STRING) <= CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -527,7 +839,7 @@ Project [(cast(cast(null as string) as tinyint) <= cast(1 as tinyint)) AS (CAST(
 -- !query
 SELECT cast(null as string) <> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [NOT (cast(cast(null as string) as tinyint) = cast(1 as tinyint)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS TINYINT)))#x]
+Project [NOT (cast(cast(null as string) as bigint) = cast(cast(1 as tinyint) as bigint)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS TINYINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -538,7 +850,7 @@ Project [NOT (cast(cast(null as string) as tinyint) = cast(1 as tinyint)) AS (NO
 -- !query
 SELECT cast(1 as smallint) = '1' FROM t
 -- !query analysis
-Project [(cast(1 as smallint) = cast(1 as smallint)) AS (CAST(1 AS SMALLINT) = 1)#x]
+Project [(cast(cast(1 as smallint) as bigint) = cast(1 as bigint)) AS (CAST(1 AS SMALLINT) = 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -549,7 +861,7 @@ Project [(cast(1 as smallint) = cast(1 as smallint)) AS (CAST(1 AS SMALLINT) = 1
 -- !query
 SELECT cast(1 as smallint) > '2' FROM t
 -- !query analysis
-Project [(cast(1 as smallint) > cast(2 as smallint)) AS (CAST(1 AS SMALLINT) > 2)#x]
+Project [(cast(cast(1 as smallint) as bigint) > cast(2 as bigint)) AS (CAST(1 AS SMALLINT) > 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -560,7 +872,7 @@ Project [(cast(1 as smallint) > cast(2 as smallint)) AS (CAST(1 AS SMALLINT) > 2
 -- !query
 SELECT cast(1 as smallint) >= '2' FROM t
 -- !query analysis
-Project [(cast(1 as smallint) >= cast(2 as smallint)) AS (CAST(1 AS SMALLINT) >= 2)#x]
+Project [(cast(cast(1 as smallint) as bigint) >= cast(2 as bigint)) AS (CAST(1 AS SMALLINT) >= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -571,7 +883,7 @@ Project [(cast(1 as smallint) >= cast(2 as smallint)) AS (CAST(1 AS SMALLINT) >=
 -- !query
 SELECT cast(1 as smallint) < '2' FROM t
 -- !query analysis
-Project [(cast(1 as smallint) < cast(2 as smallint)) AS (CAST(1 AS SMALLINT) < 2)#x]
+Project [(cast(cast(1 as smallint) as bigint) < cast(2 as bigint)) AS (CAST(1 AS SMALLINT) < 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -582,7 +894,7 @@ Project [(cast(1 as smallint) < cast(2 as smallint)) AS (CAST(1 AS SMALLINT) < 2
 -- !query
 SELECT cast(1 as smallint) <= '2' FROM t
 -- !query analysis
-Project [(cast(1 as smallint) <= cast(2 as smallint)) AS (CAST(1 AS SMALLINT) <= 2)#x]
+Project [(cast(cast(1 as smallint) as bigint) <= cast(2 as bigint)) AS (CAST(1 AS SMALLINT) <= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -593,7 +905,7 @@ Project [(cast(1 as smallint) <= cast(2 as smallint)) AS (CAST(1 AS SMALLINT) <=
 -- !query
 SELECT cast(1 as smallint) <> '2' FROM t
 -- !query analysis
-Project [NOT (cast(1 as smallint) = cast(2 as smallint)) AS (NOT (CAST(1 AS SMALLINT) = 2))#x]
+Project [NOT (cast(cast(1 as smallint) as bigint) = cast(2 as bigint)) AS (NOT (CAST(1 AS SMALLINT) = 2))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -604,7 +916,7 @@ Project [NOT (cast(1 as smallint) = cast(2 as smallint)) AS (NOT (CAST(1 AS SMAL
 -- !query
 SELECT cast(1 as smallint) = cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as smallint) = cast(cast(null as string) as smallint)) AS (CAST(1 AS SMALLINT) = CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as smallint) as bigint) = cast(cast(null as string) as bigint)) AS (CAST(1 AS SMALLINT) = CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -615,7 +927,7 @@ Project [(cast(1 as smallint) = cast(cast(null as string) as smallint)) AS (CAST
 -- !query
 SELECT cast(1 as smallint) > cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as smallint) > cast(cast(null as string) as smallint)) AS (CAST(1 AS SMALLINT) > CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as smallint) as bigint) > cast(cast(null as string) as bigint)) AS (CAST(1 AS SMALLINT) > CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -626,7 +938,7 @@ Project [(cast(1 as smallint) > cast(cast(null as string) as smallint)) AS (CAST
 -- !query
 SELECT cast(1 as smallint) >= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as smallint) >= cast(cast(null as string) as smallint)) AS (CAST(1 AS SMALLINT) >= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as smallint) as bigint) >= cast(cast(null as string) as bigint)) AS (CAST(1 AS SMALLINT) >= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -637,7 +949,7 @@ Project [(cast(1 as smallint) >= cast(cast(null as string) as smallint)) AS (CAS
 -- !query
 SELECT cast(1 as smallint) < cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as smallint) < cast(cast(null as string) as smallint)) AS (CAST(1 AS SMALLINT) < CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as smallint) as bigint) < cast(cast(null as string) as bigint)) AS (CAST(1 AS SMALLINT) < CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -648,7 +960,7 @@ Project [(cast(1 as smallint) < cast(cast(null as string) as smallint)) AS (CAST
 -- !query
 SELECT cast(1 as smallint) <= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as smallint) <= cast(cast(null as string) as smallint)) AS (CAST(1 AS SMALLINT) <= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as smallint) as bigint) <= cast(cast(null as string) as bigint)) AS (CAST(1 AS SMALLINT) <= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -659,7 +971,7 @@ Project [(cast(1 as smallint) <= cast(cast(null as string) as smallint)) AS (CAS
 -- !query
 SELECT cast(1 as smallint) <> cast(null as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as smallint) = cast(cast(null as string) as smallint)) AS (NOT (CAST(1 AS SMALLINT) = CAST(NULL AS STRING)))#x]
+Project [NOT (cast(cast(1 as smallint) as bigint) = cast(cast(null as string) as bigint)) AS (NOT (CAST(1 AS SMALLINT) = CAST(NULL AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -670,7 +982,7 @@ Project [NOT (cast(1 as smallint) = cast(cast(null as string) as smallint)) AS (
 -- !query
 SELECT '1' = cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(1 as smallint) = cast(1 as smallint)) AS (1 = CAST(1 AS SMALLINT))#x]
+Project [(cast(1 as bigint) = cast(cast(1 as smallint) as bigint)) AS (1 = CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -681,7 +993,7 @@ Project [(cast(1 as smallint) = cast(1 as smallint)) AS (1 = CAST(1 AS SMALLINT)
 -- !query
 SELECT '2' > cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(2 as smallint) > cast(1 as smallint)) AS (2 > CAST(1 AS SMALLINT))#x]
+Project [(cast(2 as bigint) > cast(cast(1 as smallint) as bigint)) AS (2 > CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -692,7 +1004,7 @@ Project [(cast(2 as smallint) > cast(1 as smallint)) AS (2 > CAST(1 AS SMALLINT)
 -- !query
 SELECT '2' >= cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(2 as smallint) >= cast(1 as smallint)) AS (2 >= CAST(1 AS SMALLINT))#x]
+Project [(cast(2 as bigint) >= cast(cast(1 as smallint) as bigint)) AS (2 >= CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -703,7 +1015,7 @@ Project [(cast(2 as smallint) >= cast(1 as smallint)) AS (2 >= CAST(1 AS SMALLIN
 -- !query
 SELECT '2' < cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(2 as smallint) < cast(1 as smallint)) AS (2 < CAST(1 AS SMALLINT))#x]
+Project [(cast(2 as bigint) < cast(cast(1 as smallint) as bigint)) AS (2 < CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -714,7 +1026,7 @@ Project [(cast(2 as smallint) < cast(1 as smallint)) AS (2 < CAST(1 AS SMALLINT)
 -- !query
 SELECT '2' <= cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(2 as smallint) <= cast(1 as smallint)) AS (2 <= CAST(1 AS SMALLINT))#x]
+Project [(cast(2 as bigint) <= cast(cast(1 as smallint) as bigint)) AS (2 <= CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -725,7 +1037,7 @@ Project [(cast(2 as smallint) <= cast(1 as smallint)) AS (2 <= CAST(1 AS SMALLIN
 -- !query
 SELECT '2' <> cast(1 as smallint) FROM t
 -- !query analysis
-Project [NOT (cast(2 as smallint) = cast(1 as smallint)) AS (NOT (2 = CAST(1 AS SMALLINT)))#x]
+Project [NOT (cast(2 as bigint) = cast(cast(1 as smallint) as bigint)) AS (NOT (2 = CAST(1 AS SMALLINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -736,7 +1048,7 @@ Project [NOT (cast(2 as smallint) = cast(1 as smallint)) AS (NOT (2 = CAST(1 AS 
 -- !query
 SELECT cast(null as string) = cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as smallint) = cast(1 as smallint)) AS (CAST(NULL AS STRING) = CAST(1 AS SMALLINT))#x]
+Project [(cast(cast(null as string) as bigint) = cast(cast(1 as smallint) as bigint)) AS (CAST(NULL AS STRING) = CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -747,7 +1059,7 @@ Project [(cast(cast(null as string) as smallint) = cast(1 as smallint)) AS (CAST
 -- !query
 SELECT cast(null as string) > cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as smallint) > cast(1 as smallint)) AS (CAST(NULL AS STRING) > CAST(1 AS SMALLINT))#x]
+Project [(cast(cast(null as string) as bigint) > cast(cast(1 as smallint) as bigint)) AS (CAST(NULL AS STRING) > CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -758,7 +1070,7 @@ Project [(cast(cast(null as string) as smallint) > cast(1 as smallint)) AS (CAST
 -- !query
 SELECT cast(null as string) >= cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as smallint) >= cast(1 as smallint)) AS (CAST(NULL AS STRING) >= CAST(1 AS SMALLINT))#x]
+Project [(cast(cast(null as string) as bigint) >= cast(cast(1 as smallint) as bigint)) AS (CAST(NULL AS STRING) >= CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -769,7 +1081,7 @@ Project [(cast(cast(null as string) as smallint) >= cast(1 as smallint)) AS (CAS
 -- !query
 SELECT cast(null as string) < cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as smallint) < cast(1 as smallint)) AS (CAST(NULL AS STRING) < CAST(1 AS SMALLINT))#x]
+Project [(cast(cast(null as string) as bigint) < cast(cast(1 as smallint) as bigint)) AS (CAST(NULL AS STRING) < CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -780,7 +1092,7 @@ Project [(cast(cast(null as string) as smallint) < cast(1 as smallint)) AS (CAST
 -- !query
 SELECT cast(null as string) <= cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as smallint) <= cast(1 as smallint)) AS (CAST(NULL AS STRING) <= CAST(1 AS SMALLINT))#x]
+Project [(cast(cast(null as string) as bigint) <= cast(cast(1 as smallint) as bigint)) AS (CAST(NULL AS STRING) <= CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -791,7 +1103,7 @@ Project [(cast(cast(null as string) as smallint) <= cast(1 as smallint)) AS (CAS
 -- !query
 SELECT cast(null as string) <> cast(1 as smallint) FROM t
 -- !query analysis
-Project [NOT (cast(cast(null as string) as smallint) = cast(1 as smallint)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS SMALLINT)))#x]
+Project [NOT (cast(cast(null as string) as bigint) = cast(cast(1 as smallint) as bigint)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS SMALLINT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -802,7 +1114,7 @@ Project [NOT (cast(cast(null as string) as smallint) = cast(1 as smallint)) AS (
 -- !query
 SELECT cast(1 as int) = '1' FROM t
 -- !query analysis
-Project [(cast(1 as int) = cast(1 as int)) AS (CAST(1 AS INT) = 1)#x]
+Project [(cast(cast(1 as int) as bigint) = cast(1 as bigint)) AS (CAST(1 AS INT) = 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -813,7 +1125,7 @@ Project [(cast(1 as int) = cast(1 as int)) AS (CAST(1 AS INT) = 1)#x]
 -- !query
 SELECT cast(1 as int) > '2' FROM t
 -- !query analysis
-Project [(cast(1 as int) > cast(2 as int)) AS (CAST(1 AS INT) > 2)#x]
+Project [(cast(cast(1 as int) as bigint) > cast(2 as bigint)) AS (CAST(1 AS INT) > 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -824,7 +1136,7 @@ Project [(cast(1 as int) > cast(2 as int)) AS (CAST(1 AS INT) > 2)#x]
 -- !query
 SELECT cast(1 as int) >= '2' FROM t
 -- !query analysis
-Project [(cast(1 as int) >= cast(2 as int)) AS (CAST(1 AS INT) >= 2)#x]
+Project [(cast(cast(1 as int) as bigint) >= cast(2 as bigint)) AS (CAST(1 AS INT) >= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -835,7 +1147,7 @@ Project [(cast(1 as int) >= cast(2 as int)) AS (CAST(1 AS INT) >= 2)#x]
 -- !query
 SELECT cast(1 as int) < '2' FROM t
 -- !query analysis
-Project [(cast(1 as int) < cast(2 as int)) AS (CAST(1 AS INT) < 2)#x]
+Project [(cast(cast(1 as int) as bigint) < cast(2 as bigint)) AS (CAST(1 AS INT) < 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -846,7 +1158,7 @@ Project [(cast(1 as int) < cast(2 as int)) AS (CAST(1 AS INT) < 2)#x]
 -- !query
 SELECT cast(1 as int) <= '2' FROM t
 -- !query analysis
-Project [(cast(1 as int) <= cast(2 as int)) AS (CAST(1 AS INT) <= 2)#x]
+Project [(cast(cast(1 as int) as bigint) <= cast(2 as bigint)) AS (CAST(1 AS INT) <= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -857,7 +1169,7 @@ Project [(cast(1 as int) <= cast(2 as int)) AS (CAST(1 AS INT) <= 2)#x]
 -- !query
 SELECT cast(1 as int) <> '2' FROM t
 -- !query analysis
-Project [NOT (cast(1 as int) = cast(2 as int)) AS (NOT (CAST(1 AS INT) = 2))#x]
+Project [NOT (cast(cast(1 as int) as bigint) = cast(2 as bigint)) AS (NOT (CAST(1 AS INT) = 2))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -868,7 +1180,7 @@ Project [NOT (cast(1 as int) = cast(2 as int)) AS (NOT (CAST(1 AS INT) = 2))#x]
 -- !query
 SELECT cast(1 as int) = cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as int) = cast(cast(null as string) as int)) AS (CAST(1 AS INT) = CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as int) as bigint) = cast(cast(null as string) as bigint)) AS (CAST(1 AS INT) = CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -879,7 +1191,7 @@ Project [(cast(1 as int) = cast(cast(null as string) as int)) AS (CAST(1 AS INT)
 -- !query
 SELECT cast(1 as int) > cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as int) > cast(cast(null as string) as int)) AS (CAST(1 AS INT) > CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as int) as bigint) > cast(cast(null as string) as bigint)) AS (CAST(1 AS INT) > CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -890,7 +1202,7 @@ Project [(cast(1 as int) > cast(cast(null as string) as int)) AS (CAST(1 AS INT)
 -- !query
 SELECT cast(1 as int) >= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as int) >= cast(cast(null as string) as int)) AS (CAST(1 AS INT) >= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as int) as bigint) >= cast(cast(null as string) as bigint)) AS (CAST(1 AS INT) >= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -901,7 +1213,7 @@ Project [(cast(1 as int) >= cast(cast(null as string) as int)) AS (CAST(1 AS INT
 -- !query
 SELECT cast(1 as int) < cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as int) < cast(cast(null as string) as int)) AS (CAST(1 AS INT) < CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as int) as bigint) < cast(cast(null as string) as bigint)) AS (CAST(1 AS INT) < CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -912,7 +1224,7 @@ Project [(cast(1 as int) < cast(cast(null as string) as int)) AS (CAST(1 AS INT)
 -- !query
 SELECT cast(1 as int) <= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as int) <= cast(cast(null as string) as int)) AS (CAST(1 AS INT) <= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as int) as bigint) <= cast(cast(null as string) as bigint)) AS (CAST(1 AS INT) <= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -923,7 +1235,7 @@ Project [(cast(1 as int) <= cast(cast(null as string) as int)) AS (CAST(1 AS INT
 -- !query
 SELECT cast(1 as int) <> cast(null as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as int) = cast(cast(null as string) as int)) AS (NOT (CAST(1 AS INT) = CAST(NULL AS STRING)))#x]
+Project [NOT (cast(cast(1 as int) as bigint) = cast(cast(null as string) as bigint)) AS (NOT (CAST(1 AS INT) = CAST(NULL AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -934,7 +1246,7 @@ Project [NOT (cast(1 as int) = cast(cast(null as string) as int)) AS (NOT (CAST(
 -- !query
 SELECT '1' = cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(1 as int) = cast(1 as int)) AS (1 = CAST(1 AS INT))#x]
+Project [(cast(1 as bigint) = cast(cast(1 as int) as bigint)) AS (1 = CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -945,7 +1257,7 @@ Project [(cast(1 as int) = cast(1 as int)) AS (1 = CAST(1 AS INT))#x]
 -- !query
 SELECT '2' > cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(2 as int) > cast(1 as int)) AS (2 > CAST(1 AS INT))#x]
+Project [(cast(2 as bigint) > cast(cast(1 as int) as bigint)) AS (2 > CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -956,7 +1268,7 @@ Project [(cast(2 as int) > cast(1 as int)) AS (2 > CAST(1 AS INT))#x]
 -- !query
 SELECT '2' >= cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(2 as int) >= cast(1 as int)) AS (2 >= CAST(1 AS INT))#x]
+Project [(cast(2 as bigint) >= cast(cast(1 as int) as bigint)) AS (2 >= CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -967,7 +1279,7 @@ Project [(cast(2 as int) >= cast(1 as int)) AS (2 >= CAST(1 AS INT))#x]
 -- !query
 SELECT '2' < cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(2 as int) < cast(1 as int)) AS (2 < CAST(1 AS INT))#x]
+Project [(cast(2 as bigint) < cast(cast(1 as int) as bigint)) AS (2 < CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -978,7 +1290,7 @@ Project [(cast(2 as int) < cast(1 as int)) AS (2 < CAST(1 AS INT))#x]
 -- !query
 SELECT '2' <> cast(1 as int) FROM t
 -- !query analysis
-Project [NOT (cast(2 as int) = cast(1 as int)) AS (NOT (2 = CAST(1 AS INT)))#x]
+Project [NOT (cast(2 as bigint) = cast(cast(1 as int) as bigint)) AS (NOT (2 = CAST(1 AS INT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -989,7 +1301,7 @@ Project [NOT (cast(2 as int) = cast(1 as int)) AS (NOT (2 = CAST(1 AS INT)))#x]
 -- !query
 SELECT '2' <= cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(2 as int) <= cast(1 as int)) AS (2 <= CAST(1 AS INT))#x]
+Project [(cast(2 as bigint) <= cast(cast(1 as int) as bigint)) AS (2 <= CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1000,7 +1312,7 @@ Project [(cast(2 as int) <= cast(1 as int)) AS (2 <= CAST(1 AS INT))#x]
 -- !query
 SELECT cast(null as string) = cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as int) = cast(1 as int)) AS (CAST(NULL AS STRING) = CAST(1 AS INT))#x]
+Project [(cast(cast(null as string) as bigint) = cast(cast(1 as int) as bigint)) AS (CAST(NULL AS STRING) = CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1011,7 +1323,7 @@ Project [(cast(cast(null as string) as int) = cast(1 as int)) AS (CAST(NULL AS S
 -- !query
 SELECT cast(null as string) > cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as int) > cast(1 as int)) AS (CAST(NULL AS STRING) > CAST(1 AS INT))#x]
+Project [(cast(cast(null as string) as bigint) > cast(cast(1 as int) as bigint)) AS (CAST(NULL AS STRING) > CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1022,7 +1334,7 @@ Project [(cast(cast(null as string) as int) > cast(1 as int)) AS (CAST(NULL AS S
 -- !query
 SELECT cast(null as string) >= cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as int) >= cast(1 as int)) AS (CAST(NULL AS STRING) >= CAST(1 AS INT))#x]
+Project [(cast(cast(null as string) as bigint) >= cast(cast(1 as int) as bigint)) AS (CAST(NULL AS STRING) >= CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1033,7 +1345,7 @@ Project [(cast(cast(null as string) as int) >= cast(1 as int)) AS (CAST(NULL AS 
 -- !query
 SELECT cast(null as string) < cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as int) < cast(1 as int)) AS (CAST(NULL AS STRING) < CAST(1 AS INT))#x]
+Project [(cast(cast(null as string) as bigint) < cast(cast(1 as int) as bigint)) AS (CAST(NULL AS STRING) < CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1044,7 +1356,7 @@ Project [(cast(cast(null as string) as int) < cast(1 as int)) AS (CAST(NULL AS S
 -- !query
 SELECT cast(null as string) <> cast(1 as int) FROM t
 -- !query analysis
-Project [NOT (cast(cast(null as string) as int) = cast(1 as int)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS INT)))#x]
+Project [NOT (cast(cast(null as string) as bigint) = cast(cast(1 as int) as bigint)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS INT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1055,7 +1367,7 @@ Project [NOT (cast(cast(null as string) as int) = cast(1 as int)) AS (NOT (CAST(
 -- !query
 SELECT cast(null as string) <= cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as int) <= cast(1 as int)) AS (CAST(NULL AS STRING) <= CAST(1 AS INT))#x]
+Project [(cast(cast(null as string) as bigint) <= cast(cast(1 as int) as bigint)) AS (CAST(NULL AS STRING) <= CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1330,7 +1642,7 @@ Project [NOT (cast(cast(null as string) as bigint) = cast(1 as bigint)) AS (NOT 
 -- !query
 SELECT cast(1 as decimal(10, 0)) = '1' FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = 1)#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) = cast(1 as double)) AS (CAST(1 AS DECIMAL(10,0)) = 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1341,7 +1653,7 @@ Project [(cast(1 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (CAST(1 AS DEC
 -- !query
 SELECT cast(1 as decimal(10, 0)) > '2' FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) > cast(2 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) > 2)#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) > cast(2 as double)) AS (CAST(1 AS DECIMAL(10,0)) > 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1352,7 +1664,7 @@ Project [(cast(1 as decimal(10,0)) > cast(2 as decimal(10,0))) AS (CAST(1 AS DEC
 -- !query
 SELECT cast(1 as decimal(10, 0)) >= '2' FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) >= cast(2 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) >= 2)#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) >= cast(2 as double)) AS (CAST(1 AS DECIMAL(10,0)) >= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1363,7 +1675,7 @@ Project [(cast(1 as decimal(10,0)) >= cast(2 as decimal(10,0))) AS (CAST(1 AS DE
 -- !query
 SELECT cast(1 as decimal(10, 0)) < '2' FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) < cast(2 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) < 2)#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) < cast(2 as double)) AS (CAST(1 AS DECIMAL(10,0)) < 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1374,7 +1686,7 @@ Project [(cast(1 as decimal(10,0)) < cast(2 as decimal(10,0))) AS (CAST(1 AS DEC
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> '2' FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(10,0)) = cast(2 as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = 2))#x]
+Project [NOT (cast(cast(1 as decimal(10,0)) as double) = cast(2 as double)) AS (NOT (CAST(1 AS DECIMAL(10,0)) = 2))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1385,7 +1697,7 @@ Project [NOT (cast(1 as decimal(10,0)) = cast(2 as decimal(10,0))) AS (NOT (CAST
 -- !query
 SELECT cast(1 as decimal(10, 0)) <= '2' FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <= cast(2 as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <= 2)#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) <= cast(2 as double)) AS (CAST(1 AS DECIMAL(10,0)) <= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1396,7 +1708,7 @@ Project [(cast(1 as decimal(10,0)) <= cast(2 as decimal(10,0))) AS (CAST(1 AS DE
 -- !query
 SELECT cast(1 as decimal(10, 0)) = cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) = cast(cast(null as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) = cast(cast(null as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) = CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1407,7 +1719,7 @@ Project [(cast(1 as decimal(10,0)) = cast(cast(null as string) as decimal(10,0))
 -- !query
 SELECT cast(1 as decimal(10, 0)) > cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) > cast(cast(null as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) > CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) > cast(cast(null as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) > CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1418,7 +1730,7 @@ Project [(cast(1 as decimal(10,0)) > cast(cast(null as string) as decimal(10,0))
 -- !query
 SELECT cast(1 as decimal(10, 0)) >= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) >= cast(cast(null as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) >= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) >= cast(cast(null as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) >= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1429,7 +1741,7 @@ Project [(cast(1 as decimal(10,0)) >= cast(cast(null as string) as decimal(10,0)
 -- !query
 SELECT cast(1 as decimal(10, 0)) < cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) < cast(cast(null as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) < CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) < cast(cast(null as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) < CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1440,7 +1752,7 @@ Project [(cast(1 as decimal(10,0)) < cast(cast(null as string) as decimal(10,0))
 -- !query
 SELECT cast(1 as decimal(10, 0)) <> cast(null as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as decimal(10,0)) = cast(cast(null as string) as decimal(10,0))) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(NULL AS STRING)))#x]
+Project [NOT (cast(cast(1 as decimal(10,0)) as double) = cast(cast(null as string) as double)) AS (NOT (CAST(1 AS DECIMAL(10,0)) = CAST(NULL AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1451,7 +1763,7 @@ Project [NOT (cast(1 as decimal(10,0)) = cast(cast(null as string) as decimal(10
 -- !query
 SELECT cast(1 as decimal(10, 0)) <= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <= cast(cast(null as string) as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as decimal(10,0)) as double) <= cast(cast(null as string) as double)) AS (CAST(1 AS DECIMAL(10,0)) <= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1462,7 +1774,7 @@ Project [(cast(1 as decimal(10,0)) <= cast(cast(null as string) as decimal(10,0)
 -- !query
 SELECT '1' = cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (1 = CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(1 as double) = cast(cast(1 as decimal(10,0)) as double)) AS (1 = CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1473,7 +1785,7 @@ Project [(cast(1 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (1 = CAST(1 AS
 -- !query
 SELECT '2' > cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(2 as decimal(10,0)) > cast(1 as decimal(10,0))) AS (2 > CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(2 as double) > cast(cast(1 as decimal(10,0)) as double)) AS (2 > CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1484,7 +1796,7 @@ Project [(cast(2 as decimal(10,0)) > cast(1 as decimal(10,0))) AS (2 > CAST(1 AS
 -- !query
 SELECT '2' >= cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(2 as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (2 >= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(2 as double) >= cast(cast(1 as decimal(10,0)) as double)) AS (2 >= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1495,7 +1807,7 @@ Project [(cast(2 as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (2 >= CAST(1 
 -- !query
 SELECT '2' < cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(2 as decimal(10,0)) < cast(1 as decimal(10,0))) AS (2 < CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(2 as double) < cast(cast(1 as decimal(10,0)) as double)) AS (2 < CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1506,7 +1818,7 @@ Project [(cast(2 as decimal(10,0)) < cast(1 as decimal(10,0))) AS (2 < CAST(1 AS
 -- !query
 SELECT '2' <= cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(2 as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (2 <= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(2 as double) <= cast(cast(1 as decimal(10,0)) as double)) AS (2 <= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1517,7 +1829,7 @@ Project [(cast(2 as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (2 <= CAST(1 
 -- !query
 SELECT '2' <> cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [NOT (cast(2 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (2 = CAST(1 AS DECIMAL(10,0))))#x]
+Project [NOT (cast(2 as double) = cast(cast(1 as decimal(10,0)) as double)) AS (NOT (2 = CAST(1 AS DECIMAL(10,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1528,7 +1840,7 @@ Project [NOT (cast(2 as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (2 = 
 -- !query
 SELECT cast(null as string) = cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (CAST(NULL AS STRING) = CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(null as string) as double) = cast(cast(1 as decimal(10,0)) as double)) AS (CAST(NULL AS STRING) = CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1539,7 +1851,7 @@ Project [(cast(cast(null as string) as decimal(10,0)) = cast(1 as decimal(10,0))
 -- !query
 SELECT cast(null as string) > cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as decimal(10,0)) > cast(1 as decimal(10,0))) AS (CAST(NULL AS STRING) > CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(null as string) as double) > cast(cast(1 as decimal(10,0)) as double)) AS (CAST(NULL AS STRING) > CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1550,7 +1862,7 @@ Project [(cast(cast(null as string) as decimal(10,0)) > cast(1 as decimal(10,0))
 -- !query
 SELECT cast(null as string) >= cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as decimal(10,0)) >= cast(1 as decimal(10,0))) AS (CAST(NULL AS STRING) >= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(null as string) as double) >= cast(cast(1 as decimal(10,0)) as double)) AS (CAST(NULL AS STRING) >= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1561,7 +1873,7 @@ Project [(cast(cast(null as string) as decimal(10,0)) >= cast(1 as decimal(10,0)
 -- !query
 SELECT cast(null as string) < cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as decimal(10,0)) < cast(1 as decimal(10,0))) AS (CAST(NULL AS STRING) < CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(null as string) as double) < cast(cast(1 as decimal(10,0)) as double)) AS (CAST(NULL AS STRING) < CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1572,7 +1884,7 @@ Project [(cast(cast(null as string) as decimal(10,0)) < cast(1 as decimal(10,0))
 -- !query
 SELECT cast(null as string) <= cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as decimal(10,0)) <= cast(1 as decimal(10,0))) AS (CAST(NULL AS STRING) <= CAST(1 AS DECIMAL(10,0)))#x]
+Project [(cast(cast(null as string) as double) <= cast(cast(1 as decimal(10,0)) as double)) AS (CAST(NULL AS STRING) <= CAST(1 AS DECIMAL(10,0)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1583,7 +1895,7 @@ Project [(cast(cast(null as string) as decimal(10,0)) <= cast(1 as decimal(10,0)
 -- !query
 SELECT cast(null as string) <> cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [NOT (cast(cast(null as string) as decimal(10,0)) = cast(1 as decimal(10,0))) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS DECIMAL(10,0))))#x]
+Project [NOT (cast(cast(null as string) as double) = cast(cast(1 as decimal(10,0)) as double)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS DECIMAL(10,0))))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1858,7 +2170,7 @@ Project [NOT (cast(cast(null as string) as double) = cast(1 as double)) AS (NOT 
 -- !query
 SELECT cast(1 as float) = '1' FROM t
 -- !query analysis
-Project [(cast(1 as float) = cast(1 as float)) AS (CAST(1 AS FLOAT) = 1)#x]
+Project [(cast(cast(1 as float) as double) = cast(1 as double)) AS (CAST(1 AS FLOAT) = 1)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1869,7 +2181,7 @@ Project [(cast(1 as float) = cast(1 as float)) AS (CAST(1 AS FLOAT) = 1)#x]
 -- !query
 SELECT cast(1 as float) > '2' FROM t
 -- !query analysis
-Project [(cast(1 as float) > cast(2 as float)) AS (CAST(1 AS FLOAT) > 2)#x]
+Project [(cast(cast(1 as float) as double) > cast(2 as double)) AS (CAST(1 AS FLOAT) > 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1880,7 +2192,7 @@ Project [(cast(1 as float) > cast(2 as float)) AS (CAST(1 AS FLOAT) > 2)#x]
 -- !query
 SELECT cast(1 as float) >= '2' FROM t
 -- !query analysis
-Project [(cast(1 as float) >= cast(2 as float)) AS (CAST(1 AS FLOAT) >= 2)#x]
+Project [(cast(cast(1 as float) as double) >= cast(2 as double)) AS (CAST(1 AS FLOAT) >= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1891,7 +2203,7 @@ Project [(cast(1 as float) >= cast(2 as float)) AS (CAST(1 AS FLOAT) >= 2)#x]
 -- !query
 SELECT cast(1 as float) < '2' FROM t
 -- !query analysis
-Project [(cast(1 as float) < cast(2 as float)) AS (CAST(1 AS FLOAT) < 2)#x]
+Project [(cast(cast(1 as float) as double) < cast(2 as double)) AS (CAST(1 AS FLOAT) < 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1902,7 +2214,7 @@ Project [(cast(1 as float) < cast(2 as float)) AS (CAST(1 AS FLOAT) < 2)#x]
 -- !query
 SELECT cast(1 as float) <= '2' FROM t
 -- !query analysis
-Project [(cast(1 as float) <= cast(2 as float)) AS (CAST(1 AS FLOAT) <= 2)#x]
+Project [(cast(cast(1 as float) as double) <= cast(2 as double)) AS (CAST(1 AS FLOAT) <= 2)#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1913,7 +2225,7 @@ Project [(cast(1 as float) <= cast(2 as float)) AS (CAST(1 AS FLOAT) <= 2)#x]
 -- !query
 SELECT cast(1 as float) <> '2' FROM t
 -- !query analysis
-Project [NOT (cast(1 as float) = cast(2 as float)) AS (NOT (CAST(1 AS FLOAT) = 2))#x]
+Project [NOT (cast(cast(1 as float) as double) = cast(2 as double)) AS (NOT (CAST(1 AS FLOAT) = 2))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1924,7 +2236,7 @@ Project [NOT (cast(1 as float) = cast(2 as float)) AS (NOT (CAST(1 AS FLOAT) = 2
 -- !query
 SELECT cast(1 as float) = cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as float) = cast(cast(null as string) as float)) AS (CAST(1 AS FLOAT) = CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as float) as double) = cast(cast(null as string) as double)) AS (CAST(1 AS FLOAT) = CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1935,7 +2247,7 @@ Project [(cast(1 as float) = cast(cast(null as string) as float)) AS (CAST(1 AS 
 -- !query
 SELECT cast(1 as float) > cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as float) > cast(cast(null as string) as float)) AS (CAST(1 AS FLOAT) > CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as float) as double) > cast(cast(null as string) as double)) AS (CAST(1 AS FLOAT) > CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1946,7 +2258,7 @@ Project [(cast(1 as float) > cast(cast(null as string) as float)) AS (CAST(1 AS 
 -- !query
 SELECT cast(1 as float) >= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as float) >= cast(cast(null as string) as float)) AS (CAST(1 AS FLOAT) >= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as float) as double) >= cast(cast(null as string) as double)) AS (CAST(1 AS FLOAT) >= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1957,7 +2269,7 @@ Project [(cast(1 as float) >= cast(cast(null as string) as float)) AS (CAST(1 AS
 -- !query
 SELECT cast(1 as float) < cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as float) < cast(cast(null as string) as float)) AS (CAST(1 AS FLOAT) < CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as float) as double) < cast(cast(null as string) as double)) AS (CAST(1 AS FLOAT) < CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1968,7 +2280,7 @@ Project [(cast(1 as float) < cast(cast(null as string) as float)) AS (CAST(1 AS 
 -- !query
 SELECT cast(1 as float) <= cast(null as string) FROM t
 -- !query analysis
-Project [(cast(1 as float) <= cast(cast(null as string) as float)) AS (CAST(1 AS FLOAT) <= CAST(NULL AS STRING))#x]
+Project [(cast(cast(1 as float) as double) <= cast(cast(null as string) as double)) AS (CAST(1 AS FLOAT) <= CAST(NULL AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1979,7 +2291,7 @@ Project [(cast(1 as float) <= cast(cast(null as string) as float)) AS (CAST(1 AS
 -- !query
 SELECT cast(1 as float) <> cast(null as string) FROM t
 -- !query analysis
-Project [NOT (cast(1 as float) = cast(cast(null as string) as float)) AS (NOT (CAST(1 AS FLOAT) = CAST(NULL AS STRING)))#x]
+Project [NOT (cast(cast(1 as float) as double) = cast(cast(null as string) as double)) AS (NOT (CAST(1 AS FLOAT) = CAST(NULL AS STRING)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1990,7 +2302,7 @@ Project [NOT (cast(1 as float) = cast(cast(null as string) as float)) AS (NOT (C
 -- !query
 SELECT '1' = cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(1 as float) = cast(1 as float)) AS (1 = CAST(1 AS FLOAT))#x]
+Project [(cast(1 as double) = cast(cast(1 as float) as double)) AS (1 = CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2001,7 +2313,7 @@ Project [(cast(1 as float) = cast(1 as float)) AS (1 = CAST(1 AS FLOAT))#x]
 -- !query
 SELECT '2' > cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(2 as float) > cast(1 as float)) AS (2 > CAST(1 AS FLOAT))#x]
+Project [(cast(2 as double) > cast(cast(1 as float) as double)) AS (2 > CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2012,7 +2324,7 @@ Project [(cast(2 as float) > cast(1 as float)) AS (2 > CAST(1 AS FLOAT))#x]
 -- !query
 SELECT '2' >= cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(2 as float) >= cast(1 as float)) AS (2 >= CAST(1 AS FLOAT))#x]
+Project [(cast(2 as double) >= cast(cast(1 as float) as double)) AS (2 >= CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2023,7 +2335,7 @@ Project [(cast(2 as float) >= cast(1 as float)) AS (2 >= CAST(1 AS FLOAT))#x]
 -- !query
 SELECT '2' < cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(2 as float) < cast(1 as float)) AS (2 < CAST(1 AS FLOAT))#x]
+Project [(cast(2 as double) < cast(cast(1 as float) as double)) AS (2 < CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2034,7 +2346,7 @@ Project [(cast(2 as float) < cast(1 as float)) AS (2 < CAST(1 AS FLOAT))#x]
 -- !query
 SELECT '2' <= cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(2 as float) <= cast(1 as float)) AS (2 <= CAST(1 AS FLOAT))#x]
+Project [(cast(2 as double) <= cast(cast(1 as float) as double)) AS (2 <= CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2045,7 +2357,7 @@ Project [(cast(2 as float) <= cast(1 as float)) AS (2 <= CAST(1 AS FLOAT))#x]
 -- !query
 SELECT '2' <> cast(1 as float) FROM t
 -- !query analysis
-Project [NOT (cast(2 as float) = cast(1 as float)) AS (NOT (2 = CAST(1 AS FLOAT)))#x]
+Project [NOT (cast(2 as double) = cast(cast(1 as float) as double)) AS (NOT (2 = CAST(1 AS FLOAT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2056,7 +2368,7 @@ Project [NOT (cast(2 as float) = cast(1 as float)) AS (NOT (2 = CAST(1 AS FLOAT)
 -- !query
 SELECT cast(null as string) = cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as float) = cast(1 as float)) AS (CAST(NULL AS STRING) = CAST(1 AS FLOAT))#x]
+Project [(cast(cast(null as string) as double) = cast(cast(1 as float) as double)) AS (CAST(NULL AS STRING) = CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2067,7 +2379,7 @@ Project [(cast(cast(null as string) as float) = cast(1 as float)) AS (CAST(NULL 
 -- !query
 SELECT cast(null as string) > cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as float) > cast(1 as float)) AS (CAST(NULL AS STRING) > CAST(1 AS FLOAT))#x]
+Project [(cast(cast(null as string) as double) > cast(cast(1 as float) as double)) AS (CAST(NULL AS STRING) > CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2078,7 +2390,7 @@ Project [(cast(cast(null as string) as float) > cast(1 as float)) AS (CAST(NULL 
 -- !query
 SELECT cast(null as string) >= cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as float) >= cast(1 as float)) AS (CAST(NULL AS STRING) >= CAST(1 AS FLOAT))#x]
+Project [(cast(cast(null as string) as double) >= cast(cast(1 as float) as double)) AS (CAST(NULL AS STRING) >= CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2089,7 +2401,7 @@ Project [(cast(cast(null as string) as float) >= cast(1 as float)) AS (CAST(NULL
 -- !query
 SELECT cast(null as string) < cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as float) < cast(1 as float)) AS (CAST(NULL AS STRING) < CAST(1 AS FLOAT))#x]
+Project [(cast(cast(null as string) as double) < cast(cast(1 as float) as double)) AS (CAST(NULL AS STRING) < CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2100,7 +2412,7 @@ Project [(cast(cast(null as string) as float) < cast(1 as float)) AS (CAST(NULL 
 -- !query
 SELECT cast(null as string) <= cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(cast(null as string) as float) <= cast(1 as float)) AS (CAST(NULL AS STRING) <= CAST(1 AS FLOAT))#x]
+Project [(cast(cast(null as string) as double) <= cast(cast(1 as float) as double)) AS (CAST(NULL AS STRING) <= CAST(1 AS FLOAT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2111,7 +2423,7 @@ Project [(cast(cast(null as string) as float) <= cast(1 as float)) AS (CAST(NULL
 -- !query
 SELECT cast(null as string) <> cast(1 as float) FROM t
 -- !query analysis
-Project [NOT (cast(cast(null as string) as float) = cast(1 as float)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS FLOAT)))#x]
+Project [NOT (cast(cast(null as string) as double) = cast(cast(1 as float) as double)) AS (NOT (CAST(NULL AS STRING) = CAST(1 AS FLOAT)))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]

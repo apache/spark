@@ -171,6 +171,76 @@ table t
 table t
 |> select y, length(y) + sum(x) as result;
 
+-- EXTEND operators: positive tests.
+------------------------------------
+
+-- Extending with a constant.
+table t
+|> extend 1 as z;
+
+-- Extending without an explicit alias.
+table t
+|> extend 1;
+
+-- Extending with an attribute.
+table t
+|> extend x as z;
+
+-- Extending with an expression.
+table t
+|> extend x + length(y) as z;
+
+-- Extending two times.
+table t
+|> extend x + length(y) as z, x + 1 as zz;
+
+-- Extending two times in sequence.
+table t
+|> extend x + length(y) as z
+|> extend z + 1 as zz;
+
+-- Extending with a struct field.
+select col from st
+|> extend col.i1 as z;
+
+-- Extending with a subquery.
+table t
+|> extend (select a from other where x = a limit 1) as z;
+
+-- Extending with a correlated reference.
+table t
+|> where exists (
+    table other
+    |> extend t.x
+    |> select * except (a, b));
+
+-- Extending with a column name that already exists in the input relation.
+table t
+|> extend 1 as x;
+
+-- Window functions are allowed in the pipe operator EXTEND list.
+table t
+|> extend first_value(x) over (partition by y) as result;
+
+-- Lateral column aliases in the pipe operator EXTEND list.
+table t
+|> extend x + length(y) as z, z + 1 as plus_one;
+
+-- EXTEND operators: negative tests.
+------------------------------------
+
+-- Aggregations are not allowed.
+table t
+|> extend sum(x) as z;
+
+-- DISTINCT is not supported.
+table t
+|> extend distinct x as z;
+
+-- EXTEND * is not supported.
+table t
+|> extend *;
+
 -- WHERE operators: positive tests.
 -----------------------------------
 
@@ -548,7 +618,8 @@ values (0, 'abc') tab(x, y)
 
 -- Union distinct with a VALUES list.
 values (0, 1) tab(x, y)
-|> union table t;
+|> union table t
+|> where x = 0;
 
 -- Union all with a table subquery on both the source and target sides.
 (select * from t)
@@ -737,17 +808,16 @@ select 1 x, 3 z
 |> aggregate count(*) group by x, z, x
 |> select x;
 
--- Grouping expressions are allowed in the aggregate functions list if they appear separately in the
--- GROUP BY clause.
-table other
-|> aggregate a group by a;
-
 -- Aggregate expressions may contain a mix of aggregate functions and grouping expressions.
 table other
 |> aggregate a + count(b) group by a;
 
 -- Aggregation operators: negative tests.
 -----------------------------------------
+
+-- All aggregate expressions must contain at least one aggregate function.
+table other
+|> aggregate a group by a;
 
 -- GROUP BY ALL is not currently supported.
 select 3 as x, 4 as y
@@ -813,11 +883,6 @@ select 1 x, 2 y, 3 z
 |> aggregate count(*) AS c, sum(x) AS x group by x
 |> where c = 1
 |> where x = 1;
-
--- Aggregate expressions may not contain references to columns or expressions not otherwise listed
--- in the GROUP BY clause.
-table other
-|> aggregate b group by a;
 
 -- WINDOW operators (within SELECT): positive tests.
 ---------------------------------------------------
