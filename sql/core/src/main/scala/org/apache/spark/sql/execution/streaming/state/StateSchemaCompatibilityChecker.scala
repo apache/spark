@@ -38,7 +38,8 @@ case class StateSchemaValidationResult(
     schemaPath: String
 )
 
-/** An Avro-based encoder used for serializing between UnsafeRow and Avro
+/**
+ * An Avro-based encoder used for serializing between UnsafeRow and Avro
  *  byte arrays in RocksDB state stores.
  *
  * This encoder is primarily utilized by [[RocksDBStateStoreProvider]] and [[RocksDBStateEncoder]]
