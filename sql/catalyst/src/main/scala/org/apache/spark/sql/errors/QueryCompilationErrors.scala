@@ -1055,11 +1055,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def functionAndOrderExpressionMismatchError(
       functionName: String,
+      functionArg: Expression,
       orderExpr: Seq[SortOrder]): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
       messageParameters = Map(
         "funcName" -> toSQLId(functionName),
+        "funcArg" -> toSQLExpr(functionArg),
         "orderingExpr" -> orderExpr.map(order => toSQLExpr(order.child)).mkString(", ")))
   }
 
