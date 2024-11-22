@@ -33,7 +33,7 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 # Launching Spark on YARN
 
-Apache Hadoop does not support Java 17 as of 3.4.0, while Apache Spark requires at least Java 17 since 4.0.0, so a different JDK should be configured for Spark applications.
+Apache Hadoop does not support Java 17 as of 3.4.1, while Apache Spark requires at least Java 17 since 4.0.0, so a different JDK should be configured for Spark applications.
 Please refer to [Configuring different JDKs for Spark Applications](#configuring-different-jdks-for-spark-applications) for details.
 
 Ensure that `HADOOP_CONF_DIR` or `YARN_CONF_DIR` points to the directory which contains the (client side) configuration files for the Hadoop cluster.

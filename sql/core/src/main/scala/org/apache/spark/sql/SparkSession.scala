@@ -20,9 +20,9 @@ package org.apache.spark.sql
 import java.net.URI
 import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
@@ -134,13 +134,33 @@ class SparkSession private(
   private[sql] lazy val sessionJobTag = s"spark-session-$sessionUUID"
 
   /**
+   * A UUID that is unique on the thread level. Used by managedJobTags to make sure that a same
+   * tag from two threads does not overlap in the underlying SparkContext/SQLExecution.
+   */
+  private[sql] lazy val threadUuid = new InheritableThreadLocal[String] {
+    override def childValue(parent: String): String = parent
+
+    override def initialValue(): String = UUID.randomUUID().toString
+  }
+
+  /**
    * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
-   * Real tag have the current session ID attached: `"tag1" -> s"spark-session-$sessionUUID-tag1"`.
+   * Real tag have the current session ID attached:
+   *   tag1 -> spark-session-$sessionUUID-thread-$threadUuid-tag1
+   *
    */
   @transient
-  private[sql] lazy val managedJobTags: ConcurrentHashMap[String, String] = {
-    new ConcurrentHashMap(parentManagedJobTags.asJava)
-  }
+  private[sql] lazy val managedJobTags = new InheritableThreadLocal[mutable.Map[String, String]] {
+      override def childValue(parent: mutable.Map[String, String]): mutable.Map[String, String] = {
+        // Note: make a clone such that changes in the parent tags aren't reflected in
+        // those of the children threads.
+        parent.clone()
+      }
+
+      override def initialValue(): mutable.Map[String, String] = {
+        mutable.Map(parentManagedJobTags.toSeq: _*)
+      }
+    }
 
   /** @inheritdoc */
   def version: String = SPARK_VERSION
@@ -243,10 +263,10 @@ class SparkSession private(
       Some(sessionState),
       extensions,
       Map.empty,
-      managedJobTags.asScala.toMap)
+      managedJobTags.get().toMap)
     result.sessionState // force copy of SessionState
     result.sessionState.artifactManager // force copy of ArtifactManager and its resources
-    result.managedJobTags // force copy of userDefinedToRealTagsMap
+    result.managedJobTags // force copy of managedJobTags
     result
   }
 
@@ -550,17 +570,17 @@ class SparkSession private(
   /** @inheritdoc */
   override def addTag(tag: String): Unit = {
     SparkContext.throwIfInvalidTag(tag)
-    managedJobTags.put(tag, s"spark-session-$sessionUUID-$tag")
+    managedJobTags.get().put(tag, s"spark-session-$sessionUUID-thread-${threadUuid.get()}-$tag")
   }
 
   /** @inheritdoc */
-  override def removeTag(tag: String): Unit = managedJobTags.remove(tag)
+  override def removeTag(tag: String): Unit = managedJobTags.get().remove(tag)
 
   /** @inheritdoc */
-  override def getTags(): Set[String] = managedJobTags.keys().asScala.toSet
+  override def getTags(): Set[String] = managedJobTags.get().keySet.toSet
 
   /** @inheritdoc */
-  override def clearTags(): Unit = managedJobTags.clear()
+  override def clearTags(): Unit = managedJobTags.get().clear()
 
   /**
    * Request to interrupt all currently running SQL operations of this session.
@@ -589,9 +609,8 @@ class SparkSession private(
    * @since 4.0.0
    */
   override def interruptTag(tag: String): Seq[String] = {
-    val realTag = managedJobTags.get(tag)
-    if (realTag == null) return Seq.empty
-    doInterruptTag(realTag, s"part of cancelled job tags $tag")
+    val realTag = managedJobTags.get().get(tag)
+    realTag.map(doInterruptTag(_, s"part of cancelled job tags $tag")).getOrElse(Seq.empty)
   }
 
   private def doInterruptTag(tag: String, reason: String): Seq[String] = {

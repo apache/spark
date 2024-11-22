@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
 
 /**
  * Tests for [[ProtobufSerializer]] and [[ProtobufDeserializer]] with a more specific focus on
@@ -37,12 +38,12 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   import ProtoSerdeSuite.MatchType._
 
   private val testFileDescFile = protobufDescriptorFile("serde_suite.desc")
-  private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
+  private val testFileDesc = CommonProtobufUtils.readDescriptorFileContent(testFileDescFile)
 
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
 
   private val proto2DescFile = protobufDescriptorFile("proto2_messages.desc")
-  private val proto2Desc = ProtobufUtils.readDescriptorFileContent(proto2DescFile)
+  private val proto2Desc = CommonProtobufUtils.readDescriptorFileContent(proto2DescFile)
 
   test("Test basic conversion") {
     withFieldMatchType { fieldMatch =>
@@ -215,7 +216,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
     val e1 = intercept[AnalysisException] {
       ProtobufUtils.buildDescriptor(
-        ProtobufUtils.readDescriptorFileContent(fileDescFile),
+        CommonProtobufUtils.readDescriptorFileContent(fileDescFile),
         "SerdeBasicMessage"
       )
     }
@@ -225,7 +226,7 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
       condition = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR")
 
     val basicMessageDescWithoutImports = descriptorSetWithoutImports(
-      ProtobufUtils.readDescriptorFileContent(
+      CommonProtobufUtils.readDescriptorFileContent(
         protobufDescriptorFile("basicmessage.desc")
       ),
       "BasicMessage"
