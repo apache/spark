@@ -565,11 +565,14 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
   extends TernaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   def this(child: Expression, pairDelim: Expression) = {
-    this(child, pairDelim, Literal(":"))
+    this(child, pairDelim, Literal.create(":", SQLConf.get.defaultStringType))
   }
 
   def this(child: Expression) = {
-    this(child, Literal(","), Literal(":"))
+    this(
+      child,
+      Literal.create(",", SQLConf.get.defaultStringType),
+      Literal.create(":", SQLConf.get.defaultStringType))
   }
 
   override def stateful: Boolean = true

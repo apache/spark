@@ -624,17 +624,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 = COLLATE('a', 'UTF8_BINARY')"),
         Seq(Row("a")))
 
-      // fail with implicit mismatch, as function return should be considered implicit
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"SELECT c1 FROM $tableName " +
-            s"WHERE c1 = SUBSTR(COLLATE('a', 'UNICODE'), 0)")
-        },
-        condition = "COLLATION_MISMATCH.IMPLICIT",
-        parameters = Map(
-          "implicitTypes" -> """"STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE""""
-        )
-      )
+      // explicit collation propagates up
+      checkAnswer(
+        sql(s"SELECT c1 FROM $tableName " +
+          s"WHERE c1 = SUBSTR(COLLATE('a', 'UNICODE'), 0)"),
+        Row("a"))
 
       // in operator
       checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 IN ('a')"),
@@ -757,9 +751,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       )
 
       // concat + in
-      checkAnswer(sql(s"SELECT c1 FROM $tableName WHERE c1 || COLLATE('a', 'UTF8_BINARY') IN " +
-        s"(COLLATE('aa', 'UNICODE'))"),
-        Seq(Row("a")))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT c1 FROM $tableName where c1 || COLLATE('a', 'UTF8_BINARY') IN " +
+            s"(COLLATE('aa', 'UNICODE'))")
+        },
+        condition = "COLLATION_MISMATCH.EXPLICIT",
+        parameters = Map(
+          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
+        )
+      )
 
       // array creation supports implicit casting
       checkAnswer(sql(s"SELECT typeof(array('a' COLLATE UNICODE, 'b')[1])"),
@@ -780,9 +781,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         exception = intercept[AnalysisException] {
           sql(s"SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI)")
         },
-        condition = "COLLATION_MISMATCH.IMPLICIT",
+        condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
-          "implicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI""""
+          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI""""
         )
       )
 
@@ -792,6 +793,15 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql("SELECT array_join(array('a', 'b' collate UNICODE_RTRIM), 'c' " +
           "collate UNICODE_CI_RTRIM)"),
         Seq(Row("acb")))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)")
+        },
+        condition = "COLLATION_MISMATCH.EXPLICIT",
+        parameters = Map(
+          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI""""
+        )
+      )
     }
   }
 
@@ -865,26 +875,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         sql(
           """EXECUTE IMMEDIATE stmtStr2 USING
             | 'a' AS var1;""".stripMargin),
-        Seq(Row("UNICODE"))
-      )
-    }
-  }
-
-  test("SPARK-47692: Parameter markers with variable mapping") {
-    checkAnswer(
-      spark.sql(
-        "SELECT collation(:var1 || :var2)",
-        Map("var1" -> Literal.create('a', StringType("UTF8_BINARY")),
-            "var2" -> Literal.create('b', StringType("UNICODE")))),
-      Seq(Row("UTF8_BINARY"))
-    )
-
-    withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkAnswer(
-        spark.sql(
-          "SELECT collation(:var1 || :var2)",
-          Map("var1" -> Literal.create('a', StringType("UTF8_BINARY")),
-              "var2" -> Literal.create('b', StringType("UNICODE")))),
         Seq(Row("UNICODE"))
       )
     }

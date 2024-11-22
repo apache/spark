@@ -127,7 +127,6 @@
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>4.28.3</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
-    <yarn.version>${hadoop.version}</yarn.version>
     <zookeeper.version>3.9.3</zookeeper.version>
     <curator.version>5.7.1</curator.version>
     <hive.group>org.apache.hive</hive.group>
@@ -135,7 +134,7 @@
     <!-- Version used in Maven Hive dependency -->
     <hive.version>2.3.10</hive.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>3.8.1</kafka.version>
+    <kafka.version>3.9.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.14.4</parquet.version>
@@ -188,7 +187,7 @@
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.17.1</commons-codec.version>
     <commons-compress.version>1.27.1</commons-compress.version>
-    <commons-io.version>2.17.0</commons-io.version>
+    <commons-io.version>2.18.0</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -1418,7 +1417,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client-minicluster</artifactId>
-        <version>${yarn.version}</version>
+        <version>${hadoop.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- End of Hadoop 3.x dependencies -->

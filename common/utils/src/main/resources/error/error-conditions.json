@@ -965,7 +965,7 @@
       },
       "RANGE_FRAME_INVALID_TYPE" : {
         "message" : [
-          "The data type <orderSpecType> used in the order specification does not match the data type <valueBoundaryType> which is used in the range frame."
+          "The data type <orderSpecType> used in the order specification does not support the data type <valueBoundaryType> which is used in the range frame."
         ]
       },
       "RANGE_FRAME_MULTI_ORDER" : {
@@ -2774,12 +2774,6 @@
     },
     "sqlState" : "42K0E"
   },
-  "INVALID_LOCATION" : {
-    "message" : [
-      "The location name cannot be an invalid URI, but `<location>` was given."
-    ],
-    "sqlState" : "42K05"
-  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -4001,9 +3995,15 @@
     ],
     "sqlState" : "42K03"
   },
-  "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION" : {
+  "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
-      "Aggregate function <expr> is not allowed when using the pipe operator |> SELECT clause; please use the pipe operator |> AGGREGATE clause instead"
+      "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "Aggregate function <expr> is not allowed when using the pipe operator |> <clause> clause; please use the pipe operator |> AGGREGATE clause instead."
     ],
     "sqlState" : "0A000"
   },
@@ -5376,6 +5376,11 @@
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
+      "SQL_SCRIPTING" : {
+        "message" : [
+          "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
+        ]
+      },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
         "message" : [
           "Creating multiple column families with <stateStoreProvider> is not supported."
@@ -5552,6 +5557,12 @@
       }
     },
     "sqlState" : "42902"
+  },
+  "UNSUPPORTED_PARTITION_TRANSFORM" : {
+    "message" : [
+      "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
@@ -7089,11 +7100,6 @@
   "_LEGACY_ERROR_TEMP_2066" : {
     "message" : [
       "Invalid namespace name: <namespace>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2067" : {
-    "message" : [
-      "Unsupported partition transform: <transform>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2068" : {
