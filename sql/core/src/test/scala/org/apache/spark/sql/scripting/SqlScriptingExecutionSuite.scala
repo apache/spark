@@ -31,7 +31,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Output from the interpreter (iterator over executable statements) is then checked - statements
  *   are executed and output DataFrames are compared with expected outputs.
  */
-class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
+class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
   // Tests setup
   override protected def sparkConf: SparkConf = {
@@ -39,25 +39,19 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   }
 
   // Helpers
-  private def runSqlScript(sqlText: String): Array[DataFrame] = {
-    val interpreter = SqlScriptingInterpreter()
+  private def runSqlScript(sqlText: String): Array[Row] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody, spark)
-    executionPlan.flatMap {
-      case statement: SingleStatementExec =>
-        if (statement.isExecuted) {
-          None
-        } else {
-          Some(Dataset.ofRows(spark, statement.parsedPlan, new QueryPlanningTracker))
-        }
-      case _ => None
-    }.toArray
+    val sse = new SqlScriptingExecution(compoundBody, spark)
+    sse.flatMap { df => df.collect() }.toArray
   }
 
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
     val result = runSqlScript(sqlText)
     assert(result.length == expected.length)
-    result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
+    result.zip(expected).foreach {
+      case (actualAnswer, expectedAnswer) =>
+        assert(actualAnswer.sameElements(expectedAnswer))
+    }
   }
 
   // Tests
@@ -182,14 +176,14 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val e = intercept[AnalysisException] {
       val sqlScript =
         s"""
-          |BEGIN
-          | BEGIN
-          |   DECLARE $varName = 1;
-          |   SELECT $varName;
-          | END;
-          | SELECT $varName;
-          |END
-          |""".stripMargin
+           |BEGIN
+           | BEGIN
+           |   DECLARE $varName = 1;
+           |   SELECT $varName;
+           | END;
+           | SELECT $varName;
+           |END
+           |""".stripMargin
       verifySqlScriptResult(sqlScript, Seq.empty)
     }
     checkError(

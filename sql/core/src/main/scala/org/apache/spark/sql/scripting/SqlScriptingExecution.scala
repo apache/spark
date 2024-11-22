@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 
 /**
@@ -30,7 +30,7 @@ class SqlScriptingExecution(
   private val executionPlan: Iterator[CompoundStatementExec] =
     SqlScriptingInterpreter().buildExecutionPlan(sqlScript, session)
 
-  private var current = if (executionPlan.hasNext) Some(executionPlan.next()) else None
+  private var current = getNextResult
 
   override def hasNext: Boolean = {
     current.isDefined
@@ -40,19 +40,38 @@ class SqlScriptingExecution(
     if (!hasNext) {
       throw new NoSuchElementException("No more statements to execute")
     }
-    moveCurrentToNextResult()
-    current.get.asInstanceOf[SingleStatementExec].buildDataFrame(session)
+    val res = current.get.asInstanceOf[SingleStatementExec].buildDataFrame(session)
+    current = getNextResult
+    res
   }
 
-  private def moveCurrentToNextResult(): Unit = {
-    while (current.isDefined && !current.get.isResult) {
-      current.get match {
-        case exec: SingleStatementExec =>
-          exec.buildDataFrame(session).collect()
-        case _ => // Do nothing
+  private def getNextResult: Option[CompoundStatementExec] = {
+    var currentStatement = if (executionPlan.hasNext) Some(executionPlan.next()) else None
+    while (currentStatement.isDefined && !currentStatement.get.isResult) {
+      currentStatement match {
+        case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>
+          withErrorHandling() {
+            stmt.buildDataFrame(session).collect()
+          }
+        case _ => // pass
       }
-      current = if (executionPlan.hasNext) Some(executionPlan.next()) else None
+      currentStatement = if (executionPlan.hasNext) Some(executionPlan.next()) else None
+    }
+    currentStatement
+  }
+
+  private def handleException(e: Exception): Unit = {
+    // Rethrow the exception
+    // TODO: SPARK-48353 Add error handling for SQL scripts
+    throw e
+  }
+
+  def withErrorHandling()(f: => Unit): Unit = {
+    try {
+      f
+    } catch {
+      case e: Exception =>
+        handleException(e)
     }
   }
-
 }

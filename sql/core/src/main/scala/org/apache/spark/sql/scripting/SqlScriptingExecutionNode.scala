@@ -82,7 +82,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
-      val df = Dataset.ofRows(session, statement.parsedPlan)
+      val df = statement.buildDataFrame(session)
       df.schema.fields match {
         case Array(field) if field.dataType == BooleanType =>
           df.limit(2).collect() match {
