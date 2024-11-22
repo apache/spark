@@ -2078,8 +2078,8 @@ abstract class JsonSuite
             .option("mode", "FAILFAST")
             .json(path)
         },
-        condition = "_LEGACY_ERROR_TEMP_2167",
-        parameters = Map("failFastMode" -> "FAILFAST", "dataType" -> "string|bigint"))
+        condition = "INVALID_JSON_RECORD_TYPE",
+        parameters = Map("failFastMode" -> "FAILFAST", "invalidType" -> "\"STRING\"|\"BIGINT\""))
 
       val ex = intercept[SparkException] {
         spark.read

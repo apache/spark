@@ -363,5 +363,20 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       queryContext =
         Array(ExpectedContext(fragment = "outer", callSitePattern = getCurrentClassCallSitePattern))
     )
+
+    // Missing `outer()` for another outer
+    val exception3 = intercept[AnalysisException] {
+      spark.table("l").select(
+        $"a",
+        spark.table("r").where($"b" === $"a".outer()).select(sum($"d")).scalar()
+      ).collect()
+    }
+    checkError(
+      exception3,
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`b`", "proposal" -> "`c`, `d`"),
+      queryContext =
+        Array(ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
+    )
   }
 }
