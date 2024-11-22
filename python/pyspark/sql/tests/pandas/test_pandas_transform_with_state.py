@@ -775,7 +775,7 @@ class TransformWithStateInPandasTestsMixin:
             .transformWithStateInPandas(
                 statefulProcessor=stateful_processor,
                 outputStructType=output_schema,
-                outputMode="Update",
+                outputMode="Append",
                 timeMode=timeMode,
                 eventTimeColumnName="outputTimestamp",
             )
@@ -783,7 +783,7 @@ class TransformWithStateInPandasTestsMixin:
             .count()
             .writeStream.queryName("chaining_ops_query")
             .foreachBatch(check_results)
-            .outputMode("update")
+            .outputMode("append")
             .start()
         )
 

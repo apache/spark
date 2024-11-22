@@ -103,6 +103,7 @@ object UnsupportedOperationChecker extends Logging {
     case d: Deduplicate if d.isStreaming && d.keys.exists(hasEventTimeCol) => true
     case d: DeduplicateWithinWatermark if d.isStreaming => true
     case t: TransformWithState if t.isStreaming => true
+    case t: TransformWithStateInPandas if t.isStreaming => true
     case _ => false
   }
 
