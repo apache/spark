@@ -695,6 +695,21 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
       )
 
+      // different explicit collations are set
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |SELECT c1 FROM $tableName
+               |WHERE COLLATE('a', 'UTF8_BINARY') = COLLATE('a', 'UNICODE')"""
+              .stripMargin)
+        },
+        condition = "COLLATION_MISMATCH.EXPLICIT",
+        parameters = Map(
+          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
+        )
+      )
+
       // in operator has different collations
       checkError(
         exception = intercept[AnalysisException] {
@@ -772,6 +787,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       )
 
       checkAnswer(sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)"),
+        Seq(Row("acb")))
+      checkAnswer(
+        sql("SELECT array_join(array('a', 'b' collate UNICODE_RTRIM), 'c' " +
+          "collate UNICODE_CI_RTRIM)"),
         Seq(Row("acb")))
     }
   }

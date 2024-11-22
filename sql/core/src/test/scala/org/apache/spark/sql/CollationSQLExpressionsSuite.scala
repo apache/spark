@@ -2718,7 +2718,10 @@ class CollationSQLExpressionsSuite
         "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary", true),
       ReflectExpressions("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary",
         "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary", false),
-
+      ReflectExpressions("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary_rtrim",
+        "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary_rtrim", true),
+      ReflectExpressions("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary_rtrim",
+        "A5Cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_binary_rtrim", false),
       ReflectExpressions("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
         "a5cf6c42-0c85-418f-af6c-3e4e5b1328f2", "utf8_lcase", true),
       ReflectExpressions("A5cf6C42-0C85-418f-af6c-3E4E5b1328f2", "utf8_binary",
@@ -3457,22 +3460,22 @@ class CollationSQLExpressionsSuite
     )
 
     val testCases = Seq(
-      HyperLogLogPlusPlusTestCase("utf8_binary", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
-        "aA", "Aa", "aa"), Seq(Row(10))),
-      HyperLogLogPlusPlusTestCase("utf8_binary_rtrim", Seq("a", "a", "A", "z", "zz", "ZZ", "w",
+      HyperLogLogPlusPlusTestCase("utf8_binary", Seq("a", "a", "A", "z", "zz", "ZZ", "w",
         "AA", "aA", "Aa", "aa"), Seq(Row(10))),
+      HyperLogLogPlusPlusTestCase("utf8_binary_rtrim", Seq("a ", "a", "a", "A", "z", "zz", "ZZ",
+        "w", "AA", "aA", "Aa", "aa"), Seq(Row(10))),
       HyperLogLogPlusPlusTestCase("utf8_lcase", Seq("a", "a", "A", "z", "zz", "ZZ", "w",
         "AA", "aA", "Aa", "aa"), Seq(Row(5))),
-      HyperLogLogPlusPlusTestCase("utf8_lcase_rtrim", Seq("a", "a", "A", "z", "zz", "ZZ", "w",
+      HyperLogLogPlusPlusTestCase("utf8_lcase_rtrim", Seq("a ", "a", "a", "A", "z", "zz", "ZZ", "w",
         "AA", "aA", "Aa", "aa"), Seq(Row(5))),
       HyperLogLogPlusPlusTestCase("UNICODE", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
         "aA", "Aa", "aa"), Seq(Row(9))),
-      HyperLogLogPlusPlusTestCase("UNICODE_RTRIM", Seq("a ", "a", "A", "z", "zz", "ZZ", "w", "AA",
-        "aA", "Aa", "aa"), Seq(Row(9))),
+      HyperLogLogPlusPlusTestCase("UNICODE_RTRIM", Seq("a ", "a", "a", "A", "z", "zz", "ZZ", "w",
+        "AA", "aA", "Aa", "aa"), Seq(Row(9))),
       HyperLogLogPlusPlusTestCase("UNICODE_CI", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
         "aA", "Aa", "aa"), Seq(Row(5))),
-      HyperLogLogPlusPlusTestCase("UNICODE_CI_RTRIM", Seq("a", "a", "A", "z", "zz", "ZZ", "w", "AA",
-        "aA", "Aa", "aa"), Seq(Row(5)))
+      HyperLogLogPlusPlusTestCase("UNICODE_CI_RTRIM", Seq("a ", "a", "a", "A", "z", "zz", "ZZ", "w",
+        "AA", "aA", "Aa", "aa"), Seq(Row(5)))
     )
 
     testCases.foreach( t => {
