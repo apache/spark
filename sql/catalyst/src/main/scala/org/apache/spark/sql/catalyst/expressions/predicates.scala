@@ -459,7 +459,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
         errorSubClass = "DATA_DIFF_TYPES",
         messageParameters = Map(
           "functionName" -> toSQLId(prettyName),
-          "dataType" -> children.map(child => toSQLType(child.dataType)).mkString("[", ", ", "]")
+          "dataType" -> children.map(child => toSQLType(child.dataType)).("[", ", ", "]")
         )
       )
     } else {
@@ -487,7 +487,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     }
   }
 
-  override def toString: String = s"$value IN ${list.mkString("(", ",", ")")}"
+  override def toString: String = s"$value IN ${list.("(", ",", ")")}"
 
   override def eval(input: InternalRow): Any = {
     if (list.isEmpty && !legacyNullInEmptyBehavior) {
@@ -610,7 +610,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def toString: String = {
     if (!child.resolved) {
-      return s"$child INSET " + hset.toSeq.mkString(", ")
+      return s"$child INSET " + hset.toSeq.mkString("(", ", ", ")")
     }
     val listString = hset.toSeq
       .map(elem => Literal(elem, child.dataType).toString)
