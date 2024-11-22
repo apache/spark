@@ -94,6 +94,7 @@ private[spark] abstract class RestSubmissionServer(
    */
   private def doStart(startPort: Int): (Server, Int) = {
     val threadPool = new QueuedThreadPool(masterConf.get(MASTER_REST_SERVER_MAX_THREADS))
+    threadPool.setName(getClass().getSimpleName())
     if (Utils.isJavaVersionAtLeast21 && masterConf.get(MASTER_REST_SERVER_VIRTUAL_THREADS)) {
       val newVirtualThreadPerTaskExecutor =
         classOf[Executors].getMethod("newVirtualThreadPerTaskExecutor")
