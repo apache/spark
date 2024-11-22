@@ -609,9 +609,6 @@ class SparkSession:
                 ).cast(arrow_schema)
 
         elif isinstance(data, pa.Table):
-            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
-
-
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = data.column_names
