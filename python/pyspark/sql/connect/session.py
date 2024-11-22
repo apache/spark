@@ -522,10 +522,10 @@ class SparkSession:
             "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
             "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
         )
+        timezone = configs["spark.sql.session.timeZone"]
+        prefer_timestamp = configs["spark.sql.timestampType"]
 
         _table: Optional[pa.Table] = None
-        timezone: Optional[str] = configs["spark.sql.session.timeZone"]
-        prefer_timestamp = configs["spark.sql.timestampType"]
 
         if isinstance(data, pd.DataFrame):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
