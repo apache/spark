@@ -97,7 +97,7 @@ trait TTLState {
   def metrics: Map[String, SQLMetric] = Map.empty
 
   private final val TTL_INDEX = "$ttl_" + stateName
-  private final val TTL_INDEX_KEY_SCHEMA = getSingleKeyTTLRowSchema(elementKeySchema)
+  private final val TTL_INDEX_KEY_SCHEMA = getTTLRowKeySchema(elementKeySchema)
   private final val TTL_EMPTY_VALUE_ROW_SCHEMA: StructType =
     StructType(Array(StructField("__empty__", NullType)))
 

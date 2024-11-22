@@ -30,23 +30,42 @@ import org.apache.spark.sql.types._
  * files and to be passed into `RocksDBStateKey(/Value)Encoder`.
  */
 object TransformWithStateKeyValueRowSchemaUtils {
+  /**
+   * Creates a schema that is the concatenation of the grouping key and a user-defined
+   * key. This is used by MapState to create a composite key that is then treated as
+   * an "elementKey" by OneToOneTTLState.
+   */
   def getCompositeKeySchema(
       groupingKeySchema: StructType,
       userKeySchema: StructType): StructType = {
     new StructType()
-      .add("groupingKey", new StructType(groupingKeySchema.fields))
+      .add("key", new StructType(groupingKeySchema.fields))
       .add("userKey", new StructType(userKeySchema.fields))
   }
 
-  def getSingleKeyTTLRowSchema(keySchema: StructType): StructType =
+  /**
+   * Represents the schema of keys in the TTL index, managed by TTLState implementations.
+   * There is no value associated with entries in the TTL index, so there is no method
+   * called, for example, getTTLValueSchema.
+   */
+  def getTTLRowKeySchema(keySchema: StructType): StructType =
     new StructType()
       .add("expirationMs", LongType)
       .add("elementKey", keySchema)
 
+  /**
+   * Represents the schema of a single long value, which is used to store the expiration
+   * timestamp of elements in the minimum index, managed by OneToManyTTLState.
+   */
   def getExpirationMsRowSchema(): StructType =
     new StructType()
       .add("expirationMs", LongType)
 
+  /**
+   * Represents the schema of an element with TTL in the primary index. We store the expiration
+   * of each value along with the value itself, since each value has its own TTL. It is used as
+   * the value schema of every value, for every stateful variable.
+   */
   def getValueSchemaWithTTL(schema: StructType, hasTTL: Boolean): StructType = {
     if (hasTTL) {
       new StructType()
@@ -238,8 +257,7 @@ class CompositeKeyStateEncoder[K, V](
 /** Class for TTL with single key serialization */
 class TTLEncoder(schema: StructType) {
 
-  private val ttlKeyProjection = UnsafeProjection.create(
-    getSingleKeyTTLRowSchema(schema))
+  private val ttlKeyProjection = UnsafeProjection.create(getTTLRowKeySchema(schema))
 
   // Take a groupingKey UnsafeRow and turn it into a (expirationMs, groupingKey) UnsafeRow.
   def encodeTTLRow(expirationMs: Long, elementKey: UnsafeRow): UnsafeRow = {

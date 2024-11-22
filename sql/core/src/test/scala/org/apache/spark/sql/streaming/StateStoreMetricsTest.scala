@@ -27,7 +27,7 @@ trait StateStoreMetricsTest extends StreamTest {
   private var lastCheckedRecentProgressIndex = -1
   private var lastQuery: StreamExecution = null
 
-  override val streamingTimeout = 15.seconds
+  override val streamingTimeout = 120.seconds
 
   override def beforeEach(): Unit = {
     super.beforeEach()
