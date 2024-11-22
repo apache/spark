@@ -48,7 +48,7 @@ DataFrame API and fully declarative.
 
 <p style="text-align: center;">
   <img src="img/extending-spark-connect.png" title="Figure 1: Architecture" alt="Extending Spark
-Connect Diagram" />
+Connect Diagram"/>
 </p>
 Spark Server Libraries extend Spark. They typically provide additional server-side logic integrated
 with Spark, which is exposed to client applications as part of the Spark Connect API, using Spark
@@ -105,15 +105,17 @@ library.
 A Spark Server Library consists of the following components, illustrated in Fig. 2:
 
 1. The Spark Connect protocol extension (blue box _Proto_ API)
-2. A Spark Connect Plugin…
-3. … with the application logic that extends Spark
+2. A Spark Connect Plugin.
+3. The application logic that extends Spark.
 4. The client package that exposes the Spark Server Library application logic to the Spark Client
 Application, alongside PySpark or the Scala Spark Client. 
 <p style="text-align: center;">
   <img src="img/extending-spark-connect-labelled.png" title="Figure 2: Labelled Architecture" alt="Extending Spark
-Connect Diagram - Labelled Steps" />
+Connect Diagram - Labelled Steps"/>
 </p> 
+
 #### (1) Spark Connect Protocol Extension
+
 To extend Spark with a new Spark Server Library, developers can extend the three main operation
 types in the Spark Connect protocol: _Relation_, _Expression_, and _Command_. 
 
@@ -152,7 +154,8 @@ message ExamplePluginExpression {
   Expression child = 1;
   string custom_field = 2;
 }
-{% endhighlight %} 
+{% endhighlight %}
+
 #### (2) Spark Connect Plugin implementation with (3) custom application logic
 
 As a next step, the developer implements the _ExpressionPlugin_ class of Spark Connect with custom
@@ -213,24 +216,25 @@ with the expression applied.
 
 {% highlight python %}
 from pyspark.sql.connect.column import Expression
-from myxample.proto import ExamplePluginExpression
 import pyspark.sql.connect.proto as proto
+
+from myxample.proto import ExamplePluginExpression
 
 # Internal class that satisfies the interface by the Python client
 # of Spark Connect to generate the protobuf representation from
 # an instance of the expression.
 class ExampleExpression(Expression):
-	def to_plan(self, session) -> proto.Expression:
-		fun = proto.Expression()
-		plugin = ExamplePluginExpression()
-		plugin.child.literal.long = 10
-		plugin.custom_field = "example"
-		fun.extension.Pack(plugin)
-		return fun
+    def to_plan(self, session) -> proto.Expression:
+        fun = proto.Expression()
+        plugin = ExamplePluginExpression()
+        plugin.child.literal.long = 10
+        plugin.custom_field = "example"
+        fun.extension.Pack(plugin)
+        return fun
 
 # Defining the function to be used from the consumers.
 def example_expression(col: Column) -> Column:
-	return Column(ExampleExpression())
+    return Column(ExampleExpression())
 
 
 # Using the expression in the Spark Connect client code.
