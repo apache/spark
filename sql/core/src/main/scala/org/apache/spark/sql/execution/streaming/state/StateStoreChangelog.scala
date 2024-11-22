@@ -110,6 +110,8 @@ abstract class StateStoreChangelogWriter(
     compressedStream.writeUTF(s"v${version}")
   }
 
+  writeVersion()
+
   protected var backingFileStream: CancellableFSDataOutputStream =
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
@@ -169,6 +171,9 @@ class StateStoreChangelogWriterV1(
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
 
+  // Don't write version in V1
+  override def writeVersion(): Unit = {}
+
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
     compressedStream.writeInt(key.length)
@@ -224,9 +229,6 @@ class StateStoreChangelogWriterV2(
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def version: Short = 2
-
-  // append the version field to the changelog file starting from version 2
-  writeVersion()
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.PUT_RECORD)
@@ -293,7 +295,6 @@ class StateStoreChangelogWriterV3(
 
   override def version: Short = 3
 
-  writeVersion()
   // Also write lineage information to the changelog, it should appear
   // in the second line for v3 because the first line is the version
   writeLineage(stateStoreCheckpointIdLineage)
@@ -336,7 +337,7 @@ class StateStoreChangelogWriterV4(
 class StateStoreChangelogReaderFactory(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec) {
+    compressionCodec: CompressionCodec) extends Logging{
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
@@ -368,13 +369,18 @@ class StateStoreChangelogReaderFactory(
    * @return StateStoreChangelogReader
    */
   def constructChangelogReader(): StateStoreChangelogReader = {
-    readVersion() match {
+    val reader = readVersion() match {
       case 1 => new StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec)
       case 2 => new StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec)
       case 3 => new StateStoreChangelogReaderV3(fm, fileToRead, compressionCodec)
       case 4 => new StateStoreChangelogReaderV4(fm, fileToRead, compressionCodec)
       case version => throw QueryExecutionErrors.invalidChangeLogReaderVersion(version)
     }
+
+    if (input != null) {
+      input.close()
+    }
+    reader
   }
 }
 
@@ -405,12 +411,18 @@ abstract class StateStoreChangelogReader(
   }
   protected val input: DataInputStream = decompressStream(sourceStream)
 
+  // This function is valid only when called upon initialization,
+  // because version is written in the first line only for version >= 2.
+  protected def readVersion(): String = input.readUTF()
+
   protected def verifyVersion(): Unit = {
     // ensure that the version read is correct, also updates file position
-    val changelogVersionStr = input.readUTF()
+    val changelogVersionStr = readVersion()
     assert(changelogVersionStr == s"v${version}",
       s"Changelog version mismatch: $changelogVersionStr != v${version}")
   }
+
+  verifyVersion()
 
   private def readLineage(): Array[LineageItem] = {
     assert(version >= 3,
@@ -443,6 +455,8 @@ class StateStoreChangelogReaderV1(
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
+
+  override protected def readVersion(): String = "v1"
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val keySize = input.readInt()
@@ -493,8 +507,6 @@ class StateStoreChangelogReaderV2(
 
   override def version: Short = 2
 
-  verifyVersion()
-
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())
     // A EOF_RECORD means end of file.
@@ -542,8 +554,6 @@ class StateStoreChangelogReaderV3(
   extends StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec) {
 
   override def version: Short = 3
-
-  verifyVersion()
 
   // If the changelogFile is written when state store checkpoint unique id is enabled
   // the first line would be the version and the second line would be the lineage.

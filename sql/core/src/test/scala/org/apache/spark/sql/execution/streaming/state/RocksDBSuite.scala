@@ -32,11 +32,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.rocksdb.CompressionType
 import org.scalactic.source.Position
+import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
 
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
@@ -165,7 +167,8 @@ trait AlsoTestWithChangelogCheckpointingEnabled
 }
 
 @SlowSQLTest
-class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
+class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession
+    with PrivateMethodTester {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
@@ -752,6 +755,35 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
     }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: changelog reader / writer " +
+    "failure cases") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    // Create a v1 writer
+    val changelogWriterV1 = fileManager.getChangeLogWriter(101)
+    assert(changelogWriterV1.version === 1)
+
+    (1 to 5).foreach(i => changelogWriterV1.put(i.toString, i.toString))
+    (2 to 4).foreach(j => changelogWriterV1.delete(j.toString))
+
+    changelogWriterV1.commit()
+    // Success case, when reading from the same file, a V1 reader should be constructed.
+    val changelogReaderV1 = fileManager.getChangelogReader(101)
+    assert(changelogReaderV1.version === 1)
+
+    // Failure case, force creating a V3 reader.
+    val dfsChangelogFile = PrivateMethod[Path](Symbol("dfsChangelogFile"))
+    val codec = PrivateMethod[CompressionCodec](Symbol("codec"))
+    val changelogFile = fileManager invokePrivate dfsChangelogFile(101L, None)
+    val compressionCodec = fileManager invokePrivate codec()
+    val fm = CheckpointFileManager.create(new Path(dfsRootDir.getAbsolutePath), new Configuration)
+    val e = intercept[AssertionError] {
+      new StateStoreChangelogReaderV3(fm, changelogFile, compressionCodec)
+    }
+    assert(e.getMessage.contains("Changelog version mismatch"))
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog " +

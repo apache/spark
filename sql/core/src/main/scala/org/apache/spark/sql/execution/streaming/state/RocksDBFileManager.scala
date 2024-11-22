@@ -202,6 +202,10 @@ class RocksDBFileManager(
       case _ =>
         throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
     }
+
+    logInfo(log"Loaded change log reader version " +
+      log"${MDC(LogKeys.FILE_VERSION, changelogWriter.version)}")
+
     changelogWriter
   }
 
@@ -211,7 +215,12 @@ class RocksDBFileManager(
       useColumnFamilies: Boolean = false,
       checkpointUniqueId: Option[String] = None): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
-    new StateStoreChangelogReaderFactory(fm, changelogFile, codec).constructChangelogReader()
+    val reader = new StateStoreChangelogReaderFactory(fm, changelogFile, codec)
+      .constructChangelogReader()
+
+    logInfo(log"Loaded change log reader version ${MDC(LogKeys.FILE_VERSION, reader.version)}")
+
+    reader
   }
 
   /**
