@@ -662,6 +662,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         s"IN (COLLATE('aa', 'UTF8_LCASE'))"), Seq(Row("a"), Row("A")))
       checkAnswer(sql(s"SELECT c1 FROM $tableName where (c1 || 'a') " +
         s"IN (COLLATE('aa', 'UTF8_BINARY'))"), Seq(Row("a")))
+      checkAnswer(sql(s"SELECT c1 FROM $tableName where c1 || 'a' " +
+        s"IN (COLLATE('aa', 'UTF8_LCASE_RTRIM'))"), Seq(Row("a"), Row("A")))
+      checkAnswer(sql(s"SELECT c1 FROM $tableName where (c1 || 'a') " +
+        s"IN (COLLATE('aa', 'UTF8_BINARY_RTRIM'))"), Seq(Row("a")))
+
 
       // columns have different collation
       checkError(
@@ -671,21 +676,6 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         condition = "COLLATION_MISMATCH.IMPLICIT",
         parameters = Map(
           "implicitTypes" -> """"STRING COLLATE UTF8_LCASE", "STRING COLLATE UNICODE_CI""""
-        )
-      )
-
-      // different explicit collations are set
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(
-            s"""
-               |SELECT c1 FROM $tableName
-               |WHERE COLLATE('a', 'UTF8_BINARY') = COLLATE('a', 'UNICODE')"""
-              .stripMargin)
-        },
-        condition = "COLLATION_MISMATCH.EXPLICIT",
-        parameters = Map(
-          "explicitTypes" -> """"STRING", "STRING COLLATE UNICODE""""
         )
       )
 
@@ -787,12 +777,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         )
       )
 
-      checkAnswer(sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)"),
-        Seq(Row("acb")))
-      checkAnswer(
-        sql("SELECT array_join(array('a', 'b' collate UNICODE_RTRIM), 'c' " +
-          "collate UNICODE_CI_RTRIM)"),
-        Seq(Row("acb")))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI_RTRIM)")
+        },
+        condition = "COLLATION_MISMATCH.EXPLICIT",
+        parameters = Map(
+          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI_RTRIM""""
+        )
+      )
+
       checkError(
         exception = intercept[AnalysisException] {
           sql("SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)")
