@@ -155,17 +155,12 @@ class OptimizerLoggingSuite extends PlanTest {
   }
 
   test("SPARK-50329: toString for InSet should be valid for unresolved plan") {
-    withSQLConf(
-      SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO"
-    ) {
-      val input = LocalRelation($"a".int, $"b".string, $"c".double)
-      val inSetPredicate = InSet($"a", Set(1, 2))
-      val query = input.select($"a", $"b").where(inSetPredicate)
-      val analyzed = query.analyze
+    val input = LocalRelation($"a".int, $"b".string, $"c".double)
+    val inSetPredicate = InSet($"a", Set(1, 2))
+    val query = input.select($"a", $"b").where(inSetPredicate)
+    val analyzed = query.analyze
 
-      assert(query.toString.contains("'a INSET (values with unresolved data types)"))
-      assert(analyzed.toString.contains("INSET 1, 2"))
-      assert(!analyzed.toString.contains("unresolved"))
-    }
+    assert(query.toString.contains("'a INSET 1, 2"))
+    assert(analyzed.toString.contains("INSET 1, 2"))
   }
 }
