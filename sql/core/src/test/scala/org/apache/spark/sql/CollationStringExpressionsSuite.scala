@@ -198,8 +198,8 @@ class CollationStringExpressionsSuite
     checkError(
       exception = intercept[AnalysisException] {
         val expr = StringSplitSQL(
-          Collate(Literal.create("1a2"), scala.Right(ResolvedCollation("UTF8_BINARY"))),
-          Collate(Literal.create("a"), scala.Right(ResolvedCollation("UTF8_LCASE"))))
+          Collate(Literal.create("1a2"), ResolvedCollation("UTF8_BINARY")),
+          Collate(Literal.create("a"), ResolvedCollation("UTF8_LCASE")))
         CollationTypeCasts.transform(expr)
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",

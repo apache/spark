@@ -24,8 +24,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
-  private val UTF8_BINARY_COLLATION_NAME = scala.Right(ResolvedCollation("UTF8_BINARY"))
-  private val UTF8_LCASE_COLLATION_NAME = scala.Right(ResolvedCollation("UTF8_LCASE"))
+  private val UTF8_BINARY_COLLATION_NAME = ResolvedCollation("UTF8_BINARY")
+  private val UTF8_LCASE_COLLATION_NAME = ResolvedCollation("UTF8_LCASE")
 
   test("validate default collation") {
     val collationId = CollationFactory.collationNameToId("UTF8_BINARY")
@@ -65,7 +65,7 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("collate on non existing collation") {
     checkError(
       exception = intercept[SparkException] { Collate(Literal("abc"),
-        scala.Left(UnresolvedCollation(Seq("UTF8_BS")))) },
+        UnresolvedCollation(Seq("UTF8_BS"))) },
       condition = "COLLATION_INVALID_NAME",
       sqlState = "42704",
       parameters = Map("collationName" -> "UTF8_BS", "proposals" -> "UTF8_LCASE"))

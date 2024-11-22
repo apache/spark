@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_COLLATION
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
 /**
@@ -28,12 +29,10 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  */
 object ResolveCollationName extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveExpressions {
-      case c @ Collate(_, scala.Left(unresolvedCollation: UnresolvedCollation)) =>
+    plan.resolveExpressionsWithPruning(_.containsPattern(UNRESOLVED_COLLATION), ruleId) {
+      case c @ Collate(_, unresolvedCollation: UnresolvedCollation) =>
         c.copy(collation =
-          scala.Right(
-            ResolvedCollation(resolveFullyQualifiedName(unresolvedCollation.collationName))
-          )
+          ResolvedCollation(resolveFullyQualifiedName(unresolvedCollation.collationName))
         )
     }
 

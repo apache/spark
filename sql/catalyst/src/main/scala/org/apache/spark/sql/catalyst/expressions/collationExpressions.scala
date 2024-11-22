@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_COLLATION}
 import org.apache.spark.sql.catalyst.util.{AttributeNameParser, CollationFactory}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -56,8 +57,8 @@ object CollateExpressionBuilder extends ExpressionBuilder {
                 evalCollation.toString.toUpperCase().contains("TRIM")) {
                 throw QueryCompilationErrors.trimCollationNotEnabledError()
               }
-              Collate(e, scala.Left(UnresolvedCollation(
-                AttributeNameParser.parseAttributeName(evalCollation.toString))))
+              Collate(e, UnresolvedCollation(
+                AttributeNameParser.parseAttributeName(evalCollation.toString)))
             }
           case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
             funcName, "collationName", StringType)
@@ -74,25 +75,27 @@ object CollateExpressionBuilder extends ExpressionBuilder {
  * This function is pass-through, it will not modify the input data.
  * Only type metadata will be updated.
  */
-case class Collate(child: Expression, collation: Either[UnresolvedCollation, ResolvedCollation])
-  extends UnaryExpression with ExpectsInputTypes {
-  override def dataType: DataType = collation.merge.dataType
+case class Collate(child: Expression, collation: Expression)
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  override def left: Expression = child
+  override def right: Expression = collation
+  override def dataType: DataType = collation.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation(supportsTrimCollation = true))
-
-  override protected def withNewChildInternal(
-    newChild: Expression): Expression = copy(newChild)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def eval(row: InternalRow): Any = child.eval(row)
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    defineCodeGen(ctx, ev, (in) => in)
-
   override def sql: String = s"$prettyName(${child.sql}, $collation)"
 
-  override def toString: String = s"$prettyName($child, $collation)"
+  override def toString: String =
+    s"$prettyName($child, $collation)"
 
-  override def childrenResolved: Boolean = children.forall(_.resolved) && collation.merge.resolved
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_COLLATION)
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
+    copy(child = newLeft, collation = newRight)
 }
 
 /**
@@ -117,9 +120,15 @@ case class UnresolvedCollation(collationName: Seq[String])
 case class ResolvedCollation(collationName: String) extends LeafExpression with CodegenFallback {
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any = {}
+  override def foldable: Boolean = true
 
   override def dataType: DataType = StringType(CollationFactory.collationNameToId(collationName))
+
+  override def eval(input: InternalRow): Any = input
+
+  override def toString: String = collationName
+
+  override def sql: String = collationName
 }
 
 // scalastyle:off line.contains.tab

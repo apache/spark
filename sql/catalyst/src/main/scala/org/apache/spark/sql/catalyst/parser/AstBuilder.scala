@@ -2645,8 +2645,8 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitCollate(ctx: CollateContext): Expression = withOrigin(ctx) {
     val collationName = visitCollateClause(ctx.collateClause())
 
-    Collate(expression(ctx.primaryExpression), Left(UnresolvedCollation(
-      AttributeNameParser.parseAttributeName(collationName))))
+    Collate(expression(ctx.primaryExpression), UnresolvedCollation(
+      AttributeNameParser.parseAttributeName(collationName)))
   }
 
   override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
