@@ -42,22 +42,6 @@ object XmlExpressionEvalUtils {
   }
 }
 
-object XPathEvaluatorFactory {
-  def create(dataType: DataType, path: UTF8String): XPathEvaluator = {
-    dataType match {
-      case BooleanType => XPathBooleanEvaluator(path)
-      case ShortType => XPathShortEvaluator(path)
-      case IntegerType => XPathIntEvaluator(path)
-      case LongType => XPathLongEvaluator(path)
-      case FloatType => XPathFloatEvaluator(path)
-      case DoubleType => XPathDoubleEvaluator(path)
-      case dt if dt.isInstanceOf[StringType] => XPathStringEvaluator(path)
-      case ArrayType(elementType, _) if elementType.isInstanceOf[StringType] =>
-        XPathListEvaluator(path)
-    }
-  }
-}
-
 trait XPathEvaluator {
 
   protected val path: UTF8String

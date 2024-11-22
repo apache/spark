@@ -62,8 +62,9 @@ abstract class XPathExtract
   def xml: Expression
   def path: Expression
 
-  @transient private lazy val pathUTF8String = path.eval().asInstanceOf[UTF8String]
-  @transient private lazy val evaluator = XPathEvaluatorFactory.create(dataType, pathUTF8String)
+  @transient protected lazy val pathUTF8String: UTF8String = path.eval().asInstanceOf[UTF8String]
+
+  protected def evaluator: XPathEvaluator
 
   override def replacement: Expression = Invoke(
     Literal.create(evaluator, ObjectType(classOf[XPathEvaluator])),
@@ -86,6 +87,8 @@ abstract class XPathExtract
 // scalastyle:on line.size.limit
 case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract with Predicate {
 
+  @transient override lazy val evaluator: XPathEvaluator = XPathBooleanEvaluator(pathUTF8String)
+
   override def prettyName: String = "xpath_boolean"
 
   override protected def withNewChildrenInternal(
@@ -104,6 +107,9 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
+
+  @transient override lazy val evaluator: XPathEvaluator = XPathShortEvaluator(pathUTF8String)
+
   override def prettyName: String = "xpath_short"
   override def dataType: DataType = ShortType
 
@@ -123,6 +129,9 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
+
+  @transient override lazy val evaluator: XPathEvaluator = XPathIntEvaluator(pathUTF8String)
+
   override def prettyName: String = "xpath_int"
   override def dataType: DataType = IntegerType
 
@@ -142,6 +151,9 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
+
+  @transient override lazy val evaluator: XPathEvaluator = XPathLongEvaluator(pathUTF8String)
+
   override def prettyName: String = "xpath_long"
   override def dataType: DataType = LongType
 
@@ -161,6 +173,9 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
+
+  @transient override lazy val evaluator: XPathEvaluator = XPathFloatEvaluator(pathUTF8String)
+
   override def prettyName: String = "xpath_float"
   override def dataType: DataType = FloatType
 
@@ -180,6 +195,9 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
+
+  @transient override lazy val evaluator: XPathEvaluator = XPathDoubleEvaluator(pathUTF8String)
+
   override def prettyName: String =
     getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("xpath_double")
   override def dataType: DataType = DoubleType
@@ -200,6 +218,9 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
+
+  @transient override lazy val evaluator: XPathEvaluator = XPathStringEvaluator(pathUTF8String)
+
   override def prettyName: String = "xpath_string"
   override def dataType: DataType = SQLConf.get.defaultStringType
 
@@ -221,6 +242,9 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
+
+  @transient override lazy val evaluator: XPathEvaluator = XPathListEvaluator(pathUTF8String)
+
   override def prettyName: String = "xpath"
   override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
 
