@@ -806,7 +806,7 @@ private[spark] class TaskSetManager(
     val info = taskInfos(tid)
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause successful and tasksSuccessful wrong result.
-    if(info.finished) {
+    if (info.finished) {
       if (dropTaskInfoAccumulablesOnTaskCompletion) {
         // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
         // lifetime.

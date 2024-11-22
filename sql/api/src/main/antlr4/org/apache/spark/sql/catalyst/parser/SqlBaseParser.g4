@@ -48,7 +48,7 @@ compoundOrSingleStatement
     ;
 
 singleCompoundStatement
-    : beginEndCompoundBlock SEMICOLON? EOF
+    : BEGIN compoundBody END SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
@@ -1503,6 +1503,7 @@ version
 
 operatorPipeRightSide
     : selectClause windowClause?
+    | EXTEND extendList=namedExpressionSeq
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
     // the grammar simply for purposes of catching this invalid syntax and throwing a specific
     // dedicated error message.
@@ -1617,6 +1618,7 @@ ansiNonReserved
     | EXISTS
     | EXPLAIN
     | EXPORT
+    | EXTEND
     | EXTENDED
     | EXTERNAL
     | EXTRACT
@@ -1963,6 +1965,7 @@ nonReserved
     | EXISTS
     | EXPLAIN
     | EXPORT
+    | EXTEND
     | EXTENDED
     | EXTERNAL
     | EXTRACT

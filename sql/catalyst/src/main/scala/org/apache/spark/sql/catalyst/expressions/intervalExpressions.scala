@@ -24,7 +24,6 @@ import com.google.common.math.{DoubleMath, IntMath, LongMath}
 
 import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MONTHS_PER_YEAR
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -481,7 +480,7 @@ case class MakeDTInterval(
     hours: Expression,
     mins: Expression,
     secs: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes {
+  extends QuaternaryExpression with ImplicitCastInputTypes with SupportQueryContext {
   override def nullIntolerant: Boolean = true
 
   def this(
@@ -514,13 +513,15 @@ case class MakeDTInterval(
       day.asInstanceOf[Int],
       hour.asInstanceOf[Int],
       min.asInstanceOf[Int],
-      sec.asInstanceOf[Decimal])
+      sec.asInstanceOf[Decimal],
+      origin.context)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (day, hour, min, sec) => {
+      val errorContext = getContextOrNullCode(ctx)
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec)"
+      s"$iu.makeDayTimeInterval($day, $hour, $min, $sec, $errorContext)"
     })
   }
 
@@ -532,6 +533,8 @@ case class MakeDTInterval(
       mins: Expression,
       secs: Expression): MakeDTInterval =
     copy(days, hours, mins, secs)
+
+  override def initQueryContext(): Option[QueryContext] = Some(origin.context)
 }
 
 @ExpressionDescription(
@@ -556,7 +559,7 @@ case class MakeDTInterval(
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeYMInterval(years: Expression, months: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  extends BinaryExpression with ImplicitCastInputTypes with Serializable with SupportQueryContext {
   override def nullIntolerant: Boolean = true
 
   def this(years: Expression) = this(years, Literal(0))
@@ -568,17 +571,14 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override def dataType: DataType = YearMonthIntervalType()
 
   override def nullSafeEval(year: Any, month: Any): Any = {
-    Math.toIntExact(Math.addExact(month.asInstanceOf[Number].longValue(),
-      Math.multiplyExact(year.asInstanceOf[Number].longValue(), MONTHS_PER_YEAR)))
+    makeYearMonthInterval(year.asInstanceOf[Int], month.asInstanceOf[Int], origin.context)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (years, months) => {
-      val math = classOf[Math].getName.stripSuffix("$")
-      s"""
-         |$math.toIntExact(java.lang.Math.addExact($months,
-         |  $math.multiplyExact($years, $MONTHS_PER_YEAR)))
-         |""".stripMargin
+      val errorContext = getContextOrNullCode(ctx)
+      val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+      s"$iu.makeYearMonthInterval($years, $months, $errorContext)"
     })
   }
 
@@ -587,6 +587,10 @@ case class MakeYMInterval(years: Expression, months: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression =
     copy(years = newLeft, months = newRight)
+
+  override def initQueryContext(): Option[QueryContext] = {
+    Some(origin.context)
+  }
 }
 
 // Multiply an year-month interval by a numeric
@@ -699,8 +703,8 @@ trait IntervalDivide {
       context: QueryContext): Unit = {
     if (value == minValue && num.dataType.isInstanceOf[IntegralType]) {
       if (numValue.asInstanceOf[Number].longValue() == -1) {
-        throw QueryExecutionErrors.intervalArithmeticOverflowError(
-          "Interval value overflows after being divided by -1", "try_divide", context)
+        throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+          "try_divide", context)
       }
     }
   }

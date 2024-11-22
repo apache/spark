@@ -1926,20 +1926,20 @@ class DatasetSuite extends QueryTest
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassA(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassA"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassA'"))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassC(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassC"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassC'"))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         Seq(CircularReferenceClassD(null)).toDS()
       },
-      condition = "_LEGACY_ERROR_TEMP_2139",
-      parameters = Map("t" -> "org.apache.spark.sql.CircularReferenceClassD"))
+      condition = "CIRCULAR_CLASS_REFERENCE",
+      parameters = Map("t" -> "'org.apache.spark.sql.CircularReferenceClassD'"))
   }
 
   test("SPARK-20125: option of map") {

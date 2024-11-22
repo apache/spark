@@ -24,12 +24,8 @@ import numpy as np
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.pandas.utils import name_like_string
-from pyspark.testing.pandasutils import (
-    have_plotly,
-    plotly_requirement_message,
-    PandasOnSparkTestCase,
-    TestUtils,
-)
+from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.utils import have_plotly, plotly_requirement_message
 
 if have_plotly:
     from plotly import express

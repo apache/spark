@@ -77,7 +77,7 @@ abstract class StringRegexExpression extends BinaryExpression
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val regex = pattern(input2.asInstanceOf[UTF8String].toString)
-    if(regex == null) {
+    if (regex == null) {
       null
     } else {
       matches(regex, input1.asInstanceOf[UTF8String].toString)
@@ -984,7 +984,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     val m = getLastMatcher(s, p)
     val matchResults = new ArrayBuffer[UTF8String]()
-    while(m.find) {
+    while (m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
       RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
