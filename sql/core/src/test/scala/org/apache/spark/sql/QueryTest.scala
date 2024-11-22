@@ -450,11 +450,11 @@ object QueryTest extends Assertions {
   }
 
   def withQueryExecutionsCaptured(spark: SparkSession)(thunk: => Unit): Seq[QueryExecution] = {
-    var capturedQueryExecution = Seq.empty[QueryExecution]
+    var capturedQueryExecutions = Seq.empty[QueryExecution]
 
     val listener = new QueryExecutionListener {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        capturedQueryExecution = capturedQueryExecution :+ qe
+        capturedQueryExecutions = capturedQueryExecutions :+ qe
       }
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
@@ -468,7 +468,7 @@ object QueryTest extends Assertions {
       spark.listenerManager.unregister(listener)
     }
 
-    capturedQueryExecution
+    capturedQueryExecutions
   }
 }
 
