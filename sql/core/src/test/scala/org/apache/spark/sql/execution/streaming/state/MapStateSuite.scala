@@ -38,7 +38,7 @@ class MapStateSuite extends StateVariableSuiteBase {
 
   import testImplicits._
 
-  testWithEncodingTypes("Map state operations for single instance") {
+  test("Map state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -73,7 +73,7 @@ class MapStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("Map state operations for multiple map instances") {
+  test("Map state operations for multiple map instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -113,7 +113,7 @@ class MapStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("Map state operations with list, value, another map instances") {
+  test("Map state operations with list, value, another map instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -173,7 +173,7 @@ class MapStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("test Map state TTL") {
+  test("test Map state TTL") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
@@ -231,7 +231,7 @@ class MapStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("test null or negative TTL duration throws error") {
+  test("test null or negative TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
@@ -259,7 +259,7 @@ class MapStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("Map state with TTL with non-primitive types") {
+  test("Map state with TTL with non-primitive types") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10

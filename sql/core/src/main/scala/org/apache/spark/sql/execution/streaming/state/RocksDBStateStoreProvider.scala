@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
-import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.util.control.NonFatal
 
+import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -32,9 +34,9 @@ import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StreamExecution}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{NonFateSharingCache, Utils}
 
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
@@ -76,16 +78,17 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
       // Create cache key using store ID to avoid collisions
-      val avroEncCacheKey = s"${stateStoreId.operatorId}_" +
+      val avroEncCacheKey = s"${getRunId}_${stateStoreId.operatorId}_" +
         s"${stateStoreId.partitionId}_$colFamilyName"
 
-      // If we have not created the avroEncoder for this column family, create
-      // it, or look in the cache maintained in the RocksDBStateStoreProvider
-      // companion object
-      lazy val avroEnc = stateStoreEncoding match {
+      def avroEnc = stateStoreEncoding match {
         case "avro" => Some(
-          RocksDBStateStoreProvider.avroEncoderMap.computeIfAbsent(avroEncCacheKey,
-            _ => getAvroEnc(keyStateEncoderSpec, valueSchema))
+          RocksDBStateStoreProvider.avroEncoderMap.get(
+            avroEncCacheKey,
+            new java.util.concurrent.Callable[AvroEncoder] {
+              override def call(): AvroEncoder = getAvroEnc(keyStateEncoderSpec, valueSchema)
+            }
+          )
         )
         case "unsaferow" => None
       }
@@ -95,6 +98,17 @@ private[sql] class RocksDBStateStoreProvider
           Some(newColFamilyId), avroEnc), RocksDBStateEncoder.getValueEncoder(valueSchema,
           useMultipleValuesPerKey, avroEnc)))
     }
+
+    private def getRunId: String = {
+      val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
+      if (runId != null) {
+        runId
+      } else {
+        assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
+        UUID.randomUUID().toString
+      }
+    }
+
     private def getAvroSerializer(schema: StructType): AvroSerializer = {
       val avroType = SchemaConverters.toAvroType(schema)
       new AvroSerializer(schema, avroType, nullable = false)
@@ -657,8 +671,16 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
 
+  private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
   // Add the cache at companion object level so it persists across provider instances
-  private val avroEncoderMap = new java.util.concurrent.ConcurrentHashMap[String, AvroEncoder]()
+  private val avroEncoderMap: NonFateSharingCache[String, AvroEncoder] = {
+    val guavaCache = CacheBuilder.newBuilder()
+      .maximumSize(MAX_AVRO_ENCODERS_IN_CACHE)  // Adjust size based on your needs
+      .expireAfterAccess(1, TimeUnit.HOURS)  // Optional: Add expiration if needed
+      .build[String, AvroEncoder]()
+
+    new NonFateSharingCache(guavaCache)
+  }
 
   // Native operation latencies report as latency in microseconds
   // as SQLMetrics support millis. Convert the value to millis

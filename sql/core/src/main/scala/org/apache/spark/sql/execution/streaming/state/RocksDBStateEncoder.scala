@@ -684,6 +684,26 @@ class RangeKeyScanStateEncoder(
     writer.getRow()
   }
 
+  /**
+   * Encodes an UnsafeRow into an Avro-compatible byte array format for range scan operations.
+   *
+   * This method transforms row data into a binary format that preserves ordering when
+   * used in range scans.
+   * For each field in the row:
+   * - A marker byte is written to indicate null status or sign (for numeric types)
+   * - The value is written in big-endian format
+   *
+   * Special handling is implemented for:
+   * - Null values: marked with nullValMarker followed by zero bytes
+   * - Negative numbers: marked with negativeValMarker
+   * - Floating point numbers: bit manipulation to handle sign and NaN values correctly
+   *
+   * @param row The UnsafeRow to encode
+   * @param avroType The Avro schema defining the structure for encoding
+   * @return Array[Byte] containing the Avro-encoded data that preserves ordering for range scans
+   * @throws UnsupportedOperationException if a field's data type is not supported for range
+   *                                       scan encoding
+   */
   def encodePrefixKeyForRangeScan(
       row: UnsafeRow,
       avroType: Schema): Array[Byte] = {
@@ -805,6 +825,25 @@ class RangeKeyScanStateEncoder(
     out.toByteArray
   }
 
+  /**
+   * Decodes an Avro-encoded byte array back into an UnsafeRow for range scan operations.
+   *
+   * This method reverses the encoding process performed by encodePrefixKeyForRangeScan:
+   * - Reads the marker byte to determine null status or sign
+   * - Reconstructs the original values from big-endian format
+   * - Handles special cases for floating point numbers by reversing bit manipulations
+   *
+   * The decoding process preserves the original data types and values, including:
+   * - Null values marked by nullValMarker
+   * - Sign information for numeric types
+   * - Proper restoration of negative floating point values
+   *
+   * @param bytes The Avro-encoded byte array to decode
+   * @param avroType The Avro schema defining the structure for decoding
+   * @return UnsafeRow containing the decoded data
+   * @throws UnsupportedOperationException if a field's data type is not supported for range
+   *                                       scan decoding
+   */
   def decodePrefixKeyForRangeScan(
       bytes: Array[Byte],
       avroType: Schema): UnsafeRow = {

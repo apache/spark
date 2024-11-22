@@ -38,8 +38,20 @@ case class StateSchemaValidationResult(
     schemaPath: String
 )
 
-// Avro encoder that is used by the RocksDBStateStoreProvider and RocksDBStateEncoder
-// in order to serialize from UnsafeRow to a byte array of Avro encoding.
+/** An Avro-based encoder used for serializing between UnsafeRow and Avro
+ *  byte arrays in RocksDB state stores.
+ *
+ * This encoder is primarily utilized by [[RocksDBStateStoreProvider]] and [[RocksDBStateEncoder]]
+ * to handle serialization and deserialization of state store data.
+ *
+ * @param keySerializer Serializer for converting state store keys to Avro format
+ * @param keyDeserializer Deserializer for converting Avro-encoded keys back to UnsafeRow
+ * @param valueSerializer Serializer for converting state store values to Avro format
+ * @param valueDeserializer Deserializer for converting Avro-encoded values back to UnsafeRow
+ * @param suffixKeySerializer Optional serializer for handling suffix keys in Avro format
+ * @param suffixKeyDeserializer Optional deserializer for converting Avro-encoded suffix
+ *                              keys back to UnsafeRow
+ */
 case class AvroEncoder(
   keySerializer: AvroSerializer,
   keyDeserializer: AvroDeserializer,

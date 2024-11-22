@@ -46,7 +46,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
   import StateStoreTestsHelper._
   import testImplicits._
 
-  testWithEncodingTypes("Implicit key operations") {
+  test("Implicit key operations") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -91,7 +91,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("Value state operations for single instance") {
+  test("Value state operations for single instance") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -118,7 +118,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("Value state operations for multiple instances") {
+  test("Value state operations for multiple instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -163,7 +163,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("Value state operations for unsupported type name should fail") {
+  test("Value state operations for unsupported type name should fail") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
@@ -184,7 +184,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("colFamily with HDFSBackedStateStoreProvider should fail") {
+  test("colFamily with HDFSBackedStateStoreProvider should fail") {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new HDFSBackedStateStoreProvider()
     val storeConf = new StateStoreConf(new SQLConf())
@@ -203,8 +203,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     )
   }
 
-  testWithEncodingTypes("test SQL encoder - Value state operations for " +
-    "Primitive(Double) instances") {
+  test("test SQL encoder - Value state operations for Primitive(Double) instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -230,8 +229,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("test SQL encoder - Value state operations " +
-    "for Primitive(Long) instances") {
+  test("test SQL encoder - Value state operations for Primitive(Long) instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -257,7 +255,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("test SQL encoder - Value state operations for case class instances") {
+  test("test SQL encoder - Value state operations for case class instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -283,7 +281,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("test SQL encoder - Value state operations for POJO instances") {
+  test("test SQL encoder - Value state operations for POJO instances") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -309,7 +307,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes(s"test Value state TTL") {
+  test(s"test Value state TTL") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
@@ -365,7 +363,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("test null or zero TTL duration throws error") {
+  test("test null or zero TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
@@ -392,7 +390,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  testWithEncodingTypes("Value state TTL with non-primitive type") {
+  test("Value state TTL with non-primitive type") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
@@ -425,7 +423,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
  * types (ValueState, ListState, MapState) used in arbitrary stateful operators.
  */
 abstract class StateVariableSuiteBase extends SharedSparkSession
-  with BeforeAndAfter with AlsoTestWithChangelogCheckpointingEnabled {
+  with BeforeAndAfter with AlsoTestWithEncodingTypes {
 
   before {
     StateStore.stop()

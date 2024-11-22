@@ -780,7 +780,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  testWithEncodingTypes("Use statefulProcessor without transformWithState - handle should be absent") {
+  testWithEncodingTypes("Use statefulProcessor without transformWithState -" +
+    " handle should be absent") {
     val processor = new RunningCountStatefulProcessor()
     val ex = intercept[Exception] {
       processor.getHandle
