@@ -29,7 +29,8 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("ReorderAssociativeOperator", Once,
+      Batch("ReorderAssociativeOperator", FixedPoint(10),
+        ConstantFolding,
         ReorderAssociativeOperator) :: Nil
   }
 
@@ -44,7 +45,7 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
           ($"b" + 1) * 2 * 3 * 4,
           $"a" + 1 + $"b" + 2 + $"c" + 3,
           $"a" + 1 + $"b" * 2 + $"c" + 3,
-          Rand(0) * 1 * 2 * 3 * 4)
+          Rand(0) * 1.0 * 2.0 * 3.0 * 4.0)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -56,7 +57,7 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
           (($"b" + 1) * 24).as("((((b + 1) * 2) * 3) * 4)"),
           ($"a" + $"b" + $"c" + 6).as("(((((a + 1) + b) + 2) + c) + 3)"),
           ($"a" + $"b" * 2 + $"c" + 4).as("((((a + 1) + (b * 2)) + c) + 3)"),
-          Rand(0) * 1 * 2 * 3 * 4)
+          Rand(0) * 1.0 * 2.0 * 3.0 * 4.0)
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -105,5 +106,18 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         ).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-50380: conditional branches with error expression") {
+    val originalQuery1 = testRelation.select(If($"a" === 1, 1L, Literal(1).div(0) + $"b")).analyze
+    val optimized1 = Optimize.execute(originalQuery1)
+    comparePlans(optimized1, originalQuery1)
+
+    val originalQuery2 = testRelation.select(
+      If($"a" === 1, 1, ($"b" + Literal(Int.MaxValue)) + 1).as("col")).analyze
+    val optimized2 = Optimize.execute(originalQuery2)
+    val correctAnswer2 = testRelation.select(
+      If($"a" === 1, 1, $"b" + (Literal(Int.MaxValue) + 1)).as("col")).analyze
+    comparePlans(optimized2, correctAnswer2)
   }
 }

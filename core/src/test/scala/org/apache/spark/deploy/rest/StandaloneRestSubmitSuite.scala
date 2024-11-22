@@ -25,6 +25,7 @@ import java.util.Base64
 import scala.collection.mutable
 
 import jakarta.servlet.http.HttpServletResponse
+import org.eclipse.jetty.util.thread.ThreadPool.SizedThreadPool
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
@@ -33,7 +34,7 @@ import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.deploy.master.RecoveryState
-import org.apache.spark.internal.config.MASTER_REST_SERVER_FILTERS
+import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS}
 import org.apache.spark.rpc._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -543,6 +544,19 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
       assert(desc.command.arguments.slice(3, 5) === expectedArguments)
     }
+  }
+
+  test("SPARK-50381: Support spark.master.rest.maxThreads") {
+    val conf = new SparkConf()
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv = Some(RpcEnv.create("rest-with-maxThreads", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    conf.set(MASTER_REST_SERVER_MAX_THREADS, 2000)
+    server = Some(new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077"))
+    server.get.start()
+    val pool = server.get._server.get.getThreadPool.asInstanceOf[SizedThreadPool]
+    assert(pool.getMaxThreads === 2000)
   }
 
   /* --------------------- *
