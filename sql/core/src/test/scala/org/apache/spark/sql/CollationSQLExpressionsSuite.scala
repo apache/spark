@@ -1441,7 +1441,7 @@ class CollationSQLExpressionsSuite
       )
     )
   }
-  
+
   test("Support XmlToStructs xml expression with collation") {
     case class XmlToStructsTestCase(
      input: String,
