@@ -596,6 +596,77 @@ DropTable false, false
 
 
 -- !query
+create table t4 (text string collate utf8_binary, pairDelim string collate utf8_lcase_rtrim, keyValueDelim string collate utf8_binary_rtrim) using parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t4`, false
+
+
+-- !query
+insert into t4 values('a:1,b:2,c:3', ', ', ': ')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t4, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t4], Append, `spark_catalog`.`default`.`t4`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/t4), [text, pairDelim, keyValueDelim]
++- Project [cast(col1#x as string) AS text#x, cast(col2#x as string collate UTF8_LCASE_RTRIM) AS pairDelim#x, cast(col3#x as string collate UTF8_BINARY_RTRIM) AS keyValueDelim#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase_rtrim, keyValueDelim collate utf8_binary_rtrim) from t4
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE_RTRIM\""
+  }
+}
+
+
+-- !query
+select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary_rtrim, keyValueDelim collate utf8_binary_rtrim) from t4
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_BINARY_RTRIM\""
+  }
+}
+
+
+-- !query
+select str_to_map(text collate unicode_ai_rtrim, pairDelim collate unicode_ai_rtrim, keyValueDelim collate unicode_ai_rtrim) from t4
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"collate(text, unicode_ai_rtrim)\"",
+    "inputType" : "\"STRING COLLATE UNICODE_AI_RTRIM\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"str_to_map(collate(text, unicode_ai_rtrim), collate(pairDelim, unicode_ai_rtrim), collate(keyValueDelim, unicode_ai_rtrim))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 124,
+    "fragment" : "str_to_map(text collate unicode_ai_rtrim, pairDelim collate unicode_ai_rtrim, keyValueDelim collate unicode_ai_rtrim)"
+  } ]
+}
+
+
+-- !query
+drop table t4
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t4
+
+
+-- !query
 create table t5(s string, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`t5`, false
@@ -2144,6 +2215,14 @@ Project [octet_length(collate(utf8_binary#x, utf8_lcase)) AS octet_length(collat
 
 
 -- !query
+select octet_length(utf8_binary collate utf8_lcase_rtrim), octet_length(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [octet_length(collate(utf8_binary#x, utf8_lcase_rtrim)) AS octet_length(collate(utf8_binary, utf8_lcase_rtrim))#x, octet_length(collate(utf8_lcase#x, utf8_binary_rtrim)) AS octet_length(collate(utf8_lcase, utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select luhn_check(num) from t9
 -- !query analysis
 Project [luhn_check(cast(num#xL as string)) AS luhn_check(num)#x]
@@ -2234,6 +2313,14 @@ Project [is_valid_utf8(collate(utf8_binary#x, utf8_lcase)) AS is_valid_utf8(coll
 
 
 -- !query
+select is_valid_utf8(utf8_binary collate utf8_lcase_rtrim), is_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [is_valid_utf8(collate(utf8_binary#x, utf8_lcase_rtrim)) AS is_valid_utf8(collate(utf8_binary, utf8_lcase_rtrim))#x, is_valid_utf8(collate(utf8_lcase#x, utf8_binary_rtrim)) AS is_valid_utf8(collate(utf8_lcase, utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t5
 -- !query analysis
 Project [make_valid_utf8(utf8_binary#x) AS make_valid_utf8(utf8_binary)#x, make_valid_utf8(utf8_lcase#x) AS make_valid_utf8(utf8_lcase)#x]
@@ -2245,6 +2332,14 @@ Project [make_valid_utf8(utf8_binary#x) AS make_valid_utf8(utf8_binary)#x, make_
 select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query analysis
 Project [make_valid_utf8(collate(utf8_binary#x, utf8_lcase)) AS make_valid_utf8(collate(utf8_binary, utf8_lcase))#x, make_valid_utf8(collate(utf8_lcase#x, utf8_binary)) AS make_valid_utf8(collate(utf8_lcase, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
+select make_valid_utf8(utf8_binary collate utf8_lcase_rtrim), make_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [make_valid_utf8(collate(utf8_binary#x, utf8_lcase_rtrim)) AS make_valid_utf8(collate(utf8_binary, utf8_lcase_rtrim))#x, make_valid_utf8(collate(utf8_lcase#x, utf8_binary_rtrim)) AS make_valid_utf8(collate(utf8_lcase, utf8_binary_rtrim))#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -2266,6 +2361,14 @@ Project [validate_utf8(collate(utf8_binary#x, utf8_lcase)) AS validate_utf8(coll
 
 
 -- !query
+select validate_utf8(utf8_binary collate utf8_lcase_rtrim), validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [validate_utf8(collate(utf8_binary#x, utf8_lcase_rtrim)) AS validate_utf8(collate(utf8_binary, utf8_lcase_rtrim))#x, validate_utf8(collate(utf8_lcase#x, utf8_binary_rtrim)) AS validate_utf8(collate(utf8_lcase, utf8_binary_rtrim))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
 select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t5
 -- !query analysis
 Project [try_validate_utf8(utf8_binary#x) AS try_validate_utf8(utf8_binary)#x, try_validate_utf8(utf8_lcase#x) AS try_validate_utf8(utf8_lcase)#x]
@@ -2277,6 +2380,14 @@ Project [try_validate_utf8(utf8_binary#x) AS try_validate_utf8(utf8_binary)#x, t
 select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query analysis
 Project [try_validate_utf8(collate(utf8_binary#x, utf8_lcase)) AS try_validate_utf8(collate(utf8_binary, utf8_lcase))#x, try_validate_utf8(collate(utf8_lcase#x, utf8_binary)) AS try_validate_utf8(collate(utf8_lcase, utf8_binary))#x]
++- SubqueryAlias spark_catalog.default.t5
+   +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
+
+
+-- !query
+select try_validate_utf8(utf8_binary collate utf8_lcase_rtrim), try_validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query analysis
+Project [try_validate_utf8(collate(utf8_binary#x, utf8_lcase_rtrim)) AS try_validate_utf8(collate(utf8_binary, utf8_lcase_rtrim))#x, try_validate_utf8(collate(utf8_lcase#x, utf8_binary_rtrim)) AS try_validate_utf8(collate(utf8_lcase, utf8_binary_rtrim))#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 

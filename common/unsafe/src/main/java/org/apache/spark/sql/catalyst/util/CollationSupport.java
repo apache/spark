@@ -37,13 +37,15 @@ public final class CollationSupport {
   public static class StringSplitSQL {
     public static UTF8String[] exec(final UTF8String s, UTF8String d, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      if (collation.supportsSpaceTrimming) {
-        d = CollationFactory.applyTrimmingPolicy(d, collationId);
-      }
-      if (collation.isUtf8BinaryType) {
+      if(collation.isUtf8BinaryType && !collation.supportsSpaceTrimming){
         return execBinary(s, d);
+      }
+
+      if (collation.isUtf8BinaryType) {
+        // special handling needed for utf8_binary_rtrim collation.
+        return execBinaryTrim(s, d, collationId);
       } else if (collation.isUtf8LcaseType) {
-        return execLowercase(s, d);
+        return execLowercase(s, d, collationId);
       } else {
         return execICU(s, d, collationId);
       }
@@ -59,12 +61,17 @@ public final class CollationSupport {
     public static UTF8String[] execBinary(final UTF8String string, final UTF8String delimiter) {
       return string.splitSQL(delimiter, -1);
     }
-    public static UTF8String[] execLowercase(final UTF8String string, final UTF8String delimiter) {
-      return CollationAwareUTF8String.lowercaseSplitSQL(string, delimiter, -1);
+    public static UTF8String[] execLowercase(final UTF8String string, final UTF8String delimiter,
+        final int collationId) {
+      return CollationAwareUTF8String.lowercaseSplitSQL(string, delimiter, -1, collationId);
     }
     public static UTF8String[] execICU(final UTF8String string, final UTF8String delimiter,
         final int collationId) {
       return CollationAwareUTF8String.icuSplitSQL(string, delimiter, -1, collationId);
+    }
+    public static UTF8String[] execBinaryTrim(final UTF8String string, final UTF8String delimiter,
+        final int collationId) {
+      return CollationAwareUTF8String.binarySplitSQL(string, delimiter, -1, collationId);
     }
   }
 
