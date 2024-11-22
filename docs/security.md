@@ -37,6 +37,12 @@ all things. Listed below are some of the things Spark supports. Also check the d
 documentation for the type of deployment you are using for deployment specific settings. Anything
 not documented, Spark does not support.
 
+# Reporting security issues
+
+If you have found a potential vulnerability in Spark, where the protections
+described on this page do not appear to be effective, please [report them to
+the Spark project privately](https://spark.apache.org/security.html).
+
 # Spark RPC (Communication protocol between Spark processes)
 
 ## Authentication
