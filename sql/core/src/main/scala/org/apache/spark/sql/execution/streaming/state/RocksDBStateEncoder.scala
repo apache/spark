@@ -1105,7 +1105,7 @@ class NoPrefixKeyStateEncoder(
           val avroBytes = new Array[Byte](dataLength)
           Platform.copyMemory(
             keyBytes, decodeKeyStartOffset + STATE_ENCODING_NUM_VERSION_BYTES,
-            avroBytes, 0, dataLength)
+            avroBytes, Platform.BYTE_ARRAY_OFFSET, dataLength)
           decodeFromAvroToUnsafeRow(avroBytes, avroEnc.get.keyDeserializer, keyAvroType, keyProj)
         } else {
           keyRow.pointTo(
