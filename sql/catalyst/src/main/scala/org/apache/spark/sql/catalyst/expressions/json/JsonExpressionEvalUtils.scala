@@ -161,27 +161,17 @@ case class StructsToJsonEvaluator(
   }
 }
 
-case class JsonTupleEvaluator(foldableFieldNames: IndexedSeq[Option[String]]) {
+case class JsonTupleEvaluator(fieldsLength: Int) {
 
   import SharedFactory._
 
   // if processing fails this shared value will be returned
   @transient private lazy val nullRow: Seq[InternalRow] =
-    new GenericInternalRow(Array.ofDim[Any](foldableFieldNames.length)) :: Nil
+    new GenericInternalRow(Array.ofDim[Any](fieldsLength)) :: Nil
 
-  // and count the number of foldable fields, we'll use this later to optimize evaluation
-  @transient lazy val constantFields: Int = foldableFieldNames.count(_ != null)
-
-  // expose for codegen
-  def foldableFieldName(index: Int): Option[String] = {
-    foldableFieldNames(index)
-  }
-
-  private def parseRow(parser: JsonParser, fieldNames: Array[String]): Seq[InternalRow] = {
+  private def parseRow(parser: JsonParser, fieldNames: Seq[String]): Seq[InternalRow] = {
     // only objects are supported
-    if (parser.nextToken() != JsonToken.START_OBJECT) {
-      return nullRow
-    }
+    if (parser.nextToken() != JsonToken.START_OBJECT) return nullRow
 
     val row = Array.ofDim[Any](fieldNames.length)
 
@@ -244,7 +234,7 @@ case class JsonTupleEvaluator(foldableFieldNames: IndexedSeq[Option[String]]) {
     }
   }
 
-  final def evaluate(json: UTF8String, fieldNames: Array[String]): Seq[InternalRow] = {
+  final def evaluate(json: UTF8String, fieldNames: Seq[String]): Seq[InternalRow] = {
     if (json == null) return nullRow
     try {
       /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
