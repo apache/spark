@@ -389,7 +389,7 @@ package object expressions  {
           val fieldExprs = nestedFields.foldLeft(a: Expression) { (e, name) =>
             ExtractValue(e, Literal(name), resolver)
           }
-          Some(Alias(fieldExprs, nestedFields.last)())
+          Some(Alias(fieldExprs, "_nested_field_" + nestedFields.last)())
 
         case Seq(a) =>
           // One match, no nested fields, use it.

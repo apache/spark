@@ -16,8 +16,12 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
@@ -70,19 +74,32 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   }
 
   private def resolveWithAggAndLCA(s: Sort, plan: LogicalPlan): Seq[Expression] = {
-
+    val aliasMap = mutable.HashMap.empty[String, Either[Alias, Int]]
     val lcaCandidates = plan match {
-      case a: Aggregate =>
-        // Because we don't support referencing a lateral alias in aggregate function
-        // and the sort might contains such a lateral alias which will be append to aggregate later
-        a.aggregateExpressions
+      case a: Aggregate => a.aggregateExpressions
       case p: Project => p.projectList
       case _ => Nil
     }
-    resolveLateralColumnAlias(lcaCandidates ++ s.order)
-      .takeRight(s.order.length)
-      .map(resolveExpressionByPlanOutput(_, s.child))
-      .map(resolveColWithAgg(_, plan))
+    lcaCandidates.foreach {
+      case a: Alias =>
+        val lowerCasedName = a.name.toLowerCase(Locale.ROOT)
+        aliasMap.get(lowerCasedName) match {
+          case Some(scala.util.Left(_)) =>
+            aliasMap(lowerCasedName) = scala.util.Right(2)
+          case Some(scala.util.Right(count)) =>
+            aliasMap(lowerCasedName) = scala.util.Right(count + 1)
+          case None =>
+            aliasMap += lowerCasedName -> scala.util.Left(a)
+        }
+      case _ =>
+    }
+    val resolvedByLCA = if (aliasMap.nonEmpty) {
+      resolveLateralColumnAlias(s.order, aliasMap)
+    } else {
+      s.order
+    }
+    val resolvedByChild = resolvedByLCA.map(resolveExpressionByPlanOutput(_, s.child))
+    resolvedByChild.map(resolveColWithAgg(_, plan))
   }
 
   private def resolveOrderByAll(

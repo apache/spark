@@ -27,6 +27,22 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT max(id) AS id FROM range(4) GROUP BY id ORDER BY avg(id)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "aggFunc" : "\"avg(lateralAliasReference(id))\"",
+    "lca" : "`id`"
+  }
+}
+
+
+-- !query
 SELECT max(id) AS id2 FROM range(4) ORDER BY avg(id2)
 -- !query schema
 struct<>
@@ -107,6 +123,17 @@ struct<id2:bigint>
 
 
 -- !query
+SELECT id % 2 AS id FROM range(4) ORDER BY id
+-- !query schema
+struct<id:bigint>
+-- !query output
+0
+0
+1
+1
+
+
+-- !query
 SELECT id % 2 AS id, id / 2 AS id FROM range(4) ORDER BY id
 -- !query schema
 struct<>
@@ -118,5 +145,21 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "n" : "2",
     "name" : "`id`"
+  }
+}
+
+
+-- !query
+SELECT id % 2 AS id2, id / 2 AS id2 FROM range(4) ORDER BY id2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "AMBIGUOUS_LATERAL_COLUMN_ALIAS",
+  "sqlState" : "42702",
+  "messageParameters" : {
+    "n" : "2",
+    "name" : "`id2`"
   }
 }

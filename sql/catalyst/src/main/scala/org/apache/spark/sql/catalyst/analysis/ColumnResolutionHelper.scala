@@ -376,14 +376,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     case _ => e
   }
 
-  protected def resolveLateralColumnAlias(selectList: Seq[Expression]): Seq[Expression] = {
+  protected def resolveLateralColumnAlias(
+      selectList: Seq[Expression],
+      // A mapping from lower-cased alias name to either the Alias itself, or the count of aliases
+      // that have the same lower-cased name. If the count is larger than 1, we won't use it to
+      // resolve lateral column aliases.
+      aliasMap: mutable.Map[String, Either[Alias, Int]] = mutable.HashMap.empty)
+  : Seq[Expression] = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) return selectList
-
-    // A mapping from lower-cased alias name to either the Alias itself, or the count of aliases
-    // that have the same lower-cased name. If the count is larger than 1, we won't use it to
-    // resolve lateral column aliases.
-    val aliasMap = mutable.HashMap.empty[String, Either[Alias, Int]]
-
     def resolve(e: Expression): Expression = {
       e.transformUpWithPruning(
         _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, LATERAL_COLUMN_ALIAS_REFERENCE)) {
