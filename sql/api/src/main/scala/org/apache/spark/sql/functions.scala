@@ -101,10 +101,6 @@ object functions {
    */
   def column(colName: String): Column = Column(colName)
 
-  def outer(col: Column): Column = Column(internal.LazyExpression(col.node))
-
-  def outer(exprSQL: String): Column = outer(expr(exprSQL))
-
   /**
    * Creates a [[Column]] of literal value.
    *

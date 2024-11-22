@@ -54,7 +54,15 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("noop outer()") {
-    checkAnswer(spark.range(1).select(outer($"id")), Row(0))
+    checkAnswer(spark.range(1).select($"id".outer()), Row(0))
+    checkError(
+      intercept[AnalysisException](spark.range(1).select($"outer_col".outer()).collect()),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`outer_col`", "proposal" -> "`id`"),
+      context = ExpectedContext(
+        fragment = "$",
+        callSitePattern = getCurrentClassCallSitePattern)
+    )
   }
 
   test("simple uncorrelated scalar subquery") {
@@ -135,13 +143,12 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   test("correlated scalar subquery in SELECT with outer() function") {
     val df1 = spark.table("l").as("t1")
     val df2 = spark.table("l").as("t2")
-    // We can use the `outer()` function to wrap either the outer column, or the entire condition,
+    // We can use the `.outer()` function to wrap either the outer column, or the entire condition,
     // or the SQL string of the condition.
     Seq(
-      $"t1.a" === outer($"t2.a"),
-      $"t1.a" === outer("t2.a"),
-      outer($"t1.a" === $"t2.a"),
-      outer("t1.a = t2.a")).foreach { cond =>
+      $"t1.a" === $"t2.a".outer(),
+      ($"t1.a" === $"t2.a").outer(),
+      expr("t1.a = t2.a").outer()).foreach { cond =>
       checkAnswer(
         df1.select(
           $"a",
@@ -153,13 +160,12 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("correlated scalar subquery in WHERE with outer() function") {
-    // We can use the `outer()` function to wrap either the outer column, or the entire condition,
+    // We can use the `.outer()` function to wrap either the outer column, or the entire condition,
     // or the SQL string of the condition.
     Seq(
-      outer($"a") === $"c",
-      outer("a") === $"c",
-      outer($"a" === $"c"),
-      outer("a = c")).foreach { cond =>
+      $"a".outer() === $"c",
+      ($"a" === $"c").outer(),
+      expr("a = c").outer()).foreach { cond =>
       checkAnswer(
         spark.table("l").where(
           $"b" < spark.table("r").where(cond).select(max($"d")).scalar()
@@ -170,13 +176,12 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("EXISTS predicate subquery with outer() function") {
-    // We can use the `outer()` function to wrap either the outer column, or the entire condition,
+    // We can use the `.outer()` function to wrap either the outer column, or the entire condition,
     // or the SQL string of the condition.
     Seq(
-      outer($"a") === $"c",
-      outer("a") === $"c",
-      outer($"a" === $"c"),
-      outer("a = c")).foreach { cond =>
+      $"a".outer() === $"c",
+      ($"a" === $"c").outer(),
+      expr("a = c").outer()).foreach { cond =>
       checkAnswer(
         spark.table("l").where(
           spark.table("r").where(cond).exists()
@@ -230,7 +235,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         spark.table("t1").select(
           $"c1",
-          spark.table("t2").where(outer($"t1.c2") === $"t2.c2").select(max($"c1")).scalar()
+          spark.table("t2").where($"t1.c2".outer() === $"t2.c2").select(max($"c1")).scalar()
         ),
         sql("SELECT c1, (select max(c1) from t2 where t1.c2 = t2.c2) from t1")
       )
@@ -240,14 +245,14 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   test("NOT EXISTS predicate subquery") {
     checkAnswer(
       spark.table("l").where(
-        !spark.table("r").where(outer($"a") === $"c").exists()
+        !spark.table("r").where($"a".outer() === $"c").exists()
       ),
       sql("select * from l where not exists (select * from r where l.a = r.c)")
     )
 
     checkAnswer(
       spark.table("l").where(
-        !spark.table("r").where(outer($"a") === $"c" && $"b" < $"d").exists()
+        !spark.table("r").where($"a".outer() === $"c" && $"b".outer() < $"d").exists()
       ),
       sql("select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)")
     )
@@ -256,8 +261,8 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   test("EXISTS predicate subquery within OR") {
     checkAnswer(
       spark.table("l").where(
-        spark.table("r").where(outer($"a") === $"c").exists() ||
-        spark.table("r").where(outer($"a") === $"c").exists()
+        spark.table("r").where($"a".outer() === $"c").exists() ||
+        spark.table("r").where($"a".outer() === $"c").exists()
       ),
       sql("select * from l where exists (select * from r where l.a = r.c)" +
         " or exists (select * from r where l.a = r.c)")
@@ -265,8 +270,8 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       spark.table("l").where(
-        !spark.table("r").where(outer($"a") === $"c" && $"b" < $"d").exists() ||
-        !spark.table("r").where(outer($"a") === $"c").exists()
+        !spark.table("r").where($"a".outer() === $"c" && $"b".outer() < $"d").exists() ||
+        !spark.table("r").where($"a".outer() === $"c").exists()
       ),
       sql("select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)" +
         " or not exists (select * from r where l.a = r.c)")
@@ -279,7 +284,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df1.select(
         $"a",
-        df2.where($"t2.a" <=> outer($"t1.a")).select(sum($"b")).scalar().as("sum_b")
+        df2.where($"t2.a" <=> $"t1.a".outer()).select(sum($"b")).scalar().as("sum_b")
       ),
       sql("select a, (select sum(b) from l t2 where t2.a <=> t1.a) sum_b from l t1")
     )
@@ -289,7 +294,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       spark.table("l").groupBy(
         $"a",
-        spark.table("r").where(outer($"a") === $"c").select(sum($"d")).scalar().as("sum_d")
+        spark.table("r").where($"a".outer() === $"c").select(sum($"d")).scalar().as("sum_d")
       ).agg(Map.empty[String, String]),
       sql("select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2")
     )
@@ -303,7 +308,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
         checkAnswer(
           spark.table("l").groupBy(
             $"a",
-            spark.table("vr").where(outer($"a") === $"c").select(sum($"d")).scalar().as("sum_d")
+            spark.table("vr").where($"a".outer() === $"c").select(sum($"d")).scalar().as("sum_d")
           ).agg(Map.empty[String, String]),
           sql("select a, (select sum(d) from vr where a = c) sum_d from l l1 group by 1, 2")
         )
@@ -317,7 +322,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     val exception1 = intercept[SparkRuntimeException] {
       df1.select(
         $"a",
-        df2.where($"t1.a" === outer($"t2.a")).select($"b").scalar().as("sum_b")
+        df2.where($"t1.a" === $"t2.a".outer()).select($"b").scalar().as("sum_b")
       ).collect()
     }
     checkError(
@@ -332,7 +337,7 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df1.select(
         $"a",
-        df2.where($"t2.a" < outer($"t1.a")).select(sum($"b")).scalar().as("sum_b")
+        df2.where($"t2.a" < $"t1.a".outer()).select(sum($"b")).scalar().as("sum_b")
       ),
       sql("select a, (select sum(b) from l t2 where t2.a < t1.a) sum_b from l t1")
     )
@@ -342,8 +347,8 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       spark.table("l").where(
         spark.table("r").where(
-          (outer($"a") === $"c" && $"d" === 2.0) ||
-            (outer($"a") === $"c" && $"d" === 1.0)
+          ($"a".outer() === $"c" && $"d" === 2.0) ||
+            ($"a".outer() === $"c" && $"d" === 1.0)
         ).select(count(lit(1))).scalar() > 0
       ).select($"a"),
       sql("""
