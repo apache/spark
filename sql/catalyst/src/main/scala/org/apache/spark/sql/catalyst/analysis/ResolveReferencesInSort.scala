@@ -21,7 +21,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExtractValue, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
@@ -81,6 +81,7 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
       case _ => Nil
     }
     lcaCandidates.foreach {
+      case Alias(_: ExtractValue, _) =>
       case a: Alias =>
         val lowerCasedName = a.name.toLowerCase(Locale.ROOT)
         aliasMap.get(lowerCasedName) match {
