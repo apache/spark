@@ -51,7 +51,7 @@ sealed trait RocksDBValueStateEncoder {
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
 
-trait StateEncoder {
+trait DataEncoder {
   def encodeKey(row: UnsafeRow): Array[Byte]
   def encodeRemainingKey(row: UnsafeRow): Array[Byte]
   def encodePrefixKeyForRangeScan(row: UnsafeRow): Array[Byte]
@@ -65,7 +65,7 @@ trait StateEncoder {
 
 abstract class RocksDBDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
-    valueSchema: StructType) extends StateEncoder {
+    valueSchema: StructType) extends DataEncoder {
 
   val keySchema = keyStateEncoderSpec.keySchema
   val reusedKeyRow = new UnsafeRow(keyStateEncoderSpec.keySchema.length)
@@ -124,7 +124,7 @@ abstract class RocksDBDataEncoder(
   }
 }
 
-class UnsafeRowStateEncoder(
+class UnsafeRowDataEncoder(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     valueSchema: StructType) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema) {
 
@@ -1087,7 +1087,7 @@ class NoPrefixKeyStateEncoder(
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
     if (!useColumnFamilies) {
-      stateEncoder.encodeUnsafeRow(row)
+      stateEncoder.encodeKey(row)
     } else {
       val bytesToEncode = stateEncoder.encodeKey(row)
       val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(
@@ -1127,7 +1127,7 @@ class NoPrefixKeyStateEncoder(
         null
       }
     } else {
-      stateEncoder.decodeToUnsafeRow(keyBytes, keyRow)
+      stateEncoder.decodeKey(keyBytes)
     }
   }
 

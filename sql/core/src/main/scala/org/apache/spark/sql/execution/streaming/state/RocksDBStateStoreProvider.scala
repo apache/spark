@@ -641,9 +641,9 @@ object RocksDBStateStoreProvider {
       case "unsaferow" =>
         RocksDBStateStoreProvider.dataEncoderCache.get(
           encoderCacheKey,
-          new java.util.concurrent.Callable[UnsafeRowStateEncoder] {
-            override def call(): UnsafeRowStateEncoder = {
-              new UnsafeRowStateEncoder(keyStateEncoderSpec, valueSchema)
+          new java.util.concurrent.Callable[UnsafeRowDataEncoder] {
+            override def call(): UnsafeRowDataEncoder = {
+              new UnsafeRowDataEncoder(keyStateEncoderSpec, valueSchema)
             }
           }
         )
