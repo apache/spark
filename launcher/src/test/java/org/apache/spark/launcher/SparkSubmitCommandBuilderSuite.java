@@ -128,15 +128,15 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     assertNotNull(extraJavaOptions, "spark.executor.extraJavaOptions should be set");
 
-    assertFalse(extraJavaOptions.contains("`"), "Extra Java options should not contain backticks");
+    assertFalse(extraJavaOptions.contains("`"), "Extra Java options should not contain `");
     assertFalse(extraJavaOptions.contains("$"), "Extra Java options should not contain $");
-    assertFalse(extraJavaOptions.contains(";"), "Extra Java options should not contain semicolons");
-    assertFalse(extraJavaOptions.contains("&"), "Extra Java options should not contain ampersands");
-    assertFalse(extraJavaOptions.contains("|"), "Extra Java options should not contain pipe symbols");
-    assertFalse(extraJavaOptions.contains("<"), "Extra Java options should not contain less-than symbols");
-    assertFalse(extraJavaOptions.contains(">"), "Extra Java options should not contain greater-than symbols");
+    assertFalse(extraJavaOptions.contains(";"), "Extra Java options should not contain ;");
+    assertFalse(extraJavaOptions.contains("&"), "Extra Java options should not contain &");
+    assertFalse(extraJavaOptions.contains("|"), "Extra Java options should not contain |");
+    assertFalse(extraJavaOptions.contains("<"), "Extra Java options should not contain <");
+    assertFalse(extraJavaOptions.contains(">"), "Extra Java options should not contain >");
 
-    assertTrue(extraJavaOptions.contains("-Xmx2g"), "Valid Java options should remain intact");
+    assertTrue(extraJavaOptions.contains("-Xmx2g"), "Valid Java options should pass");
   }
 
 
@@ -482,7 +482,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     return builder;
   }
 
-  private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
+  private List<String>  buildCommand(List<String> args, Map<String, String> env) throws Exception {
     return newCommandBuilder(args).buildCommand(env);
   }
 
