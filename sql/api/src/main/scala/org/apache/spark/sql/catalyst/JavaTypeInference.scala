@@ -143,8 +143,8 @@ object JavaTypeInference {
         case None =>
           // Concrete type unknown, check if the bounds can be used to identify a
           // UDTEncoder and if exception is thrown check if the type extends Serializable
-          val concreteBound = tv.getBounds.collectFirst {
-            case SuperClassesExtractor(clazz) => clazz
+          val concreteBound = tv.getBounds.collectFirst { case SuperClassesExtractor(clazz) =>
+            clazz
           }
           findOptimalEncoderForGenericType(
             tv.getBounds.flatMap(SuperClassesExtractor.getSuperClasses(_)).toSeq,
@@ -245,7 +245,7 @@ object JavaTypeInference {
      ( Java and Kryo). It does not attempt to give preference to Kryo over Java Ser as of now.
      Also if the Encoder is being created of Spark Connect, it should not create a Kryo based
      Encoder.
-  */
+   */
   private def findOptimalEncoderForGenericType(
       typesToCheck: Seq[Class[_]],
       seenTypeSet: Set[Class[_]],
