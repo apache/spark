@@ -611,6 +611,7 @@ object RocksDBStateStoreProvider {
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
 
   private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
+
   // Add the cache at companion object level so it persists across provider instances
   private val dataEncoderCache: NonFateSharingCache[String, RocksDBDataEncoder] = {
     val guavaCache = CacheBuilder.newBuilder()
@@ -621,6 +622,23 @@ object RocksDBStateStoreProvider {
     new NonFateSharingCache(guavaCache)
   }
 
+  /**
+   * Creates and returns a data encoder for the state store based on the specified encoding type.
+   * This method handles caching of encoders to improve performance by reusing encoder instances
+   * when possible.
+   *
+   * The method supports two encoding types:
+   * - Avro: Uses Apache Avro for serialization with schema evolution support
+   * - UnsafeRow: Uses Spark's internal row format for optimal performance
+   *
+   * @param stateStoreEncoding The encoding type to use ("avro" or "unsaferow")
+   * @param encoderCacheKey A unique key for caching the encoder instance, typically combining
+   *                       query ID, operator ID, partition ID, and column family name
+   * @param keyStateEncoderSpec Specification for how to encode keys, including schema and any
+   *                           prefix/range scan requirements
+   * @param valueSchema The schema for the values to be encoded
+   * @return A RocksDBDataEncoder instance configured for the specified encoding type
+   */
   def getDataEncoder(
       stateStoreEncoding: String,
       encoderCacheKey: String,
@@ -628,7 +646,7 @@ object RocksDBStateStoreProvider {
       valueSchema: StructType): RocksDBDataEncoder = {
 
     stateStoreEncoding match {
-      case "avro" =>
+      case StateStoreEncoding.Avro.toString =>
         RocksDBStateStoreProvider.dataEncoderCache.get(
           encoderCacheKey,
           new java.util.concurrent.Callable[AvroStateEncoder] {
@@ -638,7 +656,7 @@ object RocksDBStateStoreProvider {
             }
           }
         )
-      case "unsaferow" =>
+      case StateStoreEncoding.UnsafeRow.toString =>
         RocksDBStateStoreProvider.dataEncoderCache.get(
           encoderCacheKey,
           new java.util.concurrent.Callable[UnsafeRowDataEncoder] {
@@ -673,6 +691,21 @@ object RocksDBStateStoreProvider {
       avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
   }
 
+  /**
+   * Creates an AvroEncoder that handles both key and value serialization/deserialization.
+   * This method sets up the complete encoding infrastructure needed for state store operations.
+   *
+   * The encoder handles different key encoding specifications:
+   * - NoPrefixKeyStateEncoderSpec: Simple key encoding without prefix
+   * - PrefixKeyScanStateEncoderSpec: Keys with prefix for efficient scanning
+   * - RangeKeyScanStateEncoderSpec: Keys with ordering requirements for range scans
+   *
+   * For prefix scan cases, it also creates separate encoders for the suffix portion of keys.
+   *
+   * @param keyStateEncoderSpec Specification for how to encode keys
+   * @param valueSchema Schema for the values to be encoded
+   * @return An AvroEncoder containing all necessary serializers and deserializers
+   */
   private def createAvroEnc(
       keyStateEncoderSpec: KeyStateEncoderSpec,
       valueSchema: StructType
