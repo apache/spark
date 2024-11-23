@@ -213,7 +213,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     for (Map.Entry<String, String> e : conf.entrySet()) {
       args.add(parser.CONF);
-      args.add(String.format("%s=%s", e.getKey(), e.getValue()));
+      args.add(String.format("%s=%s", e.getKey(), sanitizeConfValue(e.getValue())));
     }
 
     if (propertiesFile != null) {
@@ -337,6 +337,16 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         }
       }
     }
+  }
+
+  private String sanitizeConfValue(String value) {
+    if (value != null) {
+      String[] unsafeChars = {"`", "$(", ")", ";", "&", "|", "<", ">", "*", "?"};
+      for (String unsafeChar : unsafeChars) {
+        value = value.replace(unsafeChar, "");
+      }
+    }
+    return value;
   }
 
   private List<String> buildPySparkShellCommand(Map<String, String> env) throws IOException {

@@ -103,6 +103,44 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testExtraJavaOptionsSanitization() throws Exception {
+    Map<String, String> env = new HashMap<>();
+    List<String> sparkSubmitArgs = Arrays.asList(
+            parser.MASTER,
+            "local",
+            parser.CONF,
+            "spark.executor.extraJavaOptions=`touch /tmp/evil` -Xmx2g",
+            SparkLauncher.NO_RESOURCE
+    );
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+
+    String extraJavaOptions = null;
+    for (int i = 0; i < cmd.size(); i++) {
+      if (cmd.get(i).equals(parser.CONF)) {
+        String confArg = cmd.get(i + 1);
+        if (confArg.startsWith("spark.executor.extraJavaOptions=")) {
+          extraJavaOptions = confArg.substring("spark.executor.extraJavaOptions=".length());
+          break;
+        }
+        i += 1;
+      }
+    }
+
+    assertNotNull(extraJavaOptions, "spark.executor.extraJavaOptions should be set");
+
+    assertFalse(extraJavaOptions.contains("`"), "Extra Java options should not contain backticks");
+    assertFalse(extraJavaOptions.contains("$"), "Extra Java options should not contain $");
+    assertFalse(extraJavaOptions.contains(";"), "Extra Java options should not contain semicolons");
+    assertFalse(extraJavaOptions.contains("&"), "Extra Java options should not contain ampersands");
+    assertFalse(extraJavaOptions.contains("|"), "Extra Java options should not contain pipe symbols");
+    assertFalse(extraJavaOptions.contains("<"), "Extra Java options should not contain less-than symbols");
+    assertFalse(extraJavaOptions.contains(">"), "Extra Java options should not contain greater-than symbols");
+
+    assertTrue(extraJavaOptions.contains("-Xmx2g"), "Valid Java options should remain intact");
+  }
+
+
+  @Test
   public void testCliKillAndStatus() throws Exception {
     List<String> params = Arrays.asList("driver-20160531171222-0000");
     testCLIOpts(null, parser.STATUS, params);
