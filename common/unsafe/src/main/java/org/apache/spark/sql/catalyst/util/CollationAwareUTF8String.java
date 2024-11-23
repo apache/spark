@@ -1531,7 +1531,7 @@ public class CollationAwareUTF8String {
   public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,
       final int limit, final int collationId) {
     CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-    if(collation.isUtf8BinaryType && !collation.supportsSpaceTrimming){
+    if (collation.isUtf8BinaryType && !collation.supportsSpaceTrimming) {
       return input.split(delim, limit);
     }
 

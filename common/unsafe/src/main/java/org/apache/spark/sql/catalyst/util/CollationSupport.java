@@ -37,7 +37,7 @@ public final class CollationSupport {
   public static class StringSplitSQL {
     public static UTF8String[] exec(final UTF8String s, UTF8String d, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-      if(collation.isUtf8BinaryType && !collation.supportsSpaceTrimming){
+      if (collation.isUtf8BinaryType && !collation.supportsSpaceTrimming) {
         return execBinary(s, d);
       }
 
@@ -705,6 +705,7 @@ public final class CollationSupport {
   }
 
   static final int lowercaseRegexFlags = Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE;
+
   public static int collationAwareRegexFlags(final int collationId) {
     return supportsLowercaseRegex(collationId) ? lowercaseRegexFlags : 0;
   }
