@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
@@ -5952,6 +5953,8 @@ class AstBuilder extends DataTypeAstBuilder
         }.get
       val projectList: Seq[NamedExpression] = Seq(UnresolvedStar(None)) ++ extendExpressions
       Project(projectList, left)
+    }.getOrElse(Option(ctx.SET).map { _ =>
+      visitOperatorPipeSet(ctx, left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
         throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
@@ -5978,7 +5981,49 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    )))))))))
+    ))))))))))
+  }
+
+  private def visitOperatorPipeSet(
+      ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
+    val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
+      visitOperatorPipeSetAssignmentSeq(ctx.operatorPipeSetAssignmentSeq())
+    var plan = left
+    val visitedSetIdentifiers = mutable.Set.empty[String]
+    setIdentifiers.zip(setTargets).foreach {
+      case (_, _: Alias) =>
+        operationNotAllowed(
+          "SQL pipe syntax |> SET operator with an alias assigned with [AS] aliasName", ctx)
+      case (ident, target) =>
+        // Check uniqueness of the assignment keys.
+        val checkKey = if (SQLConf.get.caseSensitiveAnalysis) {
+          ident.toLowerCase(Locale.ROOT)
+        } else {
+          ident
+        }
+        if (visitedSetIdentifiers(checkKey)) {
+          operationNotAllowed(
+            s"SQL pipe syntax |> SET operator with duplicate assignment key $ident", ctx)
+        }
+        visitedSetIdentifiers += checkKey
+        // Add an UnresolvedStarExcept to exclude the SET expression name from the relation and
+        // add the new SET expression to the projection list.
+        // Use a PipeSelect expression to make sure it does not contain any aggregate functions.
+        val projectList: Seq[NamedExpression] =
+          Seq(UnresolvedStarExcept(None, Seq(Seq(ident))),
+            Alias(PipeExpression(target, isAggregate = false, PipeOperators.setClause), ident)())
+        plan = Project(projectList, plan)
+    }
+    plan
+  }
+
+  override def visitOperatorPipeSetAssignmentSeq(
+      ctx: OperatorPipeSetAssignmentSeqContext): (Seq[String], Seq[Expression]) = {
+    withOrigin(ctx) {
+      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
+      val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
+      (setIdentifiers, setTargets)
+    }
   }
 
   private def visitOperatorPipeAggregate(

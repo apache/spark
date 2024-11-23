@@ -680,6 +680,156 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 table t
+|> set x = 1
+-- !query schema
+struct<y:string,x:int>
+-- !query output
+abc	1
+def	1
+
+
+-- !query
+table t
+|> set y = x
+-- !query schema
+struct<x:int,y:int>
+-- !query output
+0	0
+1	1
+
+
+-- !query
+table t
+|> extend 1 as z
+|> set z = x + length(y)
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	3
+1	def	4
+
+
+-- !query
+table t
+|> extend 1 as z
+|> extend 2 as zz
+|> set z = x + length(y), zz = x + 1
+-- !query schema
+struct<x:int,y:string,z:int,zz:int>
+-- !query output
+0	abc	3	1
+1	def	4	2
+
+
+-- !query
+table t
+|> extend 1 as z
+|> set z = x + length(y)
+|> set z = z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	4
+1	def	5
+
+
+-- !query
+select col from st
+|> extend 1 as z
+|> set z = col.i1
+-- !query schema
+struct<col:struct<i1:int,i2:int>,z:int>
+-- !query output
+{"i1":2,"i2":3}	2
+
+
+-- !query
+table t
+|> set y = (select a from other where x = a limit 1)
+-- !query schema
+struct<x:int,y:int>
+-- !query output
+0	NULL
+1	1
+
+
+-- !query
+table t
+|> extend 1 as z
+|> set z = first_value(x) over (partition by y)
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+table t
+|> set z = 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`z`",
+    "proposal" : "`x`, `y`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 20,
+    "fragment" : "table t\n|> set z = 1"
+  } ]
+}
+
+
+-- !query
+table t
+|> set x = 1 as z
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'as'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table t
+|> extend 1 as z
+|> set z = x + length(y), z = z + 1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "SQL pipe syntax |> SET operator with duplicate assignment key z"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 60,
+    "fragment" : "table t\n|> extend 1 as z\n|> set z = x + length(y), z = z + 1"
+  } ]
+}
+
+
+-- !query
+table t
 |> where true
 -- !query schema
 struct<x:int,y:string>

@@ -241,6 +241,64 @@ table t
 table t
 |> extend *;
 
+-- SET operators: positive tests.
+---------------------------------
+
+-- Setting with a constant.
+table t
+|> set x = 1;
+
+-- Setting with an attribute.
+table t
+|> set y = x;
+
+-- Setting with an expression.
+table t
+|> extend 1 as z
+|> set z = x + length(y);
+
+-- Setting two times.
+table t
+|> extend 1 as z
+|> extend 2 as zz
+|> set z = x + length(y), zz = x + 1;
+
+-- Setting two times in sequence.
+table t
+|> extend 1 as z
+|> set z = x + length(y)
+|> set z = z + 1;
+
+-- Setting with a struct field.
+select col from st
+|> extend 1 as z
+|> set z = col.i1;
+
+-- Setting with a subquery.
+table t
+|> set y = (select a from other where x = a limit 1);
+
+-- Window functions are allowed in the pipe operator SET list.
+table t
+|> extend 1 as z
+|> set z = first_value(x) over (partition by y);
+
+-- SET operators: negative tests.
+---------------------------------
+
+-- SET with a column name that does not exist in the input relation.
+table t
+|> set z = 1;
+
+-- SET with an alias.
+table t
+|> set x = 1 as z;
+
+-- SET assignments with duplicate keys.
+table t
+|> extend 1 as z
+|> set z = x + length(y), z = z + 1;
+
 -- WHERE operators: positive tests.
 -----------------------------------
 

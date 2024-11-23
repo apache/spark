@@ -1504,6 +1504,7 @@ version
 operatorPipeRightSide
     : selectClause windowClause?
     | EXTEND extendList=namedExpressionSeq
+    | SET operatorPipeSetAssignmentSeq
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
     // the grammar simply for purposes of catching this invalid syntax and throwing a specific
     // dedicated error message.
@@ -1518,6 +1519,11 @@ operatorPipeRightSide
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryTerm
     | queryOrganization
     | AGGREGATE namedExpressionSeq? aggregationClause?
+    ;
+
+operatorPipeSetAssignmentSeq
+    : ident+=errorCapturingIdentifier EQ expression
+        (COMMA ident+=errorCapturingIdentifier EQ expression)*
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
