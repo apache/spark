@@ -254,7 +254,15 @@ class UnsafeRowStateEncoder(
     }
   }
 
-  override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = null
+  override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = {
+    keyStateEncoderSpec match {
+      case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) =>
+        decodeToUnsafeRow(bytes, numFields = numColsPrefixKey)
+      case RangeKeyScanStateEncoderSpec(_, orderingOrdinals) =>
+        decodeToUnsafeRow(bytes, keySchema.length - orderingOrdinals.length)
+      case _ => null
+    }
+  }
 
   override def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow = {
     assert(keyStateEncoderSpec.isInstanceOf[RangeKeyScanStateEncoderSpec])
@@ -405,7 +413,7 @@ class AvroStateEncoder(
     if (valueBytes != null) {
       val reader = new GenericDatumReader[Any](valueAvroType)
       val decoder = DecoderFactory.get().binaryDecoder(
-        valueBytes, Platform.BYTE_ARRAY_OFFSET, valueBytes.length, null)
+        valueBytes, 0, valueBytes.length, null)
       // bytes -> Avro.GenericDataRecord
       val genericData = reader.read(null, decoder)
       // Avro.GenericDataRecord -> InternalRow
@@ -567,7 +575,8 @@ class AvroStateEncoder(
       case NoPrefixKeyStateEncoderSpec(_) =>
         decodeFromAvroToUnsafeRow(bytes, avroEncoder.keyDeserializer, keyAvroType, keyProj)
       case PrefixKeyScanStateEncoderSpec(_, _) =>
-        decodeFromAvroToUnsafeRow(bytes, avroEncoder.keyDeserializer, keyAvroType, prefixKeyProj)
+        decodeFromAvroToUnsafeRow(
+          bytes, avroEncoder.keyDeserializer, prefixKeyAvroType, prefixKeyProj)
       case _ => null
     }
   }
@@ -899,7 +908,7 @@ class RangeKeyScanStateEncoder(
     orderingOrdinals: Seq[Int],
     useColumnFamilies: Boolean = false,
     virtualColFamilyId: Option[Short] = None)
-  extends RocksDBKeyStateEncoderBase(useColumnFamilies, virtualColFamilyId) {
+  extends RocksDBKeyStateEncoderBase(useColumnFamilies, virtualColFamilyId) with Logging {
 
   private val rangeScanKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
     orderingOrdinals.map { ordinal =>
@@ -1103,8 +1112,17 @@ class NoPrefixKeyStateEncoder(
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
     if (useColumnFamilies) {
       if (keyBytes != null) {
-        // Platform.BYTE_ARRAY_OFFSET is the recommended way refer to the 1st offset. See Platform.
-        stateEncoder.decodeKey(keyBytes)
+        // Create new byte array without prefix
+        val dataLength = keyBytes.length -
+          STATE_ENCODING_NUM_VERSION_BYTES - VIRTUAL_COL_FAMILY_PREFIX_BYTES
+        val dataBytes = new Array[Byte](dataLength)
+        Platform.copyMemory(
+          keyBytes,
+          decodeKeyStartOffset + STATE_ENCODING_NUM_VERSION_BYTES,
+          dataBytes,
+          Platform.BYTE_ARRAY_OFFSET,
+          dataLength)
+        stateEncoder.decodeKey(dataBytes)
       } else {
         null
       }
