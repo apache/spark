@@ -24,7 +24,7 @@ import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
-import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.window
 import org.apache.spark.sql.internal.SQLConf
 
@@ -103,7 +103,8 @@ case class AggEventRow(
     window: Window,
     count: Long)
 
-class TransformWithStateChainingSuite extends StreamTest {
+class TransformWithStateChainingSuite extends StreamTest
+  with AlsoTestWithEncodingTypes {
   import testImplicits._
 
   test("watermark is propagated correctly for next stateful operator" +

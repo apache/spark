@@ -17,13 +17,21 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.io.ByteArrayOutputStream
 import java.lang.Double.{doubleToRawLongBits, longBitsToDouble}
 import java.lang.Float.{floatToRawIntBits, intBitsToFloat}
 import java.nio.{ByteBuffer, ByteOrder}
 
+import org.apache.avro.Schema
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
+
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer, SchemaConverters}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, JoinedRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
+import org.apache.spark.sql.execution.streaming.StateStoreColumnFamilySchemaUtils
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider.{STATE_ENCODING_NUM_VERSION_BYTES, STATE_ENCODING_VERSION, VIRTUAL_COL_FAMILY_PREFIX_BYTES}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -43,91 +51,39 @@ sealed trait RocksDBValueStateEncoder {
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
 
-abstract class RocksDBKeyStateEncoderBase(
-    useColumnFamilies: Boolean,
-    virtualColFamilyId: Option[Short] = None) extends RocksDBKeyStateEncoder {
-  def offsetForColFamilyPrefix: Int =
-    if (useColumnFamilies) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
+trait StateEncoder {
+  def encodeKey(row: UnsafeRow): Array[Byte]
+  def encodeRemainingKey(row: UnsafeRow): Array[Byte]
+  def encodePrefixKeyForRangeScan(row: UnsafeRow): Array[Byte]
+  def encodeValue(row: UnsafeRow): Array[Byte]
 
-  /**
-   * Get Byte Array for the virtual column family id that is used as prefix for
-   * key state rows.
-   */
-  override def getColumnFamilyIdBytes(): Array[Byte] = {
-    assert(useColumnFamilies, "Cannot return virtual Column Family Id Bytes" +
-      " because multiple Column is not supported for this encoder")
-    val encodedBytes = new Array[Byte](VIRTUAL_COL_FAMILY_PREFIX_BYTES)
-    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId.get)
-    encodedBytes
-  }
-
-  /**
-   * Encode and put column family Id as a prefix to a pre-allocated byte array.
-   *
-   * @param numBytes - size of byte array to be created for storing key row (without
-   *                 column family prefix)
-   * @return Array[Byte] for an array byte to put encoded key bytes
-   *         Int for a starting offset to put the encoded key bytes
-   */
-  protected def encodeColumnFamilyPrefix(numBytes: Int): (Array[Byte], Int) = {
-    val encodedBytes = new Array[Byte](numBytes + offsetForColFamilyPrefix)
-    var offset = Platform.BYTE_ARRAY_OFFSET
-    if (useColumnFamilies) {
-      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId.get)
-      offset = Platform.BYTE_ARRAY_OFFSET + offsetForColFamilyPrefix
-    }
-    (encodedBytes, offset)
-  }
-
-  /**
-   * Get starting offset for decoding an encoded key byte array.
-   */
-  protected def decodeKeyStartOffset: Int = {
-    if (useColumnFamilies) {
-      Platform.BYTE_ARRAY_OFFSET + VIRTUAL_COL_FAMILY_PREFIX_BYTES
-    } else Platform.BYTE_ARRAY_OFFSET
-  }
+  def decodeKey(bytes: Array[Byte]): UnsafeRow
+  def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow
+  def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow
+  def decodeValue(bytes: Array[Byte]): UnsafeRow
 }
 
-object RocksDBStateEncoder {
-  def getKeyEncoder(
-      keyStateEncoderSpec: KeyStateEncoderSpec,
-      useColumnFamilies: Boolean,
-      virtualColFamilyId: Option[Short] = None): RocksDBKeyStateEncoder = {
-    // Return the key state encoder based on the requested type
-    keyStateEncoderSpec match {
-      case NoPrefixKeyStateEncoderSpec(keySchema) =>
-        new NoPrefixKeyStateEncoder(keySchema, useColumnFamilies, virtualColFamilyId)
+abstract class RocksDBDataEncoder(
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    valueSchema: StructType) extends StateEncoder {
 
-      case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
-        new PrefixKeyScanStateEncoder(keySchema, numColsPrefixKey,
-          useColumnFamilies, virtualColFamilyId)
+  val keySchema = keyStateEncoderSpec.keySchema
+  val reusedKeyRow = new UnsafeRow(keyStateEncoderSpec.keySchema.length)
+  val reusedValueRow = new UnsafeRow(valueSchema.length)
 
-      case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
-        new RangeKeyScanStateEncoder(keySchema, orderingOrdinals,
-          useColumnFamilies, virtualColFamilyId)
+  // bit masks used for checking sign or flipping all bits for negative float/double values
+  val floatFlipBitMask = 0xFFFFFFFF
+  val floatSignBitMask = 0x80000000
 
-      case _ =>
-        throw new IllegalArgumentException(s"Unsupported key state encoder spec: " +
-          s"$keyStateEncoderSpec")
-    }
-  }
+  val doubleFlipBitMask = 0xFFFFFFFFFFFFFFFFL
+  val doubleSignBitMask = 0x8000000000000000L
 
-  def getValueEncoder(
-      valueSchema: StructType,
-      useMultipleValuesPerKey: Boolean): RocksDBValueStateEncoder = {
-    if (useMultipleValuesPerKey) {
-      new MultiValuedStateEncoder(valueSchema)
-    } else {
-      new SingleValueStateEncoder(valueSchema)
-    }
-  }
-
-  def getColumnFamilyIdBytes(virtualColFamilyId: Short): Array[Byte] = {
-    val encodedBytes = new Array[Byte](VIRTUAL_COL_FAMILY_PREFIX_BYTES)
-    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId)
-    encodedBytes
-  }
+  // Byte markers used to identify whether the value is null, negative or positive
+  // To ensure sorted ordering, we use the lowest byte value for negative numbers followed by
+  // positive numbers and then null values.
+  val negativeValMarker: Byte = 0x00.toByte
+  val positiveValMarker: Byte = 0x01.toByte
+  val nullValMarker: Byte = 0x02.toByte
 
   /**
    * Encode the UnsafeRow of N bytes as a N+1 byte array.
@@ -168,243 +124,26 @@ object RocksDBStateEncoder {
   }
 }
 
-/**
- * RocksDB Key Encoder for UnsafeRow that supports prefix scan
- *
- * @param keySchema - schema of the key to be encoded
- * @param numColsPrefixKey - number of columns to be used for prefix key
- * @param useColumnFamilies - if column family is enabled for this encoder
- */
-class PrefixKeyScanStateEncoder(
-    keySchema: StructType,
-    numColsPrefixKey: Int,
-    useColumnFamilies: Boolean = false,
-    virtualColFamilyId: Option[Short] = None)
-  extends RocksDBKeyStateEncoderBase(useColumnFamilies, virtualColFamilyId) {
-
-  import RocksDBStateEncoder._
-
-  private val prefixKeyFieldsWithIdx: Seq[(StructField, Int)] = {
-    keySchema.zipWithIndex.take(numColsPrefixKey)
-  }
-
-  private val remainingKeyFieldsWithIdx: Seq[(StructField, Int)] = {
-    keySchema.zipWithIndex.drop(numColsPrefixKey)
-  }
-
-  private val prefixKeyProjection: UnsafeProjection = {
-    val refs = prefixKeyFieldsWithIdx.map(x => BoundReference(x._2, x._1.dataType, x._1.nullable))
-    UnsafeProjection.create(refs)
-  }
-
-  private val remainingKeyProjection: UnsafeProjection = {
-    val refs = remainingKeyFieldsWithIdx.map(x =>
-      BoundReference(x._2, x._1.dataType, x._1.nullable))
-    UnsafeProjection.create(refs)
-  }
-
-  // This is quite simple to do - just bind sequentially, as we don't change the order.
-  private val restoreKeyProjection: UnsafeProjection = UnsafeProjection.create(keySchema)
-
-  // Reusable objects
-  private val joinedRowOnKey = new JoinedRow()
+class UnsafeRowStateEncoder(
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    valueSchema: StructType) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema) {
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
-    val prefixKeyEncoded = encodeUnsafeRow(extractPrefixKey(row))
-    val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
-
-    val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(
-      prefixKeyEncoded.length + remainingEncoded.length + 4
-    )
-
-    Platform.putInt(encodedBytes, startingOffset, prefixKeyEncoded.length)
-    Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
-      encodedBytes, startingOffset + 4, prefixKeyEncoded.length)
-    // NOTE: We don't put the length of remainingEncoded as we can calculate later
-    // on deserialization.
-    Platform.copyMemory(remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
-      encodedBytes, startingOffset + 4 + prefixKeyEncoded.length,
-      remainingEncoded.length)
-
-    encodedBytes
+    encodeUnsafeRow(row)
   }
 
-  override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
-    val prefixKeyEncodedLen = Platform.getInt(keyBytes, decodeKeyStartOffset)
-    val prefixKeyEncoded = new Array[Byte](prefixKeyEncodedLen)
-    Platform.copyMemory(keyBytes, decodeKeyStartOffset + 4,
-      prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefixKeyEncodedLen)
-
-    // Here we calculate the remainingKeyEncodedLen leveraging the length of keyBytes
-    val remainingKeyEncodedLen = keyBytes.length - 4 - prefixKeyEncodedLen -
-      offsetForColFamilyPrefix
-
-    val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
-    Platform.copyMemory(keyBytes, decodeKeyStartOffset + 4 + prefixKeyEncodedLen,
-      remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET, remainingKeyEncodedLen)
-
-    val prefixKeyDecoded = decodeToUnsafeRow(prefixKeyEncoded, numFields = numColsPrefixKey)
-    val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
-      numFields = keySchema.length - numColsPrefixKey)
-
-    restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
+  override def encodeRemainingKey(row: UnsafeRow): Array[Byte] = {
+    encodeUnsafeRow(row)
   }
 
-  private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
-    prefixKeyProjection(key)
-  }
-
-  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
-    val prefixKeyEncoded = encodeUnsafeRow(prefixKey)
-    val (prefix, startingOffset) = encodeColumnFamilyPrefix(
-      prefixKeyEncoded.length + 4
-    )
-
-    Platform.putInt(prefix, startingOffset, prefixKeyEncoded.length)
-    Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefix,
-      startingOffset + 4, prefixKeyEncoded.length)
-    prefix
-  }
-
-  override def supportPrefixKeyScan: Boolean = true
-}
-
-/**
- * RocksDB Key Encoder for UnsafeRow that supports range scan for fixed size fields
- *
- * To encode a row for range scan, we first project the orderingOrdinals from the oridinal
- * UnsafeRow into another UnsafeRow; we then rewrite that new UnsafeRow's fields in BIG_ENDIAN
- * to allow for scanning keys in sorted order using the byte-wise comparison method that
- * RocksDB uses.
- *
- * Then, for the rest of the fields, we project those into another UnsafeRow.
- * We then effectively join these two UnsafeRows together, and finally take those bytes
- * to get the resulting row.
- *
- * We cannot support variable sized fields in the range scan because the UnsafeRow format
- * stores variable sized fields as offset and length pointers to the actual values,
- * thereby changing the required ordering.
- *
- * Note that we also support "null" values being passed for these fixed size fields. We prepend
- * a single byte to indicate whether the column value is null or not. We cannot change the
- * nullability on the UnsafeRow itself as the expected ordering would change if non-first
- * columns are marked as null. If the first col is null, those entries will appear last in
- * the iterator. If non-first columns are null, ordering based on the previous columns will
- * still be honored. For rows with null column values, ordering for subsequent columns
- * will also be maintained within those set of rows. We use the same byte to also encode whether
- * the value is negative or not. For negative float/double values, we flip all the bits to ensure
- * the right lexicographical ordering. For the rationale around this, please check the link
- * here: https://en.wikipedia.org/wiki/IEEE_754#Design_rationale
- *
- * @param keySchema - schema of the key to be encoded
- * @param orderingOrdinals - the ordinals for which the range scan is constructed
- * @param useColumnFamilies - if column family is enabled for this encoder
- */
-class RangeKeyScanStateEncoder(
-    keySchema: StructType,
-    orderingOrdinals: Seq[Int],
-    useColumnFamilies: Boolean = false,
-    virtualColFamilyId: Option[Short] = None)
-  extends RocksDBKeyStateEncoderBase(useColumnFamilies, virtualColFamilyId) {
-
-  import RocksDBStateEncoder._
-
-  private val rangeScanKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
-    orderingOrdinals.map { ordinal =>
-      val field = keySchema(ordinal)
+  override def encodePrefixKeyForRangeScan(row: UnsafeRow): Array[Byte] = {
+    assert(keyStateEncoderSpec.isInstanceOf[RangeKeyScanStateEncoderSpec])
+    val rsk = keyStateEncoderSpec.asInstanceOf[RangeKeyScanStateEncoderSpec]
+    val rangeScanKeyFieldsWithOrdinal = rsk.orderingOrdinals.map { ordinal =>
+      val field = rsk.keySchema(ordinal)
       (field, ordinal)
     }
-  }
-
-  private def isFixedSize(dataType: DataType): Boolean = dataType match {
-    case _: ByteType | _: BooleanType | _: ShortType | _: IntegerType | _: LongType |
-      _: FloatType | _: DoubleType => true
-    case _ => false
-  }
-
-  // verify that only fixed sized columns are used for ordering
-  rangeScanKeyFieldsWithOrdinal.foreach { case (field, ordinal) =>
-    if (!isFixedSize(field.dataType)) {
-      // NullType is technically fixed size, but not supported for ordering
-      if (field.dataType == NullType) {
-        throw StateStoreErrors.nullTypeOrderingColsNotSupported(field.name, ordinal.toString)
-      } else {
-        throw StateStoreErrors.variableSizeOrderingColsNotSupported(field.name, ordinal.toString)
-      }
-    }
-  }
-
-  private val remainingKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
-    0.to(keySchema.length - 1).diff(orderingOrdinals).map { ordinal =>
-      val field = keySchema(ordinal)
-      (field, ordinal)
-    }
-  }
-
-  private val rangeScanKeyProjection: UnsafeProjection = {
-    val refs = rangeScanKeyFieldsWithOrdinal.map(x =>
-      BoundReference(x._2, x._1.dataType, x._1.nullable))
-    UnsafeProjection.create(refs)
-  }
-
-  private val remainingKeyProjection: UnsafeProjection = {
-    val refs = remainingKeyFieldsWithOrdinal.map(x =>
-      BoundReference(x._2, x._1.dataType, x._1.nullable))
-    UnsafeProjection.create(refs)
-  }
-
-  // The original schema that we might get could be:
-  //    [foo, bar, baz, buzz]
-  // We might order by bar and buzz, leading to:
-  //    [bar, buzz, foo, baz]
-  // We need to create a projection that sends, for example, the buzz at index 1 to index
-  // 3. Thus, for every record in the original schema, we compute where it would be in
-  // the joined row and created a projection based on that.
-  private val restoreKeyProjection: UnsafeProjection = {
-    val refs = keySchema.zipWithIndex.map { case (field, originalOrdinal) =>
-      val ordinalInJoinedRow = if (orderingOrdinals.contains(originalOrdinal)) {
-          orderingOrdinals.indexOf(originalOrdinal)
-      } else {
-          orderingOrdinals.length +
-            remainingKeyFieldsWithOrdinal.indexWhere(_._2 == originalOrdinal)
-      }
-
-      BoundReference(ordinalInJoinedRow, field.dataType, field.nullable)
-    }
-    UnsafeProjection.create(refs)
-  }
-
-  // Reusable objects
-  private val joinedRowOnKey = new JoinedRow()
-
-  private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
-    rangeScanKeyProjection(key)
-  }
-
-  // bit masks used for checking sign or flipping all bits for negative float/double values
-  private val floatFlipBitMask = 0xFFFFFFFF
-  private val floatSignBitMask = 0x80000000
-
-  private val doubleFlipBitMask = 0xFFFFFFFFFFFFFFFFL
-  private val doubleSignBitMask = 0x8000000000000000L
-
-  // Byte markers used to identify whether the value is null, negative or positive
-  // To ensure sorted ordering, we use the lowest byte value for negative numbers followed by
-  // positive numbers and then null values.
-  private val negativeValMarker: Byte = 0x00.toByte
-  private val positiveValMarker: Byte = 0x01.toByte
-  private val nullValMarker: Byte = 0x02.toByte
-
-  // Rewrite the unsafe row by replacing fixed size fields with BIG_ENDIAN encoding
-  // using byte arrays.
-  // To handle "null" values, we prepend a byte to the byte array indicating whether the value
-  // is null or not. If the value is null, we write the null byte followed by zero bytes.
-  // If the value is not null, we write the null byte followed by the value.
-  // Note that setting null for the index on the unsafeRow is not feasible as it would change
-  // the sorting order on iteration.
-  // Also note that the same byte is used to indicate whether the value is negative or not.
-  private def encodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
-    val writer = new UnsafeRowWriter(orderingOrdinals.length)
+    val writer = new UnsafeRowWriter(rsk.orderingOrdinals.length)
     writer.resetRowWriter()
     rangeScanKeyFieldsWithOrdinal.zipWithIndex.foreach { case (fieldWithOrdinal, idx) =>
       val field = fieldWithOrdinal._1
@@ -500,19 +239,33 @@ class RangeKeyScanStateEncoder(
         }
       }
     }
-    writer.getRow()
+    encodeUnsafeRow(writer.getRow())
   }
 
-  // Rewrite the unsafe row by converting back from BIG_ENDIAN byte arrays to the
-  // original data types.
-  // For decode, we extract the byte array from the UnsafeRow, and then read the first byte
-  // to determine if the value is null or not. If the value is null, we set the ordinal on
-  // the UnsafeRow to null. If the value is not null, we read the rest of the bytes to get the
-  // actual value.
-  // For negative float/double values, we need to flip all the bits back to get the original value.
-  private def decodePrefixKeyForRangeScan(row: UnsafeRow): UnsafeRow = {
-    val writer = new UnsafeRowWriter(orderingOrdinals.length)
+  override def encodeValue(row: UnsafeRow): Array[Byte] = encodeUnsafeRow(row)
+
+  override def decodeKey(bytes: Array[Byte]): UnsafeRow = {
+    keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(_) =>
+        decodeToUnsafeRow(bytes, reusedKeyRow)
+      case PrefixKeyScanStateEncoderSpec(_, numColsPrefixKey) =>
+        decodeToUnsafeRow(bytes, numFields = numColsPrefixKey)
+      case _ => null
+    }
+  }
+
+  override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = null
+
+  override def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow = {
+    assert(keyStateEncoderSpec.isInstanceOf[RangeKeyScanStateEncoderSpec])
+    val rsk = keyStateEncoderSpec.asInstanceOf[RangeKeyScanStateEncoderSpec]
+    val writer = new UnsafeRowWriter(rsk.orderingOrdinals.length)
+    val rangeScanKeyFieldsWithOrdinal = rsk.orderingOrdinals.map { ordinal =>
+      val field = rsk.keySchema(ordinal)
+      (field, ordinal)
+    }
     writer.resetRowWriter()
+    val row = decodeToUnsafeRow(bytes, numFields = rsk.orderingOrdinals.length)
     rangeScanKeyFieldsWithOrdinal.zipWithIndex.foreach { case (fieldWithOrdinal, idx) =>
       val field = fieldWithOrdinal._1
 
@@ -563,13 +316,670 @@ class RangeKeyScanStateEncoder(
     writer.getRow()
   }
 
+  override def decodeValue(bytes: Array[Byte]): UnsafeRow = decodeToUnsafeRow(bytes, reusedValueRow)
+}
+
+class AvroStateEncoder(
+    keyStateEncoderSpec: KeyStateEncoderSpec,
+    valueSchema: StructType,
+    avroEncoder: AvroEncoder) extends RocksDBDataEncoder(keyStateEncoderSpec, valueSchema)
+    with Logging {
+
+  private lazy val keyAvroType: Schema = SchemaConverters.toAvroType(keySchema)
+  private lazy val keyProj = UnsafeProjection.create(keySchema)
+  private lazy val valueProj = UnsafeProjection.create(valueSchema)
+
+  private lazy val valueAvroType: Schema = SchemaConverters.toAvroType(valueSchema)
+
+  // Prefix Key schema and projection definitions used by the Avro Serializers
+  // and Deserializers
+  private lazy val prefixKeySchema = keyStateEncoderSpec match {
+    case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
+      StructType(keySchema.take (numColsPrefixKey))
+    case _ => null
+  }
+
+  private lazy val prefixKeyAvroType = SchemaConverters.toAvroType(prefixKeySchema)
+  private lazy val prefixKeyProj = UnsafeProjection.create(prefixKeySchema)
+
+  private lazy val rangeScanKeyFieldsWithOrdinal = keyStateEncoderSpec match {
+    case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
+      orderingOrdinals.map { ordinal =>
+        val field = keySchema(ordinal)
+        (field, ordinal)
+      }
+    case _ => null
+  }
+
+  private lazy val rangeScanAvroSchema = StateStoreColumnFamilySchemaUtils.convertForRangeScan(
+    StructType(rangeScanKeyFieldsWithOrdinal.map(_._1).toArray))
+
+  private lazy val rangeScanAvroType = SchemaConverters.toAvroType(rangeScanAvroSchema)
+
+  private lazy val rangeScanAvroProjection = UnsafeProjection.create(rangeScanAvroSchema)
+
+  // Existing remainder key schema stuff
+  // Remaining Key schema and projection definitions used by the Avro Serializers
+  // and Deserializers
+  private val remainingKeySchema = keyStateEncoderSpec match {
+    case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
+      StructType(keySchema.drop(numColsPrefixKey))
+    case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
+      StructType(0.until(keySchema.length).diff(orderingOrdinals).map(keySchema(_)))
+    case _ => null
+  }
+
+  private lazy val remainingKeyAvroType = SchemaConverters.toAvroType(remainingKeySchema)
+
+  private lazy val remainingKeyAvroProjection = UnsafeProjection.create(remainingKeySchema)
+
+  /**
+   * This method takes an UnsafeRow, and serializes to a byte array using Avro encoding.
+   */
+  def encodeUnsafeRowToAvro(
+      row: UnsafeRow,
+      avroSerializer: AvroSerializer,
+      valueAvroType: Schema,
+      out: ByteArrayOutputStream): Array[Byte] = {
+    // InternalRow -> Avro.GenericDataRecord
+    val avroData =
+      avroSerializer.serialize(row)
+    out.reset()
+    val encoder = EncoderFactory.get().directBinaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](
+      valueAvroType) // Defining Avro writer for this struct type
+    writer.write(avroData, encoder) // Avro.GenericDataRecord -> byte array
+    encoder.flush()
+    out.toByteArray
+  }
+
+  /**
+   * This method takes a byte array written using Avro encoding, and
+   * deserializes to an UnsafeRow using the Avro deserializer
+   */
+  def decodeFromAvroToUnsafeRow(
+      valueBytes: Array[Byte],
+      avroDeserializer: AvroDeserializer,
+      valueAvroType: Schema,
+      valueProj: UnsafeProjection): UnsafeRow = {
+    if (valueBytes != null) {
+      val reader = new GenericDatumReader[Any](valueAvroType)
+      val decoder = DecoderFactory.get().binaryDecoder(
+        valueBytes, Platform.BYTE_ARRAY_OFFSET, valueBytes.length, null)
+      // bytes -> Avro.GenericDataRecord
+      val genericData = reader.read(null, decoder)
+      // Avro.GenericDataRecord -> InternalRow
+      val internalRow = avroDeserializer.deserialize(
+        genericData).orNull.asInstanceOf[InternalRow]
+      // InternalRow -> UnsafeRow
+      valueProj.apply(internalRow)
+    } else {
+      null
+    }
+  }
+
+  private val out = new ByteArrayOutputStream
+  override def encodeKey(row: UnsafeRow): Array[Byte] = {
+    keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(_) =>
+        encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
+      case PrefixKeyScanStateEncoderSpec(_, _) =>
+        encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, prefixKeyAvroType, out)
+      case _ => null
+    }
+  }
+
+  override def encodeRemainingKey(row: UnsafeRow): Array[Byte] = {
+    keyStateEncoderSpec match {
+      case PrefixKeyScanStateEncoderSpec(_, _) =>
+        encodeUnsafeRowToAvro(row, avroEncoder.suffixKeySerializer.get, remainingKeyAvroType, out)
+      case RangeKeyScanStateEncoderSpec(_, _) =>
+        encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, remainingKeyAvroType, out)
+      case _ => null
+    }
+  }
+
+  override def encodePrefixKeyForRangeScan(
+      row: UnsafeRow): Array[Byte] = {
+    val record = new GenericData.Record(rangeScanAvroType)
+    var fieldIdx = 0
+    rangeScanKeyFieldsWithOrdinal.zipWithIndex.foreach { case (fieldWithOrdinal, idx) =>
+      val field = fieldWithOrdinal._1
+      val value = row.get(idx, field.dataType)
+
+      // Create marker byte buffer
+      val markerBuffer = ByteBuffer.allocate(1)
+      markerBuffer.order(ByteOrder.BIG_ENDIAN)
+
+      if (value == null) {
+        markerBuffer.put(nullValMarker)
+        record.put(fieldIdx, ByteBuffer.wrap(markerBuffer.array()))
+        record.put(fieldIdx + 1, ByteBuffer.wrap(new Array[Byte](field.dataType.defaultSize)))
+      } else {
+        field.dataType match {
+          case BooleanType =>
+            markerBuffer.put(positiveValMarker)
+            record.put(fieldIdx, ByteBuffer.wrap(markerBuffer.array()))
+            val valueBuffer = ByteBuffer.allocate(1)
+            valueBuffer.put(if (value.asInstanceOf[Boolean]) 1.toByte else 0.toByte)
+            record.put(fieldIdx + 1, ByteBuffer.wrap(valueBuffer.array()))
+
+          case ByteType =>
+            val byteVal = value.asInstanceOf[Byte]
+            markerBuffer.put(if (byteVal < 0) negativeValMarker else positiveValMarker)
+            record.put(fieldIdx, ByteBuffer.wrap(markerBuffer.array()))
+
+            val valueBuffer = ByteBuffer.allocate(1)
+            valueBuffer.order(ByteOrder.BIG_ENDIAN)
+            valueBuffer.put(byteVal)
+            record.put(fieldIdx + 1, ByteBuffer.wrap(valueBuffer.array()))
+
+          case ShortType =>
+            val shortVal = value.asInstanceOf[Short]
+            markerBuffer.put(if (shortVal < 0) negativeValMarker else positiveValMarker)
+            record.put(fieldIdx, ByteBuffer.wrap(markerBuffer.array()))
+
+            val valueBuffer = ByteBuffer.allocate(2)
+            valueBuffer.order(ByteOrder.BIG_ENDIAN)
+            valueBuffer.putShort(shortVal)
+            record.put(fieldIdx + 1, ByteBuffer.wrap(valueBuffer.array()))
+
+          case IntegerType =>
+            val intVal = value.asInstanceOf[Int]
+            markerBuffer.put(if (intVal < 0) negativeValMarker else positiveValMarker)
+            record.put(fieldIdx, ByteBuffer.wrap(markerBuffer.array()))
+
+            val valueBuffer = ByteBuffer.allocate(4)
+            valueBuffer.order(ByteOrder.BIG_ENDIAN)
+            valueBuffer.putInt(intVal)
+            record.put(fieldIdx + 1, ByteBuffer.wrap(valueBuffer.array()))
+
+          case LongType =>
+            val longVal = value.asInstanceOf[Long]
+            markerBuffer.put(if (longVal < 0) negativeValMarker else positiveValMarker)
+            record.put(fieldIdx, ByteBuffer.wrap(markerBuffer.array()))
+
+            val valueBuffer = ByteBuffer.allocate(8)
+            valueBuffer.order(ByteOrder.BIG_ENDIAN)
+            valueBuffer.putLong(longVal)
+            record.put(fieldIdx + 1, ByteBuffer.wrap(valueBuffer.array()))
+
+          case FloatType =>
+            val floatVal = value.asInstanceOf[Float]
+            val rawBits = floatToRawIntBits(floatVal)
+            markerBuffer.put(if ((rawBits & floatSignBitMask) != 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
+            })
+            record.put(fieldIdx, ByteBuffer.wrap(markerBuffer.array()))
+
+            val valueBuffer = ByteBuffer.allocate(4)
+            valueBuffer.order(ByteOrder.BIG_ENDIAN)
+            if ((rawBits & floatSignBitMask) != 0) {
+              val updatedVal = rawBits ^ floatFlipBitMask
+              valueBuffer.putFloat(intBitsToFloat(updatedVal))
+            } else {
+              valueBuffer.putFloat(floatVal)
+            }
+            record.put(fieldIdx + 1, ByteBuffer.wrap(valueBuffer.array()))
+
+          case DoubleType =>
+            val doubleVal = value.asInstanceOf[Double]
+            val rawBits = doubleToRawLongBits(doubleVal)
+            markerBuffer.put(if ((rawBits & doubleSignBitMask) != 0) {
+              negativeValMarker
+            } else {
+              positiveValMarker
+            })
+            record.put(fieldIdx, ByteBuffer.wrap(markerBuffer.array()))
+
+            val valueBuffer = ByteBuffer.allocate(8)
+            valueBuffer.order(ByteOrder.BIG_ENDIAN)
+            if ((rawBits & doubleSignBitMask) != 0) {
+              val updatedVal = rawBits ^ doubleFlipBitMask
+              valueBuffer.putDouble(longBitsToDouble(updatedVal))
+            } else {
+              valueBuffer.putDouble(doubleVal)
+            }
+            record.put(fieldIdx + 1, ByteBuffer.wrap(valueBuffer.array()))
+
+          case _ => throw new UnsupportedOperationException(
+            s"Range scan encoding not supported for data type: ${field.dataType}")
+        }
+      }
+      fieldIdx += 2
+    }
+
+    out.reset()
+    val writer = new GenericDatumWriter[GenericRecord](rangeScanAvroType)
+    val encoder = EncoderFactory.get().binaryEncoder(out, null)
+    writer.write(record, encoder)
+    encoder.flush()
+    out.toByteArray
+  }
+
+  override def encodeValue(row: UnsafeRow): Array[Byte] =
+    encodeUnsafeRowToAvro(row, avroEncoder.valueSerializer, valueAvroType, out)
+
+  override def decodeKey(bytes: Array[Byte]): UnsafeRow = {
+    keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(_) =>
+        decodeFromAvroToUnsafeRow(bytes, avroEncoder.keyDeserializer, keyAvroType, keyProj)
+      case PrefixKeyScanStateEncoderSpec(_, _) =>
+        decodeFromAvroToUnsafeRow(bytes, avroEncoder.keyDeserializer, keyAvroType, prefixKeyProj)
+      case _ => null
+    }
+  }
+
+
+  override def decodeRemainingKey(bytes: Array[Byte]): UnsafeRow = {
+    keyStateEncoderSpec match {
+      case PrefixKeyScanStateEncoderSpec(_, _) =>
+        decodeFromAvroToUnsafeRow(bytes,
+          avroEncoder.suffixKeyDeserializer.get, remainingKeyAvroType, remainingKeyAvroProjection)
+      case RangeKeyScanStateEncoderSpec(_, _) =>
+        decodeFromAvroToUnsafeRow(
+          bytes, avroEncoder.keyDeserializer, remainingKeyAvroType, remainingKeyAvroProjection)
+      case _ => null
+    }
+  }
+
+  override def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow = {
+    val reader = new GenericDatumReader[GenericRecord](rangeScanAvroType)
+    val decoder = DecoderFactory.get().binaryDecoder(bytes, 0, bytes.length, null)
+    val record = reader.read(null, decoder)
+
+    val rowWriter = new UnsafeRowWriter(rangeScanKeyFieldsWithOrdinal.length)
+    rowWriter.resetRowWriter()
+
+    var fieldIdx = 0
+    rangeScanKeyFieldsWithOrdinal.zipWithIndex.foreach { case (fieldWithOrdinal, idx) =>
+      val field = fieldWithOrdinal._1
+
+      val markerBytes = record.get(fieldIdx).asInstanceOf[ByteBuffer].array()
+      val markerBuf = ByteBuffer.wrap(markerBytes)
+      markerBuf.order(ByteOrder.BIG_ENDIAN)
+      val marker = markerBuf.get()
+
+      if (marker == nullValMarker) {
+        rowWriter.setNullAt(idx)
+      } else {
+        field.dataType match {
+          case BooleanType =>
+            val bytes = record.get(fieldIdx + 1).asInstanceOf[ByteBuffer].array()
+            rowWriter.write(idx, bytes(0) == 1)
+
+          case ByteType =>
+            val bytes = record.get(fieldIdx + 1).asInstanceOf[ByteBuffer].array()
+            val valueBuf = ByteBuffer.wrap(bytes)
+            valueBuf.order(ByteOrder.BIG_ENDIAN)
+            rowWriter.write(idx, valueBuf.get())
+
+          case ShortType =>
+            val bytes = record.get(fieldIdx + 1).asInstanceOf[ByteBuffer].array()
+            val valueBuf = ByteBuffer.wrap(bytes)
+            valueBuf.order(ByteOrder.BIG_ENDIAN)
+            rowWriter.write(idx, valueBuf.getShort())
+
+          case IntegerType =>
+            val bytes = record.get(fieldIdx + 1).asInstanceOf[ByteBuffer].array()
+            val valueBuf = ByteBuffer.wrap(bytes)
+            valueBuf.order(ByteOrder.BIG_ENDIAN)
+            rowWriter.write(idx, valueBuf.getInt())
+
+          case LongType =>
+            val bytes = record.get(fieldIdx + 1).asInstanceOf[ByteBuffer].array()
+            val valueBuf = ByteBuffer.wrap(bytes)
+            valueBuf.order(ByteOrder.BIG_ENDIAN)
+            rowWriter.write(idx, valueBuf.getLong())
+
+          case FloatType =>
+            val bytes = record.get(fieldIdx + 1).asInstanceOf[ByteBuffer].array()
+            val valueBuf = ByteBuffer.wrap(bytes)
+            valueBuf.order(ByteOrder.BIG_ENDIAN)
+            if (marker == negativeValMarker) {
+              val floatVal = valueBuf.getFloat
+              val updatedVal = floatToRawIntBits(floatVal) ^ floatFlipBitMask
+              rowWriter.write(idx, intBitsToFloat(updatedVal))
+            } else {
+              rowWriter.write(idx, valueBuf.getFloat())
+            }
+
+          case DoubleType =>
+            val bytes = record.get(fieldIdx + 1).asInstanceOf[ByteBuffer].array()
+            val valueBuf = ByteBuffer.wrap(bytes)
+            valueBuf.order(ByteOrder.BIG_ENDIAN)
+            if (marker == negativeValMarker) {
+              val doubleVal = valueBuf.getDouble
+              val updatedVal = doubleToRawLongBits(doubleVal) ^ doubleFlipBitMask
+              rowWriter.write(idx, longBitsToDouble(updatedVal))
+            } else {
+              rowWriter.write(idx, valueBuf.getDouble())
+            }
+
+          case _ => throw new UnsupportedOperationException(
+            s"Range scan decoding not supported for data type: ${field.dataType}")
+        }
+      }
+      fieldIdx += 2
+    }
+
+    rowWriter.getRow()
+  }
+
+  override def decodeValue(bytes: Array[Byte]): UnsafeRow =
+    decodeFromAvroToUnsafeRow(
+      bytes, avroEncoder.valueDeserializer, valueAvroType, valueProj)
+}
+
+abstract class RocksDBKeyStateEncoderBase(
+    useColumnFamilies: Boolean,
+    virtualColFamilyId: Option[Short] = None) extends RocksDBKeyStateEncoder {
+  def offsetForColFamilyPrefix: Int =
+    if (useColumnFamilies) VIRTUAL_COL_FAMILY_PREFIX_BYTES else 0
+
+  /**
+   * Get Byte Array for the virtual column family id that is used as prefix for
+   * key state rows.
+   */
+  override def getColumnFamilyIdBytes(): Array[Byte] = {
+    assert(useColumnFamilies, "Cannot return virtual Column Family Id Bytes" +
+      " because multiple Column is not supported for this encoder")
+    val encodedBytes = new Array[Byte](VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId.get)
+    encodedBytes
+  }
+
+  /**
+   * Encode and put column family Id as a prefix to a pre-allocated byte array.
+   *
+   * @param numBytes - size of byte array to be created for storing key row (without
+   *                 column family prefix)
+   * @return Array[Byte] for an array byte to put encoded key bytes
+   *         Int for a starting offset to put the encoded key bytes
+   */
+  protected def encodeColumnFamilyPrefix(numBytes: Int): (Array[Byte], Int) = {
+    val encodedBytes = new Array[Byte](numBytes + offsetForColFamilyPrefix)
+    var offset = Platform.BYTE_ARRAY_OFFSET
+    if (useColumnFamilies) {
+      Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId.get)
+      offset = Platform.BYTE_ARRAY_OFFSET + offsetForColFamilyPrefix
+    }
+    (encodedBytes, offset)
+  }
+
+  /**
+   * Get starting offset for decoding an encoded key byte array.
+   */
+  protected def decodeKeyStartOffset: Int = {
+    if (useColumnFamilies) {
+      Platform.BYTE_ARRAY_OFFSET + VIRTUAL_COL_FAMILY_PREFIX_BYTES
+    } else Platform.BYTE_ARRAY_OFFSET
+  }
+}
+
+object RocksDBStateEncoder {
+  def getKeyEncoder(
+      stateEncoder: RocksDBDataEncoder,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useColumnFamilies: Boolean,
+      virtualColFamilyId: Option[Short] = None): RocksDBKeyStateEncoder = {
+    // Return the key state encoder based on the requested type
+    keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(keySchema) =>
+        new NoPrefixKeyStateEncoder(stateEncoder, keySchema, useColumnFamilies, virtualColFamilyId)
+
+      case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
+        new PrefixKeyScanStateEncoder(stateEncoder, keySchema, numColsPrefixKey,
+          useColumnFamilies, virtualColFamilyId)
+
+      case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
+        new RangeKeyScanStateEncoder(stateEncoder, keySchema, orderingOrdinals,
+          useColumnFamilies, virtualColFamilyId)
+
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported key state encoder spec: " +
+          s"$keyStateEncoderSpec")
+    }
+  }
+
+  def getValueEncoder(
+      stateEncoder: RocksDBDataEncoder,
+      valueSchema: StructType,
+      useMultipleValuesPerKey: Boolean): RocksDBValueStateEncoder = {
+    if (useMultipleValuesPerKey) {
+      new MultiValuedStateEncoder(stateEncoder, valueSchema)
+    } else {
+      new SingleValueStateEncoder(stateEncoder, valueSchema)
+    }
+  }
+
+  def getColumnFamilyIdBytes(virtualColFamilyId: Short): Array[Byte] = {
+    val encodedBytes = new Array[Byte](VIRTUAL_COL_FAMILY_PREFIX_BYTES)
+    Platform.putShort(encodedBytes, Platform.BYTE_ARRAY_OFFSET, virtualColFamilyId)
+    encodedBytes
+  }
+}
+
+/**
+ * RocksDB Key Encoder for UnsafeRow that supports prefix scan
+ *
+ * @param keySchema - schema of the key to be encoded
+ * @param numColsPrefixKey - number of columns to be used for prefix key
+ * @param useColumnFamilies - if column family is enabled for this encoder
+ */
+class PrefixKeyScanStateEncoder(
+    stateEncoder: RocksDBDataEncoder,
+    keySchema: StructType,
+    numColsPrefixKey: Int,
+    useColumnFamilies: Boolean = false,
+    virtualColFamilyId: Option[Short] = None)
+  extends RocksDBKeyStateEncoderBase(useColumnFamilies, virtualColFamilyId) with Logging {
+
+  private val prefixKeyFieldsWithIdx: Seq[(StructField, Int)] = {
+    keySchema.zipWithIndex.take(numColsPrefixKey)
+  }
+
+  private val remainingKeyFieldsWithIdx: Seq[(StructField, Int)] = {
+    keySchema.zipWithIndex.drop(numColsPrefixKey)
+  }
+
+  private val prefixKeyProjection: UnsafeProjection = {
+    val refs = prefixKeyFieldsWithIdx.map(x => BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  private val remainingKeyProjection: UnsafeProjection = {
+    val refs = remainingKeyFieldsWithIdx.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  // This is quite simple to do - just bind sequentially, as we don't change the order.
+  private val restoreKeyProjection: UnsafeProjection = UnsafeProjection.create(keySchema)
+
+  // Reusable objects
+  private val joinedRowOnKey = new JoinedRow()
+
+  override def encodeKey(row: UnsafeRow): Array[Byte] = {
+    val prefixKeyEncoded = stateEncoder.encodeKey(extractPrefixKey(row))
+    val remainingEncoded = stateEncoder.encodeRemainingKey(remainingKeyProjection(row))
+
+    val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(
+      prefixKeyEncoded.length + remainingEncoded.length + 4
+    )
+
+    Platform.putInt(encodedBytes, startingOffset, prefixKeyEncoded.length)
+    Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, startingOffset + 4, prefixKeyEncoded.length)
+    // NOTE: We don't put the length of remainingEncoded as we can calculate later
+    // on deserialization.
+    Platform.copyMemory(remainingEncoded, Platform.BYTE_ARRAY_OFFSET,
+      encodedBytes, startingOffset + 4 + prefixKeyEncoded.length,
+      remainingEncoded.length)
+
+    encodedBytes
+  }
+
+  override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
+    val prefixKeyEncodedLen = Platform.getInt(keyBytes, decodeKeyStartOffset)
+    val prefixKeyEncoded = new Array[Byte](prefixKeyEncodedLen)
+    Platform.copyMemory(keyBytes, decodeKeyStartOffset + 4,
+      prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefixKeyEncodedLen)
+
+    // Here we calculate the remainingKeyEncodedLen leveraging the length of keyBytes
+    val remainingKeyEncodedLen = keyBytes.length - 4 - prefixKeyEncodedLen -
+      offsetForColFamilyPrefix
+
+    val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
+    Platform.copyMemory(keyBytes, decodeKeyStartOffset + 4 + prefixKeyEncodedLen,
+      remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET, remainingKeyEncodedLen)
+
+    val prefixKeyDecoded = stateEncoder.decodeKey(
+      prefixKeyEncoded)
+    val remainingKeyDecoded = stateEncoder.decodeRemainingKey(remainingKeyEncoded)
+
+    restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
+  }
+
+  private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
+    prefixKeyProjection(key)
+  }
+
+  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
+    val prefixKeyEncoded = stateEncoder.encodeKey(prefixKey)
+    val (prefix, startingOffset) = encodeColumnFamilyPrefix(
+      prefixKeyEncoded.length + 4
+    )
+
+    Platform.putInt(prefix, startingOffset, prefixKeyEncoded.length)
+    Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefix,
+      startingOffset + 4, prefixKeyEncoded.length)
+    prefix
+  }
+
+  override def supportPrefixKeyScan: Boolean = true
+}
+
+/**
+ * RocksDB Key Encoder for UnsafeRow that supports range scan for fixed size fields
+ *
+ * To encode a row for range scan, we first project the orderingOrdinals from the oridinal
+ * UnsafeRow into another UnsafeRow; we then rewrite that new UnsafeRow's fields in BIG_ENDIAN
+ * to allow for scanning keys in sorted order using the byte-wise comparison method that
+ * RocksDB uses.
+ *
+ * Then, for the rest of the fields, we project those into another UnsafeRow.
+ * We then effectively join these two UnsafeRows together, and finally take those bytes
+ * to get the resulting row.
+ *
+ * We cannot support variable sized fields in the range scan because the UnsafeRow format
+ * stores variable sized fields as offset and length pointers to the actual values,
+ * thereby changing the required ordering.
+ *
+ * Note that we also support "null" values being passed for these fixed size fields. We prepend
+ * a single byte to indicate whether the column value is null or not. We cannot change the
+ * nullability on the UnsafeRow itself as the expected ordering would change if non-first
+ * columns are marked as null. If the first col is null, those entries will appear last in
+ * the iterator. If non-first columns are null, ordering based on the previous columns will
+ * still be honored. For rows with null column values, ordering for subsequent columns
+ * will also be maintained within those set of rows. We use the same byte to also encode whether
+ * the value is negative or not. For negative float/double values, we flip all the bits to ensure
+ * the right lexicographical ordering. For the rationale around this, please check the link
+ * here: https://en.wikipedia.org/wiki/IEEE_754#Design_rationale
+ *
+ * @param keySchema - schema of the key to be encoded
+ * @param orderingOrdinals - the ordinals for which the range scan is constructed
+ * @param useColumnFamilies - if column family is enabled for this encoder
+ */
+class RangeKeyScanStateEncoder(
+    stateEncoder: RocksDBDataEncoder,
+    keySchema: StructType,
+    orderingOrdinals: Seq[Int],
+    useColumnFamilies: Boolean = false,
+    virtualColFamilyId: Option[Short] = None)
+  extends RocksDBKeyStateEncoderBase(useColumnFamilies, virtualColFamilyId) {
+
+  private val rangeScanKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
+    orderingOrdinals.map { ordinal =>
+      val field = keySchema(ordinal)
+      (field, ordinal)
+    }
+  }
+
+  private def isFixedSize(dataType: DataType): Boolean = dataType match {
+    case _: ByteType | _: BooleanType | _: ShortType | _: IntegerType | _: LongType |
+      _: FloatType | _: DoubleType => true
+    case _ => false
+  }
+
+  // verify that only fixed sized columns are used for ordering
+  rangeScanKeyFieldsWithOrdinal.foreach { case (field, ordinal) =>
+    if (!isFixedSize(field.dataType)) {
+      // NullType is technically fixed size, but not supported for ordering
+      if (field.dataType == NullType) {
+        throw StateStoreErrors.nullTypeOrderingColsNotSupported(field.name, ordinal.toString)
+      } else {
+        throw StateStoreErrors.variableSizeOrderingColsNotSupported(field.name, ordinal.toString)
+      }
+    }
+  }
+
+  private val remainingKeyFieldsWithOrdinal: Seq[(StructField, Int)] = {
+    0.to(keySchema.length - 1).diff(orderingOrdinals).map { ordinal =>
+      val field = keySchema(ordinal)
+      (field, ordinal)
+    }
+  }
+
+  private val rangeScanKeyProjection: UnsafeProjection = {
+    val refs = rangeScanKeyFieldsWithOrdinal.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  private val remainingKeyProjection: UnsafeProjection = {
+    val refs = remainingKeyFieldsWithOrdinal.map(x =>
+      BoundReference(x._2, x._1.dataType, x._1.nullable))
+    UnsafeProjection.create(refs)
+  }
+
+  // The original schema that we might get could be:
+  //    [foo, bar, baz, buzz]
+  // We might order by bar and buzz, leading to:
+  //    [bar, buzz, foo, baz]
+  // We need to create a projection that sends, for example, the buzz at index 1 to index
+  // 3. Thus, for every record in the original schema, we compute where it would be in
+  // the joined row and created a projection based on that.
+  private val restoreKeyProjection: UnsafeProjection = {
+    val refs = keySchema.zipWithIndex.map { case (field, originalOrdinal) =>
+      val ordinalInJoinedRow = if (orderingOrdinals.contains(originalOrdinal)) {
+          orderingOrdinals.indexOf(originalOrdinal)
+      } else {
+          orderingOrdinals.length +
+            remainingKeyFieldsWithOrdinal.indexWhere(_._2 == originalOrdinal)
+      }
+
+      BoundReference(ordinalInJoinedRow, field.dataType, field.nullable)
+    }
+    UnsafeProjection.create(refs)
+  }
+
+  // Reusable objects
+  private val joinedRowOnKey = new JoinedRow()
+
+  private def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
+    rangeScanKeyProjection(key)
+  }
+
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
     // This prefix key has the columns specified by orderingOrdinals
     val prefixKey = extractPrefixKey(row)
-    val rangeScanKeyEncoded = encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
+    val rangeScanKeyEncoded = stateEncoder.encodePrefixKeyForRangeScan(prefixKey)
 
     val result = if (orderingOrdinals.length < keySchema.length) {
-      val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
+      val remainingEncoded = stateEncoder.encodeRemainingKey(remainingKeyProjection(row))
       val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(
         rangeScanKeyEncoded.length + remainingEncoded.length + 4
       )
@@ -606,9 +1016,8 @@ class RangeKeyScanStateEncoder(
     Platform.copyMemory(keyBytes, decodeKeyStartOffset + 4,
       prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefixKeyEncodedLen)
 
-    val prefixKeyDecodedForRangeScan = decodeToUnsafeRow(prefixKeyEncoded,
-      numFields = orderingOrdinals.length)
-    val prefixKeyDecoded = decodePrefixKeyForRangeScan(prefixKeyDecodedForRangeScan)
+    val prefixKeyDecoded = stateEncoder.decodePrefixKeyForRangeScan(
+      prefixKeyEncoded)
 
     if (orderingOrdinals.length < keySchema.length) {
       // Here we calculate the remainingKeyEncodedLen leveraging the length of keyBytes
@@ -620,8 +1029,7 @@ class RangeKeyScanStateEncoder(
         remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
         remainingKeyEncodedLen)
 
-      val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
-        numFields = keySchema.length - orderingOrdinals.length)
+      val remainingKeyDecoded = stateEncoder.decodeRemainingKey(remainingKeyEncoded)
 
       val joined = joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded)
       val restored = restoreKeyProjection(joined)
@@ -634,7 +1042,7 @@ class RangeKeyScanStateEncoder(
   }
 
   override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
-    val rangeScanKeyEncoded = encodeUnsafeRow(encodePrefixKeyForRangeScan(prefixKey))
+    val rangeScanKeyEncoded = stateEncoder.encodePrefixKeyForRangeScan(prefixKey)
     val (prefix, startingOffset) = encodeColumnFamilyPrefix(rangeScanKeyEncoded.length + 4)
 
     Platform.putInt(prefix, startingOffset, rangeScanKeyEncoded.length)
@@ -659,21 +1067,20 @@ class RangeKeyScanStateEncoder(
  *    then the generated array byte will be N+1 bytes.
  */
 class NoPrefixKeyStateEncoder(
+    stateEncoder: RocksDBDataEncoder,
     keySchema: StructType,
     useColumnFamilies: Boolean = false,
     virtualColFamilyId: Option[Short] = None)
   extends RocksDBKeyStateEncoderBase(useColumnFamilies, virtualColFamilyId) {
-
-  import RocksDBStateEncoder._
 
   // Reusable objects
   private val keyRow = new UnsafeRow(keySchema.size)
 
   override def encodeKey(row: UnsafeRow): Array[Byte] = {
     if (!useColumnFamilies) {
-      encodeUnsafeRow(row)
+      stateEncoder.encodeUnsafeRow(row)
     } else {
-      val bytesToEncode = row.getBytes
+      val bytesToEncode = stateEncoder.encodeKey(row)
       val (encodedBytes, startingOffset) = encodeColumnFamilyPrefix(
         bytesToEncode.length +
           STATE_ENCODING_NUM_VERSION_BYTES
@@ -697,15 +1104,13 @@ class NoPrefixKeyStateEncoder(
     if (useColumnFamilies) {
       if (keyBytes != null) {
         // Platform.BYTE_ARRAY_OFFSET is the recommended way refer to the 1st offset. See Platform.
-        keyRow.pointTo(
-          keyBytes,
-          decodeKeyStartOffset + STATE_ENCODING_NUM_VERSION_BYTES,
-          keyBytes.length - STATE_ENCODING_NUM_VERSION_BYTES - VIRTUAL_COL_FAMILY_PREFIX_BYTES)
-        keyRow
+        stateEncoder.decodeKey(keyBytes)
       } else {
         null
       }
-    } else decodeToUnsafeRow(keyBytes, keyRow)
+    } else {
+      stateEncoder.decodeToUnsafeRow(keyBytes, keyRow)
+    }
   }
 
   override def supportPrefixKeyScan: Boolean = false
@@ -728,16 +1133,13 @@ class NoPrefixKeyStateEncoder(
  * merged in RocksDB using merge operation, and all merged values can be read using decodeValues
  * operation.
  */
-class MultiValuedStateEncoder(valueSchema: StructType)
+class MultiValuedStateEncoder(
+    stateEncoder: RocksDBDataEncoder,
+    valueSchema: StructType)
   extends RocksDBValueStateEncoder with Logging {
 
-  import RocksDBStateEncoder._
-
-  // Reusable objects
-  private val valueRow = new UnsafeRow(valueSchema.size)
-
   override def encodeValue(row: UnsafeRow): Array[Byte] = {
-    val bytes = encodeUnsafeRow(row)
+    val bytes = stateEncoder.encodeValue(row)
     val numBytes = bytes.length
 
     val encodedBytes = new Array[Byte](java.lang.Integer.BYTES + bytes.length)
@@ -756,7 +1158,7 @@ class MultiValuedStateEncoder(valueSchema: StructType)
       val encodedValue = new Array[Byte](numBytes)
       Platform.copyMemory(valueBytes, java.lang.Integer.BYTES + Platform.BYTE_ARRAY_OFFSET,
         encodedValue, Platform.BYTE_ARRAY_OFFSET, numBytes)
-      decodeToUnsafeRow(encodedValue, valueRow)
+      stateEncoder.decodeValue(encodedValue)
     }
   }
 
@@ -782,7 +1184,7 @@ class MultiValuedStateEncoder(valueSchema: StructType)
 
           pos += numBytes
           pos += 1 // eat the delimiter character
-          decodeToUnsafeRow(encodedValue, valueRow)
+          stateEncoder.decodeValue(encodedValue)
         }
       }
     }
@@ -803,15 +1205,12 @@ class MultiValuedStateEncoder(valueSchema: StructType)
  *    (offset 0 is the version byte of value 0). That is, if the unsafe row has N bytes,
  *    then the generated array byte will be N+1 bytes.
  */
-class SingleValueStateEncoder(valueSchema: StructType)
+class SingleValueStateEncoder(
+    stateEncoder: RocksDBDataEncoder,
+    valueSchema: StructType)
   extends RocksDBValueStateEncoder {
 
-  import RocksDBStateEncoder._
-
-  // Reusable objects
-  private val valueRow = new UnsafeRow(valueSchema.size)
-
-  override def encodeValue(row: UnsafeRow): Array[Byte] = encodeUnsafeRow(row)
+  override def encodeValue(row: UnsafeRow): Array[Byte] = stateEncoder.encodeValue(row)
 
   /**
    * Decode byte array for a value to a UnsafeRow.
@@ -820,7 +1219,7 @@ class SingleValueStateEncoder(valueSchema: StructType)
    *       the given byte array.
    */
   override def decodeValue(valueBytes: Array[Byte]): UnsafeRow = {
-    decodeToUnsafeRow(valueBytes, valueRow)
+    stateEncoder.decodeValue(valueBytes)
   }
 
   override def supportsMultipleValuesPerKey: Boolean = false

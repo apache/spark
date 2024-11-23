@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io._
-import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.util.control.NonFatal
 
+import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -29,11 +31,12 @@ import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroOptions, AvroSerializer, SchemaConverters}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StreamExecution}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{NonFateSharingCache, Utils}
 
 private[sql] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable
@@ -74,9 +77,15 @@ private[sql] class RocksDBStateStoreProvider
         isInternal: Boolean = false): Unit = {
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
       val newColFamilyId = rocksDB.createColFamilyIfAbsent(colFamilyName)
+      val dataEncoderCacheKey = s"${getRunId(hadoopConf)}_${stateStoreId.operatorId}_" +
+        s"${stateStoreId.partitionId}_${colFamilyName}"
+
+      val dataEncoder = getDataEncoder(
+        stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
+
       keyValueEncoderMap.putIfAbsent(colFamilyName,
-        (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
-          Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(valueSchema,
+        (RocksDBStateEncoder.getKeyEncoder(dataEncoder, keyStateEncoderSpec, useColumnFamilies,
+          Some(newColFamilyId)), RocksDBStateEncoder.getValueEncoder(dataEncoder, valueSchema,
           useMultipleValuesPerKey)))
     }
 
@@ -364,6 +373,7 @@ private[sql] class RocksDBStateStoreProvider
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
     this.useColumnFamilies = useColumnFamilies
+    this.stateStoreEncoding = storeConf.stateStoreEncodingFormat
 
     if (useMultipleValuesPerKey) {
       require(useColumnFamilies, "Multiple values per key support requires column families to be" +
@@ -377,10 +387,16 @@ private[sql] class RocksDBStateStoreProvider
       defaultColFamilyId = Some(rocksDB.createColFamilyIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME))
     }
 
+    val dataEncoderCacheKey = s"${getRunId(hadoopConf)}_${stateStoreId.operatorId}_" +
+      s"${stateStoreId.partitionId}_${StateStore.DEFAULT_COL_FAMILY_NAME}"
+
+    val dataEncoder = getDataEncoder(
+      stateStoreEncoding, dataEncoderCacheKey, keyStateEncoderSpec, valueSchema)
+
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
-      (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
+      (RocksDBStateEncoder.getKeyEncoder(dataEncoder, keyStateEncoderSpec,
         useColumnFamilies, defaultColFamilyId),
-        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey)))
+        RocksDBStateEncoder.getValueEncoder(dataEncoder, valueSchema, useMultipleValuesPerKey)))
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -458,6 +474,7 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
   @volatile private var useColumnFamilies: Boolean = _
+  @volatile private var stateStoreEncoding: String = _
 
   private[sql] lazy val rocksDB = {
     val dfsRootDir = stateStoreId.storeCheckpointLocation().toString
@@ -592,6 +609,113 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
   val VIRTUAL_COL_FAMILY_PREFIX_BYTES = 2
+
+  private val MAX_AVRO_ENCODERS_IN_CACHE = 1000
+  // Add the cache at companion object level so it persists across provider instances
+  private val dataEncoderCache: NonFateSharingCache[String, RocksDBDataEncoder] = {
+    val guavaCache = CacheBuilder.newBuilder()
+      .maximumSize(MAX_AVRO_ENCODERS_IN_CACHE)  // Adjust size based on your needs
+      .expireAfterAccess(1, TimeUnit.HOURS)  // Optional: Add expiration if needed
+      .build[String, RocksDBDataEncoder]()
+
+    new NonFateSharingCache(guavaCache)
+  }
+
+  def getDataEncoder(
+      stateStoreEncoding: String,
+      encoderCacheKey: String,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      valueSchema: StructType): RocksDBDataEncoder = {
+
+    stateStoreEncoding match {
+      case "avro" =>
+        RocksDBStateStoreProvider.dataEncoderCache.get(
+          encoderCacheKey,
+          new java.util.concurrent.Callable[AvroStateEncoder] {
+            override def call(): AvroStateEncoder = {
+              val avroEncoder = createAvroEnc(keyStateEncoderSpec, valueSchema)
+              new AvroStateEncoder(keyStateEncoderSpec, valueSchema, avroEncoder)
+            }
+          }
+        )
+      case "unsaferow" =>
+        RocksDBStateStoreProvider.dataEncoderCache.get(
+          encoderCacheKey,
+          new java.util.concurrent.Callable[UnsafeRowStateEncoder] {
+            override def call(): UnsafeRowStateEncoder = {
+              new UnsafeRowStateEncoder(keyStateEncoderSpec, valueSchema)
+            }
+          }
+        )
+    }
+  }
+
+  private def getRunId(hadoopConf: Configuration): String = {
+    val runId = hadoopConf.get(StreamExecution.RUN_ID_KEY)
+    if (runId != null) {
+      runId
+    } else {
+      assert(Utils.isTesting, "Failed to find query id/batch Id in task context")
+      UUID.randomUUID().toString
+    }
+  }
+
+  private def getAvroSerializer(schema: StructType): AvroSerializer = {
+    val avroType = SchemaConverters.toAvroType(schema)
+    new AvroSerializer(schema, avroType, nullable = false)
+  }
+
+  private def getAvroDeserializer(schema: StructType): AvroDeserializer = {
+    val avroType = SchemaConverters.toAvroType(schema)
+    val avroOptions = AvroOptions(Map.empty)
+    new AvroDeserializer(avroType, schema,
+      avroOptions.datetimeRebaseModeInRead, avroOptions.useStableIdForUnionType,
+      avroOptions.stableIdPrefixForUnionType, avroOptions.recursiveFieldMaxDepth)
+  }
+
+  private def createAvroEnc(
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      valueSchema: StructType
+  ): AvroEncoder = {
+    val valueSerializer = getAvroSerializer(valueSchema)
+    val valueDeserializer = getAvroDeserializer(valueSchema)
+
+    // Get key schema based on encoder spec type
+    val keySchema = keyStateEncoderSpec match {
+      case NoPrefixKeyStateEncoderSpec(schema) =>
+        schema
+      case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
+        StructType(schema.take(numColsPrefixKey))
+      case RangeKeyScanStateEncoderSpec(schema, orderingOrdinals) =>
+        val remainingSchema = {
+          0.until(schema.length).diff(orderingOrdinals).map { ordinal =>
+            schema(ordinal)
+          }
+        }
+        StructType(remainingSchema)
+    }
+
+    // Handle suffix key schema for prefix scan case
+    val suffixKeySchema = keyStateEncoderSpec match {
+      case PrefixKeyScanStateEncoderSpec(schema, numColsPrefixKey) =>
+        Some(StructType(schema.drop(numColsPrefixKey)))
+      case _ =>
+        None
+    }
+
+    val keySerializer = getAvroSerializer(keySchema)
+    val keyDeserializer = getAvroDeserializer(keySchema)
+
+    // Create the AvroEncoder with all components
+    AvroEncoder(
+      keySerializer,
+      keyDeserializer,
+      valueSerializer,
+      valueDeserializer,
+      suffixKeySchema.map(getAvroSerializer),
+      suffixKeySchema.map(getAvroDeserializer)
+    )
+  }
 
   // Native operation latencies report as latency in microseconds
   // as SQLMetrics support millis. Convert the value to millis

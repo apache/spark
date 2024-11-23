@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.sql.avro.{AvroDeserializer, AvroSerializer}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, StatefulOperatorStateInfo}
 import org.apache.spark.sql.execution.streaming.state.SchemaHelper.{SchemaReader, SchemaWriter}
@@ -36,6 +37,17 @@ case class StateSchemaValidationResult(
     evolvedSchema: Boolean,
     schemaPath: String
 )
+
+// Avro encoder that is used by the RocksDBStateStoreProvider and RocksDBStateEncoder
+// in order to serialize from UnsafeRow to a byte array of Avro encoding.
+case class AvroEncoder(
+  keySerializer: AvroSerializer,
+  keyDeserializer: AvroDeserializer,
+  valueSerializer: AvroSerializer,
+  valueDeserializer: AvroDeserializer,
+  suffixKeySerializer: Option[AvroSerializer] = None,
+  suffixKeyDeserializer: Option[AvroDeserializer] = None
+) extends Serializable
 
 // Used to represent the schema of a column family in the state store
 case class StateStoreColFamilySchema(

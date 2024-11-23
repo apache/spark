@@ -429,7 +429,8 @@ class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
  * Class that adds tests for transformWithState stateful streaming operator
  */
 class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithChangelogCheckpointingEnabled
+  with AlsoTestWithEncodingTypes {
 
   import testImplicits._
 
