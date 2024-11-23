@@ -104,6 +104,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testExtraJavaOptionsSanitization() throws Exception {
+    //SPARK-50240: Test to check extra Java options inputs are sanitized
     Map<String, String> env = new HashMap<>();
     List<String> sparkSubmitArgs = Arrays.asList(
             parser.MASTER,
