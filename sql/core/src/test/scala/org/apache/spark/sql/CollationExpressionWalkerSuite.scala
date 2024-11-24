@@ -742,7 +742,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
           }
         } catch {
           case e: SparkRuntimeException => assert(e.getCondition == "USER_RAISED_EXCEPTION")
-          case other: Throwable => throw other
+          case other: Throwable => throw new Exception(s"Query $query failed", other)
         }
       }
     }

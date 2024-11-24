@@ -872,8 +872,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unsupportedPartitionTransformError(
       transform: Transform): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2067",
-      messageParameters = Map("transform" -> transform.toString()))
+      errorClass = "UNSUPPORTED_PARTITION_TRANSFORM",
+      messageParameters = Map("transform" -> toSQLId(transform.toString)))
   }
 
   def missingDatabaseLocationError(): SparkIllegalArgumentException = {

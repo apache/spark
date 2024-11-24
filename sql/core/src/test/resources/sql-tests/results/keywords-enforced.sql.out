@@ -115,6 +115,7 @@ EXECUTE	true
 EXISTS	false
 EXPLAIN	false
 EXPORT	false
+EXTEND	false
 EXTENDED	false
 EXTERNAL	false
 EXTRACT	false

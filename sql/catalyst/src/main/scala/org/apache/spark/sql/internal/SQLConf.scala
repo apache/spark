@@ -778,15 +778,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
-  val ALLOW_READING_UNKNOWN_COLLATIONS =
-    buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
-      .internal()
-      .doc("Enables spark to read unknown collation name as UTF8_BINARY. If the config is " +
-        "not enabled, when spark encounters an unknown collation name, it will throw an error.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -4592,7 +4583,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase INT96 timestamps from Proleptic Gregorian calendar to " +
         "the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
         "When CORRECTED, Spark will not do rebase and write the timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees ancient " +
+        "When EXCEPTION, Spark will fail the writing if it sees ancient " +
         "timestamps that are ambiguous between the two calendars.")
       .version("3.1.0")
       .stringConf
@@ -4606,7 +4597,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
         "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "When EXCEPTION, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. " +
         "This config influences on writes of the following parquet logical types: DATE, " +
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
@@ -4623,7 +4614,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase INT96 timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
         "When CORRECTED, Spark will not do rebase and read the timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees ancient " +
+        "When EXCEPTION, Spark will fail the reading if it sees ancient " +
         "timestamps that are ambiguous between the two calendars. This config is only effective " +
         "if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
@@ -4638,7 +4629,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
         "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "When EXCEPTION, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
         "This config influences on reads of the following parquet logical types: DATE, " +
@@ -4657,7 +4648,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Avro files. " +
         "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
+        "When EXCEPTION, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
       .stringConf
@@ -4671,7 +4662,7 @@ object SQLConf {
       .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files. " +
         "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
-        "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
+        "When EXCEPTION, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
@@ -5581,8 +5572,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       StringType(CollationFactory.collationNameToId(getConf(DEFAULT_COLLATION)))
     }
   }
-
-  override def allowReadingUnknownCollations: Boolean = getConf(ALLOW_READING_UNKNOWN_COLLATIONS)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
