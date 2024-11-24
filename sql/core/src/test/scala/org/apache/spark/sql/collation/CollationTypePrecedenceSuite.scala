@@ -397,27 +397,23 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   test("coercing structs") {
     assertQuerySchema(
       sql(s"SELECT array(struct(1, 'a'), struct(2, 'b' collate utf8_lcase))"),
-      ArrayType(StructType(Seq(
-        StructField("col1", IntegerType),
-        StructField("col2", StringType("UTF8_LCASE")),
-      ))))
+      ArrayType(
+        StructType(
+          Seq(StructField("col1", IntegerType), StructField("col2", StringType("UTF8_LCASE"))))))
 
     assertQuerySchema(
       sql(s"SELECT array(struct(1, 'a' collate utf8_lcase), struct(2, 'b' collate utf8_lcase))"),
-      ArrayType(StructType(Seq(
-        StructField("col1", IntegerType),
-        StructField("col2", StringType("UTF8_LCASE")),
-      ))))
+      ArrayType(
+        StructType(
+          Seq(StructField("col1", IntegerType), StructField("col2", StringType("UTF8_LCASE"))))))
 
     assertExplicitMismatch(
       sql(s"SELECT array(struct(1, 'a' collate utf8_lcase), struct(2, 'b' collate unicode))"))
 
-    assertImplicitMismatch(
-      sql(s"""
+    assertImplicitMismatch(sql(s"""
            |SELECT array(struct(1, c1), struct(2, c2))
            |FROM VALUES ('a' collate unicode, 'b' collate utf8_lcase) AS t(c1, c2)
-           |""".stripMargin)
-    )
+           |""".stripMargin))
   }
 
   test("coercing maps") {
@@ -431,7 +427,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
     assertQuerySchema(
       sql(s"SELECT ARRAY(map('key1', 'val1'), map('key2' collate UNICODE, 'val2'))"),
-        ArrayType(MapType(StringType("UNICODE"), StringType)))
+      ArrayType(MapType(StringType("UNICODE"), StringType)))
 
     assertExplicitMismatch(
       sql(s"SELECT map('key1', 'val1' collate utf8_lcase, 'key2', 'val2' collate unicode)"))
@@ -440,23 +436,20 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   test("maps of structs") {
     assertQuerySchema(
       sql(s"SELECT map('key1', struct(1, 'a' collate unicode), 'key2', struct(2, 'b'))"),
-      MapType(StringType, StructType(Seq(
-        StructField("col1", IntegerType),
-        StructField("col2", StringType("UNICODE"))
-      )))
-    )
+      MapType(
+        StringType,
+        StructType(
+          Seq(StructField("col1", IntegerType), StructField("col2", StringType("UNICODE"))))))
 
     checkAnswer(
-      sql(s"SELECT map('key1', struct(1, 'a' collate unicode_ci)," +
-        s"'key2', struct(2, 'b'))['key1'].col2 = 'A'"),
-      Seq(Row(true))
-    )
+      sql(
+        s"SELECT map('key1', struct(1, 'a' collate unicode_ci)," +
+          s"'key2', struct(2, 'b'))['key1'].col2 = 'A'"),
+      Seq(Row(true)))
   }
 
   test("coercing arrays") {
-    assertQuerySchema(
-      sql(s"SELECT array('a', 'b')"),
-      ArrayType(StringType))
+    assertQuerySchema(sql(s"SELECT array('a', 'b')"), ArrayType(StringType))
 
     assertQuerySchema(
       sql(s"SELECT array('a' collate utf8_lcase, 'b')"),
@@ -466,8 +459,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"SELECT array('a' collate utf8_lcase, 'b' collate utf8_lcase)"),
       ArrayType(StringType("UTF8_LCASE")))
 
-    assertExplicitMismatch(
-      sql(s"SELECT array('a' collate utf8_lcase, 'b' collate unicode)"))
+    assertExplicitMismatch(sql(s"SELECT array('a' collate utf8_lcase, 'b' collate unicode)"))
 
     assertQuerySchema(
       sql(s"SELECT array(array('a', 'b'), array('c' collate utf8_lcase, 'd'))"),
@@ -488,16 +480,12 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   test("array of structs") {
     assertQuerySchema(
       sql(s"SELECT array(struct(1, 'a' collate unicode), struct(2, 'b'))[0]"),
-      StructType(Seq(
-        StructField("col1", IntegerType),
-        StructField("col2", StringType("UNICODE"))
-      ))
-    )
+      StructType(
+        Seq(StructField("col1", IntegerType), StructField("col2", StringType("UNICODE")))))
 
     checkAnswer(
       sql(s"SELECT array(struct(1, 'a' collate unicode_ci), struct(2, 'b'))[0].col2 = 'A'"),
-      Seq(Row(true))
-    )
+      Seq(Row(true)))
   }
 
   test("coercing deeply nested complex types") {
@@ -511,17 +499,18 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
            |  )
            |)
            |""".stripMargin),
-      StructType(Seq(
-        StructField("col1", StructType(Seq(
-          StructField("col1", IntegerType),
-          StructField("col2", StringType("UNICODE"))
-        ))),
-        StructField("col2", ArrayType(StructType(Seq(
-          StructField("col1", IntegerType),
-          StructField("col2", StringType("UTF8_LCASE"))
-        ))))
-      ))
-    )
+      StructType(
+        Seq(
+          StructField(
+            "col1",
+            StructType(
+              Seq(StructField("col1", IntegerType), StructField("col2", StringType("UNICODE"))))),
+          StructField(
+            "col2",
+            ArrayType(
+              StructType(Seq(
+                StructField("col1", IntegerType),
+                StructField("col2", StringType("UTF8_LCASE")))))))))
 
     assertQuerySchema(
       sql(s"""
@@ -536,16 +525,15 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
            |  42
            |)
            |""".stripMargin),
-      StructType(Seq(
-        StructField("col1", StructType(Seq(
-          StructField("col1", ArrayType(MapType(
-            StringType("UTF8_LCASE"),
-            StringType("UNICODE")
-          )))
-        ))),
-        StructField("col2", IntegerType)
-      ))
-    )
+      StructType(
+        Seq(
+          StructField(
+            "col1",
+            StructType(
+              Seq(StructField(
+                "col1",
+                ArrayType(MapType(StringType("UTF8_LCASE"), StringType("UNICODE"))))))),
+          StructField("col2", IntegerType))))
   }
 
   test("access collated map via literal") {
