@@ -270,11 +270,15 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // Handle the case where the left-hand side of an IN-subquery contains an aggregate.
     //
     // This handler pulls up any expression containing such an IN-subquery into a new Project
-    // node and then re-enters RewritePredicateSubquery#apply, where the new Project node
-    // will be handled by the Unary node handler. The Unary node handler will transform the
-    // plan into a join. Without this pre-transformation, the Unary node handler would
-    // create a join with an aggregate expression in the join condition, which is illegal
-    // (see SPARK-50091).
+    // node, replacing aggregate expressions with attributes, and then re-enters
+    // RewritePredicateSubquery#apply, where the new Project node will be handled
+    // by the Unary node handler.
+    //
+    // The Unary node handler uses the left-hand side of the IN-subquery in a
+    // join condition. Thus, without this pre-transformation, the join condition
+    // contains an aggregate, which is illegal. With this pre-transformation, the
+    // join condition contains an attribute from the left-hand side of the
+    // IN-subquery contained in the Project node.
     //
     // For example:
     //
@@ -298,10 +302,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     //      +- LocalRelation [col1#28, col2#29]
     //
     // The transformation pulled the IN-subquery up into a Project. The left-hand side of the
-    // In-subquery is now an attribute (sum(col2)#36L) that refers to the actual aggregation
-    // which is still performed in the Aggregate node (sum(col2#28) AS sum(col2)#36L).
+    // IN-subquery is now an attribute (sum(col2)#36L) that refers to the actual aggregation
+    // which is still performed in the Aggregate node (sum(col2#28) AS sum(col2)#36L). The Unary
+    // node handler will use that attribute in the join condition (rather than the aggregate
+    // expression).
     //
-    // Note that if the IN-subquery is nested in a larger expression, that entire larger
+    // If the IN-subquery is nested in a larger expression, that entire larger
     // expression is pulled up into the Project. For example:
     //
     //   SELECT SUM(col2) IN (SELECT c3 FROM v1) AND SUM(col3) > -1 AS x
