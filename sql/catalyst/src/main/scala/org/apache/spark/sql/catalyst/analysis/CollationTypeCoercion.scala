@@ -51,10 +51,10 @@ object CollationTypeCoercion {
       outputStringType match {
         case Some(st) =>
           val newBranches = caseWhenExpr.branches.map { case (condition, value) =>
-            (condition, castStringType(value, st))
+            (condition, changeType(value, st))
           }
           val newElseValue =
-            caseWhenExpr.elseValue.map(e => castStringType(e, st))
+            caseWhenExpr.elseValue.map(e => changeType(e, st))
           CaseWhen(newBranches, newElseValue)
 
         case _ =>
@@ -167,26 +167,36 @@ object CollationTypeCoercion {
   }
 
   /**
-   * Casts given expression to collated StringType with id equal to collationId only
-   * if expression has StringType in the first place.
+   * Changes the data type of the expression to the given `newType`.
    */
-  private def castStringType(expr: Expression, st: DataType): Expression = {
-    castStringType(expr.dataType, st) match {
+  private def changeType(expr: Expression, newType: DataType): Expression = {
+    mergeTypes(expr.dataType, newType) match {
       case Some(newDataType) if newDataType != expr.dataType =>
         assert(!newDataType.existsRecursively(_.isInstanceOf[StringTypeWithContext]))
 
-        expr match {
+        val exprWithNewType = expr match {
           case lit: Literal => lit.copy(dataType = newDataType)
           case cast: Cast => cast.copy(dataType = newDataType)
           case _ => Cast(expr, newDataType)
         }
+
+        // also copy the collation context tag
+        if (hasCollationContextTag(expr)) {
+          exprWithNewType.setTagValue(
+            COLLATION_CONTEXT_TAG, expr.getTagValue(COLLATION_CONTEXT_TAG).get)
+        }
+        exprWithNewType
 
       case _ =>
         expr
     }
   }
 
-  private def castStringType(inType: DataType, castType: DataType): Option[DataType] = {
+  /**
+   * If possible, returns the new data type from `inType` by applying
+   * the collation of `castType`.
+   */
+  private def mergeTypes(inType: DataType, castType: DataType): Option[DataType] = {
     val outType = mergeStructurally(inType, castType) {
       case (left, right) if left == right =>
         left
@@ -252,7 +262,7 @@ object CollationTypeCoercion {
 
     lctOpt match {
       case Some(lct) =>
-        expressions.map(e => castStringType(e, lct))
+        expressions.map(e => changeType(e, lct))
       case _ =>
         expressions
     }
