@@ -106,15 +106,13 @@ abstract class StateStoreChangelogWriter(
     new DataOutputStream(compressed)
   }
 
-  protected def writeVersion(): Unit = {
-    compressedStream.writeUTF(s"v${version}")
-  }
-
-  writeVersion()
-
   protected var backingFileStream: CancellableFSDataOutputStream =
     fm.createAtomic(file, overwriteIfPossible = true)
   protected var compressedStream: DataOutputStream = compressStream(backingFileStream)
+
+  protected def writeVersion(): Unit = {
+    compressedStream.writeUTF(s"v${version}")
+  }
 
   protected def writeLineage(stateStoreCheckpointIdLineage: Array[LineageItem]): Unit = {
     assert(version >= 3,
@@ -171,9 +169,6 @@ class StateStoreChangelogWriterV1(
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
 
-  // Don't write version in V1
-  override def writeVersion(): Unit = {}
-
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     assert(compressedStream != null)
     compressedStream.writeInt(key.length)
@@ -229,6 +224,9 @@ class StateStoreChangelogWriterV2(
   extends StateStoreChangelogWriter(fm, file, compressionCodec) {
 
   override def version: Short = 2
+
+  // append the version field to the changelog file starting from version 2
+  writeVersion()
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
     writePutOrMergeRecord(key, value, RecordType.PUT_RECORD)
@@ -295,6 +293,9 @@ class StateStoreChangelogWriterV3(
 
   override def version: Short = 3
 
+  // append the version field to the changelog file starting from version 3
+  writeVersion()
+
   // Also write lineage information to the changelog, it should appear
   // in the second line for v3 because the first line is the version
   writeLineage(stateStoreCheckpointIdLineage)
@@ -353,14 +354,21 @@ class StateStoreChangelogReaderFactory(
   protected val input: DataInputStream = decompressStream(sourceStream)
 
   private def readVersion(): Short = {
-    val versionStr = input.readUTF()
-    // Versions in the first line are prefixed with "v", e.g. "v2"
-    // Since there is no version written for version 1,
-    // return 1 if first line doesn't start with "v"
-    if (!versionStr.startsWith("v")) {
-      1
-    } else {
-      versionStr.stripPrefix("v").toShort
+    try {
+      val versionStr = input.readUTF()
+      // Versions in the first line are prefixed with "v", e.g. "v2"
+      // Since there is no version written for version 1,
+      // return 1 if first line doesn't start with "v"
+      if (!versionStr.startsWith("v")) {
+        1
+      } else {
+        versionStr.stripPrefix("v").toShort
+      }
+    } catch {
+      // When there is no record being written in the changelog file in V1,
+      // the file contains a single int -1 meaning EOF, then the above readUTF()
+      // throws with EOFException and we return version 1.
+      case _: java.io.EOFException => 1
     }
   }
 
@@ -422,8 +430,6 @@ abstract class StateStoreChangelogReader(
       s"Changelog version mismatch: $changelogVersionStr != v${version}")
   }
 
-  verifyVersion()
-
   private def readLineage(): Array[LineageItem] = {
     assert(version >= 3,
       "readLineage should only be invoked with state store checkpoint id enabled (version >= 3)")
@@ -455,8 +461,6 @@ class StateStoreChangelogReaderV1(
 
   // Note that v1 does not record this value in the changelog file
   override def version: Short = 1
-
-  override protected def readVersion(): String = "v1"
 
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val keySize = input.readInt()
@@ -507,6 +511,8 @@ class StateStoreChangelogReaderV2(
 
   override def version: Short = 2
 
+  verifyVersion()
+
   override def getNext(): (RecordType.Value, Array[Byte], Array[Byte]) = {
     val recordType = RecordType.getRecordTypeFromByte(input.readByte())
     // A EOF_RECORD means end of file.
@@ -554,6 +560,8 @@ class StateStoreChangelogReaderV3(
   extends StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec) {
 
   override def version: Short = 3
+
+  verifyVersion()
 
   // If the changelogFile is written when state store checkpoint unique id is enabled
   // the first line would be the version and the second line would be the lineage.

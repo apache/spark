@@ -757,6 +757,56 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: StateStoreChangelogReaderFactory " +
+    "edge case") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    val lineage: Array[LineageItem] = Array(
+      LineageItem(1, java.util.UUID.randomUUID.toString),
+      LineageItem(2, java.util.UUID.randomUUID.toString),
+      LineageItem(3, java.util.UUID.randomUUID.toString)
+    )
+
+    // Create a v1 writer
+    val changelogWriterV1 = fileManager.getChangeLogWriter(101)
+    assert(changelogWriterV1.version === 1)
+    changelogWriterV1.commit() // v1 with empty content
+
+    val changelogReaderV1 = fileManager.getChangelogReader(101)
+    assert(changelogReaderV1.version === 1) // getChangelogReader should return a v1 reader
+
+    // Create a v2 writer
+    val changelogWriterV2 = fileManager.getChangeLogWriter(102, useColumnFamilies = true)
+    assert(changelogWriterV2.version === 2)
+    changelogWriterV2.commit() // v2 with empty content
+
+    val changelogReaderV2 = fileManager.getChangelogReader(102)
+    assert(changelogReaderV2.version === 2) // getChangelogReader should return a v2 reader
+
+    // Create a v3 writer
+    val changelogWriterV3 = fileManager.getChangeLogWriter(
+      103, useColumnFamilies = false, checkpointUniqueId, Some(lineage))
+    assert(changelogWriterV3.version === 3)
+    changelogWriterV3.commit() // v1 with empty content
+
+    val changelogReaderV3 = fileManager.getChangelogReader(
+      103, checkpointUniqueId = checkpointUniqueId)
+    assert(changelogReaderV3.version === 3) // getChangelogReader should return a v3 reader
+
+    // Create a v4 writer
+    val changelogWriterV4 = fileManager.getChangeLogWriter(
+      104, useColumnFamilies = true, checkpointUniqueId, Some(lineage))
+    assert(changelogWriterV4.version === 4)
+    changelogWriterV4.commit() // v1 with empty content
+
+    val changelogReaderV4 = fileManager.getChangelogReader(
+      104, checkpointUniqueId = checkpointUniqueId)
+    assert(changelogReaderV4.version === 4) // getChangelogReader should return a v4 reader
+  }
+
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: changelog reader / writer " +
     "failure cases") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
@@ -805,8 +855,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     (2 to 4).foreach(j => changelogWriter.delete(j.toString))
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(
-      3, useColumnFamilies = false, checkpointUniqueId)
+    val changelogReader = fileManager.getChangelogReader(3, checkpointUniqueId)
     assert(changelogReader.version === 3)
     assert(changelogReader.lineage sameElements lineage)
     val entries = changelogReader.toSeq
@@ -843,7 +892,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(1, useColumnFamilies = true)
+    val changelogReader = fileManager.getChangelogReader(1)
     assert(changelogReader.version === 2)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
@@ -886,8 +935,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(
-      1, useColumnFamilies = true, checkpointUniqueId)
+    val changelogReader = fileManager.getChangelogReader(1, checkpointUniqueId)
     assert(changelogReader.version === 4)
     assert(changelogReader.lineage sameElements lineage)
     val entries = changelogReader.toSeq

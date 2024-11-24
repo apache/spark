@@ -212,7 +212,6 @@ class RocksDBFileManager(
   // Get the changelog file at version
   def getChangelogReader(
       version: Long,
-      useColumnFamilies: Boolean = false,
       checkpointUniqueId: Option[String] = None): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
     val reader = new StateStoreChangelogReaderFactory(fm, changelogFile, codec)
@@ -312,6 +311,15 @@ class RocksDBFileManager(
     logFilesInDir(localDir, log"Loaded checkpoint files " +
       log"for version ${MDC(LogKeys.VERSION_NUM, version)}")
     metadata
+  }
+
+  def listFiles(): Array[String] = {
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      fm.list(path).map(_.getPath.getName)
+    } else {
+      Array.empty
+    }
   }
 
   // Get latest snapshot version <= version
