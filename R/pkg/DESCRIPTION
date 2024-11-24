@@ -58,7 +58,7 @@ Collate:
     'utils.R'
     'window.R'
     'zzz.R'
-RoxygenNote: 7.1.2
+RoxygenNote: 7.3.1
 VignetteBuilder: knitr
 NeedsCompilation: no
 Encoding: UTF-8

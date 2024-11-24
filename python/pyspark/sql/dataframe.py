@@ -5895,6 +5895,59 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def pipe(self, *funcs: tuple[Callable[..., "DataFrame"]]) -> "DataFrame":
+        """Returns a new :class:`DataFrame`. Concise syntax for piping multiple custom transformations.
+
+        .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        funcs : collection of function(s)
+            each element is a function that takes and returns a :class:`DataFrame`.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Transformed DataFrame.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import col
+        >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
+        >>> def cast_all_to_int(input_df):
+        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        ...
+        >>> def sort_columns_asc(input_df):
+        ...     return input_df.select(*sorted(input_df.columns))
+        ...
+        >>> df.pipe(cast_all_to_int, sort_columns_asc).show()
+        +-----+---+
+        |float|int|
+        +-----+---+
+        |    1|  1|
+        |    2|  2|
+        +-----+---+
+
+        >>> def add_n(n):
+        ...     def closure(input_df):
+        ...         return input_df.select([(col(col_name) + n).alias(col_name)
+        ...                                 for col_name in input_df.columns])
+        ...     return closure
+        ... 
+        >>> df.pipe(add_n(n=1), add_n(n=10)).show()
+        +---+-----+
+        |int|float|
+        +---+-----+
+        | 12| 12.0|
+        | 13| 13.0|
+        +---+-----+
+        """
+        ...
+
+    @dispatch_df_method
     def sameSemantics(self, other: "DataFrame") -> bool:
         """
         Returns `True` when the logical query plans inside both :class:`DataFrame`\\s are equal and
