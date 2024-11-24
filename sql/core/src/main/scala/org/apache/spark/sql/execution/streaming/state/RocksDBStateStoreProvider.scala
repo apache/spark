@@ -426,7 +426,7 @@ private[sql] class RocksDBStateStoreProvider
           stateStoreId.toString,
           "ROCKSDB_STORE_PROVIDER",
           e)
-//      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
+      case e: Throwable => throw QueryExecutionErrors.cannotLoadStore(e)
     }
   }
 

@@ -246,8 +246,7 @@ private[spark] object Utils
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
     val dir = createDirectory(root, namePrefix)
-    println("wei-- create temp dir")
-//    ShutdownHookManager.registerShutdownDeleteDir(dir)
+    ShutdownHookManager.registerShutdownDeleteDir(dir)
     dir
   }
 

@@ -2193,13 +2193,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = f)
   }
 
-  def failedToReadLineage(fileToRead: Path, f: Throwable): Throwable = {
-    new SparkException(
-      errorClass = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
-      messageParameters = Map("fileToRead" -> fileToRead.toString()),
-      cause = f)
-  }
-
   def failedToCommitStateFileError(providerClass: String, f: Throwable): Throwable = {
     new SparkException(
       errorClass = "CANNOT_WRITE_STATE_STORE.CANNOT_COMMIT",

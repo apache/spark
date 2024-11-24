@@ -313,15 +313,6 @@ class RocksDBFileManager(
     metadata
   }
 
-  def listFiles(): Array[String] = {
-    val path = new Path(dfsRootDir)
-    if (fm.exists(path)) {
-      fm.list(path).map(_.getPath.getName)
-    } else {
-      Array.empty
-    }
-  }
-
   // Get latest snapshot version <= version
   def getLatestSnapshotVersion(version: Long): Long = {
     val path = new Path(dfsRootDir)
