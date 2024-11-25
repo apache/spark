@@ -55,9 +55,11 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   extends SQLConfHelper with ColumnResolutionHelper {
 
   def apply(s: Sort): LogicalPlan = {
+    val resolvedByLCA = resolveByLateralColumnAlias(s)
+    val resolvedBasic = resolvedByLCA.map(resolveExpressionByPlanOutput(_, s.child))
     val resolvedWithAgg = s.child match {
-      case Filter(_, agg: Aggregate) => resolveWithAggAndLCA(s, agg)
-      case other => resolveWithAggAndLCA(s, other)
+      case Filter(_, agg: Aggregate) => resolvedBasic.map(resolveColWithAgg(_, agg))
+      case _ => resolvedBasic.map(resolveColWithAgg(_, s.child))
     }
     val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
     val orderByAllResolved = resolveOrderByAll(
@@ -73,11 +75,12 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
     }
   }
 
-  private def resolveWithAggAndLCA(s: Sort, plan: LogicalPlan): Seq[Expression] = {
+  private def resolveByLateralColumnAlias(s: Sort): Seq[Expression] = {
     val aliasMap = mutable.HashMap.empty[String, Either[Alias, Int]]
-    val lcaCandidates = plan match {
-      case a: Aggregate => a.aggregateExpressions
+    val lcaCandidates = s.child match {
       case p: Project => p.projectList
+      case Filter(_, agg: Aggregate) => agg.aggregateExpressions
+      case agg: Aggregate => agg.aggregateExpressions
       case _ => Nil
     }
     lcaCandidates.foreach {
@@ -94,13 +97,11 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
         }
       case _ =>
     }
-    val resolvedByLCA = if (aliasMap.nonEmpty) {
+    if (aliasMap.nonEmpty) {
       resolveLateralColumnAlias(s.order, aliasMap)
     } else {
       s.order
     }
-    val resolvedByChild = resolvedByLCA.map(resolveExpressionByPlanOutput(_, s.child))
-    resolvedByChild.map(resolveColWithAgg(_, plan))
   }
 
   private def resolveOrderByAll(
