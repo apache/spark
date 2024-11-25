@@ -35,13 +35,11 @@ abstract class StatefulProcessorHandleImplBase(
 
   def verifyTimerOperations(operationType: String): Unit = {
     if (timeMode == NoTime) {
-      println(s"JVM stateful processor, delete timer, timeMode: $timeMode")
       throw StateStoreErrors.cannotPerformOperationWithInvalidTimeMode(operationType,
         timeMode.toString)
     }
 
     if (currState < INITIALIZED || currState >= TIMER_PROCESSED) {
-      println(s"JVM stateful processor, delete timer, currstate: $currState")
       throw StateStoreErrors.cannotPerformOperationWithInvalidHandleState(operationType,
         currState.toString)
     }

@@ -1956,7 +1956,6 @@ def main(infile, outfile):
             iterator = deserializer.load_stream(infile)
             out_iter = func(split_index, iterator)
             try:
-                print(f"Inside process, before dump stream for data rows\n")
                 serializer.dump_stream(out_iter, outfile)
             finally:
                 # Sending a signal to TransformWithState UDF to perform proper cleanup steps.

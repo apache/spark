@@ -55,7 +55,7 @@ class TransformWithStateInPandasTestsMixin:
     @classmethod
     def conf(cls):
         cfg = SparkConf()
-        cfg.set("spark.sql.shuffle.partitions", "1")
+        cfg.set("spark.sql.shuffle.partitions", "5")
         cfg.set(
             "spark.sql.streaming.stateStore.providerClass",
             "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
@@ -103,7 +103,6 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
-    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -561,7 +560,6 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results
         )
-    """
 
     def _test_transform_with_state_init_state_in_pandas(
         self, stateful_processor, check_results, time_mode="None"
@@ -608,7 +606,6 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
-    """
     def test_transform_with_state_init_state_in_pandas(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -705,7 +702,6 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_non_contiguous_grouping_cols(
             SimpleStatefulProcessorWithInitialState(), check_results, initial_state
         )
-    """
 
     def test_transform_with_state_init_state_with_timers(self):
         def check_results(batch_df, batch_id):
@@ -716,7 +712,6 @@ class TransformWithStateInPandasTestsMixin:
                 # regardless of whether key exists in the data rows or not
                 expired_df = batch_df.filter(batch_df["id"].contains("expired"))
                 data_df = batch_df.filter(~batch_df["id"].contains("expired"))
-                print(f"batch id: {batch_id}, batch df: {batch_df.collect()}\n")
                 assert set(expired_df.sort("id").select("id").collect()) == {
                     Row(id="0-expired"),
                     Row(id="3-expired"),

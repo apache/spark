@@ -513,39 +513,6 @@ class PandasGroupedOpsMixin:
                 watermark_timestamp = -1
             return batch_timestamp, watermark_timestamp
 
-        def process_timers(
-                statefulProcessorApiClient: StatefulProcessorApiClient,
-                batch_timestamp: int,
-                watermark_timestamp: int,) -> Iterator["PandasDataFrameLike"]:
-            result_iter_list = []
-            if timeMode.lower() == "processingtime":
-                expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
-                    batch_timestamp
-                )
-            elif timeMode.lower() == "eventtime":
-                expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
-                    watermark_timestamp
-                )
-            else:
-                expiry_list_iter = iter([[]])
-
-            # process with expiry timers, only timer related rows will be emitted
-            for expiry_list in expiry_list_iter:
-                for key_obj, expiry_timestamp in expiry_list:
-                    print(f"I am setting implict key as {key_obj}\n")
-                    statefulProcessorApiClient.set_implicit_key(key_obj)
-                    result_iter_list.append(
-                        statefulProcessor.handleExpiredTimer(
-                            key_obj,
-                            TimerValues(batch_timestamp, watermark_timestamp),
-                            ExpiredTimerInfo(expiry_timestamp),
-                        )
-                    )
-            # TODO(SPARK-49603) set the handle state in the lazily initialized iterator
-            result = itertools.chain(*result_iter_list)
-            print(f"returning from process timers, tuple\n")
-            return (result, statefulProcessorApiClient)
-
         def handle_data_rows(
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
@@ -554,7 +521,6 @@ class PandasGroupedOpsMixin:
             inputRows: Optional[Iterator["PandasDataFrameLike"]] = None,
         ) -> Tuple[Iterator["PandasDataFrameLike"], StatefulProcessorApiClient]:
             statefulProcessorApiClient.set_implicit_key(key)
-            print(f"I am inside handle data rows, key is {key}\n")
             # process with data rows
             if inputRows is not None:
                 data_iter = statefulProcessor.handleInputRows(
@@ -563,9 +529,9 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(
                     StatefulProcessorHandleState.DATA_PROCESSED
                 )
-                return (data_iter, statefulProcessorApiClient, statefulProcessor)
+                return (data_iter, statefulProcessorApiClient, statefulProcessor, timeMode)
             else:
-                return (iter([]), statefulProcessorApiClient, statefulProcessor)
+                return (iter([]), statefulProcessorApiClient, statefulProcessor, timeMode)
 
         def transformWithStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,
@@ -583,7 +549,6 @@ class PandasGroupedOpsMixin:
             # Key is None when we have processed all the input data from the worker and ready to
             # proceed with the cleanup steps.
             if key is None:
-                print(f"I am inside key is None\n")
                 statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessor.close()
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
@@ -591,10 +556,9 @@ class PandasGroupedOpsMixin:
 
             batch_timestamp, watermark_timestamp = get_timestamps(statefulProcessorApiClient)
 
-            result = handle_data_rows(
+            return handle_data_rows(
                 statefulProcessorApiClient, key, batch_timestamp, watermark_timestamp, inputRows
             )
-            return result
 
         def transformWithStateWithInitStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,
@@ -626,8 +590,6 @@ class PandasGroupedOpsMixin:
             # proceed with the cleanup steps.
             batch_timestamp, watermark_timestamp = get_timestamps(statefulProcessorApiClient)
             if key is None:
-                print(f"I am inside key is None, after processing timers, handle state: "
-                      f"{statefulProcessorApiClient.handle_state}\n")
                 statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessor.close()
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
@@ -656,7 +618,7 @@ class PandasGroupedOpsMixin:
                     statefulProcessorApiClient, key, batch_timestamp, watermark_timestamp, inputRows
                 )
             else:
-                return (iter([]), statefulProcessorApiClient, statefulProcessor)
+                return (iter([]), statefulProcessorApiClient, statefulProcessor, timeMode)
 
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))

@@ -214,20 +214,15 @@ class TransformWithStateInPandasStateServer(
         // this implementation is safe
         val expiryRequest = message.getExpiryTimerRequest()
         val expiryTimestamp = expiryRequest.getExpiryTimestampMs
-        println(s"JVM server, get expiry timers, expityTimestamp: $expiryTimestamp")
         if (!expiryTimestampIter.isDefined) {
           expiryTimestampIter =
             Option(statefulProcessorHandle.getExpiredTimers(expiryTimestamp))
         }
         // expiryTimestampIter could be None in the TWSPandasServerSuite
         if (!expiryTimestampIter.isDefined || !expiryTimestampIter.get.hasNext) {
-          println(s"JVM server, get expiry timers, expityTimestamp: $expiryTimestamp, " +
-            s"send back response 1")
           // iterator is exhausted, signal the end of iterator on python client
           sendResponse(1)
         } else {
-          println(s"JVM server, get expiry timers, expityTimestamp: $expiryTimestamp, " +
-            s"send back response 0")
           sendResponse(0)
           val outputSchema = new StructType()
             .add("key", BinaryType)
@@ -323,7 +318,6 @@ class TransformWithStateInPandasStateServer(
           case TimerStateCallCommand.MethodCase.DELETE =>
             val expiryTimestamp =
               message.getTimerStateCall.getDelete.getExpiryTimestampMs
-            println(s"JVM server, delete timer, expityTimestamp: $expiryTimestamp")
             statefulProcessorHandle.deleteTimer(expiryTimestamp)
             sendResponse(0)
           case TimerStateCallCommand.MethodCase.LIST =>
