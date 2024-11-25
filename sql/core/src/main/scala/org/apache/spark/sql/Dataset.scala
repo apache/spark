@@ -995,8 +995,20 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def argument(): Column = {
-    val tableExpr = FunctionTableSubqueryArgumentExpression(logicalPlan)
+  def argument(
+    partitionBy: Seq[Column] = Seq.empty,
+    orderBy: Seq[Column] = Seq.empty,
+    withSinglePartition: Boolean = false
+  ): Column = {
+    val partitionByExpressions: Seq[Expression] = partitionBy.map(_.expr)
+    val orderByExpressions: Seq[SortOrder] = orderBy.map(_.expr.asInstanceOf[SortOrder])
+
+    val tableExpr = FunctionTableSubqueryArgumentExpression(
+      plan = logicalPlan,
+      partitionByExpressions = partitionByExpressions,
+      withSinglePartition = withSinglePartition,
+      orderByExpressions = orderByExpressions
+    )
     Column(tableExpr)
   }
 
