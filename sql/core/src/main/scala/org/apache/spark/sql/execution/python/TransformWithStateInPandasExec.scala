@@ -162,7 +162,7 @@ case class TransformWithStateInPandasExec(
         schemaForValueRow,
         NoPrefixKeyStateEncoderSpec(schemaForKeyRow),
         session.sqlContext.sessionState,
-        Some(session.sqlContext.streams.stateStoreCoordinator),
+        Some(session.streams.stateStoreCoordinator),
         useColumnFamilies = true,
         useMultipleValuesPerKey = true
       ) {
@@ -178,7 +178,7 @@ case class TransformWithStateInPandasExec(
         initialState.execute(),
         getStateInfo,
         storeNames = Seq(),
-        session.sqlContext.streams.stateStoreCoordinator) {
+        session.streams.stateStoreCoordinator) {
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
