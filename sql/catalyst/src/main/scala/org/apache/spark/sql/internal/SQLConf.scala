@@ -5268,6 +5268,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val OPTIONAL_TRAILING_COMMA_IN_NAMED_EXPRESSION_LISTS =
+    buildConf("spark.sql.optionalTrailingCommaInNamedExpressionLists")
+      .internal()
+      .doc("When set to true, SELECT lists (and other places named expression lists are " +
+        "supported) allow an optional trailing comma at the end of the list.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -6106,6 +6115,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   override def setOpsPrecedenceEnforced: Boolean =
     getConf(SQLConf.LEGACY_SETOPS_PRECEDENCE_ENABLED)
+
+  override def optionalTrailingCommaInNamedExpressionLists: Boolean =
+    getConf(SQLConf.OPTIONAL_TRAILING_COMMA_IN_NAMED_EXPRESSION_LISTS)
 
   override def exponentLiteralAsDecimalEnabled: Boolean =
     getConf(SQLConf.LEGACY_EXPONENT_LITERAL_AS_DECIMAL_ENABLED)

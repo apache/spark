@@ -70,6 +70,8 @@ abstract class AbstractParser extends DataTypeParserInterface with Logging {
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
     parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
+    parser.optional_trailing_comma_in_named_expression_lists =
+      conf.optionalTrailingCommaInNamedExpressionLists
 
     // https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
     // Save a great deal of time on correct inputs by using a two-stage parsing strategy.
