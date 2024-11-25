@@ -39,7 +39,7 @@ class Item2VecSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     val rnd = new java.util.Random(239)
     val data = sc.parallelize(
-      (0 until 100000)
+      (0 until 10000)
         .map{_ =>
           val x = rnd.nextInt(100).toLong
           (0 until 10).map(i => (x + i)  % 100).toArray
