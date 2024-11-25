@@ -19,7 +19,7 @@ import sys
 import warnings
 from collections.abc import Sized
 from functools import reduce
-from threading import RLock, local
+from threading import RLock
 from types import TracebackType
 from typing import (
     Any,
@@ -605,7 +605,6 @@ class SparkSession(SparkConversionMixin):
 
     _instantiatedSession: ClassVar[Optional["SparkSession"]] = None
     _activeSession: ClassVar[Optional["SparkSession"]] = None
-    _thread_local = local()
 
     def __init__(
         self,
@@ -2275,10 +2274,6 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptOperation"},
         )
 
-    def _initialize_tags(self) -> None:
-        if not hasattr(self._thread_local, "tags"):
-            self._thread_local.tags = set()
-
     @remote_only
     def addTag(self, tag: str) -> None:
         """
@@ -2302,8 +2297,7 @@ class SparkSession(SparkConversionMixin):
         tag : str
             The tag to be added. Cannot contain ',' (comma) character or be an empty string.
         """
-        self._initialize_tags()
-        self._thread_local.tags.add(tag)
+        self._jsparkSession.addTag(tag)
 
     @remote_only
     def removeTag(self, tag: str) -> None:
@@ -2321,8 +2315,7 @@ class SparkSession(SparkConversionMixin):
         tag : list of str
             The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
         """
-        self._initialize_tags()
-        self._thread_local.tags.discard(tag)
+        self._jsparkSession.removeTag(tag)
 
     @remote_only
     def getTags(self) -> Set[str]:
@@ -2340,8 +2333,15 @@ class SparkSession(SparkConversionMixin):
         set of str
             Set of tags of interrupted operations.
         """
-        self._initialize_tags()
-        return self._thread_local.tags
+        java_set = self._jsparkSession.getTags()
+        python_set = set()
+
+        # Use iterator to manually iterate through Java Set
+        java_iterator = java_set.iterator()
+        while java_iterator.hasNext():
+            python_set.add(str(java_iterator.next()))
+
+        return python_set
 
     @remote_only
     def clearTags(self) -> None:
@@ -2353,8 +2353,7 @@ class SparkSession(SparkConversionMixin):
         .. versionchanged:: 4.0.0
             Supports Spark Classic.
         """
-        self._initialize_tags()
-        self._thread_local.tags.clear()
+        self._jsparkSession.clearTags()
 
 
 def _test() -> None:
