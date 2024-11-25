@@ -90,9 +90,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           |FROM t;
           |END
           |""".stripMargin
-      val expected = Seq(
-        Seq(Row(false)) // select
-      )
+      val expected = Seq(Seq(Row(false)))
       verifySqlScriptResult(sqlScript, expected)
     }
   }
@@ -106,9 +104,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |SELECT var;
         |END
         |""".stripMargin
-    val expected = Seq(
-      Seq(Row(2)), // select
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScript, expected)
   }
 
@@ -121,9 +117,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |SELECT var;
         |END
         |""".stripMargin
-    val expected = Seq(
-      Seq(Row(2)), // select
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScript, expected)
   }
 
@@ -149,7 +143,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq(Row(1)), // select
       Seq(Row(2)), // select
-      Seq(Row(4)), // select
+      Seq(Row(4)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
   }
@@ -164,9 +158,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |DROP TEMPORARY VARIABLE var;
         |END
         |""".stripMargin
-    val expected = Seq(
-      Seq(Row(2)), // select
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScript, expected)
   }
 
@@ -179,9 +171,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END IF;
         |END
         |""".stripMargin
-    val expected = Seq(
-      Seq(Row(42))
-    )
+    val expected = Seq(Seq(Row(42)))
     verifySqlScriptResult(commands, expected)
   }
 
@@ -214,7 +204,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END IF;
         |END
         |""".stripMargin
-
     val expected = Seq(Seq(Row(42)))
     verifySqlScriptResult(commands, expected)
   }
@@ -234,7 +223,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  END IF;
         |END
         |""".stripMargin
-
     val expected = Seq(Seq(Row(43)))
     verifySqlScriptResult(commands, expected)
   }
@@ -251,7 +239,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END IF;
         |END
         |""".stripMargin
-
     val expected = Seq(Seq(Row(43)))
     verifySqlScriptResult(commands, expected)
   }
@@ -271,7 +258,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  END IF;
         |END
         |""".stripMargin
-
     val expected = Seq(Seq(Row(44)))
     verifySqlScriptResult(commands, expected)
   }
@@ -291,7 +277,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           | END IF;
           |END
           |""".stripMargin
-
       val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
@@ -314,7 +299,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           |  END IF;
           |END
           |""".stripMargin
-
       val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
@@ -405,7 +389,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           | END CASE;
           |END
           |""".stripMargin
-
       val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
@@ -429,7 +412,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           |  END CASE;
           |END
           |""".stripMargin
-
       val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
@@ -447,7 +429,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END CASE;
         |END
         |""".stripMargin
-    val expected = Seq()
+    val expected = Seq.empty
     verifySqlScriptResult(commands, expected)
   }
 
@@ -538,7 +520,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           | END CASE;
           |END
           |""".stripMargin
-
       val expected = Seq(Seq(Row(42)))
       verifySqlScriptResult(commands, expected)
     }
@@ -562,7 +543,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           |  END CASE;
           |END
           |""".stripMargin
-
       val expected = Seq(Seq(Row(44)))
       verifySqlScriptResult(commands, expected)
     }
@@ -580,7 +560,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END CASE;
         |END
         |""".stripMargin
-    val expected = Seq()
+    val expected = Seq.empty
     verifySqlScriptResult(commands, expected)
   }
 
@@ -598,7 +578,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           |  END CASE;
           |END
           |""".stripMargin
-
       val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
@@ -615,11 +594,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END WHILE;
         |END
         |""".stripMargin
-
     val expected = Seq(
       Seq(Row(0)), // select i
       Seq(Row(1)), // select i
-      Seq(Row(2)), // select i
+      Seq(Row(2)) // select i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -635,7 +613,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END WHILE;
         |END
         |""".stripMargin
-
     val expected = Seq.empty
     verifySqlScriptResult(commands, expected)
   }
@@ -656,12 +633,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END WHILE;
         |END
         |""".stripMargin
-
     val expected = Seq(
       Seq(Row(0, 0)), // select i, j
       Seq(Row(0, 1)), // select i, j
       Seq(Row(1, 0)), // select i, j
-      Seq(Row(1, 1)), // select i, j
+      Seq(Row(1, 1)) // select i, j
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -678,10 +654,9 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
           |END WHILE;
           |END
           |""".stripMargin
-
       val expected = Seq(
         Seq(Row(42)), // select
-        Seq(Row(42)), // select
+        Seq(Row(42)) // select
       )
       verifySqlScriptResult(commands, expected)
     }
@@ -700,11 +675,10 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         | END REPEAT;
         |END
         |""".stripMargin
-
     val expected = Seq(
       Seq(Row(0)), // select i
       Seq(Row(1)), // select i
-      Seq(Row(2)), // select i
+      Seq(Row(2)) // select i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -723,9 +697,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
 
-    val expected = Seq(
-      Seq(Row(3)), // select i
-    )
+    val expected = Seq(Seq(Row(3)))
     verifySqlScriptResult(commands, expected)
   }
 
@@ -752,7 +724,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(0, 0)), // select i, j
       Seq(Row(0, 1)), // select i, j
       Seq(Row(1, 0)), // select i, j
-      Seq(Row(1, 1)), // select i, j
+      Seq(Row(1, 1)) // select i, j
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -773,7 +745,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
       val expected = Seq(
         Seq(Row(42)), // select
-        Seq(Row(42)), // select
+        Seq(Row(42)) // select
       )
       verifySqlScriptResult(commands, expected)
     }
@@ -789,9 +761,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    SELECT 2;
         |  END;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -804,9 +774,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    LEAVE lbl;
         |  END WHILE;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -820,9 +788,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  UNTIL 1 = 2
         |  END REPEAT;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select 1
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -839,9 +805,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  END WHILE;
         |  SELECT x;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(2)), // select
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -859,9 +823,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  END REPEAT;
         |  SELECT x;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(2)), // select x
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -878,9 +840,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  UNTIL 1 = 2
         |  END REPEAT;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select 1
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -895,9 +855,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    END WHILE;
         |  END WHILE;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -919,7 +877,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq(Row(1)), // select 1
       Seq(Row(1)), // select 1
-      Seq(Row(2)), // select x
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -948,7 +906,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2)), // select 2
       Seq(Row(1)), // select 1
       Seq(Row(2)), // select 2
-      Seq(Row(2)), // select x
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -973,7 +931,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq(Row(1)), // select 1
       Seq(Row(1)), // select 1
-      Seq(Row(2)), // select x
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -998,7 +956,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(1)), // select x
       Seq(Row(2)), // select x
       Seq(Row(3)), // select x
-      Seq(Row(3)), // select x
+      Seq(Row(3)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1030,7 +988,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(0, 0)), // select x, y
       Seq(Row(0, 1)), // select x, y
       Seq(Row(1, 0)), // select x, y
-      Seq(Row(1, 1)), // select x, y
+      Seq(Row(1, 1)) // select x, y
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1051,9 +1009,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |  END LOOP;
         |  SELECT x;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(2)), // select x
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1068,9 +1024,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    END LOOP;
         |  END LOOP;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select 1
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1096,7 +1050,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     val expected = Seq(
       Seq(Row(1)), // select 1
       Seq(Row(1)), // select 1
-      Seq(Row(3)), // select x
+      Seq(Row(3)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }

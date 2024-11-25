@@ -31,7 +31,7 @@ class SqlScriptingExecution(
 
   // Build the execution plan for the script
   private val executionPlan: Iterator[CompoundStatementExec] =
-    SqlScriptingInterpreter().buildExecutionPlan(sqlScript, session, args)
+    SqlScriptingInterpreter(session).buildExecutionPlan(sqlScript, args)
 
   private var current = getNextResult
 

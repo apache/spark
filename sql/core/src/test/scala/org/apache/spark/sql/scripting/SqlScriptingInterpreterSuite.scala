@@ -43,9 +43,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   private def runSqlScript(
       sqlText: String,
       args: Map[String, Expression] = Map.empty): Array[DataFrame] = {
-    val interpreter = SqlScriptingInterpreter()
+    val interpreter = SqlScriptingInterpreter(spark)
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody, spark, args)
+    val executionPlan = interpreter.buildExecutionPlan(compoundBody, args)
     executionPlan.flatMap {
       case statement: SingleStatementExec =>
         if (statement.isExecuted) {
@@ -236,9 +236,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END IF;
         |END
         |""".stripMargin
-    val expected = Seq(
-      Seq(Row(42))
-    )
+    val expected = Seq(Seq(Row(42)))
     verifySqlScriptResult(commands, expected)
   }
 
