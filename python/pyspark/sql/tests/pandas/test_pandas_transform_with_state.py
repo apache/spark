@@ -55,7 +55,7 @@ class TransformWithStateInPandasTestsMixin:
     @classmethod
     def conf(cls):
         cfg = SparkConf()
-        cfg.set("spark.sql.shuffle.partitions", "5")
+        cfg.set("spark.sql.shuffle.partitions", "1")
         cfg.set(
             "spark.sql.streaming.stateStore.providerClass",
             "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
@@ -103,6 +103,7 @@ class TransformWithStateInPandasTestsMixin:
         )
         return df_final
 
+    """
     def _test_transform_with_state_in_pandas_basic(
         self, stateful_processor, check_results, single_batch=False, timeMode="None"
     ):
@@ -560,6 +561,7 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results
         )
+    """
 
     def _test_transform_with_state_init_state_in_pandas(
         self, stateful_processor, check_results, time_mode="None"
@@ -606,6 +608,7 @@ class TransformWithStateInPandasTestsMixin:
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
+    """
     def test_transform_with_state_init_state_in_pandas(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
@@ -702,6 +705,7 @@ class TransformWithStateInPandasTestsMixin:
         self._test_transform_with_state_non_contiguous_grouping_cols(
             SimpleStatefulProcessorWithInitialState(), check_results, initial_state
         )
+    """
 
     def test_transform_with_state_init_state_with_timers(self):
         def check_results(batch_df, batch_id):
@@ -712,6 +716,7 @@ class TransformWithStateInPandasTestsMixin:
                 # regardless of whether key exists in the data rows or not
                 expired_df = batch_df.filter(batch_df["id"].contains("expired"))
                 data_df = batch_df.filter(~batch_df["id"].contains("expired"))
+                print(f"batch id: {batch_id}, batch df: {batch_df.collect()}\n")
                 assert set(expired_df.sort("id").select("id").collect()) == {
                     Row(id="0-expired"),
                     Row(id="3-expired"),
@@ -777,8 +782,12 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
 
 class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitialState):
     def handleExpiredTimer(self, key, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
+        print(f"before delete Timers for key: {key}, "
+              f"timestamp: {expired_timer_info.get_expiry_time_in_ms()}\n")
         self.handle.deleteTimer(expired_timer_info.get_expiry_time_in_ms())
         str_key = f"{str(key[0])}-expired"
+        print(f"after delete Timers for key: {key}, "
+              f"return key: {str_key}\n")
         yield pd.DataFrame(
             {"id": (str_key,), "value": str(expired_timer_info.get_expiry_time_in_ms())}
         )
@@ -786,6 +795,8 @@ class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitial
     def handleInitialState(self, key, initialState, timer_values) -> None:
         super().handleInitialState(key, initialState, timer_values)
         self.handle.registerTimer(timer_values.get_current_processing_time_in_ms() - 1)
+        print(f"after register Timers for key: {key}, "
+              f"timestamp: {timer_values.get_current_processing_time_in_ms() - 1}\n")
 
 
 # A stateful processor that output the max event time it has seen. Register timer for

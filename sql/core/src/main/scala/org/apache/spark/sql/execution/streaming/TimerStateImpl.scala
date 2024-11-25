@@ -112,6 +112,8 @@ class TimerStateImpl(
    */
   def registerTimer(expiryTimestampMs: Long): Unit = {
     val groupingKey = getGroupingKey(keyToTsCFName)
+    println(s"JVM timer state, register timer, expiryTimestamp: $expiryTimestampMs, " +
+      s"groupingKey: $groupingKey")
     if (exists(groupingKey, expiryTimestampMs)) {
       logWarning(log"Failed to register timer for key=${MDC(KEY, groupingKey)} and " +
         log"timestamp=${MDC(EXPIRY_TIMESTAMP, expiryTimestampMs)} ms since it already exists")
@@ -129,6 +131,8 @@ class TimerStateImpl(
    */
   def deleteTimer(expiryTimestampMs: Long): Unit = {
     val groupingKey = getGroupingKey(keyToTsCFName)
+    println(s"JVM timer state, delete timer, expiryTimestamp: $expiryTimestampMs, " +
+      s"groupingKey: $groupingKey")
 
     if (!exists(groupingKey, expiryTimestampMs)) {
       logWarning(log"Failed to delete timer for key=${MDC(KEY, groupingKey)} and " +
