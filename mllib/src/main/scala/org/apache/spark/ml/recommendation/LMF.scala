@@ -48,8 +48,7 @@ import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 /**
  * Common params for LMF and LMFModel.
  */
-private[recommendation] trait LMFModelParams extends Params with HasPredictionCol
-  with HasBlockSize {
+private[recommendation] trait LMFModelParams extends Params with HasPredictionCol {
   /**
    * Param for the column name for user ids. Ids must be longs.
    * Default: "user"
@@ -119,8 +118,6 @@ private[recommendation] trait LMFModelParams extends Params with HasPredictionCo
 
   /** @group expertGetParam */
   def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
-
-  setDefault(blockSize -> 4096)
 }
 
 /**
@@ -317,15 +314,6 @@ class LMFModel private[ml] (
   @Since("4.0.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
-  /**
-   * Set block size for stacking input data in matrices.
-   * Default is 4096.
-   *
-   * @group expertSetParam
-   */
-  @Since("4.0.0")
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
-
   private val predict = udf { (featuresA: Seq[Float], interceptA: Float,
                                featuresB: Seq[Float], interceptB: Float) =>
     if (featuresA != null && featuresB != null) {
@@ -394,64 +382,6 @@ class LMFModel private[ml] (
   @Since("4.0.0")
   override def toString: String = {
     s"LMFModel: uid=$uid, rank=$rank"
-  }
-
-  /**
-   * Returns top `numItems` items recommended for each user, for all users.
-   * @param numItems max number of recommendations for each user
-   * @return a DataFrame of (userCol: Long, recommendations), where recommendations are
-   *         stored as an array of (itemCol: Long, rating: Float) Rows.
-   */
-  @Since("4.0.0")
-  def recommendForAllUsers(numItems: Int): DataFrame = {
-    recommendForAll(rank, userFactors, itemFactors,
-      $(userCol), $(itemCol), numItems, $(blockSize))
-  }
-
-  /**
-   * Returns top `numItems` items recommended for each user id in the input data set. Note that if
-   * there are duplicate ids in the input dataset, only one set of recommendations per unique id
-   * will be returned.
-   * @param dataset a Dataset containing a column of user ids. The column name must match `userCol`.
-   * @param numItems max number of recommendations for each user.
-   * @return a DataFrame of (userCol: Long, recommendations), where recommendations are
-   *         stored as an array of (itemCol: Long, rating: Float) Rows.
-   */
-  @Since("4.0.0")
-  def recommendForUserSubset(dataset: Dataset[_], numItems: Int): DataFrame = {
-    val srcFactorSubset = getSourceFactorSubset(
-      dataset, userFactors, $(userCol))
-    recommendForAll(
-      rank, srcFactorSubset, itemFactors, $(userCol), $(itemCol), numItems, $(blockSize))
-  }
-
-  /**
-   * Returns top `numUsers` users recommended for each item, for all items.
-   * @param numUsers max number of recommendations for each item
-   * @return a DataFrame of (itemCol: Long, recommendations), where recommendations are
-   *         stored as an array of (userCol: Long, rating: Float) Rows.
-   */
-  @Since("4.0.0")
-  def recommendForAllItems(numUsers: Int): DataFrame = {
-    recommendForAll(
-      rank, itemFactors, userFactors, $(itemCol), $(userCol), numUsers, $(blockSize))
-  }
-
-  /**
-   * Returns top `numUsers` users recommended for each item id in the input data set. Note that if
-   * there are duplicate ids in the input dataset, only one set of recommendations per unique id
-   * will be returned.
-   * @param dataset a Dataset containing a column of item ids. The column name must match `itemCol`.
-   * @param numUsers max number of recommendations for each item.
-   * @return a DataFrame of (itemCol: Long, recommendations), where recommendations are
-   *         stored as an array of (userCol: Long, rating: Float) Rows.
-   */
-  @Since("4.0.0")
-  def recommendForItemSubset(dataset: Dataset[_], numUsers: Int): DataFrame = {
-    val srcFactorSubset = getSourceFactorSubset(
-      dataset, itemFactors, $(itemCol))
-    recommendForAll(rank,
-      srcFactorSubset, userFactors, $(itemCol), $(userCol), numUsers, $(blockSize))
   }
 }
 
@@ -636,15 +566,6 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
   @Since("4.0.0")
   def setColdStartStrategy(value: String): this.type = set(coldStartStrategy, value)
 
-  /**
-   * Set block size for stacking input data in matrices.
-   * Default is 4096.
-   *
-   * @group expertSetParam
-   */
-  @Since("4.0.0")
-  def setBlockSize(value: Int): this.type = set(blockSize, value)
-
   @Since("4.0.0")
   override def fit(dataset: Dataset[_]): LMFModel = instrumented { instr =>
     transformSchema(dataset.schema)
@@ -694,7 +615,7 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
     instr.logParams(this, rank, negative, maxIter, stepSize, parallelism,
       numPartitions, pow, minUserCount, minItemCount, regParamU, regParamI,
       fitIntercept, implicitPrefs, intermediateStorageLevel, finalStorageLevel,
-      checkpointInterval, blockSize)
+      checkpointInterval)
 
     val result = new LMF.Backend($(rank), $(negative), $(maxIter), $(stepSize),
       $(parallelism), $(numPartitions), $(pow),
@@ -719,7 +640,6 @@ class LMF(@Since("4.0.0") override val uid: String) extends Estimator[LMFModel] 
       .setItemCol($(itemCol))
       .setPredictionCol($(predictionCol))
       .setColdStartStrategy($(coldStartStrategy))
-      .setBlockSize($(blockSize))
       .setParent(this)
     copyValues(model)
   }
