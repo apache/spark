@@ -1215,9 +1215,10 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             ExpiredTimerInfo,
             TimerValues,
         )
+
         # Clone the original iterator to get additional args
         cloned_iterator, result_iterator = tee(iterator)
-        result = ([(pd, t) for x in cloned_iterator for y, t in x for pd in y[0]])
+        result = [(pd, t) for x in cloned_iterator for y, t in x for pd in y[0]]
         args = [(y[1], y[2], t, y[3]) for x in result_iterator for y, t in x]
 
         # if num of keys is smaller than num of partitions, some partitions will have empty
@@ -1251,6 +1252,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             For a given key, need to properly set implicit key before calling handleExpiredTimer,
             and remove the implicit key after consuming the iterator.
             """
+
             def wrapper():
                 timer_cur_key = kwargs.get("key", args[0] if len(args) > 0 else None)
                 # set implicit key for the timer row before calling UDF
@@ -1268,11 +1270,13 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         # process with expiry timers, only timer related rows will be emitted
         for expiry_list in expiry_list_iter:
             for key_obj, expiry_timestamp in expiry_list:
-                result_iter_list.append(timer_iter_wrapper(
-                    statefulProcessor.handleExpiredTimer,
-                    key=key_obj,
-                    timer_values=TimerValues(batch_timestamp, watermark_timestamp),
-                    expired_timer_info=ExpiredTimerInfo(expiry_timestamp))
+                result_iter_list.append(
+                    timer_iter_wrapper(
+                        statefulProcessor.handleExpiredTimer,
+                        key=key_obj,
+                        timer_values=TimerValues(batch_timestamp, watermark_timestamp),
+                        expired_timer_info=ExpiredTimerInfo(expiry_timestamp),
+                    )
                 )
 
         timer_result_list = ((df, outputType) for df in chain(*result_iter_list))
