@@ -1522,8 +1522,12 @@ operatorPipeRightSide
     ;
 
 operatorPipeSetAssignmentSeq
-    : ident+=errorCapturingIdentifier EQ expression
-        (COMMA ident+=errorCapturingIdentifier EQ expression)*
+    : ident+=errorCapturingIdentifier
+        (DOT errorCapturingIdentifier)*  // This is invalid syntax; we just capture it here.
+        EQ expression
+        (COMMA ident+=errorCapturingIdentifier
+          (DOT errorCapturingIdentifier)*  // This is invalid syntax; we just capture it here.
+          EQ expression)*
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.

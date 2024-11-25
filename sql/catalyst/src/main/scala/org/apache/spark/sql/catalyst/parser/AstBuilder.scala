@@ -2276,9 +2276,10 @@ class AstBuilder extends DataTypeAstBuilder
   def visitStarExcept(ctx: StarContext, target: Option[Seq[String]]): Expression = withOrigin(ctx) {
     val exceptCols = ctx.exceptClause
       .exceptCols.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
-    UnresolvedStarExcept(
+    UnresolvedStarExceptOrReplace(
       target,
-      exceptCols.toSeq)
+      exceptCols.toSeq,
+      replacements = None)
   }
 
   /**
@@ -6006,12 +6007,14 @@ class AstBuilder extends DataTypeAstBuilder
             s"SQL pipe syntax |> SET operator with duplicate assignment key $ident", ctx)
         }
         visitedSetIdentifiers += checkKey
-        // Add an UnresolvedStarExcept to exclude the SET expression name from the relation and
-        // add the new SET expression to the projection list.
+        // Add an UnresolvedStarExceptOrReplace to exclude the SET expression name from the relation
+        // and add the new SET expression to the projection list.
         // Use a PipeSelect expression to make sure it does not contain any aggregate functions.
+        val replacement =
+          Alias(PipeExpression(target, isAggregate = false, PipeOperators.setClause), ident)()
         val projectList: Seq[NamedExpression] =
-          Seq(UnresolvedStarExcept(None, Seq(Seq(ident))),
-            Alias(PipeExpression(target, isAggregate = false, PipeOperators.setClause), ident)())
+          Seq(UnresolvedStarExceptOrReplace(
+            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement))))
         plan = Project(projectList, plan)
     }
     plan
@@ -6020,6 +6023,11 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitOperatorPipeSetAssignmentSeq(
       ctx: OperatorPipeSetAssignmentSeqContext): (Seq[String], Seq[Expression]) = {
     withOrigin(ctx) {
+      if (!ctx.DOT.isEmpty) {
+        operationNotAllowed(
+          s"SQL pipe syntax |> SET operator with multi-part assignment key " +
+            s"(only single-part keys are allowed)", ctx)
+      }
       val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
       val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
       (setIdentifiers, setTargets)

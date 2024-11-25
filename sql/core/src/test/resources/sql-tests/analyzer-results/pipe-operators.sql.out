@@ -735,7 +735,7 @@ org.apache.spark.sql.AnalysisException
 table t
 |> set x = 1
 -- !query analysis
-Project [y#x, pipeexpression(1, false, SET) AS x#x]
+Project [pipeexpression(1, false, SET) AS x#x, y#x]
 +- SubqueryAlias spark_catalog.default.t
    +- Relation spark_catalog.default.t[x#x,y#x] csv
 
@@ -767,7 +767,7 @@ table t
 |> set z = x + length(y), zz = x + 1
 -- !query analysis
 Project [x#x, y#x, z#x, pipeexpression((x#x + 1), false, SET) AS zz#x]
-+- Project [x#x, y#x, zz#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x]
++- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x, zz#x]
    +- Project [x#x, y#x, z#x, pipeexpression(2, false, EXTEND) AS zz#x]
       +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
          +- SubqueryAlias spark_catalog.default.t
@@ -882,6 +882,26 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "startIndex" : 1,
     "stopIndex" : 60,
     "fragment" : "table t\n|> extend 1 as z\n|> set z = x + length(y), z = z + 1"
+  } ]
+}
+
+
+-- !query
+select col from st
+|> set col.i1 = 42
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "SQL pipe syntax |> SET operator with multi-part assignment key (only single-part keys are allowed)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 37,
+    "fragment" : "col.i1 = 42"
   } ]
 }
 

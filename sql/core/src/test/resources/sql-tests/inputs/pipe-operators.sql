@@ -245,6 +245,8 @@ table t
 ---------------------------------
 
 -- Setting with a constant.
+-- The indicated column is not the last column in the table, and the SET operator will replace it
+-- with the new value in its existing position.
 table t
 |> set x = 1;
 
@@ -298,6 +300,10 @@ table t
 table t
 |> extend 1 as z
 |> set z = x + length(y), z = z + 1;
+
+-- Setting nested fields in structs is not supported.
+select col from st
+|> set col.i1 = 42;
 
 -- WHERE operators: positive tests.
 -----------------------------------

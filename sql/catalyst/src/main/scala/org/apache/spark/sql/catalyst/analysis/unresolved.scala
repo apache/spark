@@ -462,13 +462,15 @@ abstract class Star extends LeafExpression with NamedExpression {
  * "SELECT record.* from (SELECT struct(a,b,c) as record ...)
  *
  * @param target an optional name that should be the target of the expansion.  If omitted all
- *              targets' columns are produced. This can either be a table name or struct name. This
- *              is a list of identifiers that is the path of the expansion.
+ *               targets' columns are produced. This can either be a table name or struct name. This
+ *               is a list of identifiers that is the path of the expansion.
  *
- * This class provides the shared behavior between the classes for SELECT * ([[UnresolvedStar]])
- * and SELECT * EXCEPT ([[UnresolvedStarExcept]]). [[UnresolvedStar]] is just a case class of this,
- * while [[UnresolvedStarExcept]] adds some additional logic to the expand method.
-  */
+ *               This class provides the shared behavior between the classes for
+ *               SELECT * ([[UnresolvedStar]])
+ *               and SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]). [[UnresolvedStar]] is
+ *               just a case class of this, while [[UnresolvedStarExceptOrReplace]] adds some
+ *               additional logic to the expand method.
+ */
 abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with Unevaluable {
   /**
    * Returns true if the nameParts is a subset of the last elements of qualifier of the attribute.
@@ -571,8 +573,15 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
  *
  * @param excepts a list of names that should be excluded from the expansion.
  *
+ * @param replacements an optional list of expressions that should be used to replace the
+ *                     expressions removed by EXCEPT. If present, the length of this list must
+ *                     be the same as the length of the EXCEPT list. This supports replacing
+ *                     expressions instead of excluding them from the original SELECT list.
  */
-case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[String]])
+case class UnresolvedStarExceptOrReplace(
+    target: Option[Seq[String]],
+    excepts: Seq[Seq[String]],
+    replacements: Option[Seq[NamedExpression]])
   extends UnresolvedStarBase(target) {
 
   /**
@@ -652,7 +661,14 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
       // group the except pairs by the column they refer to. NOTE: no groupMap until scala 2.13
       val groupedExcepts: AttributeMap[Seq[Seq[String]]] =
         AttributeMap(excepts.groupBy(_._1.toAttribute).transform((_, v) => v.map(_._2)))
-
+      // If the 'replacements' list is populated to indicate we should replace excepted columns
+      // with new expressions, we must have the same number of replacements as excepts. Keep an
+      // index to track the current replacement.
+      replacements.foreach { r =>
+        assert(excepts.size == r.size,
+          "The number of replacements must be the same as the number of excepts")
+      }
+      var replacementIndex = 0
       // map input columns while searching for the except entry corresponding to the current column
       columns.map(col => col -> groupedExcepts.get(col.toAttribute)).collect {
         // pass through columns that don't match anything in groupedExcepts
@@ -679,11 +695,15 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
             filterColumns(extractedFields.toImmutableArraySeq, newExcepts)), col.name)()
         // if there are multiple nestedExcepts but one is empty we must have overlapping except
         // columns. throw an error.
-        case (col, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
+        case (_, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
           throw new AnalysisException(
             errorClass = "EXCEPT_OVERLAPPING_COLUMNS",
             messageParameters = Map(
               "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
+        // found a match and the 'replacements' list is populated - replace the column
+        case (_, Some(_)) if replacements.nonEmpty =>
+          replacementIndex += 1
+          replacements.get(replacementIndex - 1)
       }
     }
 

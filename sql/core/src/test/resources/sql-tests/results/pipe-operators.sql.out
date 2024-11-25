@@ -682,10 +682,10 @@ org.apache.spark.sql.AnalysisException
 table t
 |> set x = 1
 -- !query schema
-struct<y:string,x:int>
+struct<x:int,y:string>
 -- !query output
-abc	1
-def	1
+1	abc
+1	def
 
 
 -- !query
@@ -824,6 +824,28 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "startIndex" : 1,
     "stopIndex" : 60,
     "fragment" : "table t\n|> extend 1 as z\n|> set z = x + length(y), z = z + 1"
+  } ]
+}
+
+
+-- !query
+select col from st
+|> set col.i1 = 42
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "SQL pipe syntax |> SET operator with multi-part assignment key (only single-part keys are allowed)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 27,
+    "stopIndex" : 37,
+    "fragment" : "col.i1 = 42"
   } ]
 }
 
