@@ -21,32 +21,33 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 
 /**
- * SQL scripting interpreter - builds SQL script execution plan.
+ * SQL scripting executor - executes script and returns result statements.
  */
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
     session: SparkSession) extends Iterator[DataFrame] {
 
+  // Build the execution plan for the script
   private val executionPlan: Iterator[CompoundStatementExec] =
     SqlScriptingInterpreter().buildExecutionPlan(sqlScript, session)
 
   private var current = getNextResult
 
-  override def hasNext: Boolean = {
-    current.isDefined
-  }
+  override def hasNext: Boolean = current.isDefined
 
   override def next(): DataFrame = {
     if (!hasNext) {
       throw new NoSuchElementException("No more statements to execute")
     }
-    val res = current.get.asInstanceOf[SingleStatementExec].buildDataFrame(session)
+    val nextDataFrame = current.get.asInstanceOf[SingleStatementExec].buildDataFrame(session)
     current = getNextResult
-    res
+    nextDataFrame
   }
 
+  /** Helper method to iterate through statements until next result statement is encountered */
   private def getNextResult: Option[CompoundStatementExec] = {
     var currentStatement = if (executionPlan.hasNext) Some(executionPlan.next()) else None
+    // While we don't have a result statement, execute the statements
     while (currentStatement.isDefined && !currentStatement.get.isResult) {
       currentStatement match {
         case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>

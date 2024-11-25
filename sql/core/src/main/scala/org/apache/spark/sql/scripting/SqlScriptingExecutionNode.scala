@@ -127,6 +127,7 @@ class SingleStatementExec(
    */
   var isExecuted = false
 
+  /** Statement is result if it is a SELECT query, and it is not in control flow condition */
   override def isResult: Boolean = parsedPlan.isInstanceOf[Project] && !isExecuted
 
   /**
