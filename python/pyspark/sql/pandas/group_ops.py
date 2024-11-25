@@ -505,11 +505,10 @@ class PandasGroupedOpsMixin:
         def handle_data_rows(
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
-            batch_timestamp: int,
-            watermark_timestamp: int,
             inputRows: Optional[Iterator["PandasDataFrameLike"]] = None,
         ) -> Tuple[Iterator["PandasDataFrameLike"], StatefulProcessorApiClient]:
             statefulProcessorApiClient.set_implicit_key(key)
+            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps()
             # process with data rows
             if inputRows is not None:
                 data_iter = statefulProcessor.handleInputRows(
@@ -543,12 +542,7 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
 
-            batch_timestamp, watermark_timestamp =\
-                statefulProcessorApiClient.get_timestamps(timeMode)
-
-            return handle_data_rows(
-                statefulProcessorApiClient, key, batch_timestamp, watermark_timestamp, inputRows
-            )
+            return handle_data_rows(statefulProcessorApiClient, key, inputRows)
 
         def transformWithStateWithInitStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,
@@ -584,8 +578,7 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
 
-            batch_timestamp, watermark_timestamp = \
-                statefulProcessorApiClient.get_timestamps(timeMode)
+            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps()
             # only process initial state if first batch and initial state is not None
             if initialStates is not None:
                 for cur_initial_state in initialStates:
@@ -605,9 +598,7 @@ class PandasGroupedOpsMixin:
                 inputRows = itertools.chain([first], inputRows)
 
             if not input_rows_empty:
-                return handle_data_rows(
-                    statefulProcessorApiClient, key, batch_timestamp, watermark_timestamp, inputRows
-                )
+                return handle_data_rows(statefulProcessorApiClient, key, inputRows)
             else:
                 return (iter([]), statefulProcessorApiClient, statefulProcessor, timeMode)
 

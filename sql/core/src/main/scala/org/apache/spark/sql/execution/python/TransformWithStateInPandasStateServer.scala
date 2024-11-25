@@ -120,6 +120,7 @@ class TransformWithStateInPandasStateServer(
   }
 
   /** Timer related class variables */
+
   private var expiryTimestampIter: Option[Iterator[(Any, Long)]] =
     if (expiryTimerIterForTest != null) {
       Option(expiryTimerIterForTest)

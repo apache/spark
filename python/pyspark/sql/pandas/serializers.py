@@ -1231,8 +1231,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         outputType = args[0][2]
         timeMode = args[0][3]
 
-        batch_timestamp, watermark_timestamp = \
-            statefulProcessorApiClient.get_timestamps(timeMode)
+        batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps()
 
         result_iter_list = []
         if timeMode.lower() == "processingtime":
