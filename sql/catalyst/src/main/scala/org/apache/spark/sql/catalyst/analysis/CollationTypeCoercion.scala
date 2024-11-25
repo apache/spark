@@ -198,9 +198,6 @@ object CollationTypeCoercion {
    */
   private def mergeTypes(inType: DataType, castType: DataType): Option[DataType] = {
     val outType = mergeStructurally(inType, castType) {
-      case (left, right) if left == right =>
-        left
-
       case (_: StringType, right: StringTypeWithContext) =>
         right.stringType
     }
@@ -217,9 +214,12 @@ object CollationTypeCoercion {
       (baseCase: PartialFunction[(DataType, DataType), DataType]): Option[DataType] = {
     (leftType, rightType) match {
 
-      // handle base case
+      // handle the base cases first
       case _ if baseCase.isDefinedAt((leftType, rightType)) =>
         Option(baseCase(leftType, rightType))
+
+      case _ if leftType == rightType =>
+        Some(leftType)
 
       case (ArrayType(leftElemType, nullable), ArrayType(rightElemType, _)) =>
         mergeStructurally(leftElemType, rightElemType)( baseCase).map(ArrayType(_, nullable))
@@ -241,12 +241,12 @@ object CollationTypeCoercion {
           return None
         }
         val newFields = leftFields.zip(rightFields).map {
-          case (field, field2) =>
-            val newType = mergeStructurally(field.dataType, field2.dataType)(baseCase)
+          case (leftField, rightField) =>
+            val newType = mergeStructurally(leftField.dataType, rightField.dataType)(baseCase)
             if (newType.isEmpty) {
               return None
             }
-            field.copy(dataType = newType.get)
+            leftField.copy(dataType = newType.get)
         }
         Some(StructType(newFields))
 
@@ -405,9 +405,6 @@ object CollationTypeCoercion {
    */
   private def mergeWinner(left: DataType, right: DataType): Option[DataType] = {
     mergeStructurally(left, right) {
-      case (left, right) if left == right =>
-        left
-
       case (left: StringTypeWithContext, right: StringTypeWithContext) =>
         getWinningStringType(left, right)
 
