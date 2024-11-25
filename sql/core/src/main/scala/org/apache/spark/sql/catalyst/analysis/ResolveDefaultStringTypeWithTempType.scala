@@ -18,10 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{DataType, StringType, StructType}
 
 /**
  * Resolves default string types in DDL commands. For DML commands, the default string type is
@@ -33,24 +34,17 @@ import org.apache.spark.sql.types.{DataType, StringType}
  * [[TemporaryStringType]] object in cases where the old type and new are equal and thus would
  * not change the plan after transformation.
  */
-class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
+class ResolveDefaultStringTypeWithTempType(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val newPlan = if (isDDLCommand(plan)) {
+    if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
       val newType = stringTypeForDMLCommand
       transformPlan(plan, newType)
     }
-
-    if (!replaceWithTempType || newPlan.fastEquals(plan)) {
-      newPlan
-    } else {
-      // Due to how tree transformations work and StringType object being equal to
-      // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
-      // to ensure the correct results for occurrences of default string type.
-      ResolveDefaultStringTypesWithoutTempType.apply(newPlan)
-    }
   }
+
+  override def requiresRestart: Boolean = true
 
   private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType
 
@@ -70,17 +64,24 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     }
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
-    case _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
+    case _: CreateTable | _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
     case _ => isCreateOrAlterPlan(plan)
   }
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
-    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs | _: V1CreateTablePlan => true
+    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
     case _ => false
   }
 
   private def transformDDL(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
+      case createTable: CreateTable =>
+        val newType = stringTypeForDDLCommand(createTable)
+        val newSchema = replaceDefaultStringType(createTable.tableDesc.schema, newType)
+          .asInstanceOf[StructType]
+        val withNewSchema = createTable.copy(createTable.tableDesc.copy(schema = newSchema))
+        transformPlan(withNewSchema, newType)
+
       case p if isCreateOrAlterPlan(p) =>
         val newType = stringTypeForDDLCommand(p)
         transformPlan(p, newType)
@@ -176,11 +177,11 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
   }
 }
 
-case object ResolveDefaultStringTypes
-  extends ResolveDefaultStringTypes(replaceWithTempType = true) {}
+case object ResolveDefaultStringTypeWithTempType
+  extends ResolveDefaultStringTypeWithTempType(replaceWithTempType = true) {}
 
-case object ResolveDefaultStringTypesWithoutTempType
-  extends ResolveDefaultStringTypes(replaceWithTempType = false) {}
+case object ResolveDefaultStringTypeWithoutTempType
+  extends ResolveDefaultStringTypeWithTempType(replaceWithTempType = false) {}
 
 case class TemporaryStringType(override val collationId: Int)
   extends StringType(collationId) {}
