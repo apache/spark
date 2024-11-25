@@ -167,6 +167,7 @@ case class QualifiedColType(
  *                             Only valid for static partitions.
  * @param byName               If true, reorder the data columns to match the column names of the
  *                             target table.
+ * @param isCtas               If true, the insert is a part of a DDL statement (CTAS/RTAS).
  */
 case class InsertIntoStatement(
     table: LogicalPlan,

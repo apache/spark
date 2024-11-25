@@ -3671,7 +3671,7 @@ class DataSourceV2SQLSuiteV1Filter
       val df = sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) VALUES (1, 'a'), (2, 'b')")
 
       val collected = df.queryExecution.optimizedPlan.collect {
-        case CommandResult(_, AppendData(relation: DataSourceV2Relation, _, _, _, _, _), _, _) =>
+        case CommandResult(_, AppendData(relation: DataSourceV2Relation, _, _, _, _, _, _), _, _) =>
           assert(relation.options.get("write.split-size") == "10")
       }
       assert (collected.size == 1)
