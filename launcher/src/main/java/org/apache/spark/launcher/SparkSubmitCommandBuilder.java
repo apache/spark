@@ -339,6 +339,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
   }
 
+  /**
+   * Sanitizes the configuration value to prevent command injection vulnerabilities.
+   * Removes shell metacharacters that could be used to manipulate shell commands.
+   *
+   * References:
+   * - OWASP Command Injection Prevention Cheat Sheet
+   * (https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html)
+   */
   private String sanitizeConfValue(String value) {
     if (value != null) {
       String[] unsafeChars = {"`", "$(", ")", ";", "&", "|", "<", ">", "*", "?"};
