@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.rules.RuleExecutor.ONE_MORE_ITER
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 
@@ -44,7 +43,7 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
       transformPlan(plan, newType)
     }
 
-    val finalPlan = if (!replaceWithTempType || newPlan.fastEquals(plan)) {
+    if (!replaceWithTempType || newPlan.fastEquals(plan)) {
       newPlan
     } else {
       // Due to how tree transformations work and StringType object being equal to
@@ -52,14 +51,6 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
       // to ensure the correct results for occurrences of default string type.
       ResolveDefaultStringTypesWithoutTempType.apply(newPlan)
     }
-
-    if (finalPlan == plan && finalPlan == newPlan) {
-      finalPlan.unsetTagValue(ONE_MORE_ITER)
-    } else {
-      finalPlan.setTagValue(ONE_MORE_ITER, ())
-    }
-
-    finalPlan
   }
 
   private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType

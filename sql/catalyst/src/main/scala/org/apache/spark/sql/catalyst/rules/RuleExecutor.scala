@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import scala.collection.mutable.ListBuffer
-
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -32,7 +30,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object RuleExecutor {
-  val ONE_MORE_ITER: TreeNodeTag[Unit] = TreeNodeTag[Unit]("one_more_iter")
 
   protected val queryExecutionMeter = QueryExecutionMetering()
 
@@ -240,8 +237,6 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
       // Run until fix point or the max number of iterations as specified in the strategy.
       while (continue) {
-        val effectiveRules = new ListBuffer[Rule[TreeType]]()
-
         curPlan = batch.rules.foldLeft(curPlan) {
           case (plan, rule) =>
             val startTime = System.nanoTime()
@@ -252,7 +247,6 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             if (effective) {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
-              effectiveRules.addOne(rule)
               planChangeLogger.logRule(rule.ruleName, plan, result)
               // Run the plan changes validation after each rule.
               if (fullValidation || lightweightValidation) {
@@ -310,7 +304,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           continue = false
         }
 
-        if (reachedFixedPoint(lastPlan, curPlan)) {
+        if (curPlan.fastEquals(lastPlan)) {
           logTrace(
             s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
           continue = false
@@ -323,9 +317,5 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     planChangeLogger.logMetrics(name, RuleExecutor.getCurrentMetrics() - beforeMetrics)
 
     curPlan
-  }
-
-  private def reachedFixedPoint(oldPlan: TreeType, newPlan: TreeType): Boolean = {
-    oldPlan.fastEquals(newPlan) && newPlan.getTagValue(RuleExecutor.ONE_MORE_ITER).isEmpty
   }
 }
