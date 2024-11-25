@@ -21,9 +21,9 @@ import unittest
 from pyspark.sql.tests.test_udf_profiler import (
     UDFProfiler2TestsMixin,
     _do_computation,
-    has_flameprof,
 )
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.utils import have_flameprof
 
 
 class UDFProfilerParityTests(UDFProfiler2TestsMixin, ReusedConnectTestCase):
