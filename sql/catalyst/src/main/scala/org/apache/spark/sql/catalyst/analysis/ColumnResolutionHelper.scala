@@ -381,7 +381,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       // A mapping from lower-cased alias name to either the Alias itself, or the count of aliases
       // that have the same lower-cased name. If the count is larger than 1, we won't use it to
       // resolve lateral column aliases.
-      aliasMap: mutable.Map[String, Either[Alias, Int]] = mutable.HashMap.empty)
+      aliasMap: mutable.Map[String, Either[Alias, Int]] = mutable.HashMap.empty,
+      throws: Boolean = true)
   : Seq[Expression] = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) return selectList
     def resolve(e: Expression): Expression = {
@@ -399,19 +400,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // look up lateral column aliases.
           val lowerCasedName = u.nameParts.head.toLowerCase(Locale.ROOT)
           aliasMap.get(lowerCasedName).map {
-            case scala.util.Left(alias) =>
-              if (alias.resolved) {
-                val resolvedAttr = resolveExpressionByPlanOutput(
-                  u, LocalRelation(Seq(alias.toAttribute)), throws = true
-                ).asInstanceOf[NamedExpression]
+            case scala.util.Left(alias) if alias.resolved =>
+              val resolvedAttr = resolveExpressionByPlanOutput(
+                u, LocalRelation(Seq(alias.toAttribute)), throws)
+              if (throws || resolvedAttr.resolved) {
                 assert(resolvedAttr.resolved)
-                LateralColumnAliasReference(resolvedAttr, u.nameParts, alias.toAttribute)
+                LateralColumnAliasReference(
+                  resolvedAttr.asInstanceOf[NamedExpression], u.nameParts, alias.toAttribute)
               } else {
-                // Still returns a `LateralColumnAliasReference` even if the lateral column alias
-                // is not resolved yet. This is to make sure we won't mistakenly resolve it to
-                // outer references.
-                LateralColumnAliasReference(u, u.nameParts, alias.toAttribute)
+                u
               }
+            case scala.util.Left(alias) =>
+              LateralColumnAliasReference(u, u.nameParts, alias.toAttribute)
             case scala.util.Right(count) =>
               throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, count)
           }.getOrElse(u)

@@ -98,7 +98,7 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
       case _ =>
     }
     if (aliasMap.nonEmpty) {
-      resolveLateralColumnAlias(s.order, aliasMap)
+      resolveLateralColumnAlias(s.order, aliasMap, throws = false)
     } else {
       s.order
     }
