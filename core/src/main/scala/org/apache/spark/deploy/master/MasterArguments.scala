@@ -33,12 +33,6 @@ private[master] class MasterArguments(args: Array[String], conf: SparkConf) exte
   var webUiPort = 8080
   var propertiesFile: String = null
 
-  // Check for settings in environment variables
-  if (System.getenv("SPARK_MASTER_IP") != null) {
-    logWarning("SPARK_MASTER_IP is deprecated, please use SPARK_MASTER_HOST")
-    host = System.getenv("SPARK_MASTER_IP")
-  }
-
   if (System.getenv("SPARK_MASTER_HOST") != null) {
     host = System.getenv("SPARK_MASTER_HOST")
   }
