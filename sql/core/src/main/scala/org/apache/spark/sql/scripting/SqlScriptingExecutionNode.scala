@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.NameParameterizedQuery
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
@@ -37,11 +37,6 @@ sealed trait CompoundStatementExec extends Logging {
    * Example: DropVariable statements are automatically created at the end of each compound.
    */
   val isInternal: Boolean = false
-
-  /**
-   * Whether the statement originates from the SQL statement that returns the result.
-   */
-  def isResult: Boolean = false
 
   /**
    * Reset execution of the current node.
@@ -133,16 +128,13 @@ class SingleStatementExec(
   /**
    * Plan with named parameters.
    */
-  lazy val resolvedPlan: LogicalPlan = {
+  private lazy val preparedPlan: LogicalPlan = {
     if (args.nonEmpty) {
       NameParameterizedQuery(parsedPlan, args)
     } else {
       parsedPlan
     }
   }
-
-  /** Statement is result if it is a SELECT query, and it is not in control flow condition */
-  override def isResult: Boolean = parsedPlan.isInstanceOf[Project] && !isExecuted
 
   /**
    * Get the SQL query text corresponding to this statement.
@@ -155,14 +147,13 @@ class SingleStatementExec(
   }
 
   /**
-   * Builds a DataFrame from the parsedPlan of this SingleStatementExec,
-   * logging Origin.sqlText if it exists
+   * Builds a DataFrame from the parsedPlan of this SingleStatementExec
    * @param session The SparkSession on which the parsedPlan is built
    * @return
    *   The DataFrame.
    */
   def buildDataFrame(session: SparkSession): DataFrame = {
-    Dataset.ofRows(session, resolvedPlan)
+    Dataset.ofRows(session, preparedPlan)
   }
 
   override def reset(): Unit = isExecuted = false

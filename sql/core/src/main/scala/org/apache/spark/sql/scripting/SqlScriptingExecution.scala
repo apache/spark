@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
 
 /**
  * SQL scripting executor - executes script and returns result statements.
@@ -41,26 +41,33 @@ class SqlScriptingExecution(
     if (!hasNext) {
       throw new NoSuchElementException("No more statements to execute")
     }
-    val nextDataFrame = current.get.asInstanceOf[SingleStatementExec].buildDataFrame(session)
+    val nextDataFrame = current.get
     current = getNextResult
     nextDataFrame
   }
 
   /** Helper method to iterate through statements until next result statement is encountered */
-  private def getNextResult: Option[CompoundStatementExec] = {
+  private def getNextResult: Option[DataFrame] = {
     var currentStatement = if (executionPlan.hasNext) Some(executionPlan.next()) else None
     // While we don't have a result statement, execute the statements
-    while (currentStatement.isDefined && !currentStatement.get.isResult) {
+    while (currentStatement.isDefined) {
       currentStatement match {
         case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>
           withErrorHandling() {
-            stmt.buildDataFrame(session).collect()
+            val df = stmt.buildDataFrame(session)
+            if (df.logicalPlan.isInstanceOf[CommandResult]) {
+              // If the statement is not a result, we need to write it to a noop sink to execute it
+              df.write.format("noop").mode("overwrite").save()
+            } else {
+              // If the statement is a result, we need to return it to the caller
+              return Some(df)
+            }
           }
         case _ => // pass
       }
       currentStatement = if (executionPlan.hasNext) Some(executionPlan.next()) else None
     }
-    currentStatement
+    None
   }
 
   private def handleException(e: Exception): Unit = {

@@ -417,14 +417,13 @@ class SparkSession private(
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): DataFrame = {
     val sse = new SqlScriptingExecution(script, this, args)
-    var df: DataFrame = null
-    var result: Option[Seq[Row]] = null
+    var result: Option[Seq[Row]] = None
 
     while (sse.hasNext) {
       sse.withErrorHandling() {
-        df = sse.next()
+        val df = sse.next()
         if (sse.hasNext) {
-          df.collect()
+          df.write.format("noop").mode("overwrite").save()
         } else {
           // Collect results from the last DataFrame
           result = Some(df.collect().toSeq)
@@ -432,7 +431,7 @@ class SparkSession private(
       }
     }
 
-    if (result == null) {
+    if (result.isEmpty) {
       emptyDataFrame
     } else {
       val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
