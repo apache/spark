@@ -82,6 +82,39 @@ deepspeed_requirement_message = None if have_deepspeed else "No module named 'de
 have_plotly = have_package("plotly")
 plotly_requirement_message = None if have_plotly else "No module named 'plotly'"
 
+have_matplotlib = have_package("matplotlib")
+matplotlib_requirement_message = None if have_matplotlib else "No module named 'matplotlib'"
+
+have_tabulate = have_package("tabulate")
+tabulate_requirement_message = None if have_tabulate else "No module named 'tabulate'"
+
+have_graphviz = have_package("graphviz")
+graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
+
+
+pandas_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pandas_version
+
+    require_minimum_pandas_version()
+except Exception as e:
+    # If Pandas version requirement is not satisfied, skip related tests.
+    pandas_requirement_message = str(e)
+
+have_pandas = pandas_requirement_message is None
+
+
+pyarrow_requirement_message = None
+try:
+    from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+
+    require_minimum_pyarrow_version()
+except Exception as e:
+    # If Arrow version requirement is not satisfied, skip related tests.
+    pyarrow_requirement_message = str(e)
+
+have_pyarrow = pyarrow_requirement_message is None
+
 
 def read_int(b):
     return struct.unpack("!i", b)[0]

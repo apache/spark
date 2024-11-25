@@ -4135,11 +4135,20 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def pipeOperatorSelectContainsAggregateFunction(expr: Expression): Throwable = {
+  def pipeOperatorAggregateExpressionContainsNoAggregateFunction(expr: Expression): Throwable = {
     new AnalysisException(
-      errorClass = "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+      errorClass = "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
       messageParameters = Map(
         "expr" -> expr.toString),
+      origin = expr.origin)
+  }
+
+  def pipeOperatorContainsAggregateFunction(expr: Expression, clause: String): Throwable = {
+    new AnalysisException(
+      errorClass = "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+      messageParameters = Map(
+        "expr" -> expr.toString,
+        "clause" -> clause),
       origin = expr.origin)
   }
 

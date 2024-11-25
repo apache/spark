@@ -59,7 +59,7 @@ class InMemoryRowLevelOperationTable(
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new InMemoryScanBuilder(schema) {
+      new InMemoryScanBuilder(schema, options) {
         override def build: Scan = {
           val scan = super.build()
           configuredScan = scan.asInstanceOf[InMemoryBatchScan]
@@ -115,7 +115,7 @@ class InMemoryRowLevelOperationTable(
     override def rowId(): Array[NamedReference] = Array(PK_COLUMN_REF)
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new InMemoryScanBuilder(schema)
+      new InMemoryScanBuilder(schema, options)
     }
 
     override def newWriteBuilder(info: LogicalWriteInfo): DeltaWriteBuilder =
