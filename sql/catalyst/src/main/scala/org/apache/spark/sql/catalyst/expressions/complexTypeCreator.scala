@@ -583,9 +583,9 @@ case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: E
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
-      StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true),
-      StringTypeNonCSAICollation(supportsTrimCollation = true))
+      StringTypeNonCSAICollation,
+      StringTypeNonCSAICollation,
+      StringTypeNonCSAICollation)
 
   override def dataType: DataType = MapType(first.dataType, first.dataType)
 

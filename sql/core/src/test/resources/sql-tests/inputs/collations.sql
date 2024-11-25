@@ -110,16 +110,6 @@ select str_to_map(text collate unicode_ai, pairDelim collate unicode_ai, keyValu
 
 drop table t4;
 
--- create table for str_to_map trim collation
-create table t4 (text string collate utf8_binary, pairDelim string collate utf8_lcase_rtrim, keyValueDelim string collate utf8_binary_rtrim) using parquet;
-
-insert into t4 values('a:1,b:2,c:3', ', ', ': ');
-select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase_rtrim, keyValueDelim collate utf8_binary_rtrim) from t4;
-select str_to_map(text collate utf8_binary, pairDelim collate utf8_binary_rtrim, keyValueDelim collate utf8_binary_rtrim) from t4;
-select str_to_map(text collate unicode_ai_rtrim, pairDelim collate unicode_ai_rtrim, keyValueDelim collate unicode_ai_rtrim) from t4;
-
-drop table t4;
-
 create table t5(s string, utf8_binary string collate utf8_binary, utf8_lcase string collate utf8_lcase) using parquet;
 insert into t5 values ('Spark', 'Spark', 'SQL');
 insert into t5 values ('aaAaAAaA', 'aaAaAAaA', 'aaAaAAaA');
