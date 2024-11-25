@@ -541,7 +541,6 @@ class InheritableThread(threading.Thread):
                             self._session.addTag(tag)
                     assert SparkContext._active_spark_context is not None
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
-
                     return target(*a, **k)
 
                 super(InheritableThread, self).__init__(
