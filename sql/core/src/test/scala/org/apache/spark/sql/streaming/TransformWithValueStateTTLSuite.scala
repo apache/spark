@@ -321,7 +321,7 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
           .add("id", IntegerType, false)
           .add("name", StringType)
         val compositeKeySchema = new StructType()
-          .add("groupingKey", new StructType().add("value", StringType))
+          .add("key", new StructType().add("value", StringType))
           .add("userKey", userKeySchema)
         val schema4 = StateStoreColFamilySchema(
           "mapState",
