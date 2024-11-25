@@ -2127,7 +2127,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
-    val table = if (canEagerlyEvaluateInlineTable(unresolvedTable)) {
+    val table = if (canEagerlyEvaluateInlineTable(unresolvedTable, ctx)) {
       EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
     } else {
       unresolvedTable
@@ -2138,9 +2138,36 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Determines if the inline table can be eagerly evaluated.
    */
-  private def canEagerlyEvaluateInlineTable(table: UnresolvedInlineTable): Boolean = {
-    conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED) &&
-      ResolveInlineTables.canResolveInlineTable(table)
+  private def canEagerlyEvaluateInlineTable(
+      table: UnresolvedInlineTable,
+      ctx: InlineTableContext): Boolean = {
+    if (!conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+      return false
+    }
+
+    val isSessionCollationSet = conf.defaultStringType != StringType
+
+    // if either of these are true we also need to check string types to make sure
+    // that there are no unresolved string types in the expressions
+    val checkStringTypes = isSessionCollationSet || contextInsideCreate(ctx)
+
+    ResolveInlineTables.canResolveInlineTable(table, checkStringTypes)
+  }
+
+  private def contextInsideCreate(ctx: ParserRuleContext): Boolean = {
+    var currentContext: RuleContext = ctx
+
+    while (currentContext != null) {
+      if (currentContext.isInstanceOf[CreateTableContext] ||
+          currentContext.isInstanceOf[ReplaceTableContext] ||
+          currentContext.isInstanceOf[CreateViewContext]) {
+        return true
+      }
+
+      currentContext = currentContext.parent
+    }
+
+    false
   }
 
   /**

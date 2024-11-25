@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal, NamedLambdaVariable}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.rules.RuleExecutor.ONE_MORE_ITER
+import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType, StructType}
@@ -86,7 +87,7 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
   }
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
-    case _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
+    case _: V2CreateTablePlan | _: CreateView | _: CreateViewCommand | _: AlterViewAs => true
     case _ => false
   }
 
@@ -140,6 +141,9 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
 
       case Literal(value, dt) if hasDefaultStringType(dt) =>
         Literal(value, replaceDefaultStringType(dt, newType))
+
+      case lambdaVar: NamedLambdaVariable if hasDefaultStringType(lambdaVar.dataType) =>
+        lambdaVar.copy(dataType = replaceDefaultStringType(lambdaVar.dataType, newType))
 
       case other => other
     }

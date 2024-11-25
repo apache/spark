@@ -470,4 +470,18 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
       checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable"), Seq(Row(0)))
     }
   }
+
+  test("inline table in RTAS") {
+    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+      sql(s"""
+           |REPLACE TABLE $testTable AS
+           |SELECT *
+           |FROM (VALUES ('a', 'a' = 'A'))
+           |AS inline_table(c1, c2);
+           |""".stripMargin)
+
+      assertTableColumnCollation(testTable, "c1", "UTF8_BINARY")
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2"), Seq(Row(0)))
+    }
+  }
 }

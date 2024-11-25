@@ -34,8 +34,11 @@ object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
     }
   }
 
-  def canResolveInlineTable(table: UnresolvedInlineTable): Boolean = {
-    table.expressionsResolved && !table.expressions.exists(hasUnresolvedStringType)
+  def canResolveInlineTable(
+      table: UnresolvedInlineTable,
+      checkStringTypes: Boolean = true): Boolean = {
+    table.expressionsResolved &&
+      (!checkStringTypes || !table.expressions.exists(hasUnresolvedStringType))
   }
 
   private def hasUnresolvedStringType(expression: Expression): Boolean =

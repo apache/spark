@@ -230,7 +230,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    */
   def hasExpressionWithDefaultStringType(expression: Expression): Boolean = {
     expression.exists {
-      case e @ (_: Literal | _: ColumnDefinition | _: Cast) =>
+      case e @ (_: Literal | _: ColumnDefinition | _: Cast | _: NamedLambdaVariable) =>
         hasDefaultStringType(e.dataType)
       case _ =>
         false

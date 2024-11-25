@@ -858,7 +858,7 @@ private[hive] trait HiveInspectors {
    * @return Hive java objectinspector (recursively).
    */
   def toInspector(expr: Expression): ObjectInspector = expr match {
-    case Literal(value, StringType) =>
+    case Literal(value, _: StringType) =>
       getStringWritableConstantObjectInspector(value)
     case Literal(value, IntegerType) =>
       getIntWritableConstantObjectInspector(value)
@@ -1147,7 +1147,7 @@ private[hive] trait HiveInspectors {
       case IntegerType => intTypeInfo
       case LongType => longTypeInfo
       case ShortType => shortTypeInfo
-      case StringType => stringTypeInfo
+      case _: StringType => stringTypeInfo
       case d: DecimalType => decimalTypeInfo(d)
       case DateType => dateTypeInfo
       case TimestampType => timestampTypeInfo
