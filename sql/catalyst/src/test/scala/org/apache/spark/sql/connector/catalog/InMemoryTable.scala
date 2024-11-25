@@ -84,23 +84,23 @@ class InMemoryTable(
     InMemoryBaseTable.maybeSimulateFailedTableWrite(new CaseInsensitiveStringMap(properties))
     InMemoryBaseTable.maybeSimulateFailedTableWrite(info.options)
 
-    new InMemoryWriterBuilderWithOverWrite()
+    new InMemoryWriterBuilderWithOverWrite(info)
   }
 
-  private class InMemoryWriterBuilderWithOverWrite() extends InMemoryWriterBuilder
-    with SupportsOverwrite {
+  class InMemoryWriterBuilderWithOverWrite(override val info: LogicalWriteInfo)
+    extends InMemoryWriterBuilder(info) with SupportsOverwrite {
 
     override def truncate(): WriteBuilder = {
-      if (writer != Append) {
+      if (!writer.isInstanceOf[Append]) {
         throw new IllegalArgumentException(s"Unsupported writer type: $writer")
       }
-      writer = TruncateAndAppend
-      streamingWriter = StreamingTruncateAndAppend
+      writer = new TruncateAndAppend(info)
+      streamingWriter = new StreamingTruncateAndAppend(info)
       this
     }
 
     override def overwrite(filters: Array[Filter]): WriteBuilder = {
-      if (writer != Append) {
+      if (!writer.isInstanceOf[Append]) {
         throw new IllegalArgumentException(s"Unsupported writer type: $writer")
       }
       writer = new Overwrite(filters)
