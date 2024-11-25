@@ -65,7 +65,7 @@ class UDFProfilerWithoutPlanCacheParityTests(UDFProfilerParityTests):
                 io.getvalue(), f"10.*{os.path.basename(inspect.getfile(_do_computation))}"
             )
 
-            if has_flameprof:
+            if have_flameprof:
                 self.assertIn("svg", self.spark.profile.render(id))
 
 
