@@ -1030,10 +1030,10 @@ namedExpression
     ;
 
 namedExpressionSeq
-    : namedExpression
-        {optional_trailing_comma_in_named_expression_lists}? (COMMA namedExpression)* COMMA?
-    | namedExpression
-        {!optional_trailing_comma_in_named_expression_lists}? (COMMA namedExpression)*
+    : {optional_trailing_comma_in_named_expression_lists}?
+        namedExpression (COMMA namedExpression)* COMMA?
+    | {!optional_trailing_comma_in_named_expression_lists}?
+        namedExpression (COMMA namedExpression)*
     ;
 
 partitionFieldList

@@ -501,7 +501,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql1),
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'b'", "hint" -> ": extra input 'b'"))
+      parameters = Map("error" -> "'b'", "hint" -> ""))
   }
 
   test("limit") {
@@ -1978,12 +1978,14 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-50418: Support an optional trailing comma at the end of SELECT lists") {
     withSQLConf(SQLConf.OPTIONAL_TRAILING_COMMA_IN_NAMED_EXPRESSION_LISTS.key -> "true") {
       assertEqual("select 1, ", OneRowRelation().select(1))
+      assertEqual("select 1, 2", OneRowRelation().select(1, 2))
     }
     withSQLConf(SQLConf.OPTIONAL_TRAILING_COMMA_IN_NAMED_EXPRESSION_LISTS.key -> "false") {
+      assertEqual("select 1, 2", OneRowRelation().select(1, 2))
       checkError(
         exception = parseException("select 1,"),
         condition = "PARSE_SYNTAX_ERROR",
-        parameters = Map("error" -> "','", "hint" -> ""))
+        parameters = Map("error" -> "'1'", "hint" -> ""))
     }
   }
 }

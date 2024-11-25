@@ -1029,8 +1029,10 @@ class QueryCompilationErrorsSuite
         sql(s"SELECT from from FROM from from")
         sql(s"SELECT c1, from FROM VALUES(1, 2) AS T(c1, from)")
 
-        intercept[ParseException] {
-          sql("SELECT 1,")
+        withSQLConf(SQLConf.OPTIONAL_TRAILING_COMMA_IN_NAMED_EXPRESSION_LISTS.key -> "false") {
+          intercept[ParseException] {
+            sql("SELECT 1,")
+          }
         }
       }
     }
