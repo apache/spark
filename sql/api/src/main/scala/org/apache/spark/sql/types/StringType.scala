@@ -109,7 +109,8 @@ class StringType private[spark] (
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, NoConstraint) {
+case object StringType
+    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, NoConstraint) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {
