@@ -146,7 +146,7 @@ class ListStateTTLProcessor(ttlConfig: TTLConfig)
     } else if (row.action == "append") {
       listState.appendValue(row.value)
     } else if (row.action == "get_values_in_ttl_state") {
-      val ttlValues = listState.getValuesInTTLState()
+      val ttlValues = listState.getValueInTTLState()
       ttlValues.foreach { v =>
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v) :: results
       }

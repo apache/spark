@@ -143,12 +143,14 @@ trait TTLState {
     store.remove(ttlKey, TTL_INDEX)
   }
 
+  // Exposed for testing.
   private[sql] def toTTLRow(ttlKey: UnsafeRow): TTLRow = {
     val expirationMs = ttlKey.getLong(0)
     val elementKey = ttlKey.getStruct(1, TTL_INDEX_KEY_SCHEMA.length)
     TTLRow(elementKey, expirationMs)
   }
 
+  // Exposed for testing.
   private[sql] def getTTLRows(): Iterator[TTLRow] = {
     store.iterator(TTL_INDEX).map(kv => toTTLRow(kv.key))
   }
@@ -163,15 +165,14 @@ trait TTLState {
 
     // Recall that the format is (expirationMs, elementKey) -> TTL_EMPTY_VALUE_ROW, so
     // kv.value doesn't ever need to be used.
-    ttlIterator.takeWhile(kv => {
+    ttlIterator.takeWhile { kv =>
       val expirationMs = kv.key.getLong(0)
       StateTTL.isExpired(expirationMs, batchTimestampMs)
-    }).map(_.key)
+    }.map(_.key)
   }
 
-
-  // Encapsulates a row stored in a TTL index.
-  protected case class TTLRow(elementKey: UnsafeRow, expirationMs: Long)
+  // Encapsulates a row stored in a TTL index. Exposed for testing.
+  private[sql] case class TTLRow(elementKey: UnsafeRow, expirationMs: Long)
 
   /**
    * Evicts the state associated with this stateful variable that has expired
@@ -225,7 +226,7 @@ trait TTLState {
  *
  * There is some trickiness here, though. Suppose we have an element key `k` that
  * has a list with one value `v1` that expires at time `t1`. Our primary index looks like
- * k -> [v1]; our secondary index looks like [(t1, k) -> EMPTY_ROW]. Now, we add another
+ * k -> [(v1, t1)]; our secondary index looks like [(t1, k) -> EMPTY_ROW]. Now, we add another
  * value to the list, `v2`, that expires at time `t2`. The primary index updates to be
  * k -> [v1, v2]. However, how do we update our secondary index? We already have an entry
  * in our secondary index for `k`, but it's prefixed with `t1`, which we don't know at the
@@ -306,7 +307,7 @@ abstract class OneToManyTTLState(
 
   /**
    * Function to get the number of entries in the list state for a given grouping key
-   * @param encodedKey - encoded grouping key
+   * @param elementKey - encoded grouping key
    * @return - number of entries in the list state
    */
   def getEntryCount(elementKey: UnsafeRow): Long = {
@@ -528,8 +529,10 @@ abstract class OneToOneTTLState(
    * key is being used, though, since in either case, it's just an UnsafeRow.
    *
    * @param elementKey the key for which the TTL should be updated, which may
-   *                   either be an UnsafeRow derived from [[SingleKeyTTLRow]]
-   *                   or [[CompositeKeyTTLRow]].
+   *                   either be the encoded grouping key, or the grouping key
+   *                   and some user-defined key.
+   * @param elementValue the value to update the primary index with. It is of the
+   *                     form (value, expirationMs).
    * @param expirationMs the new expiration timestamp to use for elementKey.
    */
   def updateIndices(
@@ -577,17 +580,17 @@ abstract class OneToOneTTLState(
     numValuesExpired
   }
 
-    override def clearAllStateForElementKey(elementKey: UnsafeRow): Unit = {
-      val existingPrimaryValue = store.get(elementKey, stateName)
-      if (existingPrimaryValue != null) {
-        val existingExpirationMs = existingPrimaryValue.getLong(1)
+  override def clearAllStateForElementKey(elementKey: UnsafeRow): Unit = {
+    val existingPrimaryValue = store.get(elementKey, stateName)
+    if (existingPrimaryValue != null) {
+      val existingExpirationMs = existingPrimaryValue.getLong(1)
 
-        store.remove(elementKey, stateName)
-        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
+      store.remove(elementKey, stateName)
+      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
 
-        deleteFromTTLIndex(existingExpirationMs, elementKey)
-      }
+      deleteFromTTLIndex(existingExpirationMs, elementKey)
     }
+  }
 }
 
 /**

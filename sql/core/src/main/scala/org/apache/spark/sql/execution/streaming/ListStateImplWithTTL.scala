@@ -221,17 +221,19 @@ class ListStateImplWithTTL[S](
     val groupingKey = stateTypesEncoder.encodeGroupingKey()
     minIndexIterator()
       .filter(_._1 == groupingKey)
-      .map { case _ @ (_, minExpirationMs) => minExpirationMs }
+      .map(_._2)
   }
 
   /**
-   * Get all ttl values stored in ttl state for current implicit
-   * grouping key.
+   * Get the TTL value stored in TTL state for the current implicit grouping key,
+   * if it exists.
    */
-  private[sql] def getValuesInTTLState(): Iterator[Long] = {
+  private[sql] def getValueInTTLState(): Option[Long] = {
     val groupingKey = stateTypesEncoder.encodeGroupingKey()
-    getTTLRows()
-      .filter(_.elementKey == groupingKey)
-      .map(_.expirationMs)
+    val ttlRowsForGroupingKey = getTTLRows().filter(_.elementKey == groupingKey).toSeq
+
+    assert(ttlRowsForGroupingKey.size <= 1, "Multiple TTLRows found for grouping key " +
+      s"$groupingKey. Expected at most 1. Found: ${ttlRowsForGroupingKey.mkString(", ")}.")
+    ttlRowsForGroupingKey.headOption.map(_.expirationMs)
   }
 }

@@ -211,14 +211,14 @@ metrics: Map[String, SQLMetric])
       .getStruct(0, keyExprEnc.schema.length)
 
     // We're getting composite rows back
-    getTTLRows().filter(ttlRow => {
+    getTTLRows().filter { ttlRow =>
       val compositeKey = ttlRow.elementKey
       val groupingKey = compositeKey.getStruct(0, keyExprEnc.schema.length)
       groupingKey == implicitGroupingKey
-    }).map(ttlRow => {
+    }.map { ttlRow =>
       val compositeKey = ttlRow.elementKey
       val userKey = stateTypesEncoder.decodeCompositeKey(compositeKey)
       (userKey.asInstanceOf[K], ttlRow.expirationMs)
-    })
+    }
   }
 }
