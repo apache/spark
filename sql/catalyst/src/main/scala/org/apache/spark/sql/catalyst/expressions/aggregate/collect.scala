@@ -510,7 +510,7 @@ case class ListAgg(
 
   override protected def convertToBufferElement(value: Any): Any = InternalRow.copyValue(value)
 
-  override def children: Seq[Expression] = child +: delimiter +: orderExpressions.map(_.child)
+  override def children: Seq[Expression] = child +: delimiter +: orderExpressions
 
   /**
    * Utility func to check if given order is defined and different from [[child]].
@@ -534,8 +534,7 @@ case class ListAgg(
       delimiter = newChildren(1),
       orderExpressions = newChildren
         .drop(2)
-        .zip(orderExpressions)
-        .map { case (newExpr, oldSortOrder) => oldSortOrder.copy(child = newExpr) }
+        .map(_.asInstanceOf[SortOrder])
     )
 
   private[this] def orderValuesField: Seq[StructField] = {

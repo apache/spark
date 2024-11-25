@@ -278,7 +278,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
-    "aggFunc" : "\"listagg(a, NULL, a)\""
+    "aggFunc" : "\"listagg(a, NULL, a ASC NULLS FIRST)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -300,7 +300,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
   "sqlState" : "42601",
   "messageParameters" : {
-    "aggFunc" : "\"listagg(a, NULL, a)\""
+    "aggFunc" : "\"listagg(a, NULL, a ASC NULLS FIRST)\""
   },
   "queryContext" : [ {
     "objectType" : "",
