@@ -175,7 +175,8 @@ case class InsertIntoStatement(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    byName: Boolean = false) extends UnaryParsedStatement {
+    byName: Boolean = false,
+    isCtas: Boolean = false) extends UnaryParsedStatement {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")

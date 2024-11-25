@@ -1012,7 +1012,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(table, _, _, _, _, _, _) =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             relationResolution.resolveRelation(u).getOrElse(u)
@@ -1122,7 +1122,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _)
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _, _)
           if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
@@ -1146,9 +1146,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
         if (!i.overwrite) {
           if (isByName) {
-            AppendData.byName(r, query)
+            AppendData.byName(r, query, isCtas = i.isCtas)
           } else {
-            AppendData.byPosition(r, query)
+            AppendData.byPosition(r, query, isCtas = i.isCtas)
           }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {

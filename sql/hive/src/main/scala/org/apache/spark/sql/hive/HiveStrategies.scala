@@ -34,7 +34,6 @@ import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils, Ins
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceStrategy, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.execution.HiveScriptTransformationExec
-import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 import org.apache.spark.sql.internal.HiveSerDe
 
 
@@ -148,7 +147,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
     // handles InsertIntoStatement specially as the table in InsertIntoStatement is not added in its
     // children, hence not matched directly by previous HiveTableRelation case.
-    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _)
+    case i @ InsertIntoStatement(relation: HiveTableRelation, _, _, _, _, _, _, _)
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       i.copy(table = hiveTableWithStats(relation))
   }
@@ -163,10 +162,10 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoStatement(
-        r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _)
+        r: HiveTableRelation, partSpec, _, query, overwrite, ifPartitionNotExists, _, isCtas)
         if DDLUtils.isHiveTable(r.tableMeta) && query.resolved =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite,
-        ifPartitionNotExists, query.output.map(_.name))
+        ifPartitionNotExists, query.output.map(_.name), isCtas)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
@@ -231,13 +230,14 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case InsertIntoStatement(
-          r: HiveTableRelation, partition, cols, query, overwrite, ifPartitionNotExists, byName)
+          r: HiveTableRelation, partition, cols, query,
+          overwrite, ifPartitionNotExists, byName, isCtas)
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             ((r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE)) ||
               (!r.isPartitioned && conf.getConf(HiveUtils.CONVERT_INSERTING_UNPARTITIONED_TABLE)))
             && isConvertible(r) =>
         InsertIntoStatement(metastoreCatalog.convert(r, isWrite = true), partition, cols,
-          query, overwrite, ifPartitionNotExists, byName)
+          query, overwrite, ifPartitionNotExists, byName, isCtas)
 
       // Read path
       case relation: HiveTableRelation if doConvertHiveTableRelationForRead(relation) =>
@@ -249,10 +249,10 @@ case class RelationConversions(
       // This pattern would not cause conflicts because this rule is always applied before
       // `HiveAnalysis` and both of these rules are running once.
       case i @ InsertIntoHiveTable(
-        tableDesc, _, query, overwrite, ifPartitionNotExists, _, _, _, _, _, _)
+        tableDesc, _, query, overwrite, ifPartitionNotExists, _, _, _, _, _, _, _)
           if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
-            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) && i.getTagValue(BY_CTAS).isDefined =>
+            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) && i.isCtas =>
         // validation is required to be done here before relation conversion.
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         val hiveTable = DDLUtils.readHiveTable(tableDesc)
@@ -273,7 +273,8 @@ case class RelationConversions(
           if (overwrite) SaveMode.Overwrite else SaveMode.Append,
           Some(tableDesc),
           Some(hadoopRelation.location),
-          query.output.map(_.name))
+          query.output.map(_.name),
+          isCtas = true)
 
       // INSERT HIVE DIR
       case InsertIntoDir(_, storage, provider, query, overwrite)

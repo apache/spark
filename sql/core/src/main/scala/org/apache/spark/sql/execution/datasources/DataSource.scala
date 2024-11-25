@@ -447,7 +447,9 @@ case class DataSource(
    * The returned command is unresolved and need to be analyzed.
    */
   private def planForWritingFileFormat(
-      format: FileFormat, mode: SaveMode, data: LogicalPlan): InsertIntoHadoopFsRelationCommand = {
+      format: FileFormat, mode:
+      SaveMode, data: LogicalPlan,
+      isCtas: Boolean): InsertIntoHadoopFsRelationCommand = {
     // Don't glob path for the write path.  The contracts here are:
     //  1. Only one output path can be specified on the write path;
     //  2. Output path must be a legal HDFS style file system path;
@@ -481,6 +483,7 @@ case class DataSource(
       fileFormat = format,
       options = options,
       query = data,
+      isCtas = isCtas,
       mode = mode,
       catalogTable = catalogTable,
       fileIndex = fileIndex,
@@ -501,7 +504,8 @@ case class DataSource(
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
-      outputColumnNames: Seq[String]): BaseRelation = {
+      outputColumnNames: Seq[String],
+      isCtas: Boolean): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
@@ -516,7 +520,7 @@ case class DataSource(
       case format: FileFormat =>
         disallowWritingIntervals(
           outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
-        val cmd = planForWritingFileFormat(format, mode, data)
+        val cmd = planForWritingFileFormat(format, mode, data, isCtas)
         val qe = sparkSession.sessionState.executePlan(cmd)
         qe.assertCommandExecuted()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
@@ -542,7 +546,7 @@ case class DataSource(
       case format: FileFormat =>
         disallowWritingIntervals(data.schema, format.toString, forbidAnsiIntervals = false)
         DataSource.validateSchema(format.toString, data.schema, sparkSession.sessionState.conf)
-        planForWritingFileFormat(format, mode, data)
+        planForWritingFileFormat(format, mode, data, isCtas = false)
       case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
     }

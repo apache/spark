@@ -56,7 +56,8 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex],
-    outputColumnNames: Seq[String])
+    outputColumnNames: Seq[String],
+    isCtas: Boolean)
   extends V1WriteCommand {
 
   private lazy val parameters = CaseInsensitiveMap(options)

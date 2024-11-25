@@ -43,7 +43,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case a @ AppendData(r: DataSourceV2Relation, query, options, _, None, _) =>
+    case a @ AppendData(r: DataSourceV2Relation, query, options, _, _, None, _) =>
       val writeBuilder = newWriteBuilder(r.table, options, query.schema)
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)

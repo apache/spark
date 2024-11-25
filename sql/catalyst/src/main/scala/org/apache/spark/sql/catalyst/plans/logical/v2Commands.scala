@@ -96,6 +96,7 @@ case class AppendData(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
+    isCtas: Boolean,
     write: Option[Write] = None,
     analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
@@ -109,15 +110,17 @@ object AppendData {
   def byName(
       table: NamedRelation,
       df: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, df, writeOptions, isByName = true)
+      writeOptions: Map[String, String] = Map.empty,
+      isCtas: Boolean = false): AppendData = {
+    new AppendData(table, df, writeOptions, isByName = true, isCtas)
   }
 
   def byPosition(
       table: NamedRelation,
       query: LogicalPlan,
-      writeOptions: Map[String, String] = Map.empty): AppendData = {
-    new AppendData(table, query, writeOptions, isByName = false)
+      writeOptions: Map[String, String] = Map.empty,
+      isCtas: Boolean = false): AppendData = {
+    new AppendData(table, query, writeOptions, isByName = false, isCtas)
   }
 }
 
