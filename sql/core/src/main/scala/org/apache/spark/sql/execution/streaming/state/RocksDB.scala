@@ -667,7 +667,7 @@ class RocksDB(
 
       var changelogReader: StateStoreChangelogReader = null
       try {
-        changelogReader = fileManager.getChangelogReader(v, useColumnFamilies, uniqueId)
+        changelogReader = fileManager.getChangelogReader(v)
         changelogReader.foreach { case (recordType, key, value) =>
           recordType match {
             case RecordType.PUT_RECORD =>

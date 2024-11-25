@@ -157,8 +157,13 @@ class RocksDBFileManager(
   private val versionToRocksDBFiles =
     new ConcurrentHashMap[(Long, Option[String]), Seq[RocksDBImmutableFile]]()
 
-  private def getChangelogVersion(
-      useColumnFamilies: Boolean, stateStoreCheckpointIdEnabled: Boolean): Short = {
+  /**
+   * Get the changelog version based on rocksDB features.
+   * @return the version of changelog
+   */
+  private def getChangelogWriterVersion(
+      useColumnFamilies: Boolean,
+      stateStoreCheckpointIdEnabled: Boolean): Short = {
     (useColumnFamilies, stateStoreCheckpointIdEnabled) match {
       case (false, false) => 1
       case (true, false) => 2
@@ -181,7 +186,8 @@ class RocksDBFileManager(
     }
 
     val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
-    val changelogVersion = getChangelogVersion(useColumnFamilies, enableStateStoreCheckpointIds)
+    val changelogVersion = getChangelogWriterVersion(
+      useColumnFamilies, enableStateStoreCheckpointIds)
     val changelogWriter = changelogVersion match {
       case 1 =>
         new StateStoreChangelogWriterV1(fm, changelogFile, codec)
@@ -200,46 +206,24 @@ class RocksDBFileManager(
       case _ =>
         throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
     }
+
+    logInfo(log"Loaded change log reader version " +
+      log"${MDC(LogKeys.FILE_VERSION, changelogWriter.version)}")
+
     changelogWriter
   }
 
   // Get the changelog file at version
   def getChangelogReader(
       version: Long,
-      useColumnFamilies: Boolean = false,
       checkpointUniqueId: Option[String] = None): StateStoreChangelogReader = {
     val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
+    val reader = new StateStoreChangelogReaderFactory(fm, changelogFile, codec)
+      .constructChangelogReader()
 
-    val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
+    logInfo(log"Loaded change log reader version ${MDC(LogKeys.FILE_VERSION, reader.version)}")
 
-    // Note that ideally we should get the version for the reader from the
-    // changelog itself. However, since we don't record this for v1, we need to
-    // rely on external arguments to make this call today. Within the reader, we verify
-    // for the correctness of the decided/expected version. We might revisit this pattern
-    // as we add more changelog versions in the future [SPARK-50360].
-    val changelogVersion = getChangelogVersion(useColumnFamilies, enableStateStoreCheckpointIds)
-    val changelogReader = changelogVersion match {
-      case 1 =>
-        new StateStoreChangelogReaderV1(fm, changelogFile, codec)
-      case 2 =>
-        new StateStoreChangelogReaderV2(fm, changelogFile, codec)
-      case 3 =>
-        assert(enableStateStoreCheckpointIds,
-          "StateStoreChangelogReaderV3 should only be initialized when " +
-            "state store checkpoint unique id is enabled")
-        new StateStoreChangelogReaderV3(fm, changelogFile, codec)
-      case 4 =>
-        assert(enableStateStoreCheckpointIds,
-          "StateStoreChangelogReaderV4 should only be initialized when " +
-            "state store checkpoint unique id is enabled")
-        new StateStoreChangelogReaderV4(fm, changelogFile, codec)
-      case _ =>
-        throw QueryExecutionErrors.invalidChangeLogReaderVersion(changelogVersion)
-    }
-    if (checkpointUniqueId.isDefined) {
-      changelogReader.lineage
-    }
-    changelogReader
+    reader
   }
 
   /**
@@ -392,6 +376,7 @@ class RocksDBFileManager(
       Array.empty
     }
   }
+
 
   /** Get the latest version available in the DFS directory. If no data present, it returns 0. */
   def getLatestVersion(): Long = {
