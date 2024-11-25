@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -26,8 +28,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValue
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
-
-import java.util
 
 /**
  * Trait for all SQL scripting execution nodes used during interpretation phase.
