@@ -31,6 +31,7 @@ from pyspark.errors import (
 from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
     array,
+    col,
     create_map,
     array,
     lit,
@@ -1028,9 +1029,40 @@ class BaseUDTFTestsMixin:
         func = self.udtf_for_table_argument()
         df = self.spark.range(8)
         self.spark.udtf.register("test_udtf", func)
+
         assertDataFrameEqual(
             func(df.argument()),
             self.spark.sql("SELECT * FROM test_udtf(TABLE (SELECT id FROM range(0, 8)))"),
+        )
+
+    def test_df_argument_params(self):
+        class TestUDTF:
+            def eval(self, row: Row):
+                yield row["key"], row["value"]
+
+            def terminate(self):
+                if False:
+                    yield
+
+        func = udtf(TestUDTF, returnType="key: int, value: string")
+        df = self.spark.createDataFrame([(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"])
+        assertDataFrameEqual(
+            func(df.argument(partitionBy=[col("key")], orderBy=[col("value").desc()])),
+            [
+                Row(key=1, value="b"),
+                Row(key=1, value="a"),
+                Row(key=2, value="d"),
+                Row(key=2, value="c"),
+            ],
+        )
+        assertDataFrameEqual(
+            func(df.argument(withSinglePartition=True)),
+            [
+                Row(key=1, value="a"),
+                Row(key=1, value="b"),
+                Row(key=2, value="c"),
+                Row(key=2, value="d"),
+            ],
         )
 
     def udtf_for_table_argument(self):

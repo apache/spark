@@ -1786,8 +1786,15 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         else:
             return DataFrame(self._jdf.transpose(), self.sparkSession)
 
-    def argument(self) -> Column:
-        return Column(self._jdf.argument())
+    def argument(
+        self,
+        partitionBy: Optional[List["ColumnOrName"]] = None,
+        orderBy: Optional[List["ColumnOrName"]] = None,
+        withSinglePartition: bool = False,
+    ) -> Column:
+        partitionByExprs = self._jcols(*(partitionBy or []))
+        orderByExprs = self._jcols(*(orderBy or []))
+        return Column(self._jdf.argument(partitionByExprs, orderByExprs, withSinglePartition))
 
     def scalar(self) -> Column:
         return Column(self._jdf.scalar())

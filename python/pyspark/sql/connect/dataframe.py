@@ -1784,7 +1784,12 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
-    def argument(self) -> Column:
+    def argument(
+        self,
+        partitionBy: Optional[List["ColumnOrName"]] = None,
+        orderBy: Optional[List["ColumnOrName"]] = None,
+        withSinglePartition: bool = False,
+    ) -> Column:
         # TODO(SPARK-50393): Implement this method
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",
