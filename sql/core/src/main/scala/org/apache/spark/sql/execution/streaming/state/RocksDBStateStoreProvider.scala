@@ -646,7 +646,7 @@ object RocksDBStateStoreProvider {
       valueSchema: StructType): RocksDBDataEncoder = {
 
     stateStoreEncoding match {
-      case StateStoreEncoding.Avro.toString =>
+      case "avro" =>
         RocksDBStateStoreProvider.dataEncoderCache.get(
           encoderCacheKey,
           new java.util.concurrent.Callable[AvroStateEncoder] {
@@ -656,7 +656,7 @@ object RocksDBStateStoreProvider {
             }
           }
         )
-      case StateStoreEncoding.UnsafeRow.toString =>
+      case "unsaferow" =>
         RocksDBStateStoreProvider.dataEncoderCache.get(
           encoderCacheKey,
           new java.util.concurrent.Callable[UnsafeRowDataEncoder] {
