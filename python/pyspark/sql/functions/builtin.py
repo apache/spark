@@ -13029,6 +13029,13 @@ def hash(*cols: "ColumnOrName") -> Column:
     +---+---+------------+
     |ABC|DEF|   599895104|
     +---+---+------------+
+
+    >>> df.select('*', sf.hash('*')).show()
+    +---+---+------------+
+    | c1| c2|hash(c1, c2)|
+    +---+---+------------+
+    |ABC|DEF|   599895104|
+    +---+---+------------+
     """
     return _invoke_function_over_seq_of_columns("hash", cols)
 
@@ -13069,6 +13076,13 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     +---+---+-------------------+
 
     >>> df.select('*', sf.xxhash64('c1', df.c2)).show()
+    +---+---+-------------------+
+    | c1| c2|   xxhash64(c1, c2)|
+    +---+---+-------------------+
+    |ABC|DEF|3233247871021311208|
+    +---+---+-------------------+
+
+    >>> df.select('*', sf.xxhash64('*')).show()
     +---+---+-------------------+
     | c1| c2|   xxhash64(c1, c2)|
     +---+---+-------------------+
@@ -25041,24 +25055,23 @@ def try_reflect(*cols: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2",)], ["a"])
     >>> df.select(
     ...     sf.try_reflect(sf.lit("java.util.UUID"), sf.lit("fromString"), "a")
-    ... ).show()
+    ... ).show(truncate=False)
     +------------------------------------------+
     |try_reflect(java.util.UUID, fromString, a)|
     +------------------------------------------+
-    |                      a5cf6c42-0c85-418...|
+    |a5cf6c42-0c85-418f-af6c-3e4e5b1328f2      |
     +------------------------------------------+
 
     Example 2: Exception in the reflection call, resulting in null
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(1)
-    >>> df.select(
+    >>> spark.range(1).select(
     ...     sf.try_reflect(sf.lit("scala.Predef"), sf.lit("require"), sf.lit(False))
-    ... ).show()
+    ... ).show(truncate=False)
     +-----------------------------------------+
     |try_reflect(scala.Predef, require, false)|
     +-----------------------------------------+
-    |                                     NULL|
+    |NULL                                     |
     +-----------------------------------------+
     """
     return _invoke_function_over_seq_of_columns("try_reflect", cols)
@@ -25126,7 +25139,7 @@ def stack(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql impordef t functions as sf
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, 2, 3)], ['a', 'b', 'c'])
     >>> df.select('*', sf.stack(sf.lit(2), df.a, df.b, 'c')).show()
     +---+---+---+----+----+
@@ -25135,6 +25148,14 @@ def stack(*cols: "ColumnOrName") -> Column:
     |  1|  2|  3|   1|   2|
     |  1|  2|  3|   3|NULL|
     +---+---+---+----+----+
+
+    >>> df.select('*', sf.stack(sf.lit(2), df.a, df.b, 'c').alias('x', 'y')).show()
+    +---+---+---+---+----+
+    |  a|  b|  c|  x|   y|
+    +---+---+---+---+----+
+    |  1|  2|  3|  1|   2|
+    |  1|  2|  3|  3|NULL|
+    +---+---+---+---+----+
 
     >>> df.select('*', sf.stack(sf.lit(3), df.a, df.b, 'c')).show()
     +---+---+---+----+
