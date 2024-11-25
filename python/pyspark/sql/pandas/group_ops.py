@@ -502,17 +502,6 @@ class PandasGroupedOpsMixin:
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
-        def get_timestamps(
-            statefulProcessorApiClient: StatefulProcessorApiClient,
-        ) -> Tuple[int, int]:
-            if timeMode != "none":
-                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
-                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
-            else:
-                batch_timestamp = -1
-                watermark_timestamp = -1
-            return batch_timestamp, watermark_timestamp
-
         def handle_data_rows(
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
@@ -554,7 +543,8 @@ class PandasGroupedOpsMixin:
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
 
-            batch_timestamp, watermark_timestamp = get_timestamps(statefulProcessorApiClient)
+            batch_timestamp, watermark_timestamp =\
+                statefulProcessorApiClient.get_timestamps(timeMode)
 
             return handle_data_rows(
                 statefulProcessorApiClient, key, batch_timestamp, watermark_timestamp, inputRows
@@ -588,13 +578,14 @@ class PandasGroupedOpsMixin:
 
             # Key is None when we have processed all the input data from the worker and ready to
             # proceed with the cleanup steps.
-            batch_timestamp, watermark_timestamp = get_timestamps(statefulProcessorApiClient)
             if key is None:
                 statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessor.close()
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
                 return iter([])
 
+            batch_timestamp, watermark_timestamp = \
+                statefulProcessorApiClient.get_timestamps(timeMode)
             # only process initial state if first batch and initial state is not None
             if initialStates is not None:
                 for cur_initial_state in initialStates:

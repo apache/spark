@@ -353,6 +353,15 @@ class StatefulProcessorApiClient:
             # TODO(SPARK-49233): Classify user facing errors.
             raise PySparkRuntimeError(f"Error deleting state: " f"{response_message[1]}")
 
+    def get_timestamps(self, timeMode: str) -> Tuple[int, int]:
+        if timeMode != "none":
+            batch_timestamp = self.get_batch_timestamp()
+            watermark_timestamp = self.get_watermark_timestamp()
+        else:
+            batch_timestamp = -1
+            watermark_timestamp = -1
+        return batch_timestamp, watermark_timestamp
+
     def _send_proto_message(self, message: bytes) -> None:
         # Writing zero here to indicate message version. This allows us to evolve the message
         # format or even changing the message protocol in the future.

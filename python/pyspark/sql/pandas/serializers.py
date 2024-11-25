@@ -1201,8 +1201,10 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
     def dump_stream(self, iterator, stream):
         """
-        Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
-        RecordBatches, and write batches to stream.
+        Read through chained return results from a single partition of handleInputRows.
+        For a single partition, after finish handling all input rows, we need to iterate
+        through all expired timers and handle them. We chain the results of handleInputRows
+        with handleExpiredTimer into a single iterator and dump the stream as arrow batches.
         """
 
         from itertools import tee, chain
@@ -1229,12 +1231,8 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         outputType = args[0][2]
         timeMode = args[0][3]
 
-        if timeMode != "none":
-            batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
-            watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
-        else:
-            batch_timestamp = -1
-            watermark_timestamp = -1
+        batch_timestamp, watermark_timestamp = \
+            statefulProcessorApiClient.get_timestamps(timeMode)
 
         result_iter_list = []
         if timeMode.lower() == "processingtime":
@@ -1249,6 +1247,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
             expiry_list_iter = iter([[]])
 
         def timer_iter_wrapper(func, *args, **kwargs):
+            """
+            Wrap the timer iterator returned from handleExpiredTimer with implicit key handling.
+            For a given key, need to properly set implicit key before calling handleExpiredTimer,
+            and remove the implicit key after consuming the iterator.
+            """
             def wrapper():
                 timer_cur_key = kwargs.get("key", args[0] if len(args) > 0 else None)
                 # set implicit key for the timer row before calling UDF
