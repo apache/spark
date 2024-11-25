@@ -242,23 +242,22 @@ class SparkSession private[sql] (
     sql(query, Array.empty)
   }
 
-  private def sql(sqlCommand: proto.SqlCommand): DataFrame = newDataFrame {
-    builder =>
-      // Send the SQL once to the server and then check the output.
-      val cmd = newCommand(b => b.setSqlCommand(sqlCommand))
-      val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseIter = client.execute(plan.build())
+  private def sql(sqlCommand: proto.SqlCommand): DataFrame = newDataFrame { builder =>
+    // Send the SQL once to the server and then check the output.
+    val cmd = newCommand(b => b.setSqlCommand(sqlCommand))
+    val plan = proto.Plan.newBuilder().setCommand(cmd)
+    val responseIter = client.execute(plan.build())
 
-      try {
-        val response = responseIter
-          .find(_.hasSqlCommandResult)
-          .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-        // Update the builder with the values from the result.
-        builder.mergeFrom(response.getSqlCommandResult.getRelation)
-      } finally {
-        // consume the rest of the iterator
-        responseIter.foreach(_ => ())
-      }
+    try {
+      val response = responseIter
+        .find(_.hasSqlCommandResult)
+        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+      // Update the builder with the values from the result.
+      builder.mergeFrom(response.getSqlCommandResult.getRelation)
+    } finally {
+      // consume the rest of the iterator
+      responseIter.foreach(_ => ())
+    }
   }
 
   /** @inheritdoc */
