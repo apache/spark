@@ -30,7 +30,11 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private[spark] (val collationId: Int) extends AtomicType with Serializable {
+class StringType private[spark] (
+    val collationId: Int,
+    val constraint: StringConstraint = NoConstraint)
+    extends AtomicType
+    with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -84,8 +88,7 @@ class StringType private[spark] (val collationId: Int) extends AtomicType with S
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case CharType(_) | VarcharType(_) => false
-      case s: StringType => s.collationId == collationId
+      case s: StringType => s.collationId == collationId && s.constraint == constraint
       case _ => false
     }
   }
@@ -106,7 +109,7 @@ class StringType private[spark] (val collationId: Int) extends AtomicType with S
  * @since 1.3.0
  */
 @Stable
-case object StringType extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID) {
+case object StringType extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, NoConstraint) {
   private[spark] def apply(collationId: Int): StringType = new StringType(collationId)
 
   def apply(collation: String): StringType = {
@@ -114,3 +117,11 @@ case object StringType extends StringType(CollationFactory.UTF8_BINARY_COLLATION
     new StringType(collationId)
   }
 }
+
+sealed trait StringConstraint
+
+case object NoConstraint extends StringConstraint
+
+case class FixedLength(length: Int) extends StringConstraint
+
+case class MaxLength(length: Int) extends StringConstraint

@@ -23,15 +23,9 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
 @Experimental
-case class CharType(length: Int) extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID) {
+case class CharType(length: Int)
+    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, FixedLength(length)) {
   require(length >= 0, "The length of char type cannot be negative.")
-
-  override def equals(o: Any): Boolean = o match {
-    case CharType(l) => l == length
-    case _ => false
-  }
-
-  override def hashCode(): Int = super.hashCode()
 
   override def defaultSize: Int = length
   override def typeName: String = s"char($length)"
