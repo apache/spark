@@ -16,9 +16,8 @@
  */
 package org.apache.spark.ml.recommendation.logfac.pair.generator.w2v
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Partitioner
+import org.apache.spark.ml.recommendation.logfac.local.PrimitiveArrayBuffer
 import org.apache.spark.ml.recommendation.logfac.pair.LongPair
 
 
@@ -27,16 +26,16 @@ private[ml] class WindowGenerator(sent: Iterator[Array[Long]],
                                   partitioner1: Partitioner,
                                   partitioner2: Partitioner
                                  ) extends PairGenerator(sent, partitioner1, partitioner2) {
-  final private val p1 = ArrayBuffer.empty[Int]
-  final private val p2 = ArrayBuffer.empty[Int]
+  final private val p1 = PrimitiveArrayBuffer.empty[Int]
+  final private val p2 = PrimitiveArrayBuffer.empty[Int]
 
   override protected def generate(sent: Array[Long]): Iterator[LongPair] = {
     p1.clear()
     p2.clear()
 
     sent.indices.foreach{i =>
-      p1 += partitioner1.getPartition(sent(i))
-      p2 += partitioner2.getPartition(sent(i))
+      p1.add(partitioner1.getPartition(sent(i)))
+      p2.add(partitioner2.getPartition(sent(i)))
     }
 
     new Iterator[LongPair] {
@@ -52,8 +51,8 @@ private[ml] class WindowGenerator(sent: Iterator[Array[Long]],
             val c = i + j
             j += 1
 
-            if ((p1(i) == p2(c)) && sent(i) != sent(c)) {
-              return LongPair(p1(i), sent(i), sent(c))
+            if ((p1.get(i) == p2.get(c)) && sent(i) != sent(c)) {
+              return LongPair(p1.get(i), sent(i), sent(c))
             }
           }
           i += 1

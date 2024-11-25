@@ -16,11 +16,8 @@
  */
 package org.apache.spark.ml.recommendation.logfac.pair.generator
 
-import scala.collection.mutable.ArrayBuffer
-
+import org.apache.spark.ml.recommendation.logfac.local.PrimitiveArrayBuffer
 import org.apache.spark.ml.recommendation.logfac.pair.{LongPair, LongPairMulti}
-
-
 
 private[ml] object BatchedGenerator {
   final private val TOTAL_BATCH_SIZE = 10000000
@@ -29,17 +26,17 @@ private[ml] object BatchedGenerator {
             numPartitions: Int,
             withLabel: Boolean,
             withWeight: Boolean): BatchedGenerator = {
-    val left = Array.fill(numPartitions)(ArrayBuffer.empty[Long])
-    val right = Array.fill(numPartitions)(ArrayBuffer.empty[Long])
+    val left = Array.fill(numPartitions)(PrimitiveArrayBuffer.empty[Long])
+    val right = Array.fill(numPartitions)(PrimitiveArrayBuffer.empty[Long])
     val label = if (withLabel) {
-      Array.fill(numPartitions)(ArrayBuffer.empty[Float])
+      Array.fill(numPartitions)(PrimitiveArrayBuffer.empty[Float])
     } else {
-      null.asInstanceOf[Array[ArrayBuffer[Float]]]
+      null.asInstanceOf[Array[PrimitiveArrayBuffer[Float]]]
     }
     val weight = if (withWeight) {
-      Array.fill(numPartitions)(ArrayBuffer.empty[Float])
+      Array.fill(numPartitions)(PrimitiveArrayBuffer.empty[Float])
     } else {
-      null.asInstanceOf[Array[ArrayBuffer[Float]]]
+      null.asInstanceOf[Array[PrimitiveArrayBuffer[Float]]]
     }
 
     new BatchedGenerator(pairGenerator, left, right, label, weight,
@@ -48,10 +45,10 @@ private[ml] object BatchedGenerator {
 }
 
 private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair],
-                                   private val left: Array[ArrayBuffer[Long]],
-                                   private val right: Array[ArrayBuffer[Long]],
-                                   private val label: Array[ArrayBuffer[Float]],
-                                   private val weight: Array[ArrayBuffer[Float]],
+                                   private val left: Array[PrimitiveArrayBuffer[Long]],
+                                   private val right: Array[PrimitiveArrayBuffer[Long]],
+                                   private val label: Array[PrimitiveArrayBuffer[Float]],
+                                   private val weight: Array[PrimitiveArrayBuffer[Float]],
                                    private val batchSize: Int
                                   ) extends Iterator[LongPairMulti] with Serializable {
 
@@ -65,14 +62,14 @@ private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair]
       val pair = pairGenerator.next()
       val part = pair.part
 
-      if (left(part).isEmpty) {
+      if (left(part).size == 0) {
         nonEmptyCounter += 1
       }
 
-      left(part) += pair.left
-      right(part) += pair.right
-      if (label != null) label(part) += pair.label
-      if (weight != null) weight(part) += pair.weight
+      left(part).add(pair.left)
+      right(part).add(pair.right)
+      if (label != null) label(part).add(pair.label)
+      if (weight != null) weight(part).add(pair.weight)
 
       if (left(part).size >= batchSize) {
         val result = LongPairMulti(part,
@@ -91,7 +88,7 @@ private[ml] class BatchedGenerator(private val pairGenerator: Iterator[LongPair]
       }
     }
 
-    while (ptr < left.length && left(ptr).isEmpty) {
+    while (ptr < left.length && left(ptr).size == 0) {
       ptr += 1
     }
 
