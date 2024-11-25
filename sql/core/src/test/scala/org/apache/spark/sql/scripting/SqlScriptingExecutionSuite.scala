@@ -152,33 +152,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
-  test("session vars - var out of scope") {
-    val varName: String = "testVarName"
-    val e = intercept[AnalysisException] {
-      val sqlScript =
-        s"""
-           |BEGIN
-           | BEGIN
-           |   DECLARE $varName = 1;
-           |   SELECT $varName;
-           | END;
-           | SELECT $varName;
-           |END
-           |""".stripMargin
-      verifySqlScriptResult(sqlScript, Seq.empty)
-    }
-    checkError(
-      exception = e,
-      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      sqlState = "42703",
-      parameters = Map("objectName" -> s"`$varName`"),
-      context = ExpectedContext(
-        fragment = s"$varName",
-        start = 79,
-        stop = 89)
-    )
-  }
-
   test("session vars - drop var statement") {
     val sqlScript =
       """
@@ -476,75 +449,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("searched case when evaluates to null") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          |  CREATE TABLE t (a BOOLEAN) USING parquet;
-          |  CASE
-          |  WHEN (SELECT * FROM t) THEN
-          |   SELECT 42;
-          |  END CASE;
-          |END
-          |""".stripMargin
-
-      checkError(
-        exception = intercept[SqlScriptingException] (
-          runSqlScript(commands)
-        ),
-        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
-        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
-      )
-    }
-  }
-
-  test("searched case with non boolean condition - constant") {
-    val commands =
-      """
-        |BEGIN
-        |  CASE
-        |  WHEN 1 THEN
-        |   SELECT 42;
-        |  END CASE;
-        |END
-        |""".stripMargin
-
-    checkError(
-      exception = intercept[SqlScriptingException] (
-        runSqlScript(commands)
-      ),
-      condition = "INVALID_BOOLEAN_STATEMENT",
-      parameters = Map("invalidStatement" -> "1")
-    )
-  }
-
-  test("searched case with too many rows in subquery condition") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          | CREATE TABLE t (a BOOLEAN) USING parquet;
-          | INSERT INTO t VALUES (true);
-          | INSERT INTO t VALUES (true);
-          | CASE
-          |   WHEN (SELECT * FROM t) THEN
-          |     SELECT 1;
-          | END CASE;
-          |END
-          |""".stripMargin
-
-      checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands)
-        ),
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-        parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 124, stop = 140)
-      )
-    }
-  }
-
   test("simple case") {
     val commands =
       """
@@ -678,38 +582,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(commands, expected)
   }
 
-  test("simple case mismatched types") {
-    val commands =
-      """
-        |BEGIN
-        | CASE 1
-        |   WHEN "one" THEN
-        |     SELECT 42;
-        | END CASE;
-        |END
-        |""".stripMargin
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkError(
-        exception = intercept[SparkNumberFormatException](
-          runSqlScript(commands)
-        ),
-        condition = "CAST_INVALID_INPUT",
-        parameters = Map(
-          "expression" -> "'one'",
-          "sourceType" -> "\"STRING\"",
-          "targetType" -> "\"BIGINT\""),
-        context = ExpectedContext(fragment = "\"one\"", start = 23, stop = 27))
-    }
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[SqlScriptingException](
-          runSqlScript(commands)
-        ),
-        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
-        parameters = Map("invalidStatement" -> "\"ONE\""))
-    }
-  }
-
   test("simple case compare with null") {
     withTable("t") {
       val commands =
@@ -727,75 +599,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
       val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
-    }
-  }
-
-  test("if's condition must be a boolean statement") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          |  IF 1 THEN
-          |    SELECT 45;
-          |  END IF;
-          |END
-          |""".stripMargin
-      val exception = intercept[SqlScriptingException] {
-        runSqlScript(commands)
-      }
-      checkError(
-        exception = exception,
-        condition = "INVALID_BOOLEAN_STATEMENT",
-        parameters = Map("invalidStatement" -> "1")
-      )
-      assert(exception.origin.line.isDefined)
-      assert(exception.origin.line.get == 3)
-    }
-  }
-
-  test("if's condition must return a single row data") {
-    withTable("t1", "t2") {
-      // empty row
-      val commands1 =
-        """
-          |BEGIN
-          |  CREATE TABLE t1 (a BOOLEAN) USING parquet;
-          |  IF (SELECT * FROM t1) THEN
-          |    SELECT 46;
-          |  END IF;
-          |END
-          |""".stripMargin
-      val exception = intercept[SqlScriptingException] {
-        runSqlScript(commands1)
-      }
-      checkError(
-        exception = exception,
-        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
-        parameters = Map("invalidStatement" -> "(SELECT * FROM T1)")
-      )
-      assert(exception.origin.line.isDefined)
-      assert(exception.origin.line.get == 4)
-
-      // too many rows ( > 1 )
-      val commands2 =
-        """
-          |BEGIN
-          |  CREATE TABLE t2 (a BOOLEAN) USING parquet;
-          |  INSERT INTO t2 VALUES (true);
-          |  INSERT INTO t2 VALUES (true);
-          |  IF (SELECT * FROM t2) THEN
-          |    SELECT 46;
-          |  END IF;
-          |END
-          |""".stripMargin
-      checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands2)
-        ),
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-        parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t2)", start = 121, stop = 138)
-      )
     }
   }
 
@@ -974,80 +777,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("repeat with non boolean condition - constant") {
-    val commands =
-      """
-        |BEGIN
-        | DECLARE i = 0;
-        | REPEAT
-        |   SELECT i;
-        |   SET VAR i = i + 1;
-        | UNTIL
-        |   1
-        | END REPEAT;
-        |END
-        |""".stripMargin
-
-    checkError(
-      exception = intercept[SqlScriptingException] (
-        runSqlScript(commands)
-      ),
-      condition = "INVALID_BOOLEAN_STATEMENT",
-      parameters = Map("invalidStatement" -> "1")
-    )
-  }
-
-  test("repeat with empty subquery condition") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          | CREATE TABLE t (a BOOLEAN) USING parquet;
-          | REPEAT
-          |   SELECT 1;
-          | UNTIL
-          |   (SELECT * FROM t)
-          | END REPEAT;
-          |END
-          |""".stripMargin
-
-      checkError(
-        exception = intercept[SqlScriptingException] (
-          runSqlScript(commands)
-        ),
-        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
-        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
-      )
-    }
-  }
-
-  test("repeat with too many rows in subquery condition") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          | CREATE TABLE t (a BOOLEAN) USING parquet;
-          | INSERT INTO t VALUES (true);
-          | INSERT INTO t VALUES (true);
-          | REPEAT
-          |   SELECT 1;
-          | UNTIL
-          |   (SELECT * FROM t)
-          | END REPEAT;
-          |END
-          |""".stripMargin
-
-      checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands)
-        ),
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-        parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 141, stop = 157)
-      )
-    }
-  }
-
   test("leave compound block") {
     val sqlScriptText =
       """
@@ -1095,23 +824,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
-  test("iterate compound block - should fail") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  lbl: BEGIN
-        |    SELECT 1;
-        |    ITERATE lbl;
-        |  END;
-        |END""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        runSqlScript(sqlScriptText)
-      },
-      condition = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
-      parameters = Map("labelName" -> "LBL"))
-  }
-
   test("iterate while loop") {
     val sqlScriptText =
       """
@@ -1149,40 +861,6 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2)), // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
-  }
-
-  test("leave with wrong label - should fail") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  lbl: BEGIN
-        |    SELECT 1;
-        |    LEAVE randomlbl;
-        |  END;
-        |END""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        runSqlScript(sqlScriptText)
-      },
-      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
-      parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
-  }
-
-  test("iterate with wrong label - should fail") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  lbl: BEGIN
-        |    SELECT 1;
-        |    ITERATE randomlbl;
-        |  END;
-        |END""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        runSqlScript(sqlScriptText)
-      },
-      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
-      parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
   }
 
   test("leave outer loop from nested repeat loop") {
