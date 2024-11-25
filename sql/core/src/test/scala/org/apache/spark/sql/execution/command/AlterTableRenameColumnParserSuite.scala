@@ -37,12 +37,12 @@ class AlterTableRenameColumnParserSuite extends AnalysisTest with SharedSparkSes
     checkError(
       exception = parseException(parsePlan)(
         "ALTER TABLE t RENAME COLUMN test-col TO test"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
     checkError(
       exception = parseException(parsePlan)(
         "ALTER TABLE t RENAME COLUMN test TO test-col"),
-      errorClass = "INVALID_IDENTIFIER",
+      condition = "INVALID_IDENTIFIER",
       parameters = Map("ident" -> "test-col"))
   }
 
@@ -50,7 +50,7 @@ class AlterTableRenameColumnParserSuite extends AnalysisTest with SharedSparkSes
     checkError(
       exception = parseException(parsePlan)(
         "ALTER TABLE t RENAME COLUMN point.x to point.y"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'.'", "hint" -> ""))
   }
 }

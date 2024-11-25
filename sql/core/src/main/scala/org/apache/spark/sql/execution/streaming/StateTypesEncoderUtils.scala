@@ -254,7 +254,7 @@ class SingleKeyTTLEncoder(
 /** Class for TTL with composite key serialization */
 class CompositeKeyTTLEncoder[K](
     keyExprEnc: ExpressionEncoder[Any],
-    userKeyEnc: Encoder[K]) {
+    userKeyEnc: ExpressionEncoder[Any]) {
 
   private val ttlKeyProjection = UnsafeProjection.create(
     getCompositeKeyTTLRowSchema(keyExprEnc.schema, userKeyEnc.schema))
@@ -287,6 +287,9 @@ class TimerKeyEncoder(keyExprEnc: ExpressionEncoder[Any]) {
   val schemaForKeyRow: StructType = new StructType()
     .add("key", new StructType(keyExprEnc.schema.fields))
     .add("expiryTimestampMs", LongType, nullable = false)
+
+  val schemaForValueRow: StructType =
+    StructType(Array(StructField("__dummy__", NullType)))
 
   private val keySerializer = keyExprEnc.createSerializer()
   private val keyDeserializer = keyExprEnc.resolveAndBind().createDeserializer()

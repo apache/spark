@@ -24,9 +24,8 @@ import org.apache.spark.unsafe.array.ByteArrayUtils
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Concatenation of sequence of strings to final string with cheap append method
- * and one memory allocation for the final string.  Can also bound the final size of
- * the string.
+ * Concatenation of sequence of strings to final string with cheap append method and one memory
+ * allocation for the final string. Can also bound the final size of the string.
  */
 class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH) {
   protected val strings = new java.util.ArrayList[String]
@@ -35,9 +34,9 @@ class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH)
   def atLimit: Boolean = length >= maxLength
 
   /**
-   * Appends a string and accumulates its length to allocate a string buffer for all
-   * appended strings once in the toString method.  Returns true if the string still
-   * has room for further appends before it hits its max limit.
+   * Appends a string and accumulates its length to allocate a string buffer for all appended
+   * strings once in the toString method. Returns true if the string still has room for further
+   * appends before it hits its max limit.
    */
   def append(s: String): Unit = {
     if (s != null) {
@@ -56,8 +55,8 @@ class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH)
   }
 
   /**
-   * The method allocates memory for all appended strings, writes them to the memory and
-   * returns concatenated string.
+   * The method allocates memory for all appended strings, writes them to the memory and returns
+   * concatenated string.
    */
   override def toString: String = {
     val finalLength = if (atLimit) maxLength else length
@@ -68,6 +67,7 @@ class StringConcat(val maxLength: Int = ByteArrayUtils.MAX_ROUNDED_ARRAY_LENGTH)
 }
 
 object SparkStringUtils extends Logging {
+
   /** Whether we have warned about plan string truncation yet. */
   private val truncationWarningPrinted = new AtomicBoolean(false)
 
@@ -75,7 +75,8 @@ object SparkStringUtils extends Logging {
    * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
    * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
    *
-   * @return the trimmed and formatted string.
+   * @return
+   *   the trimmed and formatted string.
    */
   def truncatedString[T](
       seq: Seq[T],
@@ -90,8 +91,9 @@ object SparkStringUtils extends Logging {
             s"behavior can be adjusted by setting 'spark.sql.debug.maxToStringFields'.")
       }
       val numFields = math.max(0, maxFields - 1)
-      seq.take(numFields).mkString(
-        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
+      seq
+        .take(numFields)
+        .mkString(start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
     } else {
       seq.mkString(start, sep, end)
     }
@@ -106,8 +108,8 @@ object SparkStringUtils extends Logging {
     HexFormat.of().withDelimiter(" ").withUpperCase()
 
   /**
-   * Returns a pretty string of the byte array which prints each byte as a hex digit and add spaces
-   * between them. For example, [1A C0].
+   * Returns a pretty string of the byte array which prints each byte as a hex digit and add
+   * spaces between them. For example, [1A C0].
    */
   def getHexString(bytes: Array[Byte]): String = {
     s"[${SPACE_DELIMITED_UPPERCASE_HEX.formatHex(bytes)}]"
@@ -122,8 +124,8 @@ object SparkStringUtils extends Logging {
     val leftPadded = left ++ Seq.fill(math.max(right.size - left.size, 0))("")
     val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
 
-    leftPadded.zip(rightPadded).map {
-      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
+    leftPadded.zip(rightPadded).map { case (l, r) =>
+      (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.length) + 3)) + r
     }
   }
 }

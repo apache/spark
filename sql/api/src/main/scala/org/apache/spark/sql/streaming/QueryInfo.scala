@@ -22,8 +22,8 @@ import java.util.UUID
 import org.apache.spark.annotation.{Evolving, Experimental}
 
 /**
- * Represents the query info provided to the stateful processor used in the
- * arbitrary state API v2 to easily identify task retries on the same partition.
+ * Represents the query info provided to the stateful processor used in the arbitrary state API v2
+ * to easily identify task retries on the same partition.
  */
 @Experimental
 @Evolving

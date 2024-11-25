@@ -46,7 +46,7 @@ Spark applications in Python can either be run with the `bin/spark-submit` scrip
 
 {% highlight python %}
     install_requires=[
-        'pyspark=={site.SPARK_VERSION}'
+        'pyspark=={{site.SPARK_VERSION}}'
     ]
 {% endhighlight %}
 

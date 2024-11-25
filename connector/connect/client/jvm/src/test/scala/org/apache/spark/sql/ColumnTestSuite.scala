@@ -173,8 +173,8 @@ class ColumnTestSuite extends ConnectFunSuite {
     assert(explain1 != explain2)
     assert(explain1.strip() == "+(a, b)")
     assert(explain2.contains("UnresolvedFunction(+"))
-    assert(explain2.contains("UnresolvedAttribute(a"))
-    assert(explain2.contains("UnresolvedAttribute(b"))
+    assert(explain2.contains("UnresolvedAttribute(List(a"))
+    assert(explain2.contains("UnresolvedAttribute(List(b"))
   }
 
   private def testColName(dataType: DataType, f: ColumnName => StructField): Unit = {

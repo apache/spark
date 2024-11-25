@@ -17,10 +17,8 @@
 package org.apache.spark.sql.application
 
 import java.io.{InputStream, OutputStream}
-import java.nio.file.Paths
 import java.util.concurrent.Semaphore
 
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import ammonite.compiler.CodeClassWrapper
@@ -34,6 +32,7 @@ import ammonite.util.Util.newLine
 import org.apache.spark.SparkBuildInfo.spark_version
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SparkSession.withLocalConnectServer
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkConnectClientParser}
 
 /**
@@ -51,8 +50,9 @@ object ConnectRepl {
       /_/
 
 Type in expressions to have them evaluated.
+Spark connect server version %s.
 Spark session available as 'spark'.
-   """.format(spark_version)
+   """
 
   def main(args: Array[String]): Unit = doMain(args)
 
@@ -64,37 +64,7 @@ Spark session available as 'spark'.
       semaphore: Option[Semaphore] = None,
       inputStream: InputStream = System.in,
       outputStream: OutputStream = System.out,
-      errorStream: OutputStream = System.err): Unit = {
-    val configs: Map[String, String] =
-      sys.props
-        .filter(p =>
-          p._1.startsWith("spark.") &&
-            p._2.nonEmpty &&
-            // Don't include spark.remote that we manually set later.
-            !p._1.startsWith("spark.remote"))
-        .toMap
-
-    val remoteString: Option[String] =
-      Option(System.getProperty("spark.remote")) // Set from Spark Submit
-        .orElse(sys.env.get(SparkConnectClient.SPARK_REMOTE))
-
-    if (remoteString.exists(_.startsWith("local"))) {
-      server = Some {
-        val args = Seq(
-          Paths.get(sparkHome, "sbin", "start-connect-server.sh").toString,
-          "--master",
-          remoteString.get) ++ configs.flatMap { case (k, v) => Seq("--conf", s"$k=$v") }
-        val pb = new ProcessBuilder(args: _*)
-        // So don't exclude spark-sql jar in classpath
-        pb.environment().remove(SparkConnectClient.SPARK_REMOTE)
-        pb.start()
-      }
-      // Let the server start. We will directly request to set the configurations
-      // and this sleep makes less noisy with retries.
-      Thread.sleep(2000L)
-      System.setProperty("spark.remote", "sc://localhost")
-    }
-
+      errorStream: OutputStream = System.err): Unit = withLocalConnectServer {
     // Build the client.
     val client =
       try {
@@ -118,13 +88,6 @@ Spark session available as 'spark'.
 
     // Build the session.
     val spark = SparkSession.builder().client(client).getOrCreate()
-
-    // The configurations might not be all runtime configurations.
-    // Try to set them with ignoring failures for now.
-    configs
-      .filter(_._1.startsWith("spark.sql"))
-      .foreach { case (k, v) => Try(spark.conf.set(k, v)) }
-
     val sparkBind = new Bind("spark", spark)
 
     // Add the proper imports and register a [[ClassFinder]].
@@ -140,7 +103,7 @@ Spark session available as 'spark'.
     // Please note that we make ammonite generate classes instead of objects.
     // Classes tend to have superior serialization behavior when using UDFs.
     val main = new ammonite.Main(
-      welcomeBanner = Option(splash),
+      welcomeBanner = Option(splash.format(spark_version, spark.version)),
       predefCode = predefCode,
       replCodeWrapper = ExtendedCodeClassWrapper,
       scriptCodeWrapper = ExtendedCodeClassWrapper,
@@ -197,18 +160,12 @@ Spark session available as 'spark'.
         }
       }
     }
-    try {
-      if (semaphore.nonEmpty) {
-        // Used for testing.
-        main.run(sparkBind, new Bind[Semaphore]("semaphore", semaphore.get))
-      } else {
-        main.run(sparkBind)
-      }
-    } finally {
-      if (server.isDefined) {
-        new ProcessBuilder(Paths.get(sparkHome, "sbin", "stop-connect-server.sh").toString)
-          .start()
-      }
+
+    if (semaphore.nonEmpty) {
+      // Used for testing.
+      main.run(sparkBind, new Bind[Semaphore]("semaphore", semaphore.get))
+    } else {
+      main.run(sparkBind)
     }
   }
 }

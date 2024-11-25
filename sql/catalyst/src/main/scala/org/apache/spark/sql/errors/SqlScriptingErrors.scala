@@ -18,8 +18,11 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
@@ -27,12 +30,20 @@ import org.apache.spark.sql.exceptions.SqlScriptingException
  */
 private[sql] object SqlScriptingErrors {
 
+  def duplicateLabels(origin: Origin, label: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "LABEL_ALREADY_EXISTS",
+      cause = null,
+      messageParameters = Map("label" -> toSQLId(label)))
+  }
+
   def labelsMismatch(origin: Origin, beginLabel: String, endLabel: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "LABELS_MISMATCH",
       cause = null,
-      messageParameters = Map("beginLabel" -> beginLabel, "endLabel" -> endLabel))
+      messageParameters = Map("beginLabel" -> toSQLId(beginLabel), "endLabel" -> toSQLId(endLabel)))
   }
 
   def endLabelWithoutBeginLabel(origin: Origin, endLabel: String): Throwable = {
@@ -40,29 +51,27 @@ private[sql] object SqlScriptingErrors {
       origin = origin,
       errorClass = "END_LABEL_WITHOUT_BEGIN_LABEL",
       cause = null,
-      messageParameters = Map("endLabel" -> endLabel))
+      messageParameters = Map("endLabel" -> toSQLId(endLabel)))
   }
 
   def variableDeclarationNotAllowedInScope(
       origin: Origin,
-      varName: String,
-      lineNumber: String): Throwable = {
+      varName: Seq[String]): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
       cause = null,
-      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+      messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
   def variableDeclarationOnlyAtBeginning(
       origin: Origin,
-      varName: String,
-      lineNumber: String): Throwable = {
+      varName: Seq[String]): Throwable = {
     new SqlScriptingException(
       origin = origin,
       errorClass = "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
       cause = null,
-      messageParameters = Map("varName" -> varName, "lineNumber" -> lineNumber))
+      messageParameters = Map("varName" -> toSQLId(varName)))
   }
 
   def invalidBooleanStatement(
@@ -75,6 +84,15 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
 
+  def sqlScriptingNotEnabled(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING",
+      cause = null,
+      origin = origin,
+      messageParameters = Map(
+        "sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key)))
+  }
+
   def booleanStatementWithEmptyRow(
       origin: Origin,
       stmt: String): Throwable = {
@@ -83,5 +101,28 @@ private[sql] object SqlScriptingErrors {
       errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
+  }
+
+  def labelDoesNotExist(
+      origin: Origin,
+      labelName: String,
+      statementType: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
+      cause = null,
+      messageParameters = Map(
+        "labelName" -> toSQLStmt(labelName),
+        "statementType" -> statementType))
+  }
+
+  def invalidIterateLabelUsageForCompound(
+      origin: Origin,
+      labelName: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
+      cause = null,
+      messageParameters = Map("labelName" -> toSQLStmt(labelName)))
   }
 }

@@ -471,7 +471,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'invalid_cast_error_expected'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
@@ -662,7 +661,6 @@ org.apache.spark.SparkNumberFormatException
   "errorClass" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "expression" : "'name1'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""

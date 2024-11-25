@@ -30,7 +30,8 @@
     "pivot": {
       "col": {
         "unresolvedAttribute": {
-          "unparsedIdentifier": "a"
+          "unparsedIdentifier": "a",
+          "planId": "0"
         }
       },
       "values": [{

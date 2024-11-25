@@ -119,7 +119,7 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkUnsupportedOperationException] {
         rowWithoutSchema.fieldIndex("foo")
       },
-      errorClass = "UNSUPPORTED_CALL.FIELD_INDEX",
+      condition = "UNSUPPORTED_CALL.FIELD_INDEX",
       parameters = Map("methodName" -> "fieldIndex", "className" -> "Row", "fieldName" -> "`foo`")
     )
   }
@@ -132,7 +132,7 @@ class RowSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkRuntimeException] {
         rowWithNullValue.getLong(position)
       },
-      errorClass = "ROW_VALUE_IS_NULL",
+      condition = "ROW_VALUE_IS_NULL",
       parameters = Map("index" -> position.toString)
     )
   }

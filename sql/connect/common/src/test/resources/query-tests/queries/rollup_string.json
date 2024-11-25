@@ -14,11 +14,13 @@
     "groupType": "GROUP_TYPE_ROLLUP",
     "groupingExpressions": [{
       "unresolvedAttribute": {
-        "unparsedIdentifier": "a"
+        "unparsedIdentifier": "a",
+        "planId": "0"
       }
     }, {
       "unresolvedAttribute": {
-        "unparsedIdentifier": "b"
+        "unparsedIdentifier": "b",
+        "planId": "0"
       }
     }],
     "aggregateExpressions": [{

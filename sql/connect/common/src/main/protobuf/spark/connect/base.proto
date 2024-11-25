@@ -522,7 +522,7 @@ message ConfigRequest {
   }
 
   message GetWithDefault {
-    // (Required) The config key-value paris to get. The value will be used as the default value.
+    // (Required) The config key-value pairs to get. The value will be used as the default value.
     repeated KeyValue pairs = 1;
   }
 

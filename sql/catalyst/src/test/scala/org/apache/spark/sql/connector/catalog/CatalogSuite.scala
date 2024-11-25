@@ -362,7 +362,7 @@ class CatalogSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         catalog.alterTable(testIdent, TableChange.addColumn(Array("data", "ts"), TimestampType))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3229",
+      condition = "_LEGACY_ERROR_TEMP_3229",
       parameters = Map("name" -> "data"))
 
     // the table has not changed
@@ -381,8 +381,8 @@ class CatalogSuite extends SparkFunSuite {
         catalog.alterTable(testIdent,
           TableChange.addColumn(Array("missing_col", "new_field"), StringType))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3227",
-      parameters = Map("fieldName" -> "missing_col"))
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
   test("alterTable: update column data type") {
@@ -427,8 +427,8 @@ class CatalogSuite extends SparkFunSuite {
         catalog.alterTable(testIdent,
           TableChange.updateColumnType(Array("missing_col"), LongType))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3227",
-      parameters = Map("fieldName" -> "missing_col"))
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
   test("alterTable: add comment") {
@@ -478,8 +478,8 @@ class CatalogSuite extends SparkFunSuite {
         catalog.alterTable(testIdent,
           TableChange.updateColumnComment(Array("missing_col"), "comment"))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3227",
-      parameters = Map("fieldName" -> "missing_col"))
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
   test("alterTable: rename top-level column") {
@@ -546,8 +546,8 @@ class CatalogSuite extends SparkFunSuite {
         catalog.alterTable(testIdent,
           TableChange.renameColumn(Array("missing_col"), "new_name"))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3227",
-      parameters = Map("fieldName" -> "missing_col"))
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
   }
 
   test("alterTable: multiple changes") {
@@ -614,8 +614,8 @@ class CatalogSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), false))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3227",
-      parameters = Map("fieldName" -> "missing_col"))
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`missing_col`", "fields" -> "`id`, `data`"))
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), true))
@@ -636,8 +636,8 @@ class CatalogSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), false))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3227",
-      parameters = Map("fieldName" -> "z"))
+      condition = "FIELD_NOT_FOUND",
+      parameters = Map("fieldName" -> "`z`", "fields" -> "`x`, `y`"))
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), true))

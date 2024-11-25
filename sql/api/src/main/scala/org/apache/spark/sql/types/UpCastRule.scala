@@ -22,13 +22,8 @@ package org.apache.spark.sql.types
 private[sql] object UpCastRule {
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
-  val numericPrecedence: IndexedSeq[NumericType] = IndexedSeq(
-    ByteType,
-    ShortType,
-    IntegerType,
-    LongType,
-    FloatType,
-    DoubleType)
+  val numericPrecedence: IndexedSeq[NumericType] =
+    IndexedSeq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
 
   /**
    * Returns true iff we can safely up-cast the `from` type to `to` type without any truncating or
@@ -62,10 +57,9 @@ private[sql] object UpCastRule {
 
     case (StructType(fromFields), StructType(toFields)) =>
       fromFields.length == toFields.length &&
-        fromFields.zip(toFields).forall {
-          case (f1, f2) =>
-            resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
-        }
+      fromFields.zip(toFields).forall { case (f1, f2) =>
+        resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
+      }
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true

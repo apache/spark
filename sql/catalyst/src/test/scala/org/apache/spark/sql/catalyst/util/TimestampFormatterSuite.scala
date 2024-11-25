@@ -553,7 +553,7 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       exception = intercept[SparkException] {
         formatter.parseWithoutTimeZone(invalidTimestampStr, allowTimeZone = false)
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map(
         "message" -> ("Cannot parse field value '2021-13-01T25:61:61' for pattern " +
           "'yyyy-MM-dd HH:mm:ss' as the target spark data type \"TIMESTAMP_NTZ\"."))

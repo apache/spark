@@ -38,7 +38,7 @@ case class ParquetTable(
   extends FileTable(sparkSession, options, paths, userSpecifiedSchema) {
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ParquetScanBuilder =
-    new ParquetScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
+    ParquetScanBuilder(sparkSession, fileIndex, schema, dataSchema, mergedOptions(options))
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     ParquetUtils.inferSchema(sparkSession, options.asScala.toMap, files)

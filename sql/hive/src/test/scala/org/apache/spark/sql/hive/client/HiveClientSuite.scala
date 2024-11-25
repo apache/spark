@@ -163,7 +163,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     // test alter database location
     val tempDatabasePath2 = Utils.createTempDir().toURI
     // Hive support altering database location since HIVE-8472.
-    if (version == "3.0" || version == "3.1") {
+    if (version == "3.0" || version == "3.1" || version == "4.0") {
       client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
       val uriInCatalog = client.getDatabase("temporary").locationUri
       assert("file" === uriInCatalog.getScheme)
@@ -186,7 +186,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       assert(false, "dropDatabase should throw HiveException")
     }
     checkError(ex,
-      errorClass = "SCHEMA_NOT_EMPTY",
+      condition = "SCHEMA_NOT_EMPTY",
       parameters = Map("schemaName" -> "`temporary`"))
 
     client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
@@ -376,7 +376,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       CatalogTablePartition(Map("key1" -> "1", "key2" -> key2.toString), storageFormat)
     }
     client.createPartitions(
-      "default", "src_part", partitions, ignoreIfExists = true)
+      client.getTable("default", "src_part"), partitions, ignoreIfExists = true)
   }
 
   test("getPartitionNames(catalogTable)") {
@@ -479,13 +479,15 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     val partitions = Seq(CatalogTablePartition(
       Map("key1" -> "101", "key2" -> "102"),
       storageFormat))
+    val table = client.getTable("default", "src_part")
+
     try {
-      client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
+      client.createPartitions(table, partitions, ignoreIfExists = false)
       val e = intercept[PartitionsAlreadyExistException] {
-        client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
+        client.createPartitions(table, partitions, ignoreIfExists = false)
       }
       checkError(e,
-        errorClass = "PARTITIONS_ALREADY_EXIST",
+        condition = "PARTITIONS_ALREADY_EXIST",
         parameters = Map("partitionList" -> "PARTITION (`key1` = 101, `key2` = 102)",
           "tableName" -> "`default`.`src_part`"))
     } finally {
@@ -558,7 +560,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   test("sql create index and reset") {
     // HIVE-18448 Since Hive 3.0, INDEX is not supported.
-    if (version != "3.0" && version != "3.1") {
+    if (version != "3.0" && version != "3.1" && version != "4.0") {
       client.runSqlHive("CREATE TABLE indexed_table (key INT)")
       client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
         "as 'COMPACT' WITH DEFERRED REBUILD")
@@ -577,7 +579,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
         exception = intercept[AnalysisException] {
           versionSpark.table("mv1").collect()
         },
-        errorClass = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
+        condition = "UNSUPPORTED_FEATURE.HIVE_TABLE_TYPE",
         parameters = Map(
           "tableName" -> "`mv1`",
           "tableType" -> "materialized view"

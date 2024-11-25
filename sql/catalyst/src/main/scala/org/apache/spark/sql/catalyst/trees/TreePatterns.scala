@@ -72,6 +72,7 @@ object TreePattern extends Enumeration  {
   val NOT: Value = Value
   val NULL_CHECK: Value = Value
   val NULL_LITERAL: Value = Value
+  val PIPE_OPERATOR_SELECT: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
   val OR: Value = Value
   val OUTER_REFERENCE: Value = Value
@@ -92,6 +93,7 @@ object TreePattern extends Enumeration  {
   val SUM: Value = Value
   val TIME_WINDOW: Value = Value
   val TIME_ZONE_AWARE_EXPRESSION: Value = Value
+  val TRANSPOSE: Value = Value
   val TRUE_OR_FALSE_LITERAL: Value = Value
   val VARIANT_GET: Value = Value
   val WINDOW_EXPRESSION: Value = Value
@@ -152,11 +154,14 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
   val UNRESOLVED_IDENTIFIER_WITH_CTE: Value = Value
+  val UNRESOLVED_OUTER_REFERENCE: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_FUNC: Value = Value
+  val UNRESOLVED_PROCEDURE: Value = Value
   val UNRESOLVED_SUBQUERY_COLUMN_ALIAS: Value = Value
   val UNRESOLVED_TABLE_VALUED_FUNCTION: Value = Value
+  val UNRESOLVED_TRANSPOSE: Value = Value
   val UNRESOLVED_TVF_ALIASES: Value = Value
 
   // Execution expression patterns (alphabetically ordered)
@@ -164,4 +169,8 @@ object TreePattern extends Enumeration  {
 
   // Execution Plan patterns (alphabetically ordered)
   val EXCHANGE: Value = Value
+
+  // Lazy analysis expression patterns (alphabetically ordered)
+  val LAZY_ANALYSIS_EXPRESSION: Value = Value
+  val LAZY_OUTER_REFERENCE: Value = Value
 }

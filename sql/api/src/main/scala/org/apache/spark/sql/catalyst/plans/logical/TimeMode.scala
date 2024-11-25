@@ -37,9 +37,10 @@ object TimeModes {
         ProcessingTime
       case "eventtime" =>
         EventTime
-      case _ => throw new SparkIllegalArgumentException(
-        errorClass = "STATEFUL_PROCESSOR_UNKNOWN_TIME_MODE",
-        messageParameters = Map("timeMode" -> timeMode))
+      case _ =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "STATEFUL_PROCESSOR_UNKNOWN_TIME_MODE",
+          messageParameters = Map("timeMode" -> timeMode))
     }
   }
 }

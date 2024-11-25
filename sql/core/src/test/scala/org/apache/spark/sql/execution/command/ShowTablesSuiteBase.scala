@@ -168,7 +168,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       exception = intercept[AnalysisException] {
         sql(s"SHOW TABLES IN $catalog.nonexist")
       },
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`nonexist`"))
   }
 
@@ -177,7 +177,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       exception = intercept[AnalysisException] {
         sql(s"SHOW TABLE EXTENDED IN $catalog.nonexist LIKE '*tbl*'")
       },
-      errorClass = "SCHEMA_NOT_FOUND",
+      condition = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> s"`$catalog`.`nonexist`"))
   }
 
@@ -202,7 +202,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         exception = intercept[AnalysisException] {
           sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table' PARTITION(id = 2)")
         },
-        errorClass = "PARTITIONS_NOT_FOUND",
+        condition = "PARTITIONS_NOT_FOUND",
         parameters = Map(
           "partitionList" -> "PARTITION (`id` = 2)",
           "tableName" -> "`ns1`.`tbl`"
@@ -220,7 +220,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace LIKE '$table' PARTITION(id = 1)")
       }
       val (errorClass, parameters) = extendedPartInNonPartedTableError(catalog, namespace, table)
-      checkError(exception = e, errorClass = errorClass, parameters = parameters)
+      checkError(exception = e, condition = errorClass, parameters = parameters)
     }
   }
 
@@ -261,7 +261,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"SHOW TABLE EXTENDED IN $catalog.$namespace " +
             s"LIKE '$table' PARTITION(id1 = 1)")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1232",
+        condition = "_LEGACY_ERROR_TEMP_1232",
         parameters = Map(
           "specKeys" -> "id1",
           "partitionColumnNames" -> "id1, id2",

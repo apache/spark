@@ -72,7 +72,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
               newProject.copyTagsFrom(p)
               (newExprs, newProject)
 
-            case a @ Aggregate(groupExprs, aggExprs, child) =>
+            case a @ Aggregate(groupExprs, aggExprs, child, _) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
                 // All the missing attributes are grouping expressions, valid case.
                 (newExprs,
@@ -146,7 +146,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
         case GetColumnByOrdinal(ordinal, _) =>
           val attrCandidates = getAttrCandidates()
-          assert(ordinal >= 0 && ordinal < attrCandidates.length)
+          if (ordinal < 0 || ordinal >= attrCandidates.length) {
+            throw QueryCompilationErrors.ordinalOutOfBoundsError(
+              ordinal,
+              attrCandidates
+            )
+          }
           attrCandidates(ordinal)
 
         case GetViewColumnByNameAndOrdinal(
@@ -216,32 +221,33 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     val outerPlan = AnalysisContext.get.outerPlan
     if (outerPlan.isEmpty) return e
 
-    def resolve(nameParts: Seq[String]): Option[Expression] = try {
-      outerPlan.get match {
-        // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
-        // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
-        // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
-        case u @ UnresolvedHaving(_, agg: Aggregate) =>
-          agg.resolveChildren(nameParts, conf.resolver)
-            .orElse(u.resolveChildren(nameParts, conf.resolver))
-            .map(wrapOuterReference)
-        case other =>
-          other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
-      }
-    } catch {
-      case ae: AnalysisException =>
-        logDebug(ae.getMessage)
-        None
-    }
-
     e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
       case u: UnresolvedAttribute =>
-        resolve(u.nameParts).getOrElse(u)
+        resolveOuterReference(u.nameParts, outerPlan.get).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
       // Aggregate but failed.
       case t: TempResolvedColumn if t.hasTried =>
-        resolve(t.nameParts).getOrElse(t)
+        resolveOuterReference(t.nameParts, outerPlan.get).getOrElse(t)
     }
+  }
+
+  protected def resolveOuterReference(
+      nameParts: Seq[String], outerPlan: LogicalPlan): Option[Expression] = try {
+    outerPlan match {
+      // Subqueries in UnresolvedHaving can host grouping expressions and aggregate functions.
+      // We should resolve columns with `agg.output` and the rule `ResolveAggregateFunctions` will
+      // push them down to Aggregate later. This is similar to what we do in `resolveColumns`.
+      case u @ UnresolvedHaving(_, agg: Aggregate) =>
+        agg.resolveChildren(nameParts, conf.resolver)
+          .orElse(u.resolveChildren(nameParts, conf.resolver))
+          .map(wrapOuterReference)
+      case other =>
+        other.resolveChildren(nameParts, conf.resolver).map(wrapOuterReference)
+    }
+  } catch {
+    case ae: AnalysisException =>
+      logDebug(ae.getMessage)
+      None
   }
 
   def lookupVariable(nameParts: Seq[String]): Option[VariableReference] = {
@@ -585,7 +591,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       }
       (resolved.map(r => (r, currentDepth)), true)
     } else {
-      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, p.children, currentDepth + 1)
+      val children = p match {
+        // treat Union node as the leaf node
+        case _: Union => Seq.empty[LogicalPlan]
+        case _ => p.children
+      }
+      resolveDataFrameColumnByPlanId(u, id, isMetadataAccess, children, currentDepth + 1)
     }
 
     // In self join case like:

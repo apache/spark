@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.trees.TreePatternBits
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.TransientLazy
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -94,10 +95,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  @transient
-  lazy val references: AttributeSet = {
-    AttributeSet.fromAttributeSets(expressions.map(_.references)) -- producedAttributes
-  }
+  def references: AttributeSet = _references()
+
+  private val _references = new TransientLazy({
+    AttributeSet(expressions) -- producedAttributes
+  })
 
   /**
    * Returns true when the all the expressions in the current node as well as all of its children
@@ -635,22 +637,23 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   protected def doCanonicalize(): PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
     var id = -1
+    val allAttributesSeq = this.allAttributes
     mapExpressions {
       case a: Alias =>
         id += 1
         // As the root of the expression, Alias will always take an arbitrary exprId, we need to
         // normalize that for equality testing, by assigning expr id from 0 incrementally. The
         // alias name doesn't matter and should be erased.
-        val normalizedChild = QueryPlan.normalizeExpressions(a.child, allAttributes)
+        val normalizedChild = QueryPlan.normalizeExpressions(a.child, allAttributesSeq)
         Alias(normalizedChild, "")(ExprId(id), a.qualifier)
 
-      case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
+      case ar: AttributeReference if allAttributesSeq.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
         // normalize the exprId too.
         id += 1
         ar.withExprId(ExprId(id)).canonicalized
 
-      case other => QueryPlan.normalizeExpressions(other, allAttributes)
+      case other => QueryPlan.normalizeExpressions(other, allAttributesSeq)
     }.withNewChildren(canonicalizedChildren)
   }
 
@@ -676,8 +679,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
 
   /**
    * All the attributes that are used for this plan.
+   *
+   * `def` instead of a `lazy val` to avoid holding references to a large number of
+   * attributes, thereby reducing memory pressure on the driver. The number of attributes
+   * referenced here can be very large, especially for logical plans with wide schemas where the
+   * column pruning hasn't happened yet. Holding references to all of them can lead to
+   * significant memory overhead on the driver.
    */
-  lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
+  def allAttributes: AttributeSeq = children.flatMap(_.output)
 }
 
 object QueryPlan extends PredicateHelper {

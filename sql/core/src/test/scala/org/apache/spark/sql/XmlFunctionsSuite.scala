@@ -126,7 +126,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("1").toDS().select(from_xml($"value", lit("ARRAY<int>"), Map[String, String]().asJava))
       },
-      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map(
         "inputSchema" -> "\"ARRAY<int>\"",
         "dataType" -> "\"ARRAY<INT>\""
@@ -138,7 +138,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         Seq("1").toDF("xml").selectExpr(s"from_xml(xml, 'ARRAY<int>')")
       },
-      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map(
         "inputSchema" -> "\"ARRAY<int>\"",
         "dataType" -> "\"ARRAY<INT>\""
@@ -285,7 +285,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df2.selectExpr("to_xml(a, named_struct('a', 1))")
       },
-      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
+      condition = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "to_xml(a, named_struct('a', 1))",
@@ -298,7 +298,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df2.selectExpr("to_xml(a, map('a', 1))")
       },
-      errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
+      condition = "INVALID_OPTIONS.NON_STRING_TYPE",
       parameters = Map("mapType" -> "\"MAP<STRING, INT>\""),
       context = ExpectedContext(
         fragment = "to_xml(a, map('a', 1))",
@@ -350,7 +350,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_xml(value, 1)")
       },
-      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      condition = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"1\""),
       context = ExpectedContext(
         fragment = "from_xml(value, 1)",
@@ -362,7 +362,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("""from_xml(value, 'time InvalidType')""")
       },
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
       parameters = Map(
         "error" -> "'InvalidType'",
@@ -378,7 +378,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_xml(value, 'time Timestamp', named_struct('a', 1))")
       },
-      errorClass = "INVALID_OPTIONS.NON_MAP_FUNCTION",
+      condition = "INVALID_OPTIONS.NON_MAP_FUNCTION",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "from_xml(value, 'time Timestamp', named_struct('a', 1))",
@@ -390,7 +390,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df3.selectExpr("from_xml(value, 'time Timestamp', map('a', 1))")
       },
-      errorClass = "INVALID_OPTIONS.NON_STRING_TYPE",
+      condition = "INVALID_OPTIONS.NON_STRING_TYPE",
       parameters = Map("mapType" -> "\"MAP<STRING, INT>\""),
       context = ExpectedContext(
         fragment = "from_xml(value, 'time Timestamp', map('a', 1))",
@@ -518,7 +518,7 @@ class XmlFunctionsSuite extends QueryTest with SharedSparkSession {
         Seq(("""<ROW><i>1</i></ROW>""", "i int")).toDF("xml", "schema")
           .select(from_xml($"xml", $"schema", options)).collect()
       },
-      errorClass = "INVALID_SCHEMA.NON_STRING_LITERAL",
+      condition = "INVALID_SCHEMA.NON_STRING_LITERAL",
       parameters = Map("inputSchema" -> "\"schema\""),
       context = ExpectedContext(fragment = "from_xml", getCurrentClassCallSitePattern)
     )

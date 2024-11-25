@@ -96,4 +96,8 @@ private[sql] trait DataTypeErrorsBase {
   def getQueryContext(context: QueryContext): Array[QueryContext] = {
     if (context == null) Array.empty else Array(context)
   }
+
+  def toDSOption(option: String): String = {
+    quoteByDefault(option)
+  }
 }

@@ -57,8 +57,10 @@ from pyspark.loose_version import LooseVersion
 if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
+    import numpy as np
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
 
 
 def to_arrow_type(
@@ -166,7 +168,9 @@ def to_arrow_type(
     elif type(dt) == VariantType:
         fields = [
             pa.field("value", pa.binary(), nullable=False),
-            pa.field("metadata", pa.binary(), nullable=False),
+            # The metadata field is tagged so we can identify that the arrow struct actually
+            # represents a variant.
+            pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
         ]
         arrow_type = pa.struct(fields)
     else:
@@ -214,6 +218,22 @@ def to_arrow_schema(
         for field in schema
     ]
     return pa.schema(fields)
+
+
+def is_variant(at: "pa.DataType") -> bool:
+    """Check if a PyArrow struct data type represents a variant"""
+    import pyarrow.types as types
+
+    assert types.is_struct(at)
+
+    return any(
+        (
+            field.name == "metadata"
+            and b"variant" in field.metadata
+            and field.metadata[b"variant"] == b"true"
+        )
+        for field in at
+    ) and any(field.name == "value" for field in at)
 
 
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
@@ -275,6 +295,8 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
             from_arrow_type(at.item_type, prefer_timestamp_ntz),
         )
     elif types.is_struct(at):
+        if is_variant(at):
+            return VariantType()
         return StructType(
             [
                 StructField(
@@ -1290,6 +1312,14 @@ def _create_converter_from_pandas(
 
             return convert_udt
 
+        elif isinstance(dt, VariantType):
+
+            def convert_variant(variant: Any) -> Any:
+                assert isinstance(variant, VariantVal)
+                return {"value": variant.value, "metadata": variant.metadata}
+
+            return convert_variant
+
         return None
 
     conv = _converter(data_type)
@@ -1344,3 +1374,34 @@ def _deduplicate_field_names(dt: DataType) -> DataType:
         )
     else:
         return dt
+
+
+def _to_numpy_type(type: DataType) -> Optional["np.dtype"]:
+    """Convert Spark data type to NumPy type."""
+    import numpy as np
+
+    if type == ByteType():
+        return np.dtype("int8")
+    elif type == ShortType():
+        return np.dtype("int16")
+    elif type == IntegerType():
+        return np.dtype("int32")
+    elif type == LongType():
+        return np.dtype("int64")
+    elif type == FloatType():
+        return np.dtype("float32")
+    elif type == DoubleType():
+        return np.dtype("float64")
+    return None
+
+
+def convert_pandas_using_numpy_type(
+    df: "PandasDataFrameLike", schema: StructType
+) -> "PandasDataFrameLike":
+    for field in schema.fields:
+        if isinstance(
+            field.dataType, (ByteType, ShortType, LongType, FloatType, DoubleType, IntegerType)
+        ):
+            np_type = _to_numpy_type(field.dataType)
+            df[field.name] = df[field.name].astype(np_type)
+    return df

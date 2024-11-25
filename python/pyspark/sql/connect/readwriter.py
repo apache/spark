@@ -229,7 +229,7 @@ class DataFrameReader(OptionUtils):
     def text(
         self,
         paths: PathOrPaths,
-        wholetext: Optional[bool] = None,
+        wholetext: bool = False,
         lineSep: Optional[str] = None,
         pathGlobFilter: Optional[Union[bool, str]] = None,
         recursiveFileLookup: Optional[Union[bool, str]] = None,

@@ -28,15 +28,15 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
-import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeAnyCollation}
+import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
 import org.apache.spark.sql.types.{DataType, MapType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
-object ExprUtils extends QueryErrorsBase {
+object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   def evalTypeExpr(exp: Expression): DataType = {
     if (exp.foldable) {
-      exp.eval() match {
+      prepareForEval(exp).eval() match {
         case s: UTF8String if s != null =>
           val dataType = DataType.parseTypeWithFallback(
             s.toString,
@@ -61,7 +61,8 @@ object ExprUtils extends QueryErrorsBase {
 
   def convertToMapData(exp: Expression): Map[String, String] = exp match {
     case m: CreateMap
-      if AbstractMapType(StringTypeAnyCollation, StringTypeAnyCollation).acceptsType(m.dataType) =>
+      if AbstractMapType(StringTypeWithCollation, StringTypeWithCollation)
+        .acceptsType(m.dataType) =>
       val arrayMap = m.eval().asInstanceOf[ArrayBasedMapData]
       ArrayBasedMapData.toScalaMap(arrayMap).map { case (key, value) =>
         key.toString -> value.toString
@@ -82,7 +83,8 @@ object ExprUtils extends QueryErrorsBase {
     schema.getFieldIndex(columnNameOfCorruptRecord).foreach { corruptFieldIndex =>
       val f = schema(corruptFieldIndex)
       if (!f.dataType.isInstanceOf[StringType] || !f.nullable) {
-        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError()
+        throw QueryCompilationErrors.invalidFieldTypeForCorruptRecordError(
+          columnNameOfCorruptRecord, f.dataType)
       }
     }
   }

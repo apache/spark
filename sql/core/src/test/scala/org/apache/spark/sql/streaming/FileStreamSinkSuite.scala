@@ -50,7 +50,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.ORC_IMPLEMENTATION, "native")
+    spark.conf.set(SQLConf.ORC_IMPLEMENTATION.key, "native")
   }
 
   override def afterAll(): Unit = {
@@ -280,7 +280,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           exception = intercept[AnalysisException] {
             df.writeStream.format("parquet").outputMode(mode).start(dir.getCanonicalPath)
           },
-          errorClass = "STREAMING_OUTPUT_MODE.UNSUPPORTED_DATASOURCE",
+          condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_DATASOURCE",
           sqlState = "42KDE",
           parameters = Map("className" -> "parquet", "outputMode" -> mode))
       }
@@ -378,7 +378,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           exception = intercept[AnalysisException] {
             spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
@@ -699,7 +699,7 @@ class FileStreamSinkV1Suite extends FileStreamSinkSuite {
     // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
     // been inferred
     val hadoopdFsRelations = df.queryExecution.analyzed.collect {
-      case LogicalRelation(baseRelation: HadoopFsRelation, _, _, _) => baseRelation
+      case LogicalRelationWithTable(baseRelation: HadoopFsRelation, _) => baseRelation
     }
     assert(hadoopdFsRelations.size === 1)
     assert(hadoopdFsRelations.head.location.isInstanceOf[MetadataLogFileIndex])

@@ -117,13 +117,19 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>provided</scope>
     </dependency>
 
     <!--
       Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
       that the libraries Spark depend on have it available. We'll package the version that Spark
-      uses (14.0.1) which is not the same as Hadoop dependencies, but works.
+      uses which is not the same as Hadoop dependencies, but works.
     -->
     <dependency>
       <groupId>com.google.guava</groupId>
@@ -200,7 +206,7 @@
             <configuration>
               <executable>cp</executable>
               <arguments>
-                <argument>${basedir}/../connector/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${version}.jar</argument>
+                <argument>${basedir}/../connector/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
               </arguments>
             </configuration>
@@ -336,6 +342,14 @@
       <id>parquet-provided</id>
       <properties>
         <parquet.deps.scope>provided</parquet.deps.scope>
+      </properties>
+    </profile>
+
+    <!-- Pull in jjwt-impl and jjwt-jackson jars -->
+    <profile>
+      <id>jjwt</id>
+      <properties>
+        <jjwt.deps.scope>compile</jjwt.deps.scope>
       </properties>
     </profile>
 

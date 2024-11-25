@@ -204,7 +204,7 @@ class PlanParserSuite extends AnalysisTest {
                   |""".stripMargin
     checkError(
       exception = parseException(query),
-      errorClass = "UNCLOSED_BRACKETED_COMMENT",
+      condition = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
@@ -222,7 +222,7 @@ class PlanParserSuite extends AnalysisTest {
                   |""".stripMargin
     checkError(
       exception = parseException(query),
-      errorClass = "UNCLOSED_BRACKETED_COMMENT",
+      condition = "UNCLOSED_BRACKETED_COMMENT",
       parameters = Map.empty)
   }
 
@@ -237,8 +237,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "EXPLAIN logical SELECT 1"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0039",
-      parameters = Map.empty,
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "EXPLAIN logical SELECT 1"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -247,8 +247,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = "EXPLAIN formatted SELECT 1"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0039",
-      parameters = Map.empty,
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "EXPLAIN formatted SELECT 1"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
@@ -295,8 +295,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0038",
-      parameters = Map("duplicateNames" -> "'cte1'"),
+      condition = "DUPLICATED_CTE_NAMES",
+      parameters = Map("duplicateNames" -> "`cte1`"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,
@@ -328,13 +328,13 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "from a"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
 
     val sql2 = "from (from a union all from b) c select *"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'union'", "hint" -> ""))
   }
 
@@ -345,12 +345,12 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "from a select * select * from x where a.s < 10"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'from'", "hint" -> ""))
     val sql2 = "from a select * from b"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'from'", "hint" -> ""))
     assertEqual(
       "from a insert into tbl1 select * insert into tbl2 select * where s < 10",
@@ -372,8 +372,9 @@ class PlanParserSuite extends AnalysisTest {
     val limitWindowClauses = Seq(
       ("", (p: LogicalPlan) => p),
       (" limit 10", (p: LogicalPlan) => p.limit(10)),
-      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p)),
-      (" window w1 as () limit 10", (p: LogicalPlan) => WithWindowDefinition(ws, p).limit(10))
+      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p, forPipeSQL = false)),
+      (" window w1 as () limit 10", (p: LogicalPlan) =>
+        WithWindowDefinition(ws, p, forPipeSQL = false).limit(10))
     )
 
     val orderSortDistrClusterClauses = Seq(
@@ -393,7 +394,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = s"$baseSql order by a sort by a"
     checkError(
       exception = parseException(sql1),
-      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+      condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a sort by a",
@@ -403,7 +404,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = s"$baseSql cluster by a distribute by a"
     checkError(
       exception = parseException(sql2),
-      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+      condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "cluster by a distribute by a",
@@ -413,7 +414,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql3 = s"$baseSql order by a cluster by a"
     checkError(
       exception = parseException(sql3),
-      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+      condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a cluster by a",
@@ -423,7 +424,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql4 = s"$baseSql order by a distribute by a"
     checkError(
       exception = parseException(sql4),
-      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
+      condition = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a distribute by a",
@@ -499,7 +500,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'b'", "hint" -> ": extra input 'b'"))
   }
 
@@ -524,7 +525,7 @@ class PlanParserSuite extends AnalysisTest {
          |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
          |       w2 as w1,
          |       w3 as w1""".stripMargin,
-      WithWindowDefinition(ws1, plan))
+      WithWindowDefinition(ws1, plan, forPipeSQL = false))
   }
 
   test("lateral view") {
@@ -595,7 +596,7 @@ class PlanParserSuite extends AnalysisTest {
         |)""".stripMargin
     checkError(
       exception = parseException(sql1),
-      errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_PIVOT",
+      condition = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_PIVOT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = fragment1,
@@ -617,7 +618,7 @@ class PlanParserSuite extends AnalysisTest {
         |)""".stripMargin
     checkError(
       exception = parseException(sql2),
-      errorClass = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_UNPIVOT",
+      condition = "NOT_ALLOWED_IN_FROM.LATERAL_WITH_UNPIVOT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = fragment2,
@@ -647,7 +648,7 @@ class PlanParserSuite extends AnalysisTest {
         |)""".stripMargin
     checkError(
       exception = parseException(sql3),
-      errorClass = "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
+      condition = "NOT_ALLOWED_IN_FROM.UNPIVOT_WITH_PIVOT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = fragment3,
@@ -711,7 +712,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "select * from a natural cross join b"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INCOMPATIBLE_JOIN_TYPES",
+      condition = "INCOMPATIBLE_JOIN_TYPES",
       parameters = Map("joinType1" -> "NATURAL", "joinType2" -> "CROSS"),
       sqlState = "42613",
       context = ExpectedContext(
@@ -723,7 +724,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = "select * from a natural join b on a.id = b.id"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'on'", "hint" -> ""))
 
     // Test multiple consecutive joins
@@ -744,7 +745,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql3 = "select * from t1 inner join t2 inner join t3 on col3 = col2 on col3 = col1"
     checkError(
       exception = parseException(sql3),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'on'", "hint" -> ""))
 
     // Parenthesis
@@ -834,7 +835,7 @@ class PlanParserSuite extends AnalysisTest {
     val fragment1 = "tablesample(bucket 4 out of 10 on x)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0015",
+      condition = "_LEGACY_ERROR_TEMP_0015",
       parameters = Map("msg" -> "BUCKET x OUT OF y ON colname"),
       context = ExpectedContext(
         fragment = fragment1,
@@ -845,7 +846,7 @@ class PlanParserSuite extends AnalysisTest {
     val fragment2 = "tablesample(bucket 11 out of 10)"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0064",
+      condition = "_LEGACY_ERROR_TEMP_0064",
       parameters = Map("msg" -> "Sampling fraction (1.1) must be on interval [0, 1]"),
       context = ExpectedContext(
         fragment = fragment2,
@@ -856,7 +857,7 @@ class PlanParserSuite extends AnalysisTest {
     val fragment3 = "TABLESAMPLE(300M)"
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0015",
+      condition = "_LEGACY_ERROR_TEMP_0015",
       parameters = Map("msg" -> "byteLengthLiteral"),
       context = ExpectedContext(
         fragment = fragment3,
@@ -867,7 +868,7 @@ class PlanParserSuite extends AnalysisTest {
     val fragment4 = "TABLESAMPLE(BUCKET 3 OUT OF 32 ON rand())"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0015",
+      condition = "_LEGACY_ERROR_TEMP_0015",
       parameters = Map("msg" -> "BUCKET x OUT OF y ON function"),
       context = ExpectedContext(
         fragment = fragment4,
@@ -925,7 +926,7 @@ class PlanParserSuite extends AnalysisTest {
     val fragment1 = "default.range(2)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
       parameters = Map("funcName" -> "`default`.`range`"),
       context = ExpectedContext(
         fragment = fragment1,
@@ -937,7 +938,7 @@ class PlanParserSuite extends AnalysisTest {
     val fragment2 = "spark_catalog.default.range(2)"
     checkError(
       exception = parseException(sql2),
-      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
       parameters = Map("funcName" -> "`spark_catalog`.`default`.`range`"),
       context = ExpectedContext(
         fragment = fragment2,
@@ -1047,14 +1048,14 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "SELECT /*+ HINT() */ * FROM t"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "')'", "hint" -> ""))
 
     // Disallow space as the delimiter.
     val sql2 = "SELECT /*+ INDEX(a b c) */ * from default.t"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'b'", "hint" -> ""))
 
     assertEqual(
@@ -1114,7 +1115,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql3 = "SELECT /*+ COALESCE(30 + 50) */ * FROM t"
     checkError(
       exception = parseException(sql3),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'+'", "hint" -> ""))
 
     assertEqual(
@@ -1241,13 +1242,13 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "select ltrim(both 'S' from 'SS abc S'"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'from'", "hint" -> "")) // expecting {')'
 
     val sql2 = "select rtrim(trailing 'S' from 'SS abc S'"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'from'", "hint" -> "")) // expecting {')'
 
     assertTrimPlans(
@@ -1361,7 +1362,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'INSERT'", "hint" -> ""))
 
     // Multi insert query
@@ -1371,13 +1372,13 @@ class PlanParserSuite extends AnalysisTest {
         |INSERT INTO tbl2 SELECT * WHERE jt.id > 4""".stripMargin
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'INSERT'", "hint" -> ""))
 
     val sql3 = "ALTER VIEW testView AS INSERT INTO jt VALUES(1, 1)"
     checkError(
       exception = parseException(sql3),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'INSERT'", "hint" -> ""))
 
     // Multi insert query
@@ -1387,7 +1388,7 @@ class PlanParserSuite extends AnalysisTest {
         |INSERT INTO tbl2 SELECT * WHERE jt.id > 4""".stripMargin
     checkError(
       exception = parseException(sql4),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'INSERT'", "hint" -> ""))
   }
 
@@ -1395,13 +1396,13 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "SELECT * FROM (INSERT INTO BAR VALUES (2))"
     checkError(
       exception = parseException(sql1),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'BAR'", "hint" -> ": missing ')'"))
 
     val sql2 = "SELECT * FROM S WHERE C1 IN (INSERT INTO T VALUES (2))"
     checkError(
       exception = parseException(sql2),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'IN'", "hint" -> ""))
   }
 
@@ -1506,7 +1507,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "select * from my_tvf(arg1 => table v1)"
     checkError(
       exception = parseException(sql1),
-      errorClass =
+      condition =
         "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES",
       parameters = Map("argumentName" -> "`v1`"),
       context = ExpectedContext(
@@ -1627,14 +1628,14 @@ class PlanParserSuite extends AnalysisTest {
         val sql6 = "select * from my_tvf(arg1 => table(1) partition by col1 with single partition)"
         checkError(
           exception = parseException(sql6),
-          errorClass = "PARSE_SYNTAX_ERROR",
+          condition = "PARSE_SYNTAX_ERROR",
           parameters = Map(
             "error" -> "'partition'",
             "hint" -> ""))
         val sql7 = "select * from my_tvf(arg1 => table(1) order by col1)"
         checkError(
           exception = parseException(sql7),
-          errorClass = "PARSE_SYNTAX_ERROR",
+          condition = "PARSE_SYNTAX_ERROR",
           parameters = Map(
             "error" -> "'order'",
             "hint" -> ""))
@@ -1643,7 +1644,7 @@ class PlanParserSuite extends AnalysisTest {
         val sql8 = s"select * from my_tvf(arg1 => $sql8tableArg $sql8partition)"
         checkError(
           exception = parseException(sql8),
-          errorClass = "_LEGACY_ERROR_TEMP_0064",
+          condition = "_LEGACY_ERROR_TEMP_0064",
           parameters = Map(
             "msg" ->
               ("The table function call includes a table argument with an invalid " +
@@ -1766,7 +1767,7 @@ class PlanParserSuite extends AnalysisTest {
         |FROM testData""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
+      condition = "UNSUPPORTED_FEATURE.TRANSFORM_NON_HIVE",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql,
@@ -1824,7 +1825,7 @@ class PlanParserSuite extends AnalysisTest {
     val fragment = "TIMESTAMP AS OF col"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0056",
+      condition = "_LEGACY_ERROR_TEMP_0056",
       parameters = Map("reason" -> "timestamp expression cannot refer to any columns"),
       context = ExpectedContext(
         fragment = fragment,
@@ -1919,11 +1920,11 @@ class PlanParserSuite extends AnalysisTest {
     // Invalid empty name and invalid symbol in a name
     checkError(
       exception = parseException(s"SELECT :-"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'-'", "hint" -> ""))
     checkError(
       exception = parseException(s"SELECT :"),
-      errorClass = "PARSE_SYNTAX_ERROR",
+      condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
 

@@ -21,19 +21,19 @@ import org.apache.spark.annotation.Stable
 
 /**
  * The data type representing calendar intervals. The calendar interval is stored internally in
- * three components:
- *   an integer value representing the number of `months` in this interval,
- *   an integer value representing the number of `days` in this interval,
- *   a long value representing the number of `microseconds` in this interval.
+ * three components: an integer value representing the number of `months` in this interval, an
+ * integer value representing the number of `days` in this interval, a long value representing the
+ * number of `microseconds` in this interval.
  *
  * Please use the singleton `DataTypes.CalendarIntervalType` to refer the type.
  *
- * @note Calendar intervals are not comparable.
+ * @note
+ *   Calendar intervals are not comparable.
  *
  * @since 1.5.0
  */
 @Stable
-class CalendarIntervalType private() extends DataType {
+class CalendarIntervalType private () extends DataType {
 
   override def defaultSize: Int = 16
 

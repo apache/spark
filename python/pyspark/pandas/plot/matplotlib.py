@@ -282,30 +282,26 @@ class PandasOnSparkBoxPlot(PandasBoxPlot, BoxPlotBase):
         # This one is pandas-on-Spark specific to control precision for approx_percentile
         precision = self.kwds.get("precision", 0.01)
 
-        # # Computes mean, median, Q1 and Q3 with approx_percentile and precision
-        col_stats, col_fences = BoxPlotBase.compute_stats(data, spark_column_name, whis, precision)
-
-        # # Creates a column to flag rows as outliers or not
-        outliers = BoxPlotBase.outliers(data, spark_column_name, *col_fences)
-
-        # # Computes min and max values of non-outliers - the whiskers
-        whiskers = BoxPlotBase.calc_whiskers(spark_column_name, outliers)
-
-        if showfliers:
-            fliers = BoxPlotBase.get_fliers(spark_column_name, outliers, *col_fences)
-        else:
-            fliers = []
+        results = BoxPlotBase.compute_box(
+            data._psdf._internal.resolved_copy.spark_frame,
+            [spark_column_name],
+            whis,
+            precision,
+            showfliers,
+        )
+        assert len(results) == 1
+        result = results[0]
 
         # Builds bxpstats dict
         stats = []
         item = {
-            "mean": col_stats["mean"],
-            "med": col_stats["med"],
-            "q1": col_stats["q1"],
-            "q3": col_stats["q3"],
-            "whislo": whiskers[0],
-            "whishi": whiskers[1],
-            "fliers": fliers,
+            "mean": result["mean"],
+            "med": result["med"],
+            "q1": result["q1"],
+            "q3": result["q3"],
+            "whislo": result["lower_whisker"],
+            "whishi": result["upper_whisker"],
+            "fliers": result["fliers"] if result["fliers"] else [],
             "label": labels[0],
         }
         stats.append(item)

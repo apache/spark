@@ -22,8 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, DelegatingCatalogExtension, Identifier, Table, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, DelegatingCatalogExtension, Identifier, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
@@ -53,14 +52,10 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
     if (tables.containsKey(ident)) {
       tables.get(ident)
     } else {
-      // Table was created through the built-in catalog
-      super.loadTable(ident) match {
-        case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW => v1Table
-        case t =>
-          val table = newTable(t.name(), t.schema(), t.partitioning(), t.properties())
-          addTable(ident, table)
-          table
-      }
+      // Table was created through the built-in catalog via v1 command, this is OK as the
+      // `loadTable` should always be invoked, and we set the `tableCreated` to pass validation.
+      tableCreated.set(true)
+      super.loadTable(ident)
     }
   }
 

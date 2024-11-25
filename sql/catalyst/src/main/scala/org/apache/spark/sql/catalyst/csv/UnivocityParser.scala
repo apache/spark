@@ -21,9 +21,10 @@ import java.io.InputStream
 
 import scala.util.control.NonFatal
 
+import com.univocity.parsers.common.TextParsingException
 import com.univocity.parsers.csv.CsvParser
 
-import org.apache.spark.SparkUpgradeException
+import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
@@ -294,6 +295,20 @@ class UnivocityParser(
     }
   }
 
+  private def parseLine(line: String): Array[String] = {
+    try {
+      tokenizer.parseLine(line)
+    }
+    catch {
+      case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+        throw new SparkRuntimeException(
+          errorClass = "MALFORMED_CSV_RECORD",
+          messageParameters = Map("badRecord" -> line),
+          cause = e
+        )
+    }
+  }
+
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
    * the record is malformed).
@@ -306,7 +321,7 @@ class UnivocityParser(
       (_: String) => Some(InternalRow.empty)
     } else {
       // parse if the columnPruning is disabled or requiredSchema is nonEmpty
-      (input: String) => convert(tokenizer.parseLine(input))
+      (input: String) => convert(parseLine(input))
     }
   }
 

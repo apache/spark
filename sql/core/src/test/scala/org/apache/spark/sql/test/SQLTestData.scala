@@ -35,7 +35,7 @@ private[sql] trait SQLTestData { self =>
 
   // Helper object to import SQL implicits without a concrete SparkSession
   private object internalImplicits extends SQLImplicits {
-    protected override def session: SparkSession = self.spark
+    override protected def session: SparkSession = self.spark
   }
 
   import internalImplicits._

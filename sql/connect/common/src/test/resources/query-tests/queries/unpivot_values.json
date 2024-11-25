@@ -27,6 +27,7 @@
         }
       }]
     },
+    "variableColumnName": "name",
     "valueColumnName": "value"
   }
 }

@@ -335,7 +335,6 @@ Lines with a: 72, lines with b: 39
 To use Spark Connect as part of a Scala application/project, we first need to include the right dependencies.
 Using the `sbt` build system as an example, we add the following dependencies to the `build.sbt` file:
 {% highlight sbt %}
-libraryDependencies += "org.apache.spark" %% "spark-sql-api" % "3.5.0"
 libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "3.5.0"
 {% endhighlight %}
 
@@ -371,6 +370,8 @@ one may implement their own class extending `ClassFinder` for customized search 
 </div>
 </div>
 
+For more information on application development with Spark Connect as well as extending Spark Connect
+with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html). 
 # Client application authentication
 
 While Spark Connect does not have built-in authentication, it is designed to

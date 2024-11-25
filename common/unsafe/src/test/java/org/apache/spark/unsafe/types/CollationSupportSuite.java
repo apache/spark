@@ -94,6 +94,7 @@ public class CollationSupportSuite {
     assertCompare("bxx", "bü", "UNICODE", 1);
     assertCompare("äü", "bü", "UNICODE_CI", -1);
     assertCompare("bxx", "bü", "UNICODE_CI", 1);
+    assertCompare("cČć", "ČćC", "SR_CI_AI", 0);
     // Case variation.
     assertCompare("AbCd", "aBcD", "UTF8_BINARY", -1);
     assertCompare("ABCD", "abcd", "UTF8_LCASE", 0);
@@ -104,6 +105,7 @@ public class CollationSupportSuite {
     assertCompare("AbCδ", "ABCΔ", "UTF8_LCASE", 0);
     assertCompare("äBCd", "ÄBCD", "UNICODE", -1);
     assertCompare("Ab́cD", "AB́CD", "UNICODE_CI", 0);
+    assertCompare("ÈÉÊË", "EeEe", "AF_CI_AI", 0);
     // One-to-many case mapping (e.g. Turkish dotted I).
     assertCompare("i\u0307", "İ", "UTF8_BINARY", -1);
     assertCompare("İ", "i\u0307", "UTF8_BINARY", 1);
@@ -334,6 +336,7 @@ public class CollationSupportSuite {
     assertContains("2 Kelvin.", "2 Kelvin", "UTF8_LCASE", true);
     assertContains("2 Kelvin.", "2 Kelvin", "UTF8_LCASE", true);
     assertContains("The KKelvin.", "KKelvin,", "UTF8_LCASE", false);
+    assertContains("abčćd", "ABCCD", "SR_CI_AI", true);
     // Case variation.
     assertContains("aBcDe", "bcd", "UTF8_BINARY", false);
     assertContains("aBcDe", "BcD", "UTF8_BINARY", true);
@@ -352,6 +355,7 @@ public class CollationSupportSuite {
     assertContains("aBcDe", "BĆD", "UTF8_LCASE", false);
     assertContains("aBcDe", "abćde", "UNICODE_CI", false);
     assertContains("aBcDe", "AbĆdE", "UNICODE_CI", false);
+    assertContains("abEEE", "Bèêë", "AF_CI_AI", true);
     // One-to-many case mapping (e.g. Turkish dotted I).
     assertContains("i\u0307", "i", "UNICODE_CI", false);
     assertContains("i\u0307", "\u0307", "UNICODE_CI", false);
@@ -580,6 +584,11 @@ public class CollationSupportSuite {
     assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_LCASE", true);
     assertStartsWith("2 Kelvin.", "2 Kelvin", "UTF8_LCASE", true);
     assertStartsWith("KKelvin.", "KKelvin,", "UTF8_LCASE", false);
+    assertStartsWith("Ћао", "Ца", "sr_Cyrl_CI_AI", false);
+    assertStartsWith("Ћао", "ћа", "sr_Cyrl_CI_AI", true);
+    assertStartsWith("Ćao", "Ca", "SR_CI", false);
+    assertStartsWith("Ćao", "Ca", "SR_CI_AI", true);
+    assertStartsWith("Ćao", "Ća", "SR", true);
     // Case variation.
     assertStartsWith("aBcDe", "abc", "UTF8_BINARY", false);
     assertStartsWith("aBcDe", "aBc", "UTF8_BINARY", true);
@@ -629,6 +638,8 @@ public class CollationSupportSuite {
     assertStartsWith("İonic", "Io", "UTF8_LCASE", false);
     assertStartsWith("İonic", "i\u0307o", "UTF8_LCASE", true);
     assertStartsWith("İonic", "İo", "UTF8_LCASE", true);
+    assertStartsWith("oİ", "oİ", "UTF8_LCASE", true);
+    assertStartsWith("oİ", "oi̇", "UTF8_LCASE", true);
     // Conditional case mapping (e.g. Greek sigmas).
     assertStartsWith("σ", "σ", "UTF8_BINARY", true);
     assertStartsWith("σ", "ς", "UTF8_BINARY", false);
@@ -830,6 +841,11 @@ public class CollationSupportSuite {
     assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_LCASE", true);
     assertEndsWith("The 2 Kelvin", "2 Kelvin", "UTF8_LCASE", true);
     assertEndsWith("The KKelvin", "KKelvin,", "UTF8_LCASE", false);
+    assertEndsWith("Ћевапчићи", "цици", "sr_Cyrl_CI_AI", false);
+    assertEndsWith("Ћевапчићи", "чИЋи", "sr_Cyrl_CI_AI", true);
+    assertEndsWith("Ćevapčići", "cici", "SR_CI", false);
+    assertEndsWith("Ćevapčići", "cici", "SR_CI_AI", true);
+    assertEndsWith("Ćevapčići", "čići", "SR", true);
     // Case variation.
     assertEndsWith("aBcDe", "cde", "UTF8_BINARY", false);
     assertEndsWith("aBcDe", "cDe", "UTF8_BINARY", true);
@@ -880,6 +896,8 @@ public class CollationSupportSuite {
     assertEndsWith("the İo", "Io", "UTF8_LCASE", false);
     assertEndsWith("the İo", "i\u0307o", "UTF8_LCASE", true);
     assertEndsWith("the İo", "İo", "UTF8_LCASE", true);
+    assertEndsWith("İo", "İo", "UTF8_LCASE", true);
+    assertEndsWith("İo", "i̇o", "UTF8_LCASE", true);
     // Conditional case mapping (e.g. Greek sigmas).
     assertEndsWith("σ", "σ", "UTF8_BINARY", true);
     assertEndsWith("σ", "ς", "UTF8_BINARY", false);
@@ -1334,6 +1352,23 @@ public class CollationSupportSuite {
     // Note: results should be the same in these tests for both ICU and JVM-based implementations.
   }
 
+  private void assertInitCap(
+      String target,
+      String collationName,
+      String expectedICU,
+      String expectedNonICU) throws SparkException {
+    UTF8String target_utf8 = UTF8String.fromString(target);
+    UTF8String expectedICU_utf8 = UTF8String.fromString(expectedICU);
+    UTF8String expectedNonICU_utf8 = UTF8String.fromString(expectedNonICU);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    // Testing the new ICU-based implementation of the Lower function.
+    assertEquals(expectedICU_utf8, CollationSupport.InitCap.exec(target_utf8, collationId, true));
+    // Testing the old JVM-based implementation of the Lower function.
+    assertEquals(expectedNonICU_utf8, CollationSupport.InitCap.exec(target_utf8, collationId,
+      false));
+    // Note: results should be the same in these tests for both ICU and JVM-based implementations.
+  }
+
   @Test
   public void testInitCap() throws SparkException {
     for (String collationName: testSupportedCollations) {
@@ -1372,12 +1407,24 @@ public class CollationSupportSuite {
     assertInitCap("ÄBĆΔE", "UTF8_LCASE", "Äbćδe");
     assertInitCap("ÄBĆΔE", "UNICODE", "Äbćδe");
     assertInitCap("ÄBĆΔE", "UNICODE_CI", "Äbćδe");
+    assertInitCap("êéfgh", "AF_CI_AI", "Êéfgh");
+    assertInitCap("öoAÄ", "DE_CI_AI", "Öoaä");
+    // Case-variable character length
+    assertInitCap("İo", "UTF8_BINARY", "İo", "I\u0307o");
+    assertInitCap("İo", "UTF8_LCASE", "İo");
+    assertInitCap("İo", "UNICODE", "İo");
+    assertInitCap("İo", "UNICODE_CI", "İo");
+    assertInitCap("i\u0307o", "UTF8_BINARY", "I\u0307o");
+    assertInitCap("i\u0307o", "UTF8_LCASE", "I\u0307o");
+    assertInitCap("i\u0307o", "UNICODE", "I\u0307o");
+    assertInitCap("i\u0307o", "UNICODE_CI", "I\u0307o");
+    // Different possible word boundaries
     assertInitCap("aB 世 de", "UTF8_BINARY", "Ab 世 De");
     assertInitCap("aB 世 de", "UTF8_LCASE", "Ab 世 De");
     assertInitCap("aB 世 de", "UNICODE", "Ab 世 De");
     assertInitCap("aB 世 de", "UNICODE_CI", "Ab 世 De");
     // One-to-many case mapping (e.g. Turkish dotted I).
-    assertInitCap("İ", "UTF8_BINARY", "I\u0307");
+    assertInitCap("İ", "UTF8_BINARY", "İ", "I\u0307");
     assertInitCap("İ", "UTF8_LCASE", "İ");
     assertInitCap("İ", "UNICODE", "İ");
     assertInitCap("İ", "UNICODE_CI", "İ");
@@ -1385,7 +1432,7 @@ public class CollationSupportSuite {
     assertInitCap("I\u0307", "UTF8_LCASE","I\u0307");
     assertInitCap("I\u0307", "UNICODE","I\u0307");
     assertInitCap("I\u0307", "UNICODE_CI","I\u0307");
-    assertInitCap("İonic", "UTF8_BINARY", "I\u0307onic");
+    assertInitCap("İonic", "UTF8_BINARY", "İonic", "I\u0307onic");
     assertInitCap("İonic", "UTF8_LCASE", "İonic");
     assertInitCap("İonic", "UNICODE", "İonic");
     assertInitCap("İonic", "UNICODE_CI", "İonic");
@@ -1414,23 +1461,24 @@ public class CollationSupportSuite {
     assertInitCap("𝔸", "UTF8_LCASE", "𝔸");
     assertInitCap("𝔸", "UNICODE", "𝔸");
     assertInitCap("𝔸", "UNICODE_CI", "𝔸");
-    assertInitCap("𐐅", "UTF8_BINARY", "𐐭");
+    assertInitCap("𐐅", "UTF8_BINARY", "\uD801\uDC05", "𐐭");
     assertInitCap("𐐅", "UTF8_LCASE", "𐐅");
     assertInitCap("𐐅", "UNICODE", "𐐅");
     assertInitCap("𐐅", "UNICODE_CI", "𐐅");
-    assertInitCap("𐐭", "UTF8_BINARY", "𐐭");
+    assertInitCap("𐐭", "UTF8_BINARY", "\uD801\uDC05", "𐐭");
     assertInitCap("𐐭", "UTF8_LCASE", "𐐅");
     assertInitCap("𐐭", "UNICODE", "𐐅");
     assertInitCap("𐐭", "UNICODE_CI", "𐐅");
-    assertInitCap("𐐭𝔸", "UTF8_BINARY", "𐐭𝔸");
+    assertInitCap("𐐭𝔸", "UTF8_BINARY", "\uD801\uDC05\uD835\uDD38", "𐐭𝔸");
     assertInitCap("𐐭𝔸", "UTF8_LCASE", "𐐅𝔸");
     assertInitCap("𐐭𝔸", "UNICODE", "𐐅𝔸");
     assertInitCap("𐐭𝔸", "UNICODE_CI", "𐐅𝔸");
     // Ligatures.
-    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_BINARY","ß ﬁ ﬃ ﬀ ﬆ ῗ");
-    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_LCASE","Ss Fi Ffi Ff St \u0399\u0308\u0342");
-    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","Ss Fi Ffi Ff St \u0399\u0308\u0342");
-    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE","Ss Fi Ffi Ff St \u0399\u0308\u0342");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_BINARY", "Ss Fi Ffi Ff St Ϊ͂", "ß ﬁ ﬃ ﬀ ﬆ ῗ");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UTF8_LCASE", "Ss Fi Ffi Ff St \u0399\u0308\u0342");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE", "Ss Fi Ffi Ff St \u0399\u0308\u0342");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ῗ", "UNICODE", "Ss Fi Ffi Ff St \u0399\u0308\u0342");
+    assertInitCap("œ ǽ", "UTF8_BINARY", "Œ Ǽ", "Œ Ǽ");
     // Different possible word boundaries.
     assertInitCap("a b c", "UTF8_BINARY", "A B C");
     assertInitCap("a b c", "UNICODE", "A B C");
@@ -1458,13 +1506,42 @@ public class CollationSupportSuite {
     assertInitCap("ǆaba ǈubav Ǌegova", "UTF8_LCASE", "ǅaba ǈubav ǋegova");
     assertInitCap("ǆaba ǈubav Ǌegova", "UNICODE_CI", "ǅaba ǈubav ǋegova");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UTF8_BINARY",
-      "ß ﬁ ﬃ ﬀ ﬆ Σημερινος Ασημενιος I\u0307ota");
+      "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota","ß ﬁ ﬃ ﬀ ﬆ Σημερινος Ασημενιος I\u0307ota");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UTF8_LCASE",
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
     assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE",
       "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
-    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE_CI",
-      "Ss Fi Ffi Ff St Σημερινος Ασημενιος İota");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ ΣΗΜΕΡςΙΝΟΣ ΑΣΗΜΕΝΙΟΣ İOTA", "UNICODE_CI",
+      "Ss Fi Ffi Ff St Σημερςινος Ασημενιος İota");
+    // Characters that map to multiple characters when titlecased and lowercased.
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ İOTA", "UTF8_BINARY", "Ss Fi Ffi Ff St İota", "ß ﬁ ﬃ ﬀ ﬆ İota");
+    assertInitCap("ß ﬁ ﬃ ﬀ ﬆ OİOTA", "UTF8_BINARY",
+      "Ss Fi Ffi Ff St Oi\u0307ota", "ß ﬁ ﬃ ﬀ ﬆ Oi̇ota");
+    // Lowercasing Greek letter sigma ('Σ') when case-ignorable character present.
+    assertInitCap("`Σ", "UTF8_BINARY", "`σ", "`σ");
+    assertInitCap("1`Σ`` AΣ", "UTF8_BINARY", "1`σ`` Aς", "1`σ`` Aς");
+    assertInitCap("a1`Σ``", "UTF8_BINARY", "A1`σ``", "A1`σ``");
+    assertInitCap("a`Σ``", "UTF8_BINARY", "A`ς``", "A`σ``");
+    assertInitCap("a`Σ``1", "UTF8_BINARY", "A`ς``1", "A`σ``1");
+    assertInitCap("a`Σ``A", "UTF8_BINARY", "A`σ``a", "A`σ``a");
+    assertInitCap("ΘΑ�Σ�ΟΣ�", "UTF8_BINARY", "Θα�σ�ος�", "Θα�σ�ος�");
+    assertInitCap("ΘΑᵩΣ�ΟᵩΣᵩ�", "UTF8_BINARY", "Θαᵩς�οᵩςᵩ�", "Θαᵩς�οᵩςᵩ�");
+    assertInitCap("ΘΑ�ᵩΣ�ΟᵩΣᵩ�", "UTF8_BINARY", "Θα�ᵩσ�οᵩςᵩ�", "Θα�ᵩσ�οᵩςᵩ�");
+    assertInitCap("ΘΑ�ᵩΣᵩ�ΟᵩΣᵩ�", "UTF8_BINARY", "Θα�ᵩσᵩ�οᵩςᵩ�", "Θα�ᵩσᵩ�οᵩςᵩ�");
+    assertInitCap("ΘΑ�Σ�Ο�Σ�", "UTF8_BINARY", "Θα�σ�ο�σ�", "Θα�σ�ο�σ�");
+    // Disallowed bytes and invalid sequences.
+    assertInitCap(UTF8String.fromBytes(new byte[] { (byte)0xC0, (byte)0xC1, (byte)0xF5}).toString(),
+      "UTF8_BINARY", "���", "���");
+    assertInitCap(UTF8String.fromBytes(
+      new byte[]{(byte)0xC0, (byte)0xC1, (byte)0xF5, 0x20, 0x61, 0x41, (byte)0xC0}).toString(),
+      "UTF8_BINARY",
+      "��� Aa�", "��� Aa�");
+    assertInitCap(UTF8String.fromBytes(new byte[]{(byte)0xC2,(byte)0xC2}).toString(),
+      "UTF8_BINARY", "��", "��");
+    assertInitCap(UTF8String.fromBytes(
+      new byte[]{0x61, 0x41, (byte)0xC2, (byte)0xC2, 0x41}).toString(),
+      "UTF8_BINARY",
+      "Aa��a", "Aa��a");
   }
 
   /**
@@ -1519,6 +1596,8 @@ public class CollationSupportSuite {
     assertStringInstr("aaadS", "Ds", "UTF8_LCASE", 4);
     assertStringInstr("aaadS", "Ds", "UNICODE", 0);
     assertStringInstr("aaadS", "Ds", "UNICODE_CI", 4);
+    assertStringInstr("aaaČŠčšcs", "cs", "SR", 8);
+    assertStringInstr("aaaČŠčšcs", "cs", "SR_CI_AI", 4);
     // Advanced tests.
     assertStringInstr("test大千世界X大千世界", "大千", "UTF8_BINARY", 5);
     assertStringInstr("test大千世界X大千世界", "大千", "UTF8_LCASE", 5);
@@ -1977,6 +2056,7 @@ public class CollationSupportSuite {
     assertStringReplace("aBc世abc", "b", "12", "UNICODE_CI", "a12c世a12c");
     assertStringReplace("a世Bcdabcd", "bC", "", "UNICODE_CI", "a世dad");
     assertStringReplace("repl世ace", "Pl", "", "UNICODE_CI", "re世ace");
+    assertStringReplace("abcčšdabĆŠscd", "cs", "", "SR_CI_AI", "abcdabscd");
     // One-to-many case mapping (e.g. Turkish dotted I).
     assertStringReplace("abi̇12", "i", "X", "UNICODE_CI", "abi̇12");
     assertStringReplace("abi̇12", "\u0307", "X", "UNICODE_CI", "abi̇12");
@@ -2170,6 +2250,8 @@ public class CollationSupportSuite {
     assertStringLocate("aa", "Aaads", 1, "UTF8_LCASE", 1);
     assertStringLocate("aa", "Aaads", 1, "UNICODE", 2);
     assertStringLocate("aa", "Aaads", 1, "UNICODE_CI", 1);
+    assertStringLocate("ćČ", "CćČČćCČĆČcČcććČč", 3, "SR", 14);
+    assertStringLocate("ćČ", "CćČČćCČĆČcČcććČč", 3, "SR_CI_AI", 3);
     // Advanced tests.
     assertStringLocate("界x", "test大千世界X大千世界", 1, "UTF8_BINARY", 0);
     assertStringLocate("界X", "test大千世界X大千世界", 1, "UTF8_BINARY", 8);
@@ -2329,6 +2411,27 @@ public class CollationSupportSuite {
     assertStringLocate("b", "a🙃x🙃b", 4, "UTF8_LCASE", 5);
     assertStringLocate("b", "a🙃x🙃b", 4, "UNICODE", 5);
     assertStringLocate("b", "a🙃x🙃b", 4, "UNICODE_CI", 5);
+    // Out of bounds test cases.
+    assertStringLocate("a", "asd", 4, "UTF8_BINARY", 0);
+    assertStringLocate("a", "asd", 4, "UTF8_LCASE", 0);
+    assertStringLocate("a", "asd", 4, "UNICODE", 0);
+    assertStringLocate("a", "asd", 4, "UNICODE_CI", 0);
+    assertStringLocate("a", "asd", 100, "UTF8_BINARY", 0);
+    assertStringLocate("a", "asd", 100, "UTF8_LCASE", 0);
+    assertStringLocate("a", "asd", 100, "UNICODE", 0);
+    assertStringLocate("a", "asd", 100, "UNICODE_CI", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UTF8_BINARY", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UTF8_LCASE", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UNICODE", 0);
+    assertStringLocate("a", "🙃🙃", 4, "UNICODE_CI", 0);
+    assertStringLocate("", "asd", 100, "UTF8_BINARY", 1);
+    assertStringLocate("", "asd", 100, "UTF8_LCASE", 1);
+    assertStringLocate("", "asd", 100, "UNICODE", 1);
+    assertStringLocate("", "asd", 100, "UNICODE_CI", 1);
+    assertStringLocate("asd", "", 100, "UTF8_BINARY", 0);
+    assertStringLocate("asd", "", 100, "UTF8_LCASE", 0);
+    assertStringLocate("asd", "", 100, "UNICODE", 0);
+    assertStringLocate("asd", "", 100, "UNICODE_CI", 0);
   }
 
   /**
@@ -2499,6 +2602,7 @@ public class CollationSupportSuite {
     assertSubstringIndex("test大千世界X大千世界", "X", 1, "UNICODE_CI", "test大千世界");
     assertSubstringIndex("test大千世界大千世界", "千", 2, "UNICODE_CI", "test大千世界大");
     assertSubstringIndex("www||APACHE||org", "||", 2, "UNICODE_CI", "www||APACHE");
+    assertSubstringIndex("wwwèapacheËorg", "Ê", -3, "AF_CI_AI", "apacheËorg");
     // One-to-many case mapping (e.g. Turkish dotted I).
     assertSubstringIndex("abİo12", "i\u0307o", 1, "UNICODE_CI", "ab");
     assertSubstringIndex("abİo12", "i\u0307o", -1, "UNICODE_CI", "12");
@@ -2721,6 +2825,7 @@ public class CollationSupportSuite {
     assertStringTrim("UNICODE_CI", "asd", "A", "sd");
     assertStringTrim("UNICODE_CI", "ASD", "a", "SD");
     assertStringTrim("UNICODE_CI", "ddsXXXaa", "ASD", "XXX");
+    assertStringTrim("SR_CI_AI", "cSCšćČXXXsčšČŠsć", "čš", "XXX");
     // One-to-many case mapping (e.g. Turkish dotted I)..
     assertStringTrim("UTF8_BINARY", "ẞaaaẞ", "ß", "ẞaaaẞ");
     assertStringTrim("UTF8_BINARY", "ßaaaß", "ẞ", "ßaaaß");
@@ -3648,6 +3753,7 @@ public class CollationSupportSuite {
     assertStringTranslate("abcdef", "abcde", "123", "UTF8_LCASE", "123f");
     assertStringTranslate("abcdef", "abcde", "123", "UNICODE", "123f");
     assertStringTranslate("abcdef", "abcde", "123", "UNICODE_CI", "123f");
+    assertStringTranslate("abcdëÈêf", "ÊèË", "123", "AF_CI", "abcd321f");
     // One-to-many case mapping (e.g. Turkish dotted I).
     assertStringTranslate("İ", "i\u0307", "xy", "UTF8_BINARY", "İ");
     assertStringTranslate("İ", "i\u0307", "xy", "UTF8_LCASE", "İ");

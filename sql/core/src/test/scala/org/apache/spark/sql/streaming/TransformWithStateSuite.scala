@@ -21,12 +21,16 @@ import java.io.File
 import java.time.Duration
 import java.util.UUID
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.scalatest.matchers.must.Matchers.be
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
+import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
+import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state._
@@ -46,14 +50,14 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState",
+      Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.clear()
@@ -73,15 +77,14 @@ class RunningCountStatefulProcessorWithTTL
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState",
-      Encoders.scalaLong, TTLConfig(Duration.ofMillis(1000)))
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig(Duration.ofMillis(1000)))
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.clear()
@@ -104,14 +107,13 @@ class RunningCountListStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getListState[Long](
-      "countState", Encoders.scalaLong)
+      "countState", Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     Iterator.empty
   }
 }
@@ -123,14 +125,14 @@ class RunningCountStatefulProcessorInt
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt)
+    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0) + 1
     if (count == 3) {
       _countState.clear()
@@ -144,37 +146,33 @@ class RunningCountStatefulProcessorInt
 
 // Class to verify stateful processor usage with adding processing time timers
 class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefulProcessor {
-  private def handleProcessingTimeBasedTimers(
-      key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _countState.clear()
-    Iterator((key, "-1"))
-  }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    if (currCount == 0 && (key == "a" || key == "c")) {
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
+        + 5000)
+    }
+
+    val count = currCount + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      if (currCount == 0 && (key == "a" || key == "c")) {
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
-          + 5000)
-      }
-
-      val count = currCount + 1
-      if (count == 3) {
-        _countState.clear()
-        Iterator.empty
-      } else {
-        _countState.update(count)
-        Iterator((key, count.toString))
-      }
-    }
+    _countState.clear()
+    Iterator((key, "-1"))
   }
 }
 
@@ -187,14 +185,8 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
       outputMode: OutputMode,
       timeMode: TimeMode) : Unit = {
     super.init(outputMode, timeMode)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
-  }
-
-  private def handleProcessingTimeBasedTimers(
-      key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _timerState.clear()
-    Iterator((key, "-1"))
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   protected def processUnexpiredRows(
@@ -221,50 +213,50 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    val count = currCount + inputRows.size
+    processUnexpiredRows(key, currCount, count, timerValues)
+    Iterator((key, count.toString))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      val count = currCount + inputRows.size
-      processUnexpiredRows(key, currCount, count, timerValues)
-      Iterator((key, count.toString))
-    }
+    _timerState.clear()
+    Iterator((key, "-1"))
   }
 }
 
 class RunningCountStatefulProcessorWithMultipleTimers
   extends RunningCountStatefulProcessor {
-  private def handleProcessingTimeBasedTimers(
+
+  override def handleInputRows(
       key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    val count = currCount + inputRows.size
+    _countState.update(count)
+    if (getHandle.listTimers().isEmpty) {
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 15000)
+      assert(getHandle.listTimers().size == 3)
+    }
+    Iterator.empty
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val currCount = _countState.getOption().getOrElse(0L)
     if (getHandle.listTimers().size == 1) {
       _countState.clear()
     }
     Iterator((key, currCount.toString))
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      val count = currCount + inputRows.size
-      _countState.update(count)
-      if (getHandle.listTimers().isEmpty) {
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 15000)
-        assert(getHandle.listTimers().size == 3)
-      }
-      Iterator.empty
-    }
   }
 }
 
@@ -278,8 +270,9 @@ class MaxEventTimeStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
-      Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+      Encoders.scalaLong, TTLConfig.NONE)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   protected def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
@@ -298,18 +291,20 @@ class MaxEventTimeStatefulProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues): Iterator[(String, Int)] = {
+    val valuesSeq = inputRows.toSeq
+    val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
+      _maxEventTimeState.getOption().getOrElse(0L))
+    processUnexpiredRows(maxEventTimeSec)
+    Iterator((key, maxEventTimeSec.toInt))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
-    if (expiredTimerInfo.isValid()) {
-      _maxEventTimeState.clear()
-      Iterator((key, -1))
-    } else {
-      val valuesSeq = inputRows.toSeq
-      val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
-        _maxEventTimeState.getOption().getOrElse(0L))
-      processUnexpiredRows(maxEventTimeSec)
-      Iterator((key, maxEventTimeSec.toInt))
-    }
+    _maxEventTimeState.clear()
+    Iterator((key, -1))
   }
 }
 
@@ -322,15 +317,16 @@ class RunningCountMostRecentStatefulProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
-    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig.NONE)
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
@@ -353,14 +349,14 @@ class MostRecentStatefulProcessorWithDeletion
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     getHandle.deleteIfExists("countState")
-    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
     var output = List[(String, String)]()
@@ -379,10 +375,10 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
-    _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong)
+    _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong,
+      TTLConfig.NONE)
     Iterator.empty
   }
 }
@@ -395,11 +391,37 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig.NONE)
     _listState = getHandle.getListState[TestClass](
-      "listState", Encoders.product[TestClass])
+      "listState", Encoders.product[TestClass], TTLConfig.NONE)
     _mapState = getHandle.getMapState[POJOTestClass, String](
-      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING)
+      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING,
+      TTLConfig.NONE)
+  }
+}
+
+// For each record, creates a timer to fire in 10 seconds that sleeps for 1 second.
+class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    inputRows.flatMap { _ =>
+      val currentTime = timerValues.getCurrentProcessingTimeInMs()
+      getHandle.registerTimer(currentTime + 10000)
+      None
+    }
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
+    Thread.sleep(1000)
+    Iterator.single(key)
   }
 }
 
@@ -433,6 +455,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - lazy iterators can properly get/set keyed state") {
+    val spark = this.spark
+    import spark.implicits._
+
     class ProcessorWithLazyIterators
       extends StatefulProcessor[Long, Long, Long] {
       @transient protected var _myValueState: ValueState[Long] = _
@@ -441,41 +466,42 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
         _myValueState = getHandle.getValueState[Long](
           "myValueState",
-          Encoders.scalaLong
+          TTLConfig.NONE
         )
       }
 
       override def handleInputRows(
           key: Long,
           inputRows: Iterator[Long],
-          timerValues: TimerValues,
-          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
+          timerValues: TimerValues): Iterator[Long] = {
         // Eagerly get/set a state variable
         _myValueState.get()
         _myValueState.update(1)
 
         // Create a timer (but only once) so that we can test timers have their implicit key set
         if (!hasSetTimer) {
-            getHandle.registerTimer(0)
-            hasSetTimer = true
+          getHandle.registerTimer(0)
+          hasSetTimer = true
         }
 
         // In both of these cases, we return a lazy iterator that gets/sets state variables.
         // This is to test that the stateful processor can handle lazy iterators.
-        //
+        inputRows.map { r =>
+          _myValueState.get()
+          _myValueState.update(r)
+          r
+        }
+      }
+
+      override def handleExpiredTimer(
+          key: Long,
+          timerValues: TimerValues,
+          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
         // The timer uses a Seq(42L) since when the timer fires, inputRows is empty.
-        if (expiredTimerInfo.isValid()) {
-          Seq(42L).iterator.map { r =>
-            _myValueState.get()
-            _myValueState.update(r)
-            r
-          }
-        } else {
-          inputRows.map { r =>
-            _myValueState.get()
-            _myValueState.update(r)
-            r
-          }
+        Seq(42L).iterator.map { r =>
+          _myValueState.get()
+          _myValueState.update(r)
+          r
         }
       }
     }
@@ -524,6 +550,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
         AddData(inputData, "a", "b"),
         CheckNewAnswer(("a", "2"), ("b", "1")),
@@ -532,6 +559,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
         CheckNewAnswer(("b", "2")),
         StopStream,
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        },
         StartStream(),
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
@@ -701,6 +732,52 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
+  test("transformWithState - timer duration should be reflected in metrics") {
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS()
+      .groupByKey(x => x)
+      .transformWithState(
+        new SleepingTimerProcessor, TimeMode.ProcessingTime(), OutputMode.Update())
+
+    testStream(result, OutputMode.Update())(
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      // Side effect: timer scheduled for t = 1 + 10 = 11.
+      CheckNewAnswer(),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+        assert(metrics.get("timerProcessingTimeMs") < 2000)
+      },
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(1 * 1000),
+      // Side effect: timer scheduled for t = 2 + 10 = 12.
+      CheckNewAnswer(),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+        assert(metrics.get("timerProcessingTimeMs") < 2000)
+      },
+
+      AddData(inputData, "c"),
+      // Time is currently 2 and we need to advance past 12. So, advance by 11 seconds.
+      AdvanceManualClock(11 * 1000),
+      CheckNewAnswer("a", "b"),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+
+        // Both timers should have fired and taken 1 second each to process.
+        assert(metrics.get("timerProcessingTimeMs") >= 2000)
+      },
+
+      StopStream
+    )
+  }
+
   test("Use statefulProcessor without transformWithState - handle should be absent") {
     val processor = new RunningCountStatefulProcessor()
     val ex = intercept[Exception] {
@@ -708,7 +785,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
     checkError(
       ex.asInstanceOf[SparkRuntimeException],
-      errorClass = "STATE_STORE_HANDLE_NOT_INITIALIZED",
+      condition = "STATE_STORE_HANDLE_NOT_INITIALIZED",
       parameters = Map.empty
     )
   }
@@ -725,8 +802,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     checkAnswer(df, Seq(("a", "1"), ("b", "1")).toDF())
   }
 
-  // TODO SPARK-48796 after restart state id will not be the same
-  ignore("transformWithState - test deleteIfExists operator") {
+  test("transformWithState - test deleteIfExists operator") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1152,7 +1228,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
             checkError(
               e.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              condition = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
               parameters = Map(
                 "configName" -> "outputMode",
                 "oldConfig" -> "Update",
@@ -1194,7 +1270,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidVariableTypeChange] { t =>
             checkError(
               t.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
+              condition = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
               parameters = Map(
                 "stateVarName" -> "countState",
                 "newType" -> "ListState",
@@ -1241,7 +1317,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreInvalidConfigAfterRestart] { e =>
             checkError(
               e.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+              condition = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
               parameters = Map(
                 "configName" -> "timeMode",
                 "oldConfig" -> "NoTime",
@@ -1293,7 +1369,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
           ExpectFailure[StateStoreValueSchemaNotCompatible] { t =>
             checkError(
               t.asInstanceOf[SparkUnsupportedOperationException],
-              errorClass = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
+              condition = "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE",
               parameters = Map(
                 "storedValueSchema" -> "StructType(StructField(value,LongType,false))",
                 "newValueSchema" ->
@@ -1427,6 +1503,495 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       }
     }
   }
+
+  private def getFiles(path: Path): Array[FileStatus] = {
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val fileManager = CheckpointFileManager.create(path, hadoopConf)
+    fileManager.list(path)
+  }
+
+  private def getStateSchemaPath(stateCheckpointPath: Path): Path = {
+    new Path(stateCheckpointPath, "_stateSchema/default/")
+  }
+
+  test("transformWithState - verify that metadata and schema logs are purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "1") {
+      withTempDir { chkptDir =>
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+        // in this test case, we are changing the state spec back and forth
+        // to trigger the writing of the schema and metadata files
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str2")),
+          CheckNewAnswer(("a", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        // assert that a metadata and schema file has been written for each run
+        // as state variables have been deleted
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 2)
+
+        val result3 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result3, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str3")),
+          CheckNewAnswer(("a", "1", "str2")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        // because we don't change the schema for this run, there won't
+        // be a new schema file written.
+        testStream(result3, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str4")),
+          CheckNewAnswer(("a", "2", "str3")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        // by the end of the test, there have been 4 batches,
+        // so the metadata and schema logs, and commitLog has been purged
+        // for batches 0 and 1 so metadata and schema files exist for batches 0, 1, 2, 3
+        // and we only need to keep metadata files for batches 2, 3, and the since schema
+        // hasn't changed between batches 2, 3, we only keep the schema file for batch 2
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 1)
+      }
+    }
+  }
+
+  test("transformWithState - verify that schema file is kept after metadata is purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "2") {
+      withTempDir { chkptDir =>
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+        // in this test case, we are changing the state spec back and forth
+        // to trigger the writing of the schema and metadata files
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str2")),
+          CheckNewAnswer(("a", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        assert(getFiles(metadataPath).length == 3)
+        assert(getFiles(stateSchemaPath).length == 2)
+
+        val result3 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result3, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str3")),
+          CheckNewAnswer(("a", "1", "str2")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        // metadata files should be kept for batches 1, 2, 3
+        // schema files should be kept for batches 0, 2, 3
+        assert(getFiles(metadataPath).length == 3)
+        assert(getFiles(stateSchemaPath).length == 3)
+        // we want to ensure that we can read batch 1 even though the
+        // metadata file for batch 0 was removed
+        val batch1Df = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.BATCH_ID, 1)
+          .load()
+
+        val batch1AnsDf = batch1Df.selectExpr(
+          "key.value AS groupingKey",
+          "value.value AS valueId")
+
+        checkAnswer(batch1AnsDf, Seq(Row("a", 2L)))
+
+        val batch3Df = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.BATCH_ID, 3)
+          .load()
+
+        val batch3AnsDf = batch3Df.selectExpr(
+          "key.value AS groupingKey",
+          "value.value AS valueId")
+        checkAnswer(batch3AnsDf, Seq(Row("a", 1L)))
+      }
+    }
+  }
+
+  test("state data source integration - value state supports time travel") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "5") {
+      withTempDir { chkptDir =>
+        // in this test case, we are changing the state spec back and forth
+        // to trigger the writing of the schema and metadata files
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "3", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "4", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "5", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "6", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "7", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str2")),
+          CheckNewAnswer(("a", "str1")),
+          AddData(inputData, ("a", "str3")),
+          CheckNewAnswer(("a", "str2")),
+          AddData(inputData, ("a", "str4")),
+          CheckNewAnswer(("a", "str3")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        // Batches 0-7: countState, mostRecent
+        // Batches 8-9: countState
+
+        // By this time, offset and commit logs for batches 0-3 have been purged.
+        // However, if we want to read the data for batch 4, we need to read the corresponding
+        // metadata and schema file for batch 4, or the latest files that correspond to
+        // batch 4 (in this case, the files were written for batch 0).
+        // We want to test the behavior where the metadata files are preserved so that we can
+        // read from the state data source, even if the commit and offset logs are purged for
+        // a particular batch
+
+        val df = spark.read.format("state-metadata").load(chkptDir.toString)
+
+        // check the min and max batch ids that we have data for
+        checkAnswer(
+          df.select(
+            "operatorId", "operatorName", "stateStoreName", "numPartitions", "minBatchId",
+            "maxBatchId"),
+          Seq(Row(0, "transformWithStateExec", "default", 5, 4, 9))
+        )
+
+        val countStateDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .option(StateSourceOptions.BATCH_ID, 4)
+          .load()
+
+        val countStateAnsDf = countStateDf.selectExpr(
+          "key.value AS groupingKey",
+          "value.value AS valueId")
+        checkAnswer(countStateAnsDf, Seq(Row("a", 5L)))
+
+        val mostRecentDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, chkptDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "mostRecent")
+          .option(StateSourceOptions.BATCH_ID, 4)
+          .load()
+
+        val mostRecentAnsDf = mostRecentDf.selectExpr(
+          "key.value AS groupingKey",
+          "value.value")
+        checkAnswer(mostRecentAnsDf, Seq(Row("a", "str1")))
+      }
+    }
+  }
+
+  test("transformWithState - verify that all metadata and schema logs are not purged") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "3") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "3", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "4", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "5", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "6", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "7", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "8", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "9", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "10", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "11", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "12", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "13", "str1")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "14", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+
+        // Metadata files exist for batches 0, 12, and the thresholdBatchId is 8
+        // as this is the earliest batchId for which the commit log is not present,
+        // so we need to keep metadata files for batch 0 so we can read the commit
+        // log correspondingly
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 1)
+      }
+    }
+  }
+
+  test("transformWithState - verify that no metadata and schema logs are purged after" +
+    " removing column family") {
+    withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+      classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key ->
+        TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
+      SQLConf.MIN_BATCHES_TO_RETAIN.key -> "3") {
+      withTempDir { chkptDir =>
+        val inputData = MemoryStream[(String, String)]
+        val result1 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new RunningCountMostRecentStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "1", "")),
+          AddData(inputData, ("a", "str1")),
+          CheckNewAnswer(("a", "2", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        testStream(result1, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "1", "")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "2", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "3", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "4", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "5", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "6", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "7", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "8", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "9", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "10", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "11", "str1")),
+          AddData(inputData, ("b", "str1")),
+          CheckNewAnswer(("b", "12", "str1")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+        val result2 = inputData.toDS()
+          .groupByKey(x => x._1)
+          .transformWithState(new MostRecentStatefulProcessorWithDeletion(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result2, OutputMode.Update())(
+          StartStream(checkpointLocation = chkptDir.getCanonicalPath),
+          AddData(inputData, ("b", "str2")),
+          CheckNewAnswer(("b", "str1")),
+          AddData(inputData, ("b", "str3")),
+          CheckNewAnswer(("b", "str2")),
+          Execute { q =>
+            eventually(timeout(Span(5, Seconds))) {
+              q.asInstanceOf[MicroBatchExecution].arePendingAsyncPurge should be(false)
+            }
+          },
+          StopStream
+        )
+
+        val stateOpIdPath = new Path(new Path(chkptDir.getCanonicalPath, "state"), "0")
+        val stateSchemaPath = getStateSchemaPath(stateOpIdPath)
+
+        val metadataPath = OperatorStateMetadataV2.metadataDirPath(stateOpIdPath)
+
+        // Metadata files are written for batches 0, 2, and 14.
+        // Schema files are written for 0, 14
+        // At the beginning of the last query run, the thresholdBatchId is 11.
+        // However, we would need both schema files to be preserved, if we want to
+        // be able to read from batch 11 onwards.
+        assert(getFiles(metadataPath).length == 2)
+        assert(getFiles(stateSchemaPath).length == 2)
+      }
+    }
+  }
 }
 
 class TransformWithStateValidationSuite extends StateStoreMetricsTest {
@@ -1466,5 +2031,25 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         }
       }
     )
+  }
+
+  test("transformWithState - validate timeModes") {
+    // validation tests should pass for TimeMode.None
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.None(), None)
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.None(), Some(10L))
+
+    // validation tests should fail for TimeMode.ProcessingTime and TimeMode.EventTime
+    // when time values are not provided
+    val ex = intercept[SparkException] {
+      TransformWithStateVariableUtils.validateTimeMode(TimeMode.ProcessingTime(), None)
+    }
+    assert(ex.getMessage.contains("Failed to find time values"))
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.ProcessingTime(), Some(10L))
+
+    val ex1 = intercept[SparkException] {
+      TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), None)
+    }
+    assert(ex1.getMessage.contains("Failed to find time values"))
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), Some(10L))
   }
 }

@@ -117,7 +117,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       exception = intercept[AnalysisException] {
         spark.readStream.table(tableIdentifier)
       },
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       parameters = Map(
         "tableName" -> "`testcat`.`table_name`",
         "operation" -> "either micro-batch or continuous scan"

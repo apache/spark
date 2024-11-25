@@ -1156,7 +1156,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
 
   test("allow group.id prefix") {
     // Group ID prefix is only supported by consumer based offset reader
-    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
+    if (sqlConf.getConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
       testGroupId("groupIdPrefix", (expected, actual) => {
         assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
           "Valid consumer groups don't contain the expected group id - " +
@@ -1167,7 +1167,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
 
   test("allow group.id override") {
     // Group ID override is only supported by consumer based offset reader
-    if (spark.conf.get(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
+    if (sqlConf.getConf(SQLConf.USE_DEPRECATED_KAFKA_OFFSET_FETCHING)) {
       testGroupId("kafka.group.id", (expected, actual) => {
         assert(actual.exists(_ === expected), "Valid consumer groups don't " +
           s"contain the expected group id - Valid consumer groups: $actual / " +

@@ -132,7 +132,7 @@ class CompressionCodecSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         CompressionCodec.createCodec(conf, "foobar")
       },
-      errorClass = "CODEC_NOT_AVAILABLE.WITH_CONF_SUGGESTION",
+      condition = "CODEC_NOT_AVAILABLE.WITH_CONF_SUGGESTION",
       parameters = Map(
         "codecName" -> "foobar",
         "configKey" -> "\"spark.io.compression.codec\"",
@@ -171,7 +171,7 @@ class CompressionCodecSuite extends SparkFunSuite {
         exception = intercept[SparkIllegalArgumentException] {
           CompressionCodec.getShortName(codecClass.toUpperCase(Locale.ROOT))
         },
-        errorClass = "CODEC_SHORT_NAME_NOT_FOUND",
+        condition = "CODEC_SHORT_NAME_NOT_FOUND",
         parameters = Map("codecName" -> codecClass.toUpperCase(Locale.ROOT)))
     }
   }

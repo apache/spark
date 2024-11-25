@@ -188,7 +188,7 @@ class PercentileSuite extends SparkFunSuite {
         StringType, DateType, TimestampType,
       CalendarIntervalType, NullType)
 
-    for(dataType <- invalidDataTypes;
+    for (dataType <- invalidDataTypes;
         frequencyType <- validFrequencyTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
@@ -207,7 +207,7 @@ class PercentileSuite extends SparkFunSuite {
       )
     }
 
-    for(dataType <- validDataTypes;
+    for (dataType <- validDataTypes;
         frequencyType <- invalidFrequencyDataTypes) {
       val child = AttributeReference("a", dataType)()
       val frq = AttributeReference("frq", frequencyType)()
@@ -410,8 +410,8 @@ class PercentileSuite extends SparkFunSuite {
           agg.update(buffer, InternalRow(1, -5))
           agg.eval(buffer)
         },
-      errorClass = "_LEGACY_ERROR_TEMP_2013",
-      parameters = Map("frequencyExpression" -> "CAST(boundreference() AS INT)"))
+      condition = "NEGATIVE_VALUES_IN_FREQUENCY_EXPRESSION",
+      parameters = Map("frequencyExpression" -> "\"boundreference()\"", "negativeValue" -> "-5L"))
   }
 
   private def compareEquals(

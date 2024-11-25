@@ -79,12 +79,12 @@ private[spark] class SparkSubmit extends Logging {
     } else {
       // For non-shell applications, enable structured logging if it's not explicitly disabled
       // via the configuration `spark.log.structuredLogging.enabled`.
-      if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
-        Logging.enableStructuredLogging()
-      } else {
-        Logging.disableStructuredLogging()
-      }
+      Utils.resetStructuredLogging(sparkConf)
     }
+
+    // We should initialize log again after `spark.log.structuredLogging.enabled` effected
+    Logging.uninitialize()
+
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
     val uninitLog = initializeLogIfNecessary(true, silent = true)
@@ -109,8 +109,13 @@ private[spark] class SparkSubmit extends Logging {
    */
   private def kill(args: SparkSubmitArguments, sparkConf: SparkConf): Unit = {
     if (RestSubmissionClient.supportsRestClient(args.master)) {
-      new RestSubmissionClient(args.master)
+      val response = new RestSubmissionClient(args.master)
         .killSubmission(args.submissionToKill)
+      if (response.success) {
+        logInfo(s"${args.submissionToKill} is killed successfully.")
+      } else {
+        logError(response.message)
+      }
     } else {
       sparkConf.set("spark.master", args.master)
       SparkSubmitUtils

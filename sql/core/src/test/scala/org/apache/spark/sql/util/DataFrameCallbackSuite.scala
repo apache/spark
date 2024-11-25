@@ -118,7 +118,7 @@ class DataFrameCallbackSuite extends QueryTest
     sparkContext.listenerBus.waitUntilEmpty()
     assert(metrics.length == 2)
 
-    assert(metrics(0)._1 == "foreach")
+    assert(metrics(0)._1 == "foreachPartition")
     assert(metrics(1)._1 == "reduce")
 
     spark.listenerManager.unregister(listener)

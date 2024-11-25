@@ -165,7 +165,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
     checkError(
       exception = e,
-      errorClass = "WRITE_STREAM_NOT_ALLOWED",
+      condition = "WRITE_STREAM_NOT_ALLOWED",
       parameters = Map.empty
     )
   }
@@ -306,7 +306,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         exception = intercept[AnalysisException] {
           df.write.mode("append").clusterBy("a").saveAsTable("clusteredTable")
         },
-        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        condition = "CLUSTERING_COLUMNS_MISMATCH",
         parameters = Map(
           "tableName" -> "spark_catalog.default.clusteredtable",
           "specifiedClusteringString" -> """[["a"]]""",
@@ -317,7 +317,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         exception = intercept[AnalysisException] {
           df.write.mode("append").clusterBy("b", "a").saveAsTable("clusteredTable")
         },
-        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        condition = "CLUSTERING_COLUMNS_MISMATCH",
         parameters = Map(
           "tableName" -> "spark_catalog.default.clusteredtable",
           "specifiedClusteringString" -> """[["b"],["a"]]""",
@@ -328,7 +328,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         exception = intercept[AnalysisException] {
           df.write.mode("append").saveAsTable("clusteredTable")
         },
-        errorClass = "CLUSTERING_COLUMNS_MISMATCH",
+        condition = "CLUSTERING_COLUMNS_MISMATCH",
         parameters = Map(
           "tableName" -> "spark_catalog.default.clusteredtable",
           "specifiedClusteringString" -> "", "existingClusteringString" -> """[["a"],["b"]]""")
@@ -455,7 +455,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           exception = intercept[AnalysisException] {
             Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
           },
-          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colName" -> "`i`",
@@ -483,7 +483,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           exception = intercept[AnalysisException] {
             Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
           },
-          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colName" -> "`i`",
@@ -495,7 +495,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           exception = intercept[AnalysisException] {
             Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
           },
-          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colName" -> "`i`",
@@ -728,7 +728,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
       exception = intercept[AnalysisException] {
         testRead(spark.read.csv(), Seq.empty, schema)
       },
-      errorClass = "UNABLE_TO_INFER_SCHEMA",
+      condition = "UNABLE_TO_INFER_SCHEMA",
       parameters = Map("format" -> "CSV")
     )
 
@@ -1066,13 +1066,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           exception = intercept[AnalysisException] {
             Seq((1, 1)).toDF("col", c0).write.bucketBy(2, c0, c1).saveAsTable("t")
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
         checkError(
           exception = intercept[AnalysisException] {
             Seq((1, 1)).toDF("col", c0).write.bucketBy(2, "col").sortBy(c0, c1).saveAsTable("t")
           },
-          errorClass = "COLUMN_ALREADY_EXISTS",
+          condition = "COLUMN_ALREADY_EXISTS",
           parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
       }
     }
@@ -1086,7 +1086,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           Seq((1, 1)).toDF(colName0, colName1).write.format(format).mode("overwrite")
             .save(tempDir.getAbsolutePath)
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> s"`${colName1.toLowerCase(Locale.ROOT)}`"))
     }
 
@@ -1099,7 +1099,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           spark.read.format(format).schema(s"$colName0 INT, $colName1 INT")
             .load(testDir.getAbsolutePath)
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> s"`${colName1.toLowerCase(Locale.ROOT)}`"))
     }
 
@@ -1112,7 +1112,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         exception = intercept[AnalysisException] {
           spark.read.format(format).load(testDir.getAbsolutePath)
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
+        condition = "COLUMN_ALREADY_EXISTS",
         parameters = Map("columnName" -> s"`${colName1.toLowerCase(Locale.ROOT)}`"))
     }
 
@@ -1142,7 +1142,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
             exception = intercept[AnalysisException] {
               spark.read.format("json").option("inferSchema", true).load(testDir.getAbsolutePath)
             },
-            errorClass = "COLUMN_ALREADY_EXISTS",
+            condition = "COLUMN_ALREADY_EXISTS",
             parameters = Map("columnName" -> s"`${c1.toLowerCase(Locale.ROOT)}`"))
           checkReadPartitionColumnDuplication("json", c0, c1, src)
 

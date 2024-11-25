@@ -21,7 +21,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ParserUtils.withOrigin
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundPlanStatement, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.errors.QueryParsingErrors
 
@@ -80,26 +80,14 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
 
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    val ctx = parser.singleStatement()
+    val ctx = parser.compoundOrSingleStatement()
     withErrorHandling(ctx, Some(sqlText)) {
-      astBuilder.visitSingleStatement(ctx) match {
+      astBuilder.visitCompoundOrSingleStatement(ctx) match {
+        case compoundBody: CompoundPlanStatement => compoundBody
         case plan: LogicalPlan => plan
         case _ =>
           val position = Origin(None, None)
           throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
-      }
-    }
-  }
-
-  /** Creates [[CompoundBody]] for a given SQL script string. */
-  override def parseScript(sqlScriptText: String): CompoundBody = parse(sqlScriptText) { parser =>
-    val ctx = parser.compoundOrSingleStatement()
-    withErrorHandling(ctx, Some(sqlScriptText)) {
-      astBuilder.visitCompoundOrSingleStatement(ctx) match {
-        case body: CompoundBody => body
-        case _ =>
-          val position = Origin(None, None)
-          throw QueryParsingErrors.sqlStatementUnsupportedError(sqlScriptText, position)
       }
     }
   }

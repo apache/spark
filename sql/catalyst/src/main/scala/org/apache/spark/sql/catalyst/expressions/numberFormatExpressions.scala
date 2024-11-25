@@ -27,12 +27,13 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DatetimeType, Decimal, DecimalType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   private lazy val numberFormatter = {
     val value = right.eval()
@@ -50,7 +51,7 @@ abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Bo
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeAnyCollation, StringTypeAnyCollation)
+    Seq(StringTypeWithCollation, StringTypeWithCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
@@ -273,7 +274,9 @@ object ToCharacterBuilder extends ExpressionBuilder {
 }
 
 case class ToCharacter(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
   private lazy val numberFormatter = {
     val value = right.eval()
     if (value != null) {
@@ -284,7 +287,8 @@ case class ToCharacter(left: Expression, right: Expression)
   }
 
   override def dataType: DataType = SQLConf.get.defaultStringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType, StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(DecimalType, StringTypeWithCollation)
   override def checkInputDataTypes(): TypeCheckResult = {
     val inputTypeCheck = super.checkInputDataTypes()
     if (inputTypeCheck.isSuccess) {

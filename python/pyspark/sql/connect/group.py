@@ -101,7 +101,7 @@ class GroupedData:
 
     def __repr__(self) -> str:
         # the expressions are not resolved here,
-        # so the string representation can be different from vanilla PySpark.
+        # so the string representation can be different from classic PySpark.
         grouping_str = ", ".join(str(e._expr) for e in self._grouping_cols)
         grouping_str = f"grouping expressions: [{grouping_str}]"
 
@@ -193,29 +193,29 @@ class GroupedData:
             session=self._df._session,
         )
 
-    def min(self, *cols: str) -> "DataFrame":
+    def min(self: "GroupedData", *cols: str) -> "DataFrame":
         return self._numeric_agg("min", list(cols))
 
     min.__doc__ = PySparkGroupedData.min.__doc__
 
-    def max(self, *cols: str) -> "DataFrame":
+    def max(self: "GroupedData", *cols: str) -> "DataFrame":
         return self._numeric_agg("max", list(cols))
 
     max.__doc__ = PySparkGroupedData.max.__doc__
 
-    def sum(self, *cols: str) -> "DataFrame":
+    def sum(self: "GroupedData", *cols: str) -> "DataFrame":
         return self._numeric_agg("sum", list(cols))
 
     sum.__doc__ = PySparkGroupedData.sum.__doc__
 
-    def avg(self, *cols: str) -> "DataFrame":
+    def avg(self: "GroupedData", *cols: str) -> "DataFrame":
         return self._numeric_agg("avg", list(cols))
 
     avg.__doc__ = PySparkGroupedData.avg.__doc__
 
     mean = avg
 
-    def count(self) -> "DataFrame":
+    def count(self: "GroupedData") -> "DataFrame":
         return self.agg(F._invoke_function("count", F.lit(1)).alias("count"))
 
     count.__doc__ = PySparkGroupedData.count.__doc__

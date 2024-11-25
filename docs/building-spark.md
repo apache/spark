@@ -72,14 +72,11 @@ This will build Spark distribution along with Python pip and R packages. For mor
 
 ## Specifying the Hadoop Version and Enabling YARN
 
-You can specify the exact version of Hadoop to compile against through the `hadoop.version` property.
-
-You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different
-from `hadoop.version`.
+You can enable the `yarn` profile and specify the exact version of Hadoop to compile against through the `hadoop.version` property.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=3.4.0 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.4.1 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
@@ -282,38 +279,6 @@ Enable the profile (e.g. 2.13):
     # For sbt
     ./build/sbt -Pscala-2.13 compile
 -->
-
-## Running Jenkins tests with GitHub Enterprise
-
-While the Spark project does not maintain its own Jenkins infrastructure, [community members like Scaleway][scaleway] do.
-
-[scaleway]: https://spark.apache.org/developer-tools.html#scaleway
-
-To run tests with Jenkins:
-
-    ./dev/run-tests-jenkins
-
-If you use an individual repository or a repository on GitHub Enterprise, export the environment variables below before running the above command.
-
-### Related environment variables
-
-<table>
-<thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
-<tr>
-  <td><code>SPARK_PROJECT_URL</code></td>
-  <td>https://github.com/apache/spark</td>
-  <td>
-    The Spark project URL of GitHub Enterprise.
-  </td>
-</tr>
-<tr>
-  <td><code>GITHUB_API_BASE</code></td>
-  <td>https://api.github.com/repos/apache/spark</td>
-  <td>
-    The Spark project API server URL of GitHub Enterprise.
-  </td>
-</tr>
-</table>
 
 # Building and testing on an IPv6-only environment
 

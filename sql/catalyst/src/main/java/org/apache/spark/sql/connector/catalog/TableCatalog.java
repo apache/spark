@@ -195,11 +195,13 @@ public interface TableCatalog extends CatalogPlugin {
    * {@link #createTable(Identifier, Column[], Transform[], Map)} instead.
    */
   @Deprecated(since = "3.4.0")
-  Table createTable(
+  default Table createTable(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException;
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("createTable");
+  }
 
   /**
    * Create a table in the catalog.

@@ -21,7 +21,7 @@ import java.nio.file.{Files, LinkOption, Path, Paths}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.connect.client.Artifact.LocalFile
+import org.apache.spark.sql.Artifact
 
 trait ClassFinder {
   def findClasses(): Iterator[Artifact]
@@ -48,7 +48,7 @@ class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
 
   private def toArtifact(path: Path): Artifact = {
     // Persist the relative path of the classfile
-    Artifact.newClassArtifact(rootDir.relativize(path), new LocalFile(path))
+    Artifact.newClassArtifact(rootDir.relativize(path), new Artifact.LocalFile(path))
   }
 
   private def isClass(path: Path): Boolean = path.toString.endsWith(".class")

@@ -65,7 +65,7 @@ trait NestedDataSourceSuiteBase extends QueryTest with SharedSparkSession {
                     .load(path)
                     .collect()
                 },
-                errorClass = "COLUMN_ALREADY_EXISTS",
+                condition = "COLUMN_ALREADY_EXISTS",
                 parameters = Map("columnName" -> "`camelcase`")
               )
             }
