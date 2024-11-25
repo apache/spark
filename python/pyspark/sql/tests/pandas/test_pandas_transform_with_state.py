@@ -504,9 +504,9 @@ class TransformWithStateInPandasTestsMixin:
                 fw.write("a, 15\n")
 
         prepare_batch1(input_path)
-        time.sleep(2)
+        time.sleep(5)
         prepare_batch2(input_path)
-        time.sleep(2)
+        time.sleep(5)
         prepare_batch3(input_path)
 
         df = self._build_test_df(input_path)
