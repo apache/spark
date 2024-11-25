@@ -19,17 +19,16 @@ package org.apache.spark.sql.execution.python
 
 import java.io.{File, FileWriter}
 
-import org.apache.spark.{SparkClassNotFoundException, SparkConf, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
-import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-abstract class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
+trait PythonDataSourceSuiteBase extends QueryTest with SharedSparkSession {
 
   protected val simpleDataSourceReaderScript: String =
     """
@@ -94,9 +93,6 @@ abstract class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSessi
 
 class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
   import IntegratedUDFTestUtils._
-
-  override protected def sparkConf: SparkConf = super.sparkConf
-    .set(StaticSQLConf.PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED, true)
 
   test("SPARK-45917: automatic registration of Python Data Source") {
     assume(shouldTestPandasUDFs)
@@ -867,21 +863,5 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       .format(dataSourceName).load()
     checkAnswer(df, Row("1", "2", "true"))
     df.write.option("foo", 1).option("bar", 2).format(dataSourceName).mode("append").save()
-  }
-}
-
-class PythonDataSourceSuiteWithStaticImportDisabled extends PythonDataSourceSuiteBase {
-  import IntegratedUDFTestUtils._
-
-  override protected def sparkConf: SparkConf = super.sparkConf
-    .set(StaticSQLConf.PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED, false)
-
-  test("SPARK-50348: make static import Python data source configurable") {
-    assume(shouldTestPandasUDFs)
-    checkError(
-      exception = intercept[SparkClassNotFoundException](
-        spark.read.format(staticSourceName).load()),
-      condition = "DATA_SOURCE_NOT_FOUND",
-      parameters = Map("provider" -> "custom_source"))
   }
 }

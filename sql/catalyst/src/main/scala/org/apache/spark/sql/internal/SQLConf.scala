@@ -5984,9 +5984,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def pythonUDFWorkerFaulthandlerEnabled: Boolean = getConf(PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED)
 
-  def pythonDataSourceStaticImportEnabled: Boolean =
-    getConf(StaticSQLConf.PYTHON_DATA_SOURCE_STATIC_IMPORT_ENABLED)
-
   def pysparkPlotMaxRows: Int = getConf(PYSPARK_PLOT_MAX_ROWS)
 
   def arrowSparkREnabled: Boolean = getConf(ARROW_SPARKR_EXECUTION_ENABLED)
