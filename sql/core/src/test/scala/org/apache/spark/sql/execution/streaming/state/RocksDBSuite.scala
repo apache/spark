@@ -795,6 +795,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val changelogReaderV3 = fileManager.getChangelogReader(
       103, checkpointUniqueId = checkpointUniqueId)
     assert(changelogReaderV3.version === 3) // getChangelogReader should return a v3 reader
+    assert(changelogReaderV3.lineage sameElements lineage)
 
     // Create a v4 writer
     val changelogWriterV4 = fileManager.getChangeLogWriter(
@@ -805,6 +806,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val changelogReaderV4 = fileManager.getChangelogReader(
       104, checkpointUniqueId = checkpointUniqueId)
     assert(changelogReaderV4.version === 4) // getChangelogReader should return a v4 reader
+    assert(changelogReaderV4.lineage sameElements lineage)
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: changelog reader / writer " +
