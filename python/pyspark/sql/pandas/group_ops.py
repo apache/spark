@@ -506,7 +506,9 @@ class PandasGroupedOpsMixin:
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
             inputRows: Optional[Iterator["PandasDataFrameLike"]] = None,
-        ) -> Tuple[Iterator["PandasDataFrameLike"], StatefulProcessorApiClient]:
+        ) -> Tuple[
+            Iterator["PandasDataFrameLike"], StatefulProcessorApiClient, StatefulProcessor, str
+        ]:
             statefulProcessorApiClient.set_implicit_key(key)
             batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps()
             # process with data rows
@@ -525,7 +527,9 @@ class PandasGroupedOpsMixin:
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
-        ) -> Iterator["PandasDataFrameLike"]:
+        ) -> Tuple[
+            Iterator["PandasDataFrameLike"], StatefulProcessorApiClient, StatefulProcessor, str
+        ]:
             handle = StatefulProcessorHandle(statefulProcessorApiClient)
 
             if statefulProcessorApiClient.handle_state == StatefulProcessorHandleState.CREATED:
@@ -549,7 +553,9 @@ class PandasGroupedOpsMixin:
             key: Any,
             inputRows: Iterator["PandasDataFrameLike"],
             initialStates: Optional[Iterator["PandasDataFrameLike"]] = None,
-        ) -> Iterator["PandasDataFrameLike"]:
+        ) -> Tuple[
+            Iterator["PandasDataFrameLike"], StatefulProcessorApiClient, StatefulProcessor, str
+        ]:
             """
             UDF for TWS operator with non-empty initial states. Possible input combinations
             of inputRows and initialStates iterator:
