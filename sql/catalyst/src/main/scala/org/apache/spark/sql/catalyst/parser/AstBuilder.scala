@@ -2151,7 +2151,7 @@ class AstBuilder extends DataTypeAstBuilder
     // that there are no unresolved string types in the expressions
     val checkStringTypes = isSessionCollationSet || contextInsideCreate(ctx)
 
-    ResolveInlineTables.canResolveInlineTable(table, checkStringTypes)
+    !checkStringTypes
   }
 
   private def contextInsideCreate(ctx: ParserRuleContext): Boolean = {

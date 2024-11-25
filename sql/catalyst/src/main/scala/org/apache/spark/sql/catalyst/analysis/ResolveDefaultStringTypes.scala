@@ -18,13 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal, NamedLambdaVariable}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.rules.RuleExecutor.ONE_MORE_ITER
-import org.apache.spark.sql.execution.command.CreateViewCommand
-import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
  * Resolves default string types in DDL commands. For DML commands, the default string type is
@@ -82,12 +80,12 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     }
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
-    case _: CreateTable | _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
+    case _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
     case _ => isCreateOrAlterPlan(plan)
   }
 
   private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
-    case _: V2CreateTablePlan | _: CreateView | _: CreateViewCommand | _: AlterViewAs => true
+    case _: V1CreateTablePlan | _: V2CreateTablePlan | _: CreateView | _: AlterViewAs => true
     case _ => false
   }
 
@@ -95,12 +93,6 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     val newType = stringTypeForDDLCommand(plan)
 
     plan resolveOperators {
-      case createTable: CreateTable =>
-        val newSchema = replaceDefaultStringType(createTable.tableDesc.schema, newType)
-          .asInstanceOf[StructType]
-        val withNewSchema = createTable.copy(createTable.tableDesc.copy(schema = newSchema))
-        transformPlan(withNewSchema, newType)
-
       case p if isCreateOrAlterPlan(p) =>
         transformPlan(p, newType)
 
@@ -205,4 +197,3 @@ case class TemporaryStringType(override val collationId: Int)
   extends StringType(collationId) {
   override def toString: String = s"TemporaryStringType($collationId)"
 }
-

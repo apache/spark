@@ -473,6 +473,7 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
 
   test("inline table in RTAS") {
     withSessionCollationAndTable("UTF8_LCASE", testTable) {
+      sql(s"CREATE TABLE $testTable (c1 STRING, c2 BOOLEAN) USING $dataSource")
       sql(s"""
            |REPLACE TABLE $testTable AS
            |SELECT *
