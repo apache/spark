@@ -20,6 +20,8 @@ package org.apache.spark.sql.scripting
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.NameParameterizedQuery
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -118,6 +120,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
+    val args: Map[String, Expression],
     override val isInternal: Boolean)
   extends LeafStatementExec with WithOrigin {
 
@@ -126,6 +129,17 @@ class SingleStatementExec(
    * Example: Statements in conditions of If/Else, While, etc.
    */
   var isExecuted = false
+
+  /**
+   * Plan with named parameters.
+   */
+  lazy val resolvedPlan: LogicalPlan = {
+    if (args.nonEmpty) {
+      NameParameterizedQuery(parsedPlan, args)
+    } else {
+      parsedPlan
+    }
+  }
 
   /** Statement is result if it is a SELECT query, and it is not in control flow condition */
   override def isResult: Boolean = parsedPlan.isInstanceOf[Project] && !isExecuted
@@ -148,7 +162,7 @@ class SingleStatementExec(
    *   The DataFrame.
    */
   def buildDataFrame(session: SparkSession): DataFrame = {
-    Dataset.ofRows(session, parsedPlan)
+    Dataset.ofRows(session, resolvedPlan)
   }
 
   override def reset(): Unit = isExecuted = false

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 
 /**
@@ -25,11 +26,12 @@ import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
  */
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
-    session: SparkSession) extends Iterator[DataFrame] {
+    session: SparkSession,
+    args: Map[String, Expression]) extends Iterator[DataFrame] {
 
   // Build the execution plan for the script
   private val executionPlan: Iterator[CompoundStatementExec] =
-    SqlScriptingInterpreter().buildExecutionPlan(sqlScript, session)
+    SqlScriptingInterpreter().buildExecutionPlan(sqlScript, session, args)
 
   private var current = getNextResult
 

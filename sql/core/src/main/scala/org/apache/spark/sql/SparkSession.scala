@@ -413,8 +413,10 @@ class SparkSession private(
    |  Everything else  |
    * ----------------- */
 
-  private def executeSqlScript(script: CompoundBody): DataFrame = {
-    val sse = new SqlScriptingExecution(script, this)
+  private def executeSqlScript(
+      script: CompoundBody,
+      args: Map[String, Expression] = Map.empty): DataFrame = {
+    val sse = new SqlScriptingExecution(script, this, args)
     var df: DataFrame = null
     var result: Option[Seq[Row]] = null
 
@@ -528,7 +530,7 @@ class SparkSession private(
       plan match {
         case compoundBody: CompoundBody =>
           // execute the SQL script
-          executeSqlScript(compoundBody)
+          executeSqlScript(compoundBody, args.transform((_, v) => lit(v).expr))
         case logicalPlan: LogicalPlan =>
           // execute the standalone SQL statement
           Dataset.ofRows(self, plan, tracker)

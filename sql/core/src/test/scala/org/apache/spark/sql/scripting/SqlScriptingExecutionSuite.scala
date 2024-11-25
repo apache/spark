@@ -19,6 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -37,9 +38,11 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
   }
 
   // Helpers
-  private def runSqlScript(sqlText: String): Seq[Array[Row]] = {
+  private def runSqlScript(
+      sqlText: String,
+      args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
-    val sse = new SqlScriptingExecution(compoundBody, spark)
+    val sse = new SqlScriptingExecution(compoundBody, spark, args)
     sse.map { df => df.collect() }.toList
   }
 

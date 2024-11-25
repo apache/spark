@@ -40,6 +40,14 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df, expected)
   }
 
+  private def verifySqlScriptResultWithNamedParams(
+      sqlText: String,
+      expected: Seq[Row],
+      args: Map[String, Any]): Unit = {
+    val df = spark.sql(sqlText, args)
+    checkAnswer(df, expected)
+  }
+
   // Tests setup
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.SQL_SCRIPTING_ENABLED.key, "true")
@@ -101,6 +109,26 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     verifySqlScriptResult(sqlScript, Seq.empty)
+  }
+
+  test("named params") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT 1;
+        |  IF :param_1 > 10 THEN
+        |    SELECT :param_2;
+        |  ELSE
+        |    SELECT :param_3;
+        |  END IF;
+        |END""".stripMargin
+    // Define a map with SQL parameters
+    val args: Map[String, Any] = Map(
+      "param_1" -> 5,
+      "param_2" -> "greater",
+      "param_3" -> "smaller"
+    )
+    verifySqlScriptResultWithNamedParams(sqlScriptText, Seq(Row("smaller")), args)
   }
 
   test("positional params") {
