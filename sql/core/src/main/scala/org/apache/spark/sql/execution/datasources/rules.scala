@@ -22,7 +22,6 @@ import java.util.Locale
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -47,6 +46,29 @@ import org.apache.spark.util.ArrayImplicits._
  * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  object UnresolvedRelationResolution {
+    def unapply(plan: LogicalPlan): Option[LogicalPlan] = {
+      plan match {
+        case u: UnresolvedRelation if maybeSQLFile(u) =>
+          try {
+            val ds = resolveDataSource(u)
+            Some(LogicalRelation(ds.resolveRelation()))
+          } catch {
+            case _: ClassNotFoundException => None
+            case e: Exception if !e.isInstanceOf[AnalysisException] =>
+              // the provider is valid, but failed to create a logical plan
+              u.failAnalysis(
+                errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
+                messageParameters = Map("dataSourceType" -> u.multipartIdentifier.head),
+                cause = e
+              )
+          }
+        case _ =>
+          None
+      }
+    }
+  }
+
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
     conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
@@ -55,7 +77,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
     val ident = unresolved.multipartIdentifier
     val dataSource = DataSource(
       sparkSession,
-      paths = Seq(CatalogUtils.stringToURI(ident.last).toString),
+      paths = Seq(ident.last),
       className = ident.head,
       options = unresolved.options.asScala.toMap)
     // `dataSource.providingClass` may throw ClassNotFoundException, the caller side will try-catch
@@ -67,6 +89,12 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
         messageParameters = Map("dataSourceType" -> ident.head))
     }
+    if (isFileFormat && ident.last.isEmpty) {
+      unresolved.failAnalysis(
+        errorClass = "INVALID_EMPTY_LOCATION",
+        messageParameters = Map("location" -> ident.last))
+    }
+
     dataSource
   }
 
@@ -82,26 +110,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       } catch {
         case _: ClassNotFoundException => r
       }
-
-    case u: UnresolvedRelation if maybeSQLFile(u) =>
-      try {
-        val ds = resolveDataSource(u)
-        LogicalRelation(ds.resolveRelation())
-      } catch {
-        case _: ClassNotFoundException => u
-        case e: SparkIllegalArgumentException if e.getCondition != null =>
-          u.failAnalysis(
-            errorClass = e.getCondition,
-            messageParameters = e.getMessageParameters.asScala.toMap,
-            cause = e)
-        case e: Exception if !e.isInstanceOf[AnalysisException] =>
-          // the provider is valid, but failed to create a logical plan
-          u.failAnalysis(
-            errorClass = "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY",
-            messageParameters = Map("dataSourceType" -> u.multipartIdentifier.head),
-            cause = e
-          )
-      }
+    case UnresolvedRelationResolution(resolvedRelation) =>
+      resolvedRelation
   }
 }
 

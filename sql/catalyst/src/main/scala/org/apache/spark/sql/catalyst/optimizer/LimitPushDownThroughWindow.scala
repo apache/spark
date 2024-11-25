@@ -43,14 +43,14 @@ object LimitPushDownThroughWindow extends Rule[LogicalPlan] {
     _.containsAllPatterns(WINDOW, LIMIT), ruleId) {
     // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
     case LocalLimit(limitExpr @ IntegerLiteral(limit),
-        window @ Window(windowExpressions, Nil, orderSpec, child))
+        window @ Window(windowExpressions, Nil, orderSpec, child, _))
       if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
         limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
     // There is a Project between LocalLimit and Window if they do not have the same output.
     case LocalLimit(limitExpr @ IntegerLiteral(limit), project @ Project(_,
-        window @ Window(windowExpressions, Nil, orderSpec, child)))
+        window @ Window(windowExpressions, Nil, orderSpec, child, _)))
       if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
         limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.

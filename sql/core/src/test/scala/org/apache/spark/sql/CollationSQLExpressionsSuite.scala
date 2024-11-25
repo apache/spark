@@ -2416,8 +2416,15 @@ class CollationSQLExpressionsSuite
            |collate('${testCase.left}', '${testCase.leftCollation}'))=
            |collate('${testCase.right}', '${testCase.rightCollation}');
            |""".stripMargin
-      val testQuery = sql(query)
-      checkAnswer(testQuery, Row(testCase.result))
+
+      if (testCase.leftCollation == testCase.rightCollation) {
+        checkAnswer(sql(query), Row(testCase.result))
+      } else {
+        val exception = intercept[AnalysisException] {
+          sql(query)
+        }
+        assert(exception.getCondition === "COLLATION_MISMATCH.EXPLICIT")
+      }
     })
 
     val queryPass =
