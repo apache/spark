@@ -449,6 +449,11 @@ case class JsonTuple(children: Seq[Expression])
   extends Generator
   with QueryErrorsBase {
 
+  override def nullable: Boolean = {
+    // a row is always returned
+    false
+  }
+
   // the json body is the first child
   @transient private lazy val jsonExpr: Expression = children.head
 
@@ -465,11 +470,6 @@ case class JsonTuple(children: Seq[Expression])
 
   // and count the number of foldable fields, we'll use this later to optimize evaluation
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
-
-  override def nullable: Boolean = {
-    // a row is always returned
-    false
-  }
 
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
     case (_, idx) => StructField(s"c$idx", children.head.dataType, nullable = true)
@@ -528,19 +528,16 @@ case class JsonTuple(children: Seq[Expression])
       refFoldableFieldNames: String,
       fieldNamesTerm: String): String = {
 
-    def genFoldableFieldNameCode(refIndexedSeq: String, i: Int): String = {
+    def getFoldableFieldName(refIndexedSeq: String, i: Int): String = {
       s"(String)((scala.Option<String>)$refIndexedSeq.apply($i)).get();"
     }
 
-    // evaluate the field names as String rather than UTF8String to
-    // optimize lookups from the json token, which is also a String
     val (fieldNamesEval, setFieldNames) = if (constantFields == fieldExpressions.length) {
-      // typically the user will provide the field names as foldable expressions
-      // so we can use the cached copy
+      // all field names are foldable, so we can use the cached copy
       val s = foldableFieldNames.zipWithIndex.map {
         case (v, i) =>
           if (v != null && v.isDefined) {
-            s"$fieldNamesTerm[$i] = ${genFoldableFieldNameCode(refFoldableFieldNames, i)};"
+            s"$fieldNamesTerm[$i] = ${getFoldableFieldName(refFoldableFieldNames, i)};"
           } else {
             s"$fieldNamesTerm[$i] = null;"
           }
@@ -561,7 +558,7 @@ case class JsonTuple(children: Seq[Expression])
       }
       (f, s)
     } else {
-      // if there is a mix of constant and non-constant expressions
+      // if there is a mix of constant and non-constant field name,
       // prefer the cached copy when available
       val codes = foldableFieldNames.zip(fieldExpressions).zipWithIndex.map {
         case ((null, expr: Expression), i) =>
@@ -577,7 +574,7 @@ case class JsonTuple(children: Seq[Expression])
           (Some(f), s)
         case ((v: Option[String], _), i) =>
           val s = if (v.isDefined) {
-            s"$fieldNamesTerm[$i] = ${genFoldableFieldNameCode(refFoldableFieldNames, i)};"
+            s"$fieldNamesTerm[$i] = ${getFoldableFieldName(refFoldableFieldNames, i)};"
           } else {
             s"$fieldNamesTerm[$i] = null;"
           }
