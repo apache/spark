@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.RuleExecutor.ONE_MORE_ITER
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType, StructType}
@@ -34,17 +35,33 @@ import org.apache.spark.sql.types.{DataType, StringType, StructType}
  * [[TemporaryStringType]] object in cases where the old type and new are equal and thus would
  * not change the plan after transformation.
  */
-class ResolveDefaultStringTypeWithTempType(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
+class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (isDDLCommand(plan)) {
+
+    val newPlan = if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
       val newType = stringTypeForDMLCommand
       transformPlan(plan, newType)
     }
-  }
 
-  override def requiresRestart: Boolean = true
+    val finalPlan = if (!replaceWithTempType || newPlan.fastEquals(plan)) {
+      newPlan
+    } else {
+      // Due to how tree transformations work and StringType object being equal to
+      // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
+      // to ensure the correct results for occurrences of default string type.
+      ResolveDefaultStringTypesWithoutTempType.apply(newPlan)
+    }
+
+    if (finalPlan == plan && finalPlan == newPlan) {
+      finalPlan.unsetTagValue(ONE_MORE_ITER)
+    } else {
+      finalPlan.setTagValue(ONE_MORE_ITER, ())
+    }
+
+    finalPlan
+  }
 
   private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType
 
@@ -74,29 +91,26 @@ class ResolveDefaultStringTypeWithTempType(replaceWithTempType: Boolean) extends
   }
 
   private def transformDDL(plan: LogicalPlan): LogicalPlan = {
+    val newType = stringTypeForDDLCommand(plan)
+
     plan resolveOperators {
       case createTable: CreateTable =>
-        val newType = stringTypeForDDLCommand(createTable)
         val newSchema = replaceDefaultStringType(createTable.tableDesc.schema, newType)
           .asInstanceOf[StructType]
         val withNewSchema = createTable.copy(createTable.tableDesc.copy(schema = newSchema))
         transformPlan(withNewSchema, newType)
 
       case p if isCreateOrAlterPlan(p) =>
-        val newType = stringTypeForDDLCommand(p)
         transformPlan(p, newType)
 
       case addCols: AddColumns =>
-        val newType = stringTypeForDDLCommand(addCols.table)
         addCols.copy(columnsToAdd = replaceColumnTypes(addCols.columnsToAdd, newType))
 
       case replaceCols: ReplaceColumns =>
-        val newType = stringTypeForDDLCommand(replaceCols.table)
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, newType))
 
       case alter: AlterColumn
         if alter.dataType.isDefined && hasDefaultStringType(alter.dataType.get) =>
-        val newType = stringTypeForDDLCommand(alter.table)
         alter.copy(dataType = Some(replaceDefaultStringType(alter.dataType.get, newType)))
     }
   }
@@ -177,12 +191,14 @@ class ResolveDefaultStringTypeWithTempType(replaceWithTempType: Boolean) extends
   }
 }
 
-case object ResolveDefaultStringTypeWithTempType
-  extends ResolveDefaultStringTypeWithTempType(replaceWithTempType = true) {}
+case object ResolveDefaultStringTypes
+  extends ResolveDefaultStringTypes(replaceWithTempType = true) {}
 
-case object ResolveDefaultStringTypeWithoutTempType
-  extends ResolveDefaultStringTypeWithTempType(replaceWithTempType = false) {}
+case object ResolveDefaultStringTypesWithoutTempType
+  extends ResolveDefaultStringTypes(replaceWithTempType = false) {}
 
 case class TemporaryStringType(override val collationId: Int)
-  extends StringType(collationId) {}
+  extends StringType(collationId) {
+  override def toString: String = s"TemporaryStringType($collationId)"
+}
 

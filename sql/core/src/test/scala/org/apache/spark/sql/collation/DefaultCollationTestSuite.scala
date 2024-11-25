@@ -187,6 +187,20 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
+  test("inline table in CTAS") {
+    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+      sql(s"""
+           |CREATE TABLE $testTable AS
+           |SELECT *
+           |FROM (VALUES ('a', 'a' = 'A'))
+           |AS inline_table(c1, c2);
+           |""".stripMargin)
+
+      assertTableColumnCollation(testTable, "c1", "UTF8_BINARY")
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c2"), Seq(Row(0)))
+    }
+  }
+
   test("subsequent analyzer iterations correctly resolve default string types") {
     // since concat coercion happens after resolving default types this test
     // makes sure that we are correctly resolving the default string types
@@ -330,15 +344,35 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
     }
   }
 
+  test("inline table in SELECT") {
+    withSessionCollation("UTF8_LCASE") {
+      val df = s"""
+           |SELECT *
+           |FROM (VALUES ('a', 'a' = 'A'))
+           |""".stripMargin
+
+      checkAnswer(sql(df), Seq(Row("a", true)))
+    }
+  }
+
+  test("inline table in insert") {
+    withSessionCollationAndTable("UTF8_LCASE", testTable) {
+      sql(s"CREATE TABLE $testTable (c1 STRING, c2 BOOLEAN) USING $dataSource")
+
+      sql(s"INSERT INTO $testTable VALUES ('a', 'a' = 'A')")
+      checkAnswer(sql(s"SELECT * FROM $testTable"), Seq(Row("a", true)))
+    }
+  }
+
   test("literals in insert inherit session level collation") {
     withSessionCollationAndTable("UTF8_LCASE", testTable) {
       sql(s"CREATE TABLE $testTable (c1 BOOLEAN) USING $dataSource")
+
       sql(s"INSERT INTO $testTable VALUES ('a' = 'A')")
-
-      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1"), Seq(Row(1)))
-
       sql(s"INSERT INTO $testTable VALUES (array_contains(array('a'), 'A'))")
-      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1"), Seq(Row(2)))
+      sql(s"INSERT INTO $testTable VALUES (CONCAT(X'68656C6C6F', 'world') = 'HELLOWORLD')")
+
+      checkAnswer(sql(s"SELECT COUNT(*) FROM $testTable WHERE c1"), Seq(Row(3)))
     }
   }
 

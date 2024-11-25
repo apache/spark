@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ColumnDefinition}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
@@ -223,4 +223,27 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     a.groupingExpressions.foreach(checkValidGroupingExprs)
     a.aggregateExpressions.foreach(checkValidAggregateExpression)
   }
+
+  /**
+   * Returns whether any of the expression in the expression tree of the input
+   * has a default string type which should be resolved first.
+   */
+  def hasExpressionWithDefaultStringType(expression: Expression): Boolean = {
+    expression.exists {
+      case e @ (_: Literal | _: ColumnDefinition | _: Cast) =>
+        hasDefaultStringType(e.dataType)
+      case _ =>
+        false
+    }
+  }
+
+  /**
+   * Returns whether the input data type has a default string type which should be resolved first.
+   */
+  def hasDefaultStringType(dataType: DataType): Boolean =
+    dataType.existsRecursively {
+      case st: StringType =>
+        st.eq(StringType)
+      case _ => false
+    }
 }
