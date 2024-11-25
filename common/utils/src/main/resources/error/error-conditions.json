@@ -3351,8 +3351,8 @@
           "The function does not support DISTINCT with WITHIN GROUP."
         ]
       },
-      "MISMATCH_WITH_DISTINCT_INPUT": {
-        "message": [
+      "MISMATCH_WITH_DISTINCT_INPUT" : {
+        "message" : [
           "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
         ]
       },
