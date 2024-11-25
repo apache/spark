@@ -1060,6 +1060,7 @@ SELECT
     lag(v, 1) IGNORE NULLS OVER w lag_1,
     lag(v, 2) IGNORE NULLS OVER w lag_2,
     lag(v, 3) IGNORE NULLS OVER w lag_3,
+    lag(v, +3) IGNORE NULLS OVER w lag_plus_3,
     nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
@@ -1071,17 +1072,17 @@ FROM
 WINDOW w AS (ORDER BY id)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,lead_0:string,lead_1:string,lead_2:string,lead_3:string,lag_0:string,lag_1:string,lag_2:string,lag_3:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string,id:int,v:string,lead_0:string,lead_1:string,lead_2:string,lead_3:string,lag_0:string,lag_1:string,lag_2:string,lag_3:string,lag_plus_3:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	NULL	x	y	z	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
-a	1	x	x	y	z	v	x	NULL	NULL	NULL	x	NULL	NULL	x	x	x
-b	2	NULL	NULL	y	z	v	NULL	x	NULL	NULL	x	NULL	NULL	x	x	x
-c	3	NULL	NULL	y	z	v	NULL	x	NULL	NULL	x	NULL	NULL	x	x	x
-a	4	y	y	z	v	NULL	y	x	NULL	NULL	x	y	NULL	x	x	y
-b	5	NULL	NULL	z	v	NULL	NULL	y	x	NULL	x	y	NULL	x	x	y
-a	6	z	z	v	NULL	NULL	z	y	x	NULL	x	y	z	x	x	z
-a	7	v	v	NULL	NULL	NULL	v	z	y	x	x	y	z	x	x	v
-a	8	NULL	NULL	NULL	NULL	NULL	NULL	v	z	y	x	y	z	x	x	v
+a	0	NULL	NULL	x	y	z	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+a	1	x	x	y	z	v	x	NULL	NULL	NULL	NULL	x	NULL	NULL	x	x	x
+b	2	NULL	NULL	y	z	v	NULL	x	NULL	NULL	NULL	x	NULL	NULL	x	x	x
+c	3	NULL	NULL	y	z	v	NULL	x	NULL	NULL	NULL	x	NULL	NULL	x	x	x
+a	4	y	y	z	v	NULL	y	x	NULL	NULL	NULL	x	y	NULL	x	x	y
+b	5	NULL	NULL	z	v	NULL	NULL	y	x	NULL	NULL	x	y	NULL	x	x	y
+a	6	z	z	v	NULL	NULL	z	y	x	NULL	NULL	x	y	z	x	x	z
+a	7	v	v	NULL	NULL	NULL	v	z	y	x	x	x	y	z	x	x	v
+a	8	NULL	NULL	NULL	NULL	NULL	NULL	v	z	y	y	x	y	z	x	x	v
 
 
 -- !query
@@ -1442,3 +1443,68 @@ a	1	2
 a	NULL	1
 b	1	1
 b	2	2
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '5' DAY PRECEDING) AS mean FROM testData
+-- !query schema
+struct<val:int,val_long:bigint,val_double:double,val_date:date,val_timestamp:timestamp,cate:string,mean:double>
+-- !query output
+1	1	1.0	2017-08-01	2017-07-31 17:00:00	a	1.0
+1	2	2.5	2017-08-02	2017-08-05 23:13:20	a	1.5
+1	NULL	1.0	2017-08-01	2017-07-31 17:00:00	b	1.0
+2	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	a	100.001
+2	3	3.3	2017-08-03	2017-08-17 13:00:00	b	3.3
+3	1	1.0	2017-08-01	2017-07-31 17:00:00	NULL	1.0
+3	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	b	100.001
+NULL	1	1.0	2017-08-01	2017-07-31 17:00:00	a	1.0
+NULL	NULL	NULL	NULL	NULL	NULL	NULL
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING) AS mean FROM testData
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "orderSpecType" : "\"DATE\"",
+    "sqlExpr" : "\"(PARTITION BY val ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN INTERVAL '1 02:03:04.001' DAY TO SECOND PRECEDING AND CURRENT ROW)\"",
+    "valueBoundaryType" : "\"INTERVAL DAY TO SECOND\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 121,
+    "fragment" : "(partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING)"
+  } ]
+}
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING) AS mean FROM testData
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "exprType" : "\"DATE\"",
+    "location" : "lower",
+    "sqlExpr" : "\"RANGE BETWEEN DATE '2024-01-01' FOLLOWING AND CURRENT ROW\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 102,
+    "fragment" : "(partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING)"
+  } ]
+}
