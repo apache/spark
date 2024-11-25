@@ -75,8 +75,6 @@ case class CreateTableAsSelectExec(
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
-  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
-
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       if (ifNotExists) {
@@ -652,15 +650,14 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
         case st: StagedTable =>
           st.commitStagedChanges()
 
-          catalog match {
-            case stagingTableCatalog: StagingTableCatalog
-                if stagingTableCatalog.supportedCustomMetrics().nonEmpty =>
-              for (taskMetric <- st.reportDriverMetrics) {
-                metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
-              }
+          val driverMetrics = st.reportDriverMetrics()
+          if (driverMetrics.nonEmpty) {
+            for (taskMetric <- driverMetrics) {
+              metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
+            }
 
-              val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-              SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+            val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+            SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
           }
         case _ =>
       }
