@@ -590,11 +590,23 @@ package object config {
     ConfigBuilder("spark.storage.decommission.fallbackStorage.path")
       .doc("The location for fallback storage during block manager decommissioning. " +
         "For example, `s3a://spark-storage/`. In case of empty, fallback storage is disabled. " +
-        "The storage should be managed by TTL because Spark will not clean it up.")
+        "The storage should be managed by TTL because Spark will not clean it up, " +
+        "unless spark.storage.decommission.fallbackStorage.cleanUp is true.")
       .version("3.1.0")
       .stringConf
       .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
       .createOptional
+
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.subPaths")
+      .doc("The fallback storage puts all files of one shuffle in one directory when this is 0. " +
+        "When this option is larger than 0, it will instead distribute the files across " +
+        "this number of subdirectories.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(_ >= 0, "The number of subdirectories must be 0 or larger.")
+      .createWithDefault(Int.MaxValue)
+
 
   private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP =
     ConfigBuilder("spark.storage.decommission.fallbackStorage.cleanUp")
