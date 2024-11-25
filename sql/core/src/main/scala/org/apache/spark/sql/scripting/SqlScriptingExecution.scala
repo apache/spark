@@ -19,7 +19,7 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
+import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, MultiResult}
 
 /**
  * SQL scripting executor - executes script and returns result statements.
@@ -53,12 +53,10 @@ class SqlScriptingExecution(
     while (currentStatement.isDefined) {
       currentStatement match {
         case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>
-          withErrorHandling() {
+          withErrorHandling {
             val df = stmt.buildDataFrame(session)
-            if (df.logicalPlan.isInstanceOf[CommandResult]) {
-              // If the statement is not a result, we need to write it to a noop sink to execute it
-              df.write.format("noop").mode("overwrite").save()
-            } else {
+            if (!df.logicalPlan.isInstanceOf[CommandResult]
+              && !df.logicalPlan.isInstanceOf[MultiResult]) {
               // If the statement is a result, we need to return it to the caller
               return Some(df)
             }
@@ -76,7 +74,7 @@ class SqlScriptingExecution(
     throw e
   }
 
-  def withErrorHandling()(f: => Unit): Unit = {
+  def withErrorHandling(f: => Unit): Unit = {
     try {
       f
     } catch {

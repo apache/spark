@@ -420,7 +420,7 @@ class SparkSession private(
     var result: Option[Seq[Row]] = None
 
     while (sse.hasNext) {
-      sse.withErrorHandling() {
+      sse.withErrorHandling {
         val df = sse.next()
         if (sse.hasNext) {
           df.write.format("noop").mode("overwrite").save()
