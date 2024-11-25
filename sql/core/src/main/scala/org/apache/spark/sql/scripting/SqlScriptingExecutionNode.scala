@@ -39,7 +39,7 @@ sealed trait CompoundStatementExec extends Logging {
   /**
    * Whether the statement originates from the SQL statement that returns the result.
    */
-  val isResult: Boolean = false
+  def isResult: Boolean = false
 
   /**
    * Reset execution of the current node.
@@ -127,7 +127,7 @@ class SingleStatementExec(
    */
   var isExecuted = false
 
-  override val isResult: Boolean = parsedPlan.isInstanceOf[Project]
+  override def isResult: Boolean = parsedPlan.isInstanceOf[Project] && !isExecuted
 
   /**
    * Get the SQL query text corresponding to this statement.
