@@ -15,13 +15,11 @@
 # limitations under the License.
 #
 
-# Image for building and testing Spark branches. Based on Ubuntu 22.04.
-# See also in https://hub.docker.com/_/ubuntu
+# See more in SPARK-39959, roxygen2 < 7.2.1
+RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat'), repos='https://cloud.r-project.org/')" && \
+    Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
+    Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
 
-LABEL org.opencontainers.image.authors="Apache Spark project <dev@spark.apache.org>"
-LABEL org.opencontainers.image.licenses="Apache-2.0"
-# Overwrite this label to avoid exposing the underlying Ubuntu OS version label
-LABEL org.opencontainers.image.version=""
-
-ENV DEBIAN_FRONTEND noninteractive
-ENV DEBCONF_NONINTERACTIVE_SEEN true
+# See more in SPARK-39735
+ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
