@@ -465,11 +465,9 @@ abstract class Star extends LeafExpression with NamedExpression {
  *               targets' columns are produced. This can either be a table name or struct name. This
  *               is a list of identifiers that is the path of the expansion.
  *
- *               This class provides the shared behavior between the classes for
- *               SELECT * ([[UnresolvedStar]])
- *               and SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]). [[UnresolvedStar]] is
- *               just a case class of this, while [[UnresolvedStarExceptOrReplace]] adds some
- *               additional logic to the expand method.
+ * This class provides the shared behavior between the classes for SELECT * ([[UnresolvedStar]])
+ * and SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]). [[UnresolvedStar]] is just a case class
+ * of this, while [[UnresolvedStarExceptOrReplace]] adds some additional logic to the expand method.
  */
 abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with Unevaluable {
   /**
