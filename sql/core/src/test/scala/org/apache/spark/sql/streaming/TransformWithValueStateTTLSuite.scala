@@ -130,7 +130,7 @@ class MultipleValueStatesTTLProcessor(
       .getValueState("valueStateTTL", Encoders.scalaInt, ttlConfig)
       .asInstanceOf[ValueStateImplWithTTL[Int]]
     _valueStateWithoutTTL = getHandle
-      .getValueState("valueState", Encoders.scalaInt)
+      .getValueState[Int]("valueState", Encoders.scalaInt, TTLConfig.NONE)
       .asInstanceOf[ValueStateImpl[Int]]
   }
 
@@ -262,7 +262,8 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
     }
   }
 
-  test("verify StateSchemaV3 writes correct SQL schema of key/value and with TTL") {
+  test("verify StateSchemaV3 writes correct SQL " +
+    "schema of key/value and with TTL") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->

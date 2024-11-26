@@ -490,7 +490,7 @@ abstract class JsonSuite
 
       // The following tests are about type coercion instead of JSON data source.
       // Here we simply forcus on the behavior of non-Ansi.
-      if(!SQLConf.get.ansiEnabled) {
+      if (!SQLConf.get.ansiEnabled) {
         // Number and Boolean conflict: resolve the type as number in this query.
         checkAnswer(
           sql("select num_bool - 10 from jsonTable where num_bool > 11"),
@@ -2078,8 +2078,8 @@ abstract class JsonSuite
             .option("mode", "FAILFAST")
             .json(path)
         },
-        condition = "_LEGACY_ERROR_TEMP_2167",
-        parameters = Map("failFastMode" -> "FAILFAST", "dataType" -> "string|bigint"))
+        condition = "INVALID_JSON_RECORD_TYPE",
+        parameters = Map("failFastMode" -> "FAILFAST", "invalidType" -> "\"STRING\"|\"BIGINT\""))
 
       val ex = intercept[SparkException] {
         spark.read

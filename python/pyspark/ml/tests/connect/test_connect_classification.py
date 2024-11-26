@@ -23,13 +23,7 @@ from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
 from pyspark.ml.tests.connect.test_legacy_mode_classification import ClassificationTestsMixin
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-torch_requirement_message = "torch is required"
-have_torch = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
+from pyspark.testing.utils import have_torch, torch_requirement_message
 
 
 @unittest.skipIf(

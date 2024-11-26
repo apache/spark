@@ -21,11 +21,12 @@ import scala.reflect.runtime.universe.TypeTag
 
 import _root_.java.util
 
-import org.apache.spark.annotation.{DeveloperApi, Stable}
+import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, ForeachFunction, ForeachPartitionFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions, AnalysisException, Column, DataFrameWriter, DataFrameWriterV2, Encoder, MergeIntoWriter, Observation, Row, TypedColumn}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.{ToScalaUDF, UDFAdaptors}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -127,6 +128,8 @@ abstract class Dataset[T] extends Serializable {
   def sparkSession: SparkSession
 
   val encoder: Encoder[T]
+
+  @DeveloperApi @Unstable def queryExecution: QueryExecution
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe. In contrast to the
@@ -1695,6 +1698,33 @@ abstract class Dataset[T] extends Serializable {
    * @since 4.0.0
    */
   def transpose(): Dataset[Row]
+
+  /**
+   * Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.
+   *
+   * The `scalar()` method is useful for extracting a `Column` object that represents a scalar
+   * value from a DataFrame, especially when the DataFrame results from an aggregation or
+   * single-value computation. This returned `Column` can then be used directly in `select`
+   * clauses or as predicates in filters on the outer DataFrame, enabling dynamic data filtering
+   * and calculations based on scalar values.
+   *
+   * @group subquery
+   * @since 4.0.0
+   */
+  def scalar(): Column
+
+  /**
+   * Return a `Column` object for an EXISTS Subquery.
+   *
+   * The `exists` method provides a way to create a boolean column that checks for the presence of
+   * related records in a subquery. When applied within a `DataFrame`, this method allows you to
+   * filter rows based on whether matching records exist in the related dataset. The resulting
+   * `Column` object can be used directly in filtering conditions or as a computed column.
+   *
+   * @group subquery
+   * @since 4.0.0
+   */
+  def exists(): Column
 
   /**
    * Define (named) metrics to observe on the Dataset. This method returns an 'observed' Dataset
