@@ -83,8 +83,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "product", // Discussed in https://github.com/apache/spark/pull/30745
       "unwrap_udt",
       "timestamp_add",
-      "timestamp_diff",
-      "outer"
+      "timestamp_diff"
     )
 
     // We only consider functions matching this pattern, this excludes symbolic and other

@@ -49,8 +49,19 @@ class SubqueryTestsMixin:
 
     def test_noop_outer(self):
         assertDataFrameEqual(
-            self.spark.range(1).select(sf.outer(sf.col("id"))),
+            self.spark.range(1).select(sf.col("id").outer()),
             self.spark.range(1).select(sf.col("id")),
+        )
+
+        with self.assertRaises(AnalysisException) as pe:
+            self.spark.range(1).select(sf.col("outer_col").outer()).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            messageParameters={"objectName": "`outer_col`", "proposal": "`id`"},
+            query_context_type=QueryContextType.DataFrame,
+            fragment="col",
         )
 
     def test_simple_uncorrelated_scalar_subquery(self):
@@ -181,7 +192,7 @@ class SubqueryTestsMixin:
                     "c1",
                     (
                         self.spark.table("t2")
-                        .where(sf.outer(sf.col("t1.c2")) == sf.col("t2.c2"))
+                        .where(sf.col("t1.c2").outer() == sf.col("t2.c2"))
                         .select(sf.max("c1"))
                         .scalar()
                     ),
@@ -198,10 +209,9 @@ class SubqueryTestsMixin:
 
             with self.subTest("in where"):
                 for cond in [
-                    sf.outer(sf.col("a")) == sf.col("c"),
-                    sf.outer("a") == sf.col("c"),
-                    sf.outer(sf.col("a") == sf.col("c")),
-                    sf.outer("a = c"),
+                    sf.col("a").outer() == sf.col("c"),
+                    (sf.col("a") == sf.col("c")).outer(),
+                    sf.expr("a = c").outer(),
                 ]:
                     with self.subTest(cond=cond):
                         assertDataFrameEqual(
@@ -219,10 +229,9 @@ class SubqueryTestsMixin:
                 df2 = self.spark.table("l").alias("t2")
 
                 for cond in [
-                    sf.col("t1.a") == sf.outer(sf.col("t2.a")),
-                    sf.col("t1.a") == sf.outer("t2.a"),
-                    sf.outer(sf.col("t1.a") == sf.col("t2.a")),
-                    sf.outer("t1.a = t2.a"),
+                    sf.col("t1.a") == sf.col("t2.a").outer(),
+                    (sf.col("t1.a") == sf.col("t2.a")).outer(),
+                    sf.expr("t1.a = t2.a").outer(),
                 ]:
                     with self.subTest(cond=cond):
                         assertDataFrameEqual(
@@ -245,7 +254,7 @@ class SubqueryTestsMixin:
                         "a",
                         (
                             self.spark.table("r")
-                            .where(sf.col("b") == sf.outer(sf.col("a")))
+                            .where(sf.col("b") == sf.col("a").outer())
                             .select(sf.sum("d"))
                             .scalar()
                             .alias("sum_d")
@@ -264,7 +273,7 @@ class SubqueryTestsMixin:
                     df1.select(
                         "a",
                         (
-                            df2.where(sf.col("t2.a").eqNullSafe(sf.outer(sf.col("t1.a"))))
+                            df2.where(sf.col("t2.a").eqNullSafe(sf.col("t1.a").outer()))
                             .select(sf.sum("b"))
                             .scalar()
                             .alias("sum_b")
@@ -284,7 +293,7 @@ class SubqueryTestsMixin:
                         "a",
                         (
                             self.spark.table("r")
-                            .where(sf.outer(sf.col("a")) == sf.col("c"))
+                            .where(sf.col("a").outer() == sf.col("c"))
                             .select(sf.sum("d"))
                             .scalar()
                             .alias("sum_d")
@@ -305,7 +314,7 @@ class SubqueryTestsMixin:
                 with self.assertRaises(SparkRuntimeException) as pe:
                     df1.select(
                         "a",
-                        df2.where(sf.col("t1.a") == sf.outer(sf.col("t2.a"))).select("b").scalar(),
+                        df2.where(sf.col("t1.a") == sf.col("t2.a").outer()).select("b").scalar(),
                     ).collect()
 
                 self.check_error(
@@ -322,7 +331,7 @@ class SubqueryTestsMixin:
                     df1.select(
                         "a",
                         (
-                            df2.where(sf.col("t2.a") < sf.outer(sf.col("t1.a")))
+                            df2.where(sf.col("t2.a") < sf.col("t1.a").outer())
                             .select(sf.sum("b"))
                             .scalar()
                             .alias("sum_b")
@@ -339,11 +348,8 @@ class SubqueryTestsMixin:
                     .where(
                         self.spark.table("r")
                         .where(
-                            ((sf.outer(sf.col("a")) == sf.col("c")) & (sf.col("d") == sf.lit(2.0)))
-                            | (
-                                (sf.outer(sf.col("a")) == sf.col("c"))
-                                & (sf.col("d") == sf.lit(1.0))
-                            )
+                            ((sf.col("a").outer() == sf.col("c")) & (sf.col("d") == sf.lit(2.0)))
+                            | ((sf.col("a").outer() == sf.col("c")) & (sf.col("d") == sf.lit(1.0)))
                         )
                         .select(sf.count(sf.lit(1)))
                         .scalar()
@@ -368,9 +374,9 @@ class SubqueryTestsMixin:
 
             with self.subTest("EXISTS"):
                 for cond in [
-                    sf.outer(sf.col("a")) == sf.col("c"),
-                    sf.outer("a") == sf.col("c"),
-                    sf.outer("a = c"),
+                    sf.col("a").outer() == sf.col("c"),
+                    (sf.col("a") == sf.col("c")).outer(),
+                    sf.expr("a = c").outer(),
                 ]:
                     with self.subTest(cond=cond):
                         assertDataFrameEqual(
@@ -395,7 +401,7 @@ class SubqueryTestsMixin:
             with self.subTest("NOT EXISTS"):
                 assertDataFrameEqual(
                     self.spark.table("l").where(
-                        ~self.spark.table("r").where(sf.outer(sf.col("a")) == sf.col("c")).exists()
+                        ~self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                     ),
                     self.spark.sql(
                         """select * from l where not exists (select * from r where l.a = r.c)"""
@@ -407,8 +413,8 @@ class SubqueryTestsMixin:
                         ~(
                             self.spark.table("r")
                             .where(
-                                (sf.outer(sf.col("a")) == sf.col("c"))
-                                & (sf.outer(sf.col("b")) < sf.col("d"))
+                                (sf.col("a").outer() == sf.col("c"))
+                                & (sf.col("b").outer() < sf.col("d"))
                             )
                             .exists()
                         )
@@ -424,8 +430,8 @@ class SubqueryTestsMixin:
             with self.subTest("EXISTS within OR"):
                 assertDataFrameEqual(
                     self.spark.table("l").where(
-                        self.spark.table("r").where(sf.outer(sf.col("a")) == sf.col("c")).exists()
-                        | self.spark.table("r").where(sf.outer(sf.col("a")) == sf.col("c")).exists()
+                        self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
+                        | self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                     ),
                     self.spark.sql(
                         """
@@ -439,11 +445,11 @@ class SubqueryTestsMixin:
                     self.spark.table("l").where(
                         self.spark.table("r")
                         .where(
-                            (sf.outer(sf.col("a")) == sf.col("c"))
-                            & (sf.outer(sf.col("b")) < sf.col("d"))
+                            (sf.col("a").outer() == sf.col("c"))
+                            & (sf.col("b").outer() < sf.col("d"))
                         )
                         .exists()
-                        | self.spark.table("r").where(sf.outer(sf.col("a")) == sf.col("c")).exists()
+                        | self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
                     ),
                     self.spark.sql(
                         """

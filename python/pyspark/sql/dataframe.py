@@ -6525,7 +6525,7 @@ class DataFrame:
         >>> employees.alias("e1").where(
         ...     sf.col("salary")
         ...     > employees.alias("e2").where(
-        ...         sf.col("e2.department_id") == sf.outer(sf.col("e1.department_id"))
+        ...         sf.col("e2.department_id") == sf.col("e1.department_id").outer()
         ...     ).select(sf.avg("salary")).scalar()
         ... ).select("name", "salary", "department_id").show()
         +-----+------+-------------+
@@ -6544,7 +6544,7 @@ class DataFrame:
         ...     sf.format_number(
         ...         sf.lit(100) * sf.col("salary") /
         ...             employees.alias("e2").where(
-        ...                 sf.col("e2.department_id") == sf.outer(sf.col("e1.department_id"))
+        ...                 sf.col("e2.department_id") == sf.col("e1.department_id").outer()
         ...             ).select(sf.sum("salary")).scalar().alias("avg_salary"),
         ...         1
         ...     ).alias("salary_proportion_in_department")
@@ -6599,7 +6599,7 @@ class DataFrame:
         >>> from pyspark.sql import functions as sf
         >>> customers.alias("c").where(
         ...     orders.alias("o").where(
-        ...         sf.col("o.customer_id") == sf.outer(sf.col("c.customer_id"))
+        ...         sf.col("o.customer_id") == sf.col("c.customer_id").outer()
         ...     ).exists()
         ... ).orderBy("customer_id").show()
         +-----------+-------------+-------+
@@ -6615,7 +6615,7 @@ class DataFrame:
         >>> from pyspark.sql import functions as sf
         >>> customers.alias("c").where(
         ...     ~orders.alias("o").where(
-        ...         sf.col("o.customer_id") == sf.outer(sf.col("c.customer_id"))
+        ...         sf.col("o.customer_id") == sf.col("c.customer_id").outer()
         ...     ).exists()
         ... ).orderBy("customer_id").show()
         +-----------+-------------+---------+
@@ -6629,7 +6629,7 @@ class DataFrame:
         >>> from pyspark.sql import functions as sf
         >>> orders.alias("o").where(
         ...     customers.alias("c").where(
-        ...         (sf.col("c.customer_id") == sf.outer(sf.col("o.customer_id")))
+        ...         (sf.col("c.customer_id") == sf.col("o.customer_id").outer())
         ...         & (sf.col("country") == "USA")
         ...     ).exists()
         ... ).orderBy("order_id").show()
