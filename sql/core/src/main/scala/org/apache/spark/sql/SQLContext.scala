@@ -17,18 +17,22 @@
 
 package org.apache.spark.sql
 
-import java.util.Properties
+import scala.reflect.runtime.universe.TypeTag
+
+import _root_.java.util.{List => JavaList, Map => JavaMap, Properties}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.{Experimental, Stable, Unstable}
-import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.api.Dataset
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ShowTables
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -36,8 +40,8 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 /**
  * The entry point for working with structured data (rows and columns) in Spark 1.x.
  *
- * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class
- * here for backward compatibility.
+ * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class here
+ * for backward compatibility.
  *
  * @groupname basic Basic Operations
  * @groupname ddl_ops Persistent Catalog DDL
@@ -51,8 +55,8 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @since 1.0.0
  */
 @Stable
-class SQLContext private[sql](override val sparkSession: SparkSession)
-  extends api.SQLContext(sparkSession) {
+class SQLContext private[sql] (override val sparkSession: SparkSession)
+    extends api.SQLContext(sparkSession) {
 
   self =>
 
@@ -72,21 +76,17 @@ class SQLContext private[sql](override val sparkSession: SparkSession)
   // TODO: move this logic into SparkSession
 
   private[sql] def sessionState: SessionState = sparkSession.sessionState
+
   private[sql] def sharedState: SharedState = sparkSession.sharedState
+
   @deprecated("Use SparkSession.sessionState.conf instead", "4.0.0")
   private[sql] def conf: SQLConf = sessionState.conf
 
   /** @inheritdoc */
-  override def sparkContext: SparkContext = sparkSession.sparkContext
+  def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
 
   /** @inheritdoc */
-  override def newSession(): SQLContext = sparkSession.newSession().sqlContext
-
-  /** @inheritdoc */
-  override def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
-
-  /** @inheritdoc */
-  override def setConf(props: Properties): Unit = {
+  def setConf(props: Properties): Unit = {
     sessionState.conf.setConf(props)
   }
 
@@ -94,20 +94,21 @@ class SQLContext private[sql](override val sparkSession: SparkSession)
     sessionState.conf.setConf(entry, value)
   }
 
+  /** @inheritdoc */
   @Experimental
   @transient
   @Unstable
-  /** @inheritdoc */
-  override def experimental: ExperimentalMethods = sparkSession.experimental
+  def experimental: ExperimentalMethods = sparkSession.experimental
 
   /** @inheritdoc */
-  override def udf: UDFRegistration = sparkSession.udf
+  def udf: UDFRegistration = sparkSession.udf
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
+
   /**
-   * (Scala-specific) Implicit methods available in Scala for converting
-   * common Scala objects into `DataFrame`s.
+   * (Scala-specific) Implicit methods available in Scala for converting common Scala objects into
+   * `DataFrame`s.
    *
    * {{{
    *   val sqlContext = new SQLContext(sc)
@@ -118,6 +119,7 @@ class SQLContext private[sql](override val sparkSession: SparkSession)
    * @since 1.3.0
    */
   object implicits extends SQLImplicits {
+
     /** @inheritdoc */
     override protected def session: SparkSession = sparkSession
   }
@@ -135,10 +137,10 @@ class SQLContext private[sql](override val sparkSession: SparkSession)
   }
 
   /** @inheritdoc */
-  override def read: DataFrameReader = sparkSession.read
+  def read: DataFrameReader = sparkSession.read
 
   /** @inheritdoc */
-  override def readStream: DataStreamReader = sparkSession.readStream
+  def readStream: DataStreamReader = sparkSession.readStream
 
   /**
    * Registers the given `DataFrame` as a temporary table in the catalog. Temporary tables exist
@@ -149,22 +151,249 @@ class SQLContext private[sql](override val sparkSession: SparkSession)
   }
 
   /** @inheritdoc */
-  override def tables(): DataFrame = {
+  def tables(): DataFrame = {
     Dataset.ofRows(sparkSession, ShowTables(CurrentNamespace, None))
   }
 
   /** @inheritdoc */
-  override def tables(databaseName: String): DataFrame = {
+  def tables(databaseName: String): DataFrame = {
     Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
   }
 
   /** @inheritdoc */
-  override def streams: StreamingQueryManager = sparkSession.streams
+  def streams: StreamingQueryManager = sparkSession.streams
 
   /** @inheritdoc */
-  override def tableNames(databaseName: String): Array[String] = {
+  def tableNames(databaseName: String): Array[String] = {
     sessionState.catalog.listTables(databaseName).map(_.table).toArray
   }
+
+  /** @inheritdoc */
+  override def sparkContext: SparkContext = super.sparkContext
+
+  /** @inheritdoc */
+  override def newSession(): SQLContext = {
+    new SQLContext(sparkSession.newSession())
+  }
+
+  /** @inheritdoc */
+  override def emptyDataFrame: Dataset[Row] = super.emptyDataFrame
+
+  /** @inheritdoc */
+  override def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): Dataset[Row] =
+    super.createDataFrame(rdd)
+
+  /** @inheritdoc */
+  override def createDataFrame[A <: Product: TypeTag](data: Seq[A]): Dataset[Row] =
+    super.createDataFrame(data)
+
+  /** @inheritdoc */
+  override def baseRelationToDataFrame(baseRelation: BaseRelation): Dataset[Row] =
+    super.baseRelationToDataFrame(baseRelation)
+
+  /** @inheritdoc */
+  @DeveloperApi
+  override def createDataFrame(rowRDD: RDD[Row], schema: StructType): Dataset[Row] =
+    super.createDataFrame(rowRDD, schema)
+
+  /** @inheritdoc */
+  override def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = super.createDataset(data)
+
+  /** @inheritdoc */
+  override def createDataset[T: Encoder](data: RDD[T]): Dataset[T] = super.createDataset(data)
+
+  /** @inheritdoc */
+  override def createDataset[T: Encoder](data: JavaList[T]): Dataset[T] =
+    super.createDataset(data)
+
+  /** @inheritdoc */
+  @DeveloperApi
+  override def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): Dataset[Row] =
+    super.createDataFrame(rowRDD, schema)
+
+  /** @inheritdoc */
+  @DeveloperApi
+  override def createDataFrame(rows: JavaList[Row], schema: StructType): Dataset[Row] =
+    super.createDataFrame(rows, schema)
+
+  /** @inheritdoc */
+  override def createDataFrame(rdd: RDD[_], beanClass: Class[_]): Dataset[Row] =
+    super.createDataFrame(rdd, beanClass)
+
+  /** @inheritdoc */
+  override def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): Dataset[Row] =
+    super.createDataFrame(rdd, beanClass)
+
+  /** @inheritdoc */
+  override def createDataFrame(data: JavaList[_], beanClass: Class[_]): Dataset[Row] =
+    super.createDataFrame(data, beanClass)
+
+  /** @inheritdoc */
+  override def createExternalTable(tableName: String, path: String): Dataset[Row] =
+    super.createExternalTable(tableName, path)
+
+  /** @inheritdoc */
+  override def createExternalTable(
+      tableName: String,
+      path: String,
+      source: String): Dataset[Row] = {
+    super.createExternalTable(tableName, path, source)
+  }
+
+  /** @inheritdoc */
+  override def createExternalTable(
+      tableName: String,
+      source: String,
+      options: JavaMap[String, String]): Dataset[Row] = {
+    super.createExternalTable(tableName, source, options)
+  }
+
+  /** @inheritdoc */
+  override def createExternalTable(
+      tableName: String,
+      source: String,
+      options: Map[String, String]): Dataset[Row] = {
+    super.createExternalTable(tableName, source, options)
+  }
+
+  /** @inheritdoc */
+  override def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: JavaMap[String, String]): Dataset[Row] = {
+    super.createExternalTable(tableName, source, schema, options)
+  }
+
+  /** @inheritdoc */
+  override def createExternalTable(
+      tableName: String,
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): Dataset[Row] = {
+    super.createExternalTable(tableName, source, schema, options)
+  }
+
+  /** @inheritdoc */
+  override def range(end: Long): Dataset[Row] = super.range(end)
+
+  /** @inheritdoc */
+  override def range(start: Long, end: Long): Dataset[Row] = super.range(start, end)
+
+  /** @inheritdoc */
+  override def range(start: Long, end: Long, step: Long): Dataset[Row] =
+    super.range(start, end, step)
+
+  /** @inheritdoc */
+  override def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[Row] =
+    super.range(start, end, step, numPartitions)
+
+  /** @inheritdoc */
+  override def sql(sqlText: String): Dataset[Row] = super.sql(sqlText)
+
+  /** @inheritdoc */
+  override def table(tableName: String): Dataset[Row] = super.table(tableName)
+
+  /** @inheritdoc */
+  override def applySchema(rowRDD: RDD[Row], schema: StructType): Dataset[Row] =
+    super.applySchema(rowRDD, schema)
+
+  /** @inheritdoc */
+  override def applySchema(rowRDD: JavaRDD[Row], schema: StructType): Dataset[Row] =
+    super.applySchema(rowRDD, schema)
+
+  /** @inheritdoc */
+  override def applySchema(rdd: RDD[_], beanClass: Class[_]): Dataset[Row] =
+    super.applySchema(rdd, beanClass)
+
+  /** @inheritdoc */
+  override def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): Dataset[Row] =
+    super.applySchema(rdd, beanClass)
+
+  /** @inheritdoc */
+  @scala.annotation.varargs
+  override def parquetFile(paths: String*): Dataset[Row] = super.parquetFile(paths: _*)
+
+  /** @inheritdoc */
+  override def jsonFile(path: String): Dataset[Row] = super.jsonFile(path)
+
+  /** @inheritdoc */
+  override def jsonFile(path: String, schema: StructType): Dataset[Row] =
+    super.jsonFile(path, schema)
+
+  /** @inheritdoc */
+  override def jsonFile(path: String, samplingRatio: Double): Dataset[Row] =
+    super.jsonFile(path, samplingRatio)
+
+  /** @inheritdoc */
+  override def jsonRDD(json: RDD[String]): Dataset[Row] = read.json(json)
+
+  /** @inheritdoc */
+  override def jsonRDD(json: JavaRDD[String]): Dataset[Row] = read.json(json)
+
+  /** @inheritdoc */
+  override def jsonRDD(json: RDD[String], schema: StructType): Dataset[Row] =
+    super.jsonRDD(json, schema)
+
+  /** @inheritdoc */
+  override def jsonRDD(json: JavaRDD[String], schema: StructType): Dataset[Row] =
+    super.jsonRDD(json, schema)
+
+  /** @inheritdoc */
+  override def jsonRDD(json: RDD[String], samplingRatio: Double): Dataset[Row] =
+    super.jsonRDD(json, samplingRatio)
+
+  /** @inheritdoc */
+  override def jsonRDD(json: JavaRDD[String], samplingRatio: Double): Dataset[Row] =
+    super.jsonRDD(json, samplingRatio)
+
+  /** @inheritdoc */
+  override def load(path: String): Dataset[Row] = super.load(path)
+
+  /** @inheritdoc */
+  override def load(path: String, source: String): Dataset[Row] = super.load(path, source)
+
+  /** @inheritdoc */
+  override def load(source: String, options: JavaMap[String, String]): Dataset[Row] =
+    super.load(source, options)
+
+  /** @inheritdoc */
+  override def load(source: String, options: Map[String, String]): Dataset[Row] =
+    super.load(source, options)
+
+  /** @inheritdoc */
+  override def load(
+      source: String,
+      schema: StructType,
+      options: JavaMap[String, String]): Dataset[Row] = {
+    super.load(source, schema, options)
+  }
+
+  /** @inheritdoc */
+  override def load(
+      source: String,
+      schema: StructType,
+      options: Map[String, String]): Dataset[Row] = {
+    super.load(source, schema, options)
+  }
+
+  /** @inheritdoc */
+  override def jdbc(url: String, table: String): Dataset[Row] = super.jdbc(url, table)
+
+  /** @inheritdoc */
+  override def jdbc(
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int): Dataset[Row] = {
+    super.jdbc(url, table, columnName, lowerBound, upperBound, numPartitions)
+  }
+
+  /** @inheritdoc */
+  override def jdbc(url: String, table: String, theParts: Array[String]): Dataset[Row] =
+    super.jdbc(url, table, theParts)
 }
 
 object SQLContext extends api.SQLContextCompanion {
@@ -173,14 +402,13 @@ object SQLContext extends api.SQLContextCompanion {
   override private[sql] type SparkContextImpl = SparkContext
 
   /** @inheritdoc */
-  override def getOrCreate(sparkContext: SparkContext): SQLContext = {
+  def getOrCreate(sparkContext: SparkContext): SQLContext = {
     SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
   }
 
   /**
-   * Converts an iterator of Java Beans to InternalRow using the provided
-   * bean info & schema. This is not related to the singleton, but is a static
-   * method for internal use.
+   * Converts an iterator of Java Beans to InternalRow using the provided bean info & schema. This
+   * is not related to the singleton, but is a static method for internal use.
    */
   private[sql] def beansToRows(
       data: Iterator[_],
@@ -188,7 +416,9 @@ object SQLContext extends api.SQLContextCompanion {
       attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     def createStructConverter(cls: Class[_], fieldTypes: Seq[DataType]): Any => InternalRow = {
       val methodConverters =
-        JavaTypeInference.getJavaBeanReadableProperties(cls).zip(fieldTypes)
+        JavaTypeInference
+          .getJavaBeanReadableProperties(cls)
+          .zip(fieldTypes)
           .map { case (property, fieldType) =>
             val method = property.getReadMethod
             method -> createConverter(method.getReturnType, fieldType)
@@ -197,16 +427,17 @@ object SQLContext extends api.SQLContextCompanion {
         if (value == null) {
           null
         } else {
-          new GenericInternalRow(
-            methodConverters.map { case (method, converter) =>
-              converter(method.invoke(value))
-            })
+          new GenericInternalRow(methodConverters.map { case (method, converter) =>
+            converter(method.invoke(value))
+          })
         }
     }
+
     def createConverter(cls: Class[_], dataType: DataType): Any => Any = dataType match {
       case struct: StructType => createStructConverter(cls, struct.map(_.dataType))
       case _ => CatalystTypeConverters.createToCatalystConverter(dataType)
     }
+
     val dataConverter = createStructConverter(beanClass, attrs.map(_.dataType))
     data.map(dataConverter)
   }
