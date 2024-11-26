@@ -19,6 +19,8 @@
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
 export PATH=$JAVA_HOME/bin:$PATH
 export SPARK_DOCS_IS_BUILT_ON_HOST=1
+# We expect to compile the R document on the host.
+export SKIP_RDOC=1
 
 # 2.Install bundler.
 gem install bundler -v 2.4.22

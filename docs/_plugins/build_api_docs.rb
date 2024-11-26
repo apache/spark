@@ -175,11 +175,6 @@ def build_python_docs
 end
 
 def build_r_docs
-  # We expect to compile the R document on the host.
-  if not (ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1')
-    return
-  end
-
   print_header "Building R API docs."
   cd("#{SPARK_PROJECT_ROOT}/R")
   system("./create-docs.sh") || raise("R doc generation failed")
