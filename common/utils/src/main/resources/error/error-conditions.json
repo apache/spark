@@ -497,6 +497,12 @@
     ],
     "sqlState" : "56000"
   },
+  "CIRCULAR_CLASS_REFERENCE" : {
+    "message" : [
+      "Cannot have circular references in class, but got the circular reference of class <t>."
+    ],
+    "sqlState" : "42602"
+  },
   "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
     "message" : [
       "<className> must override either <method1> or <method2>."
@@ -959,7 +965,7 @@
       },
       "RANGE_FRAME_INVALID_TYPE" : {
         "message" : [
-          "The data type <orderSpecType> used in the order specification does not match the data type <valueBoundaryType> which is used in the range frame."
+          "The data type <orderSpecType> used in the order specification does not support the data type <valueBoundaryType> which is used in the range frame."
         ]
       },
       "RANGE_FRAME_MULTI_ORDER" : {
@@ -2768,12 +2774,6 @@
     },
     "sqlState" : "42K0E"
   },
-  "INVALID_LOCATION" : {
-    "message" : [
-      "The location name cannot be an invalid URI, but `<location>` was given."
-    ],
-    "sqlState" : "42K05"
-  },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
       "The operator expects a deterministic expression, but the actual expression is <sqlExprs>."
@@ -3411,6 +3411,12 @@
     ],
     "sqlState" : "42K0L"
   },
+  "LABEL_ALREADY_EXISTS" : {
+    "message" : [
+      "The label <label> already exists. Choose another name or rename the existing label."
+    ],
+    "sqlState" : "42K0L"
+  },
   "LOAD_DATA_PATH_NOT_EXISTS" : {
     "message" : [
       "LOAD DATA input path does not exist: <path>."
@@ -3989,9 +3995,15 @@
     ],
     "sqlState" : "42K03"
   },
-  "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION" : {
+  "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
-      "Aggregate function <expr> is not allowed when using the pipe operator |> SELECT clause; please use the pipe operator |> AGGREGATE clause instead"
+      "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "Aggregate function <expr> is not allowed when using the pipe operator |> <clause> clause; please use the pipe operator |> AGGREGATE clause instead."
     ],
     "sqlState" : "0A000"
   },
@@ -5364,6 +5376,11 @@
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
+      "SQL_SCRIPTING" : {
+        "message" : [
+          "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
+        ]
+      },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
         "message" : [
           "Creating multiple column families with <stateStoreProvider> is not supported."
@@ -5540,6 +5557,12 @@
       }
     },
     "sqlState" : "42902"
+  },
+  "UNSUPPORTED_PARTITION_TRANSFORM" : {
+    "message" : [
+      "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
@@ -6388,11 +6411,6 @@
       "Partition column `<col>` not found in schema <schemaCatalog>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1156" : {
-    "message" : [
-      "Column <colName> not found in schema <tableSchema>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1158" : {
     "message" : [
       "Saving data into a view is not allowed."
@@ -7084,11 +7102,6 @@
       "Invalid namespace name: <namespace>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2067" : {
-    "message" : [
-      "Unsupported partition transform: <transform>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
@@ -7317,16 +7330,6 @@
   "_LEGACY_ERROR_TEMP_2131" : {
     "message" : [
       "Exception when registering StreamingQueryListener."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2138" : {
-    "message" : [
-      "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2139" : {
-    "message" : [
-      "cannot have circular references in class, but got the circular reference of class <t>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2144" : {

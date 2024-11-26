@@ -565,9 +565,11 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a-expired", timestamp="0"),
                 }
             elif batch_id == 2:
-                # watermark has not progressed, so timer registered in batch 1(watermark = 10)
-                # has not yet expired
-                assert set(batch_df.sort("id").collect()) == {Row(id="a", timestamp="15")}
+                # verify that rows and expired timer produce the expected result
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="15"),
+                    Row(id="a-expired", timestamp="10000"),
+                }
             else:
                 for q in self.spark.streams.active:
                     q.stop()

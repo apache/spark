@@ -237,7 +237,11 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs}</argLine>
+          <!--
+            SPARK-45265: The value for `-Xss` should be consistent with the configuration value
+            for `Test / javaOptions` in `Hive.settings` within `SparkBuild.scala`.
+          -->
+          <argLine>-da -Xmx4g -Xss64m -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraJavaTestArgs}</argLine>
         </configuration>
       </plugin>
       <plugin>

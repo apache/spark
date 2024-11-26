@@ -43,7 +43,7 @@ import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.requests.FetchRequest
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.StringSerializer
-import org.apache.kafka.common.utils.SystemTime
+import org.apache.kafka.common.utils.Time
 import org.apache.zookeeper.client.ZKClientConfig
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
@@ -253,7 +253,7 @@ class KafkaTestUtils(
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
     zkClient = KafkaZkClient(s"$zkHost:$zkPort", isSecure = false, zkSessionTimeout,
-      zkConnectionTimeout, 1, new SystemTime(), "test", new ZKClientConfig)
+      zkConnectionTimeout, 1, Time.SYSTEM, "test", new ZKClientConfig)
     zkReady = true
   }
 

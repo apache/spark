@@ -872,8 +872,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def unsupportedPartitionTransformError(
       transform: Transform): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2067",
-      messageParameters = Map("transform" -> transform.toString()))
+      errorClass = "UNSUPPORTED_PARTITION_TRANSFORM",
+      messageParameters = Map("transform" -> toSQLId(transform.toString)))
   }
 
   def missingDatabaseLocationError(): SparkIllegalArgumentException = {
@@ -2538,14 +2538,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
-  def invalidLocationError(
-      location: String,
-      errorClass: String,
-      cause: Throwable = null): SparkIllegalArgumentException = {
+  def invalidEmptyLocationError(location: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = errorClass,
-      messageParameters = Map("location" -> location),
-      cause = cause)
+      errorClass = "INVALID_EMPTY_LOCATION",
+      messageParameters = Map("location" -> location))
   }
 
   def malformedProtobufMessageDetectedInMessageParsingError(e: Throwable): Throwable = {

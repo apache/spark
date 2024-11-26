@@ -2,56 +2,56 @@
 -- !query
 select parse_url('http://userinfo@spark.apache.org/path?query=1#Ref', 'HOST')
 -- !query analysis
-Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, HOST, false) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, HOST)#x]
+Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, HOST, true) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, HOST)#x]
 +- OneRowRelation
 
 
 -- !query
 select parse_url('http://userinfo@spark.apache.org/path?query=1#Ref', 'PATH')
 -- !query analysis
-Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, PATH, false) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, PATH)#x]
+Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, PATH, true) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, PATH)#x]
 +- OneRowRelation
 
 
 -- !query
 select parse_url('http://userinfo@spark.apache.org/path?query=1#Ref', 'QUERY')
 -- !query analysis
-Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, QUERY, false) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, QUERY)#x]
+Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, QUERY, true) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, QUERY)#x]
 +- OneRowRelation
 
 
 -- !query
 select parse_url('http://userinfo@spark.apache.org/path?query=1#Ref', 'REF')
 -- !query analysis
-Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, REF, false) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, REF)#x]
+Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, REF, true) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, REF)#x]
 +- OneRowRelation
 
 
 -- !query
 select parse_url('http://userinfo@spark.apache.org/path?query=1#Ref', 'PROTOCOL')
 -- !query analysis
-Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, PROTOCOL, false) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, PROTOCOL)#x]
+Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, PROTOCOL, true) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, PROTOCOL)#x]
 +- OneRowRelation
 
 
 -- !query
 select parse_url('http://userinfo@spark.apache.org/path?query=1#Ref', 'FILE')
 -- !query analysis
-Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, FILE, false) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, FILE)#x]
+Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, FILE, true) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, FILE)#x]
 +- OneRowRelation
 
 
 -- !query
 select parse_url('http://userinfo@spark.apache.org/path?query=1#Ref', 'AUTHORITY')
 -- !query analysis
-Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, AUTHORITY, false) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, AUTHORITY)#x]
+Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, AUTHORITY, true) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, AUTHORITY)#x]
 +- OneRowRelation
 
 
 -- !query
 select parse_url('http://userinfo@spark.apache.org/path?query=1#Ref', 'USERINFO')
 -- !query analysis
-Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, USERINFO, false) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, USERINFO)#x]
+Project [parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, USERINFO, true) AS parse_url(http://userinfo@spark.apache.org/path?query=1#Ref, USERINFO)#x]
 +- OneRowRelation
 
 

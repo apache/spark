@@ -40,7 +40,7 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   pattern+="\|Registered signal handler for"
 
   "${SPARK_HOME}"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
-  exit 1
+  exit 0
 fi
 
 . "${SPARK_HOME}/sbin/spark-config.sh"

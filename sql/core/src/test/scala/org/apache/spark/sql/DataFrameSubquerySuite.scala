@@ -54,11 +54,18 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("unanalyzable expression") {
-    val exception = intercept[AnalysisException] {
-      spark.range(1).select($"id" === $"id".outer()).schema
-    }
+    val sub = spark.range(1).select($"id" === $"id".outer())
+
     checkError(
-      exception,
+      intercept[AnalysisException](sub.schema),
+      condition = "UNANALYZABLE_EXPRESSION",
+      parameters = Map("expr" -> "\"outer(id)\""),
+      queryContext =
+        Array(ExpectedContext(fragment = "outer", callSitePattern = getCurrentClassCallSitePattern))
+    )
+
+    checkError(
+      intercept[AnalysisException](sub.encoder),
       condition = "UNANALYZABLE_EXPRESSION",
       parameters = Map("expr" -> "\"outer(id)\""),
       queryContext =
