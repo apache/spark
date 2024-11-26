@@ -82,13 +82,27 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
       }
   }
 
-  test("empty BEGIN END block") {
+  test("empty singleCompoundStatement") {
     val sqlScriptText =
       """
         |BEGIN
         |END""".stripMargin
     val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
     assert(tree.collection.isEmpty)
+  }
+
+  test("empty beginEndCompoundBlock") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        | BEGIN
+        | END;
+        |END""".stripMargin
+    val tree = parsePlan(sqlScriptText).asInstanceOf[CompoundBody]
+    assert(tree.collection.length == 1)
+    assert(tree.collection.head.isInstanceOf[CompoundBody])
+    val innerBody = tree.collection.head.asInstanceOf[CompoundBody]
+    assert(innerBody.collection.isEmpty)
   }
 
   test("multiple ; in row - should fail") {
