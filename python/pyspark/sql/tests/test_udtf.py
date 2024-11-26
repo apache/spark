@@ -143,8 +143,15 @@ class BaseUDTFTestsMixin:
         df = self.spark.sql(
             "SELECT f.* FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b) f"
         )
+        schema = StructType(
+            [
+                StructField("a", IntegerType(), True),
+                StructField("b", IntegerType(), True),
+                StructField("c", IntegerType(), True),
+            ]
+        )
         expected = self.spark.createDataFrame(
-            [(0, 1, 1), (0, 1, -1), (1, 2, 3), (1, 2, -1)], schema=["a", "b", "c"]
+            [(0, 1, 1), (0, 1, -1), (1, 2, 3), (1, 2, -1)], schema=schema
         )
         assertDataFrameEqual(df, expected)
 
