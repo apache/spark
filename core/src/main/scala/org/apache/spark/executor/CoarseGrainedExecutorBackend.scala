@@ -494,6 +494,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
             case (ResourceProfile.OVERHEAD_MEM, request) =>
               driverConf.set(EXECUTOR_MEMORY_OVERHEAD.key, request.amount.toString + "m")
               logInfo(s"set memory_overhead to $request")
+            case (ResourceProfile.CORES, request) =>
+              driverConf.set(EXECUTOR_CORES.key, request.amount.toString)
+              logInfo(s"set executor cores to $request")
             case _ =>
           }
       }
