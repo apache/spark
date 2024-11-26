@@ -100,6 +100,27 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
+  test("SPARK-50426: should not trigger static Python data source lookup") {
+    assume(shouldTestPandasUDFs)
+    val testAppender = new LogAppender("Python data source lookup")
+    // Using builtin and Java data sources should not trigger a static
+    // Python data source lookup
+    withLogAppender(testAppender) {
+      spark.read.format("org.apache.spark.sql.test").load()
+      spark.range(3).write.mode("overwrite").format("noop").save()
+    }
+    assert(!testAppender.loggingEvents
+      .exists(msg => msg.getMessage.getFormattedMessage.contains(
+        "Loading static Python Data Sources.")))
+    // Now trigger a Python data source lookup
+    withLogAppender(testAppender) {
+      spark.read.format(staticSourceName).load()
+    }
+    assert(testAppender.loggingEvents
+      .exists(msg => msg.getMessage.getFormattedMessage.contains(
+        "Loading static Python Data Sources.")))
+  }
+
   test("simple data source") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
