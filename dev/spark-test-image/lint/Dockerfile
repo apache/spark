@@ -32,25 +32,11 @@ RUN Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https
 
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile.python
 RUN python3.9 -m pip install \
-    'black==23.9.1' \
-    'flake8==3.9.0' \
-    'googleapis-common-protos-stubs==2.2.0' \
-    'grpc-stubs==1.24.11' \
     'grpcio-status==1.67.0' \
-    'grpcio==1.67.0' \
-    'ipython' \
-    'ipython_genutils' \
-    'jinja2' \
+     'grpcio==1.67.0' \
     'matplotlib' \
-    'mypy==1.8.0' \
     'numpy==2.0.2' \
-    'numpydoc' \
-    'pandas' \
-    'pandas-stubs==1.2.0.53' \
-    'plotly>=4.8' \
     'pyarrow>=18.0.0' \
-    'pytest-mypy-plugins==1.9.3' \
-    'pytest==7.1.3' \
     && python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu \
     && python3.9 -m pip install torcheval \
     && python3.9 -m pip cache purge

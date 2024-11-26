@@ -20,3 +20,19 @@ RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y python3.9 python3.9-distutils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+
+RUN python3.9 -m pip install \
+    'black==23.9.1' \
+    'flake8==3.9.0' \
+    'googleapis-common-protos-stubs==2.2.0' \
+    'grpc-stubs==1.24.11' \
+    'ipython' \
+    'ipython_genutils' \
+    'jinja2' \
+    'mypy==1.8.0' \
+    'numpydoc' \
+    'pandas' \
+    'pandas-stubs==1.2.0.53' \
+    'plotly>=4.8' \
+    'pytest-mypy-plugins==1.9.3' \
+    'pytest==7.1.3'
