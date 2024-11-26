@@ -390,7 +390,7 @@ class AvroStateEncoder(
   // Existing remainder key schema definitions
   // Remaining Key schema and projection definitions used by the Avro Serializers
   // and Deserializers
-  private val remainingKeySchema = keyStateEncoderSpec match {
+  private lazy val remainingKeySchema = keyStateEncoderSpec match {
     case PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey) =>
       StructType(keySchema.drop(numColsPrefixKey))
     case RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals) =>
