@@ -322,7 +322,7 @@ class LocalDataToArrowConversion:
             return lambda value: value
 
     @staticmethod
-    def convert(data: Sequence[Any], schema: StructType, verifySchema: bool = False) -> "pa.Table":
+    def convert(data: Sequence[Any], schema: StructType) -> "pa.Table":
         assert isinstance(data, list) and len(data) > 0
 
         assert schema is not None and isinstance(schema, StructType)
@@ -372,8 +372,8 @@ class LocalDataToArrowConversion:
                 ]
             )
         )
-        table = pa.Table.from_arrays(pylist, schema=pa_schema)
-        return table.cast(pa_schema, safe=verifySchema)
+
+        return pa.Table.from_arrays(pylist, schema=pa_schema)
 
 
 class ArrowTableToRowsConversion:

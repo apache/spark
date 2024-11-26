@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.xml
 
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.xml.XmlInferSchema
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 object XmlExpressionEvalUtils {
@@ -38,5 +39,84 @@ object XmlExpressionEvalUtils {
     }
 
     UTF8String.fromString(dataType.sql)
+  }
+}
+
+trait XPathEvaluator {
+
+  protected val path: UTF8String
+
+  @transient protected lazy val xpathUtil: UDFXPathUtil = new UDFXPathUtil
+
+  final def evaluate(xml: UTF8String): Any = {
+    if (xml == null || xml.toString.isEmpty || path == null || path.toString.isEmpty) return null
+    doEvaluate(xml)
+  }
+
+  def doEvaluate(xml: UTF8String): Any
+}
+
+case class XPathBooleanEvaluator(path: UTF8String) extends XPathEvaluator {
+  override def doEvaluate(xml: UTF8String): Any = {
+    xpathUtil.evalBoolean(xml.toString, path.toString)
+  }
+}
+
+case class XPathShortEvaluator(path: UTF8String) extends XPathEvaluator {
+  override def doEvaluate(xml: UTF8String): Any = {
+    val ret = xpathUtil.evalNumber(xml.toString, path.toString)
+    if (ret eq null) null.asInstanceOf[Short] else ret.shortValue()
+  }
+}
+
+case class XPathIntEvaluator(path: UTF8String) extends XPathEvaluator {
+  override def doEvaluate(xml: UTF8String): Any = {
+    val ret = xpathUtil.evalNumber(xml.toString, path.toString)
+    if (ret eq null) null.asInstanceOf[Int] else ret.intValue()
+  }
+}
+
+case class XPathLongEvaluator(path: UTF8String) extends XPathEvaluator {
+  override def doEvaluate(xml: UTF8String): Any = {
+    val ret = xpathUtil.evalNumber(xml.toString, path.toString)
+    if (ret eq null) null.asInstanceOf[Long] else ret.longValue()
+  }
+}
+
+case class XPathFloatEvaluator(path: UTF8String) extends XPathEvaluator {
+  override def doEvaluate(xml: UTF8String): Any = {
+    val ret = xpathUtil.evalNumber(xml.toString, path.toString)
+    if (ret eq null) null.asInstanceOf[Float] else ret.floatValue()
+  }
+}
+
+case class XPathDoubleEvaluator(path: UTF8String) extends XPathEvaluator {
+  override def doEvaluate(xml: UTF8String): Any = {
+    val ret = xpathUtil.evalNumber(xml.toString, path.toString)
+    if (ret eq null) null.asInstanceOf[Double] else ret.doubleValue()
+  }
+}
+
+case class XPathStringEvaluator(path: UTF8String) extends XPathEvaluator {
+  override def doEvaluate(xml: UTF8String): Any = {
+    val ret = xpathUtil.evalString(xml.toString, path.toString)
+    UTF8String.fromString(ret)
+  }
+}
+
+case class XPathListEvaluator(path: UTF8String) extends XPathEvaluator {
+  override def doEvaluate(xml: UTF8String): Any = {
+    val nodeList = xpathUtil.evalNodeList(xml.toString, path.toString)
+    if (nodeList ne null) {
+      val ret = new Array[AnyRef](nodeList.getLength)
+      var i = 0
+      while (i < nodeList.getLength) {
+        ret(i) = UTF8String.fromString(nodeList.item(i).getNodeValue)
+        i += 1
+      }
+      new GenericArrayData(ret)
+    } else {
+      null
+    }
   }
 }
