@@ -24,41 +24,11 @@ ENV FULL_REFRESH_DATE 20241112
 
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    ca-certificates \
-    curl \
-    gfortran \
-    git \
-    gnupg \
-    libcurl4-openssl-dev \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libfribidi-dev \
-    libgit2-dev \
-    libharfbuzz-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libssl-dev \
-    libtiff5-dev \
-    libxml2-dev \
-    nodejs \
-    npm \
-    pkg-config \
-    qpdf \
-    r-base \
-    software-properties-common \
-    wget \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.apt-get
+RUN rm -rf /var/lib/apt/lists/*
 
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat'), repos='https://cloud.r-project.org/')" \
-    && Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" \
-    && Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" \
-    && Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" \
-
-# See more in SPARK-39735
-ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r
+RUN Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
 
 # Install Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa

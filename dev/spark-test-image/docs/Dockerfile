@@ -25,10 +25,55 @@ ENV FULL_REFRESH_DATE 20241029
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile
 
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile.apt-get
+RUN apt-get install -y \
+    liblapack-dev \
+    libopenblas-dev \
+    libpython3-dev \
+    openjdk-17-jdk-headless \
+    pandoc \
+    ruby \
+    ruby-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r \
+# See more in SPARK-39959, roxygen2 < 7.2.1
+RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
 
 # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
 # See 'ipython_genutils' in SPARK-38517
 # See 'docutils<0.18.0' in SPARK-39421
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile.python
+RUN python3.9 -m pip install  \
+    'sphinx==4.5.0'  \
+    mkdocs  \
+    'pydata_sphinx_theme>=0.13'  \
+    sphinx-copybutton  \
+    nbsphinx  \
+    numpydoc  \
+    jinja2  \
+    markupsafe  \
+    'pyzmq<24.0.0' \
+    ipython  \
+    ipython_genutils  \
+    sphinx_plotly_directive  \
+    'numpy>=1.20.0'  \
+    pyarrow  \
+    pandas  \
+    'plotly>=4.8'  \
+    'docutils<0.18.0' \
+    'flake8==3.9.0'  \
+    'mypy==1.8.0'  \
+    'pytest==7.1.3'  \
+    'pytest-mypy-plugins==1.9.3'  \
+    'black==23.9.1' \
+    'pandas-stubs==1.2.0.53'  \
+    'grpcio==1.62.0'  \
+    'grpcio-status==1.62.0'  \
+    'grpc-stubs==1.24.11'  \
+    'googleapis-common-protos-stubs==2.2.0' \
+    'sphinxcontrib-applehelp==1.0.4'  \
+    'sphinxcontrib-devhelp==1.0.2'  \
+    'sphinxcontrib-htmlhelp==2.0.1'  \
+    'sphinxcontrib-qthelp==1.0.3'  \
+    'sphinxcontrib-serializinghtml==1.1.5' \
+    && python3.9 -m pip cache purge \

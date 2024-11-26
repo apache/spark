@@ -24,34 +24,12 @@ ENV FULL_REFRESH_DATE 20241114
 
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    ca-certificates \
-    curl \
-    gfortran \
-    git \
-    gnupg \
-    libcurl4-openssl-dev \
-    libfontconfig1-dev \
-    libfreetype6-dev \
-    libfribidi-dev \
-    libgit2-dev \
-    libharfbuzz-dev \
-    libjpeg-dev \
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.apt-get
+RUN apt-get install -y \
     liblapack-dev \
     libopenblas-dev \
-    libpng-dev \
     libpython3-dev \
-    libssl-dev \
-    libtiff5-dev \
-    libxml2-dev \
     pandoc \
-    pkg-config \
-    qpdf \
-    r-base \
-    software-properties-common \
-    wget \
-    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN echo 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' >> /etc/apt/sources.list
@@ -59,14 +37,9 @@ RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57C
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r \
 # See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown',  \
-    'rmarkdown', 'testthat', 'devtools', 'e1071', 'survival', 'arrow',  \
+RUN Rscript -e "install.packages(c('devtools', 'e1071', 'survival', 'arrow',  \
     'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')" && \
     Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')" && \
-    Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')" && \
-    Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" && \
-    Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')"
-
-# See more in SPARK-39735
-ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
+    Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
