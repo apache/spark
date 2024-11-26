@@ -182,14 +182,8 @@ trait TTLState {
    * This method can be called at any time in the micro-batch execution,
    * as long as it is allowed to complete before subsequent state operations are
    * issued. Operations to the state variable should not be issued concurrently while
-   * this is running.
-   *
-   * (Why? Some cleanup operations leave the state store in an inconsistent state while
-   * they are doing cleanup. For example, they may choose to get an iterator over all
-   * of the existing values, delete all values, and then re-insert only the non-expired
-   * values from the iterator. If a get is issued after the delete happens but before the
-   * re-insertion completes, the get could return null even when the value does actually
-   * exist.)
+   * this is running, since it may leave the state variable in an inconsistent state
+   * as it cleans up.
    *
    * @return number of values cleaned up.
    */
@@ -205,6 +199,111 @@ trait TTLState {
    * be invoked for each of those keys.
    */
   def clearAllStateForElementKey(elementKey: UnsafeRow): Unit
+}
+
+/**
+ * OneToOneTTLState is an implementation of [[TTLState]] that is used to manage
+ * TTL for state variables that need a single secondary index to efficiently manage
+ * records with an expiration.
+ *
+ * The primary index for state variables that can use a [[OneToOneTTLState]] have
+ * the form of: [elementKey -> (value, elementExpiration)]. You'll notice that, given
+ * a timestamp, it would take linear time to probe the primary index for all of its
+ * expired values.
+ *
+ * As a result, this class uses helper methods from [[TTLState]] to maintain the secondary
+ * index from [(elementExpiration, elementKey) -> EMPTY_ROW].
+ *
+ * For an explanation of why this structure is not always sufficient (e.g. why the class
+ * [[OneToManyTTLState]] is needed), please visit its class-doc comment.
+ */
+abstract class OneToOneTTLState(
+    stateNameArg: String,
+    storeArg: StateStore,
+    elementKeySchemaArg: StructType,
+    ttlConfigArg: TTLConfig,
+    batchTimestampMsArg: Long,
+    metricsArg: Map[String, SQLMetric]) extends TTLState {
+  override def stateName: String = stateNameArg
+  override def store: StateStore = storeArg
+  override def elementKeySchema: StructType = elementKeySchemaArg
+  override def ttlConfig: TTLConfig = ttlConfigArg
+  override def batchTimestampMs: Long = batchTimestampMsArg
+  override def metrics: Map[String, SQLMetric] = metricsArg
+
+  /**
+   * This method updates the TTL for the given elementKey to be expirationMs,
+   * updating both the primary and secondary indices if needed.
+   *
+   * Note that an elementKey may be the state variable's grouping key, _or_ it
+   * could be a composite key. MapState is an example of a state variable that
+   * has composite keys, which has the structure of the groupingKey followed by
+   * the specific key in the map. This method doesn't need to know what type of
+   * key is being used, though, since in either case, it's just an UnsafeRow.
+   *
+   * @param elementKey the key for which the TTL should be updated, which may
+   *                   either be the encoded grouping key, or the grouping key
+   *                   and some user-defined key.
+   * @param elementValue the value to update the primary index with. It is of the
+   *                     form (value, expirationMs).
+   * @param expirationMs the new expiration timestamp to use for elementKey.
+   */
+  def updatePrimaryAndSecondaryIndices(
+      elementKey: UnsafeRow,
+      elementValue: UnsafeRow,
+      expirationMs: Long): Unit = {
+    val existingPrimaryValue = store.get(elementKey, stateName)
+
+    // Doesn't exist. Insert into the primary and TTL indexes.
+    if (existingPrimaryValue == null) {
+      store.put(elementKey, elementValue, stateName)
+      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+      insertIntoTTLIndex(expirationMs, elementKey)
+    } else {
+      // The new value and the existing one may differ in either timestamp or in actual
+      // value. In either case, we need to update the primary index.
+      if (elementValue != existingPrimaryValue) {
+        store.put(elementKey, elementValue, stateName)
+        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+      }
+
+      // However, the TTL index might already have the correct mapping from expirationMs to
+      // elementKey. But if it doesn't, then we need to update the TTL index.
+      val existingExpirationMs = existingPrimaryValue.getLong(1)
+      if (existingExpirationMs != expirationMs) {
+        deleteFromTTLIndex(existingExpirationMs, elementKey)
+        insertIntoTTLIndex(expirationMs, elementKey)
+      }
+    }
+  }
+
+  override def clearExpiredStateForAllKeys(): Long = {
+    var numValuesExpired = 0L
+
+    ttlEvictionIterator().foreach { ttlKey =>
+      // Delete from secondary index
+      deleteFromTTLIndex(ttlKey)
+      // Delete from primary index
+      store.remove(toTTLRow(ttlKey).elementKey, stateName)
+
+      numValuesExpired += 1
+    }
+
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", numValuesExpired)
+    numValuesExpired
+  }
+
+  override def clearAllStateForElementKey(elementKey: UnsafeRow): Unit = {
+    val existingPrimaryValue = store.get(elementKey, stateName)
+    if (existingPrimaryValue != null) {
+      val existingExpirationMs = existingPrimaryValue.getLong(1)
+
+      store.remove(elementKey, stateName)
+      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
+
+      deleteFromTTLIndex(existingExpirationMs, elementKey)
+    }
+  }
 }
 
 /**
@@ -224,36 +323,16 @@ trait TTLState {
  * like (expirationMs, groupingKey) -> EMPTY_ROW. This way, we can quickly find all the
  * grouping keys that contain at least one element that has expired.
  *
- * There is some trickiness here, though. Suppose we have an element key `k` that
- * has a list with one value `v1` that expires at time `t1`. Our primary index looks like
- * k -> [(v1, t1)]; our secondary index looks like [(t1, k) -> EMPTY_ROW]. Now, we add another
- * value to the list, `v2`, that expires at time `t2`. The primary index updates to be
- * k -> [v1, v2]. However, how do we update our secondary index? We already have an entry
- * in our secondary index for `k`, but it's prefixed with `t1`, which we don't know at the
- * time of inserting `v2`.
+ * To make sure that we aren't "late" in cleaning up expired values, this secondary index
+ * maps from the minimum expiration in a list and a grouping key to the EMPTY_VALUE. This
+ * index is called the "TTL index" in the code (to be consistent with [[OneToOneTTLState]]),
+ * though it behaves more like a work queue of lists that need to be cleaned up.
  *
- * So, do we:
- *    1. Blindly add (t2, k) -> EMPTY_ROW to the secondary index?
- *    2. Delete (t1, k) from the secondary index, and then add (t2, k) -> EMPTY_ROW?
+ * Since a grouping key may have a large list and we need to quickly know what the
+ * minimum expiration is, we need to reverse this work queue index. This reversed index
+ * maps from key to the minimum expiration in the list, and it is called the "min-index".
  *
- * We prefer option 2 because it avoids us from having many entries in the secondary
- * index for the same grouping key. But when we have (t2, k), how do we know to delete
- * (t1, k)? How do we know that t1 is prefixing k in the secondary index?
- *
- * To solve this, we introduce another index that maps element key to the the
- * minimum expiry timestamp for that element key. It is called the min-expiry index.
- * With it, we can know how to update our secondary index, and we can still range-scan
- * the TTL index to find all the keys that have expired.
- *
- * In our previous example, we'd use this min-expiry index to tell us whether `t2` was
- * smaller than the minimum expiration on-file for `k`. If it were smaller, we'd update
- * the TTL index, and the min-expiry index. If not, then we'd just update the primary
- * index. When the batchTimestampMs exceeded `t1`, we'd know to clean up `k` since it would
- * contain at least one expired value. When iterating through the many values for this `k`,
- * we'd then be able to find the next minimum value to insert back into the secondary and
- * min-expiry index.
- *
- * All of this logic is implemented by the updatePrimaryAndSecondaryIndices function.
+ * Note: currently, this is only used by ListState with TTL.
  */
 abstract class OneToManyTTLState(
     stateNameArg: String,
@@ -303,7 +382,6 @@ abstract class OneToManyTTLState(
     NoPrefixKeyStateEncoderSpec(elementKeySchema),
     isInternal = true
   )
-
 
   /**
    * Function to get the number of entries in the list state for a given grouping key
@@ -391,14 +469,6 @@ abstract class OneToManyTTLState(
     } else {
       val existingMinExpiration = existingMinExpirationUnsafeRow.getLong(0)
 
-      // If we're overwriting the primary index (via a put, not an append), then we need
-      // to definitely clear out the secondary index entries. Why? Suppose we had expirations
-      // 5, 10, and 15. If we overwrite, then none of those expirations are valid anymore.
-      //
-      // If we're not overwriting the primary index, there is still a case where we need to
-      // modify the secondary index. This is if the new expiration is less than the existing
-      // expiration. In that case, we must delete from the TTL index, and then reinsert into
-      // the TTL index, and then overwrite the min index.
       if (overwritePrimaryIndex || expirationMs < existingMinExpiration) {
         // We don't actually have to delete from the min index, since we're going
         // to overwrite it on the next line. However, since the TTL index has the existing
@@ -484,112 +554,6 @@ abstract class OneToManyTTLState(
     store
       .iterator(MIN_INDEX)
       .map(kv => (kv.key, kv.value.getLong(0)))
-  }
-}
-
-
-/**
- * OneToOneTTLState is an implementation of [[TTLState]] that is used to manage
- * TTL for state variables that need a single secondary index to efficiently manage
- * records with an expiration.
- *
- * The primary index for state variables that can use a [[OneToOneTTLState]] have
- * the form of: [elementKey -> (value, elementExpiration)]. You'll notice that, given
- * a timestamp, it would take linear time to probe the primary index for all of its
- * expired values.
- *
- * As a result, this class uses helper methods from [[TTLState]] to maintain the secondary
- * index from [(elementExpiration, elementKey) -> EMPTY_ROW].
- *
- * For an explanation of why this structure is not always sufficient (e.g. why the class
- * [[OneToManyTTLState]] is needed), please visit its class-doc comment.
- */
-abstract class OneToOneTTLState(
-    stateNameArg: String,
-    storeArg: StateStore,
-    elementKeySchemaArg: StructType,
-    ttlConfigArg: TTLConfig,
-    batchTimestampMsArg: Long,
-    metricsArg: Map[String, SQLMetric]) extends TTLState {
-  override def stateName: String = stateNameArg
-  override def store: StateStore = storeArg
-  override def elementKeySchema: StructType = elementKeySchemaArg
-  override def ttlConfig: TTLConfig = ttlConfigArg
-  override def batchTimestampMs: Long = batchTimestampMsArg
-  override def metrics: Map[String, SQLMetric] = metricsArg
-
-  /**
-   * This method updates the TTL for the given elementKey to be expirationMs,
-   * updating both the primary and secondary indices if needed.
-   *
-   * Note that an elementKey may be the state variable's grouping key, _or_ it
-   * could be a composite key. MapState is an example of a state variable that
-   * has composite keys, which has the structure of the groupingKey followed by
-   * the specific key in the map. This method doesn't need to know what type of
-   * key is being used, though, since in either case, it's just an UnsafeRow.
-   *
-   * @param elementKey the key for which the TTL should be updated, which may
-   *                   either be the encoded grouping key, or the grouping key
-   *                   and some user-defined key.
-   * @param elementValue the value to update the primary index with. It is of the
-   *                     form (value, expirationMs).
-   * @param expirationMs the new expiration timestamp to use for elementKey.
-   */
-  def updateIndices(
-      elementKey: UnsafeRow,
-      elementValue: UnsafeRow,
-      expirationMs: Long): Unit = {
-    val existingPrimaryValue = store.get(elementKey, stateName)
-
-    // Doesn't exist. Insert into the primary and TTL indexes.
-    if (existingPrimaryValue == null) {
-      store.put(elementKey, elementValue, stateName)
-      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-      insertIntoTTLIndex(expirationMs, elementKey)
-    } else {
-      // The new value and the existing one may differ in either timestamp or in actual
-      // value. In either case, we need to update the primary index.
-      if (elementValue != existingPrimaryValue) {
-        store.put(elementKey, elementValue, stateName)
-        TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-      }
-
-      // However, the TTL index might already have the correct mapping from expirationMs to
-      // elementKey. But if it doesn't, then we need to update the TTL index.
-      val existingExpirationMs = existingPrimaryValue.getLong(1)
-      if (existingExpirationMs != expirationMs) {
-        deleteFromTTLIndex(existingExpirationMs, elementKey)
-        insertIntoTTLIndex(expirationMs, elementKey)
-      }
-    }
-  }
-
-  override def clearExpiredStateForAllKeys(): Long = {
-    var numValuesExpired = 0L
-
-    ttlEvictionIterator().foreach { ttlKey =>
-      // Delete from secondary index
-      deleteFromTTLIndex(ttlKey)
-      // Delete from primary index
-      store.remove(toTTLRow(ttlKey).elementKey, stateName)
-
-      numValuesExpired += 1
-    }
-
-    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", numValuesExpired)
-    numValuesExpired
-  }
-
-  override def clearAllStateForElementKey(elementKey: UnsafeRow): Unit = {
-    val existingPrimaryValue = store.get(elementKey, stateName)
-    if (existingPrimaryValue != null) {
-      val existingExpirationMs = existingPrimaryValue.getLong(1)
-
-      store.remove(elementKey, stateName)
-      TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
-
-      deleteFromTTLIndex(existingExpirationMs, elementKey)
-    }
   }
 }
 

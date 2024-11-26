@@ -103,7 +103,7 @@ metrics: Map[String, SQLMetric])
       .calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
     val encodedValue = stateTypesEncoder.encodeValue(value, ttlExpirationMs)
 
-    updateIndices(encodedCompositeKey, encodedValue, ttlExpirationMs)
+    updatePrimaryAndSecondaryIndices(encodedCompositeKey, encodedValue, ttlExpirationMs)
   }
 
   /** Get the map associated with grouping key */

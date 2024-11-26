@@ -96,7 +96,7 @@ class ValueStateImplWithTTL[S](
       .calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
     val encodedValue = stateTypesEncoder.encodeValue(newState, ttlExpirationMs)
 
-    updateIndices(encodedKey, encodedValue, ttlExpirationMs)
+    updatePrimaryAndSecondaryIndices(encodedKey, encodedValue, ttlExpirationMs)
   }
 
   /** Function to remove state for given key */
