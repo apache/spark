@@ -277,7 +277,7 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
                 a.collectFirst {
                   case lcaRef: LateralColumnAliasReference => lcaRef.nameParts
                 }.get, a)
-            case lcaRef: LateralColumnAliasReference => lcaRef.a
+            case lcaRef: LateralColumnAliasReference => lcaRef.ne
           }.asInstanceOf[SortOrder]
         }
         sort.copy(order = newOrder)
