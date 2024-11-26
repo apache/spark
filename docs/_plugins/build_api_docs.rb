@@ -34,7 +34,12 @@ def print_header(text)
 end
 
 def build_spark_if_necessary
-  if $spark_package_is_built || (ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1')
+  # If spark has already been compiled on the host, skip here.
+  if ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'
+    return
+  end
+
+  if $spark_package_is_built
     return
   end
 
@@ -116,6 +121,16 @@ def copy_and_update_java_docs(source, dest, scala_source)
   File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
 end
 
+def build_spark_scala_and_java_docs_if_necessary
+  # If spark's docs has already been compiled on the host, skip here.
+  if ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'
+    return
+  end
+
+  command = "build/sbt -Pkinesis-asl unidoc"
+  puts "Running '#{command}'..."
+  system(command) || raise("Unidoc generation failed")
+end
 
 def build_scala_and_java_docs
   build_spark_if_necessary
@@ -123,11 +138,7 @@ def build_scala_and_java_docs
   print_header "Building Scala and Java API docs."
   cd(SPARK_PROJECT_ROOT)
 
-  if not (ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1')
-    command = "build/sbt -Pkinesis-asl unidoc"
-    puts "Running '#{command}'..."
-    system(command) || raise("Unidoc generation failed")
-  end
+  build_spark_scala_and_java_docs_if_necessary
 
   puts "Moving back into docs dir."
   cd("docs")
@@ -164,6 +175,11 @@ def build_python_docs
 end
 
 def build_r_docs
+  # We expect to compile the R document on the host.
+  if not (ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1')
+    return
+  end
+
   print_header "Building R API docs."
   cd("#{SPARK_PROJECT_ROOT}/R")
   system("./create-docs.sh") || raise("R doc generation failed")
@@ -219,7 +235,7 @@ if not (ENV['SKIP_API'] == '1')
     build_python_docs
   end
 
-  if (not (ENV['SKIP_RDOC'] == '1')) && (not (ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'))
+  if not (ENV['SKIP_RDOC'] == '1')
     build_r_docs
   end
 

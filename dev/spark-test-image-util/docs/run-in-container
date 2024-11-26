@@ -15,17 +15,17 @@
 # limitations under the License.
 #
 
-# 1.set env variable
+# 1.Set env variable.
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
 export PATH=$JAVA_HOME/bin:$PATH
 export SPARK_DOCS_IS_BUILT_ON_HOST=1
 
-# 2.install bundler
+# 2.Install bundler.
 gem install bundler -v 2.4.22
 cd /__w/spark/spark/docs
 bundle install
 
-# 3.build docs, includes: `error docs`, `scala doc`, `python doc`, `sql doc`, excludes: `r doc`
+# 3.Build docs, includes: `error docs`, `scala doc`, `python doc`, `sql doc`, excludes: `r doc`.
 # We need this link to make sure `python3` points to `python3.9` which contains the prerequisite packages.
 ln -s "$(which python3.9)" "/usr/local/bin/python3"
 
