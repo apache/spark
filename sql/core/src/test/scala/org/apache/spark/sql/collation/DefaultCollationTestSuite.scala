@@ -190,8 +190,9 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   test("inline table in CTAS") {
     withSessionCollationAndTable("UTF8_LCASE", testTable) {
       sql(s"""
-           |CREATE TABLE $testTable AS
-           |SELECT *
+           |CREATE TABLE $testTable
+           |USING $dataSource
+           |AS SELECT *
            |FROM (VALUES ('a', 'a' = 'A'))
            |AS inline_table(c1, c2);
            |""".stripMargin)
@@ -475,8 +476,9 @@ class DefaultCollationTestSuiteV2 extends DefaultCollationTestSuite with Datasou
     withSessionCollationAndTable("UTF8_LCASE", testTable) {
       sql(s"CREATE TABLE $testTable (c1 STRING, c2 BOOLEAN) USING $dataSource")
       sql(s"""
-           |REPLACE TABLE $testTable AS
-           |SELECT *
+           |REPLACE TABLE $testTable
+           |USING $dataSource
+           |AS SELECT *
            |FROM (VALUES ('a', 'a' = 'A'))
            |AS inline_table(c1, c2);
            |""".stripMargin)

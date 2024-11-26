@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal, NamedLambdaVariable}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -51,6 +51,22 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
       // to ensure the correct results for occurrences of default string type.
       ResolveDefaultStringTypesWithoutTempType.apply(newPlan)
     }
+  }
+
+  /**
+   * Returns whether any of the given `expressions` needs to have its
+   * default string type resolved.
+   */
+  def doesNeedResolve(expressions: Seq[Expression]): Boolean = {
+    expressions.exists(doesNeedResolve)
+  }
+
+  /**
+   * Returns whether the given `expression` needs to have its
+   * default string type resolved.
+   */
+  def doesNeedResolve(expression: Expression): Boolean = {
+    expression.exists(e => transformExpression.isDefinedAt(e, StringType))
   }
 
   private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType
@@ -106,30 +122,25 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
   private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
     plan resolveOperators { operator =>
       operator resolveExpressionsUp { expression =>
-        transformExpression(expression, newType)
+        transformExpression.applyOrElse((expression, newType), fallbackToExpression)
       }
     }
   }
 
+  private def fallbackToExpression(tuple: (Expression, StringType)): Expression = tuple._1
+
   /**
    * Transforms the given expression, by changing all default string types to the given new type.
    */
-  private def transformExpression(expression: Expression, newType: StringType): Expression = {
-    expression match {
-      case columnDef: ColumnDefinition if hasDefaultStringType(columnDef.dataType) =>
-        columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
+  private def transformExpression: PartialFunction[(Expression, StringType), Expression] = {
+    case (columnDef: ColumnDefinition, newType) if hasDefaultStringType(columnDef.dataType) =>
+      columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
 
-      case cast: Cast if hasDefaultStringType(cast.dataType) =>
-        cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
+    case (cast: Cast, newType) if hasDefaultStringType(cast.dataType) =>
+      cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
 
-      case Literal(value, dt) if hasDefaultStringType(dt) =>
-        Literal(value, replaceDefaultStringType(dt, newType))
-
-      case lambdaVar: NamedLambdaVariable if hasDefaultStringType(lambdaVar.dataType) =>
-        lambdaVar.copy(dataType = replaceDefaultStringType(lambdaVar.dataType, newType))
-
-      case other => other
-    }
+    case (Literal(value, dt), newType) if hasDefaultStringType(dt) =>
+      Literal(value, replaceDefaultStringType(dt, newType))
   }
 
   private def hasDefaultStringType(dataType: DataType): Boolean =

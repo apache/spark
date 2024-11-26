@@ -2601,7 +2601,9 @@ class DDLParserSuite extends AnalysisTest {
         Map("part" -> Some(part)),
         Seq.empty[String],
         if (optimizeInsertIntoCmds) {
-          ResolveInlineTables(UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))))
+          val resolvedStringTypes = ResolveDefaultStringTypes(
+            UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a")))))
+          ResolveInlineTables(resolvedStringTypes)
         } else {
           UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal("a"))))
         },
