@@ -22,7 +22,8 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image for Documentat
 
 ENV FULL_REFRESH_DATE 20241029
 
-INCLUDE+ ./dev/spark-test-image/base/Dockerfile
+# INCLUDE+ ./dev/spark-test-image/base/Dockerfile
+INCLUDE+ ../../../dev/spark-test-image/base/Dockerfile
 
 # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
 # See 'ipython_genutils' in SPARK-38517
