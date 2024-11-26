@@ -150,8 +150,6 @@ case class ReplaceTableAsSelectExec(
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
-  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
-
   override protected def run(): Seq[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
     // RTAS if the catalog does not support atomic operations.
@@ -618,14 +616,10 @@ case class DeltaWithMetadataWritingSparkTask(
 private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   override def output: Seq[Attribute] = Nil
 
-  protected def commitMetrics(tableCatalog: TableCatalog): Map[String, SQLMetric] = {
-    tableCatalog match {
-      case st: StagingTableCatalog =>
-        st.supportedCustomMetrics().map {
-          metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
-        }.toMap
-      case _ => Map.empty
-    }
+  protected def commitMetrics(tableCatalog: StagingTableCatalog): Map[String, SQLMetric] = {
+    tableCatalog.supportedCustomMetrics().map {
+      metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
+    }.toMap
   }
 
   protected def getV2Columns(schema: StructType, forceNullable: Boolean): Array[Column] = {
