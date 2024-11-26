@@ -30,13 +30,11 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 object ResolveCollationName extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveExpressionsWithPruning(_.containsPattern(UNRESOLVED_COLLATION), ruleId) {
-      case c @ Collate(_, unresolvedCollation: UnresolvedCollation) =>
-        c.copy(collation =
-          ResolvedCollation(resolveFullyQualifiedName(unresolvedCollation.collationName))
-        )
+      case UnresolvedCollation(collationName) =>
+        ResolvedCollation(resolveFullyQualifiedName(collationName))
     }
 
-  def resolveFullyQualifiedName(collationName: Seq[String]): String = {
+  private def resolveFullyQualifiedName(collationName: Seq[String]): String = {
     // If collation name has only one part, then we don't need to do any name resolution
     // and can directly resolve it to a `ResolvedCollation`.
     if (collationName.length == 1) collationName(0)

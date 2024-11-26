@@ -90,8 +90,6 @@ case class Collate(child: Expression, collation: Expression)
   override def toString: String =
     s"$prettyName($child, $collation)"
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_COLLATION)
-
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression =
     copy(child = newLeft, collation = newRight)
@@ -113,6 +111,8 @@ case class UnresolvedCollation(collationName: Seq[String])
   override def nullable: Boolean = false
 
   override lazy val resolved: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_COLLATION)
 }
 
 /**
