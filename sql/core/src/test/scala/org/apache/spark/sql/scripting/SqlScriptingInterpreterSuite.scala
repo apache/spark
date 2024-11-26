@@ -1618,6 +1618,38 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("for statement - sum of column from table") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | DECLARE sumOfCols = 0;
+          | CREATE TABLE t (intCol INT) using parquet;
+          | INSERT INTO t VALUES (1), (2), (3), (4);
+          | FOR row AS SELECT * FROM t DO
+          |   SET sumOfCols = sumOfCols + row.intCol;
+          | END FOR;
+          | SELECT sumOfCols;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // declare sumOfCols
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // set sumOfCols
+        Seq.empty[Row], // set sumOfCols
+        Seq.empty[Row], // set sumOfCols
+        Seq.empty[Row], // set sumOfCols
+        Seq.empty[Row], // drop local var
+        Seq.empty[Row], // drop local var
+        Seq(Row(10)), // select sumOfCols
+        Seq.empty[Row] // drop sumOfCols
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
   test("for statement - map, struct, array") {
     withTable("t") {
       val sqlScript =
@@ -2134,6 +2166,37 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         Seq.empty[Row], // drop local var
         Seq.empty[Row], // drop local var
         Seq.empty[Row] // drop local var
+      )
+      verifySqlScriptResult(sqlScript, expected)
+    }
+  }
+
+  test("for statement - no variable - sum of column from table") {
+    withTable("t") {
+      val sqlScript =
+        """
+          |BEGIN
+          | DECLARE sumOfCols = 0;
+          | CREATE TABLE t (intCol INT) using parquet;
+          | INSERT INTO t VALUES (1), (2), (3), (4);
+          | FOR SELECT * FROM t DO
+          |   SET sumOfCols = sumOfCols + intCol;
+          | END FOR;
+          | SELECT sumOfCols;
+          |END
+          |""".stripMargin
+
+      val expected = Seq(
+        Seq.empty[Row], // declare sumOfCols
+        Seq.empty[Row], // create table
+        Seq.empty[Row], // insert
+        Seq.empty[Row], // set sumOfCols
+        Seq.empty[Row], // set sumOfCols
+        Seq.empty[Row], // set sumOfCols
+        Seq.empty[Row], // set sumOfCols
+        Seq.empty[Row], // drop local var
+        Seq(Row(10)), // select sumOfCols
+        Seq.empty[Row] // drop sumOfCols
       )
       verifySqlScriptResult(sqlScript, expected)
     }
