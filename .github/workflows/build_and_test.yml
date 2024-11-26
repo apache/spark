@@ -390,8 +390,8 @@ jobs:
         id: docker_build_docs
         uses: docker/build-push-action@v6
         with:
-          context: ./dev
-          file: ./spark-test-image/docs/Dockerfile
+          context: .
+          file: ./dev/spark-test-image/docs/Dockerfile
           push: true
           tags: |
             ${{ needs.precondition.outputs.image_docs_url }}
