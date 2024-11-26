@@ -486,7 +486,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           .foreach {
             case (ResourceProfile.OFFHEAP_MEM, request) =>
               driverConf.set(MEMORY_OFFHEAP_SIZE.key, request.amount.toString + "m")
-              driverConf.set(MEMORY_OFFHEAP_ENABLED.key, "true")
+              if (request.amount > 0) {
+                driverConf.set(MEMORY_OFFHEAP_ENABLED.key, "true")
+              }
               logInfo(s"set off heap memory to $request")
             case (ResourceProfile.MEMORY, request) =>
               driverConf.set(EXECUTOR_MEMORY.key, request.amount.toString + "m")
