@@ -112,7 +112,7 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
           val lowerCasedName = u.nameParts.head.toLowerCase(Locale.ROOT)
           aliasMap.get(lowerCasedName).map {
             case scala.util.Left(alias) if alias.resolved =>
-                LateralColumnAliasReference(alias.toAttribute, u.nameParts, alias.toAttribute)
+              LateralColumnAliasReference(alias, u.nameParts, alias.toAttribute)
             case scala.util.Left(alias) =>
               LateralColumnAliasReference(u, u.nameParts, alias.toAttribute)
             case scala.util.Right(count) =>
