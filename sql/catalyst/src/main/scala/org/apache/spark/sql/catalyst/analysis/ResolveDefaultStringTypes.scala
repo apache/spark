@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingEx
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 
@@ -153,11 +154,12 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
   }
 
   private def needsCast(expression: Expression): Boolean = {
+    // TODO: is there a better way to figure out how not to add casts infinitely?
     if (expression.getTagValue(CAST_ADDED_TAG).isDefined) {
       return false
     } else if (!expression.resolved || !hasDefaultStringType(expression.dataType)) {
       return false
-    } else if (expression.isInstanceOf[Unevaluable]) {
+    } else if (expression.isInstanceOf[Unevaluable] && !isCurrentLikeExpression(expression)) {
       return false
     }
 
@@ -166,6 +168,9 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     !expression.children.exists(e => hasAnyStringType(e.dataType)) ||
       expression.isInstanceOf[DefaultStringProducingExpression]
   }
+
+  private def isCurrentLikeExpression(expression: Expression): Boolean =
+    expression.containsPattern(CURRENT_LIKE)
 
   private def hasAnyStringType(dataType: DataType): Boolean =
     dataType.existsRecursively(_.isInstanceOf[StringType])

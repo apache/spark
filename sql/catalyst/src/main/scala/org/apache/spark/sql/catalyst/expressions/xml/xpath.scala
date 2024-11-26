@@ -216,7 +216,7 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   since = "2.0.0",
   group = "xml_funcs")
 // scalastyle:on line.size.limit
-case class XPathString(xml: Expression, path: Expression) 
+case class XPathString(xml: Expression, path: Expression)
   extends XPathExtract
   with DefaultStringProducingExpression {
 
@@ -242,7 +242,7 @@ case class XPathString(xml: Expression, path: Expression)
   group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression)
-  extends XPathExtract 
+  extends XPathExtract
   with DefaultStringProducingExpression {
 
   @transient override lazy val evaluator: XPathEvaluator = XPathListEvaluator(pathUTF8String)

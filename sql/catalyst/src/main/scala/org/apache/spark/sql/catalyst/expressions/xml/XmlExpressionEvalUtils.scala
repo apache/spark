@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.xml
 
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.catalyst.xml.XmlInferSchema
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 object XmlExpressionEvalUtils {
