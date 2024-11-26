@@ -349,7 +349,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    */
   private String sanitizeConfValue(String value) {
     if (value != null) {
-      String[] unsafeChars = {"`", "$(", ")", ";", "&", "|", "<", ">", "*", "?"};
+      String[] unsafeChars = {"`", "$(", ")", "&", "|", "<", ">", "*", "?"};
       for (String unsafeChar : unsafeChars) {
         value = value.replace(unsafeChar, "");
       }
