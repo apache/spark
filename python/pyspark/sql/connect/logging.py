@@ -27,7 +27,8 @@ __all__ = ["configureLogging", "getLogLevel"]
 def configureLogging(level: Optional[str] = None) -> logging.Logger:
     """
     Configure log level for Spark Connect components.
-    When not specified as a parameter, log level will be picked up from the SPARK_CONNECT_LOG_LEVEL environment variable.
+    When not specified as a parameter, log level will be configured based on
+    the SPARK_CONNECT_LOG_LEVEL environment variable.
     When both are absent, logging is disabled.
 
     .. versionadded:: 4.0.0
