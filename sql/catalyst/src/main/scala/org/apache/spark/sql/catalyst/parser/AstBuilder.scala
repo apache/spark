@@ -6015,6 +6015,9 @@ class AstBuilder extends DataTypeAstBuilder
         val projectList: Seq[NamedExpression] =
           Seq(UnresolvedStarExceptOrReplace(
             target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement))))
+        // Add a projection to implement the SET operator using the UnresolvedStarExceptOrReplace
+        // expression. We do this once per SET assignment to allow for multiple SET assignments with
+        // optional lateral references to previous ones.
         plan = Project(projectList, plan)
     }
     plan

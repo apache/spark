@@ -775,6 +775,32 @@ Project [x#x, y#x, z#x, pipeexpression((x#x + 1), false, SET) AS zz#x]
 
 
 -- !query
+table other
+|> extend 3 as c
+|> set a = b, b = c
+-- !query analysis
+Project [a#x, pipeexpression(c#x, false, SET) AS b#x, c#x]
++- Project [pipeexpression(b#x, false, SET) AS a#x, b#x, c#x]
+   +- Project [a#x, b#x, pipeexpression(3, false, EXTEND) AS c#x]
+      +- SubqueryAlias spark_catalog.default.other
+         +- Relation spark_catalog.default.other[a#x,b#x] json
+
+
+-- !query
+table t
+|> extend 1 as z
+|> extend 2 as zz
+|> set z = x + length(y), zz = z + 1
+-- !query analysis
+Project [x#x, y#x, z#x, pipeexpression((z#x + 1), false, SET) AS zz#x]
++- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x, zz#x]
+   +- Project [x#x, y#x, z#x, pipeexpression(2, false, EXTEND) AS zz#x]
+      +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
+         +- SubqueryAlias spark_catalog.default.t
+            +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 table t
 |> extend 1 as z
 |> set z = x + length(y)

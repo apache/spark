@@ -265,6 +265,16 @@ table t
 |> extend 2 as zz
 |> set z = x + length(y), zz = x + 1;
 
+table other
+|> extend 3 as c
+|> set a = b, b = c;
+
+-- Setting two times with a lateral reference.
+table t
+|> extend 1 as z
+|> extend 2 as zz
+|> set z = x + length(y), zz = z + 1;
+
 -- Setting two times in sequence.
 table t
 |> extend 1 as z
