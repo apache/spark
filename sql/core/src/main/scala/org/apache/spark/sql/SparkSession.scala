@@ -460,7 +460,6 @@ class SparkSession private(
     }
 
   /** @inheritdoc */
-  @Experimental
   def sql(sqlText: String, args: Array[_]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
@@ -498,13 +497,11 @@ class SparkSession private(
     }
 
   /** @inheritdoc */
-  @Experimental
   def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
 
   /** @inheritdoc */
-  @Experimental
   override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
