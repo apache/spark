@@ -25,6 +25,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.connect.ConnectClientUnsupportedErrors
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.StructType
@@ -144,11 +145,11 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends api.Data
 
   /** @inheritdoc */
   override def json(jsonRDD: JavaRDD[String]): Dataset[Row] =
-    throwRddNotSupportedException()
+    throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
   override def json(jsonRDD: RDD[String]): Dataset[Row] =
-    throwRddNotSupportedException()
+    throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
   override def csv(path: String): DataFrame = super.csv(path)

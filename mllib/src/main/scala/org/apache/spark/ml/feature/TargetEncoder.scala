@@ -77,7 +77,7 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
 
   final def getSmoothing: Double = $(smoothing)
 
-  private[feature] lazy val inputFeatures =
+  private[feature] def inputFeatures: Array[String] =
     if (isSet(inputCol)) {
       Array($(inputCol))
     } else if (isSet(inputCols)) {
@@ -86,7 +86,7 @@ private[ml] trait TargetEncoderBase extends Params with HasLabelCol
       Array.empty[String]
     }
 
-  private[feature] lazy val outputFeatures =
+  private[feature] def outputFeatures: Array[String] =
     if (isSet(outputCol)) {
       Array($(outputCol))
     } else if (isSet(outputCols)) {
@@ -189,82 +189,66 @@ class TargetEncoder @Since("4.0.0") (@Since("4.0.0") override val uid: String)
     validateSchema(schema, fitting = true)
   }
 
+  private def extractLabel(name: String, targetType: String): Column = {
+    val c = col(name).cast(DoubleType)
+    targetType match {
+      case TargetEncoder.TARGET_BINARY =>
+        when(c === 0 || c === 1, c)
+          .when(c.isNull || c.isNaN, c)
+          .otherwise(raise_error(
+            concat(lit("Labels for TARGET_BINARY must be {0, 1}, but got "), c)))
+
+      case TargetEncoder.TARGET_CONTINUOUS => c
+    }
+  }
+
+  private def extractValue(name: String): Column = {
+    val c = col(name).cast(DoubleType)
+    when(c >= 0 && c === c.cast(IntegerType), c)
+      .when(c.isNull, lit(TargetEncoder.NULL_CATEGORY))
+      .when(c.isNaN, raise_error(lit("Values MUST NOT be NaN")))
+      .otherwise(raise_error(
+        concat(lit("Values MUST be non-negative integers, but got "), c)))
+  }
+
   @Since("4.0.0")
   override def fit(dataset: Dataset[_]): TargetEncoderModel = {
     validateSchema(dataset.schema, fitting = true)
+    val numFeatures = inputFeatures.length
 
-    // stats: Array[Map[category, (counter,stat)]]
-    val stats = dataset
-      .select((inputFeatures :+ $(labelCol)).map(col(_).cast(DoubleType)).toIndexedSeq: _*)
-      .rdd.treeAggregate(
-        Array.fill(inputFeatures.length) {
-          Map.empty[Double, (Double, Double)]
-        })(
+    // Append the unseen category, for global stats computation
+    val arrayCol = array(
+      (inputFeatures.map(v => extractValue(v)) :+ lit(TargetEncoder.UNSEEN_CATEGORY))
+        .toIndexedSeq: _*)
 
-        (agg, row: Row) => if (!row.isNullAt(inputFeatures.length)) {
-          val label = row.getDouble(inputFeatures.length)
-          if (!label.equals(Double.NaN)) {
-            inputFeatures.indices.map {
-              feature => {
-                val category: Double = {
-                  if (row.isNullAt(feature)) TargetEncoder.NULL_CATEGORY // null category
-                  else {
-                    val value = row.getDouble(feature)
-                    if (value < 0.0 || value != value.toInt) throw new SparkException(
-                      s"Values from column ${inputFeatures(feature)} must be indices, " +
-                        s"but got $value.")
-                    else value // non-null category
-                  }
-                }
-                val (class_count, class_stat) = agg(feature).getOrElse(category, (0.0, 0.0))
-                val (global_count, global_stat) =
-                  agg(feature).getOrElse(TargetEncoder.UNSEEN_CATEGORY, (0.0, 0.0))
-                $(targetType) match {
-                  case TargetEncoder.TARGET_BINARY => // counting
-                    if (label == 1.0) {
-                      // positive => increment both counters for current & unseen categories
-                      agg(feature) +
-                        (category -> (1 + class_count, 1 + class_stat)) +
-                        (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count, 1 + global_stat))
-                    } else if (label == 0.0) {
-                      // negative => increment only global counter for current & unseen categories
-                      agg(feature) +
-                        (category -> (1 + class_count, class_stat)) +
-                        (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count, global_stat))
-                    } else throw new SparkException(
-                      s"Values from column ${getLabelCol} must be binary (0,1) but got $label.")
-                  case TargetEncoder.TARGET_CONTINUOUS => // incremental mean
-                    // increment counter and iterate on mean for current & unseen categories
-                    agg(feature) +
-                      (category -> (1 + class_count,
-                        class_stat + ((label - class_stat) / (1 + class_count)))) +
-                      (TargetEncoder.UNSEEN_CATEGORY -> (1 + global_count,
-                        global_stat + ((label - global_stat) / (1 + global_count))))
-                }
-              }
-            }.toArray
-          } else agg  // ignore NaN-labeled observations
-        } else agg,  // ignore null-labeled observations
+    val checked = dataset
+      .select(extractLabel($(labelCol), $(targetType)).as("label"), arrayCol.as("array"))
+      .where(!col("label").isNaN && !col("label").isNull)
+      .select(col("label"), posexplode(col("array")).as(Seq("index", "value")))
 
-        (agg1, agg2) => inputFeatures.indices.map {
-          feature => {
-            val categories = agg1(feature).keySet ++ agg2(feature).keySet
-            categories.map(category =>
-              category -> {
-                val (counter1, stat1) = agg1(feature).getOrElse(category, (0.0, 0.0))
-                val (counter2, stat2) = agg2(feature).getOrElse(category, (0.0, 0.0))
-                $(targetType) match {
-                  case TargetEncoder.TARGET_BINARY => (counter1 + counter2, stat1 + stat2)
-                  case TargetEncoder.TARGET_CONTINUOUS => (counter1 + counter2,
-                    ((counter1 * stat1) + (counter2 * stat2)) / (counter1 + counter2))
-                }
-              }).toMap
-          }
-        }.toArray)
+    val statCol = $(targetType) match {
+      case TargetEncoder.TARGET_BINARY => count_if(col("label") === 1)
+      case TargetEncoder.TARGET_CONTINUOUS => avg(col("label"))
+    }
+    val aggregated = checked
+      .groupBy("index", "value")
+      .agg(count(lit(1)).cast(DoubleType).as("count"), statCol.cast(DoubleType).as("stat"))
 
+    // stats: Array[Map[category, (count, stat)]]
+    val stats = Array.fill(numFeatures)(collection.mutable.Map.empty[Double, (Double, Double)])
+    aggregated.select("index", "value", "count", "stat").collect()
+      .foreach { case Row(index: Int, value: Double, count: Double, stat: Double) =>
+        if (index < numFeatures) {
+          // Assign the per-category stats to the corresponding feature
+          stats(index).update(value, (count, stat))
+        } else {
+          // Assign the global stats to all features
+          assert(value == TargetEncoder.UNSEEN_CATEGORY)
+          stats.foreach { s => s.update(value, (count, stat)) }
+        }
+      }
 
-
-    val model = new TargetEncoderModel(uid, stats).setParent(this)
+    val model = new TargetEncoderModel(uid, stats.map(_.toMap)).setParent(this)
     copyValues(model)
   }
 
@@ -363,54 +347,35 @@ class TargetEncoderModel private[ml] (
           }
       }
 
-    // builds a column-to-column function from a map of encodings
-    val apply_encodings: Map[Double, Double] => (Column => Column) =
-      (mappings: Map[Double, Double]) => {
-        (col: Column) => {
-          val nullWhen = when(col.isNull,
-            mappings.get(TargetEncoder.NULL_CATEGORY) match {
-              case Some(code) => lit(code)
-              case None => if ($(handleInvalid) == TargetEncoder.KEEP_INVALID) {
-                lit(mappings.get(TargetEncoder.UNSEEN_CATEGORY).get)
-              } else raise_error(lit(
-                s"Unseen null value in feature ${col.toString}. To handle unseen values, " +
-                  s"set Param handleInvalid to ${TargetEncoder.KEEP_INVALID}."))
-            })
-          val ordered_mappings = (mappings - TargetEncoder.NULL_CATEGORY).toList.sortWith {
-            (a, b) =>
-              (b._1 == TargetEncoder.UNSEEN_CATEGORY) ||
-                ((a._1 != TargetEncoder.UNSEEN_CATEGORY) && (a._1 < b._1))
-          }
-          ordered_mappings
-            .foldLeft(nullWhen)(
-              (new_col: Column, mapping) => {
-                val (original, encoded) = mapping
-                if (original != TargetEncoder.UNSEEN_CATEGORY) {
-                  new_col.when(col === original, lit(encoded))
-                } else { // unseen category
-                  new_col.otherwise(
-                    if ($(handleInvalid) == TargetEncoder.KEEP_INVALID) lit(encoded)
-                    else raise_error(concat(
-                      lit("Unseen value "), col,
-                      lit(s" in feature ${col.toString}. To handle unseen values, " +
-                        s"set Param handleInvalid to ${TargetEncoder.KEEP_INVALID}."))))
-                }
-              })
+    val newCols = inputFeatures.zip(outputFeatures).zip(encodings).map {
+      case ((featureIn, featureOut), mapping) =>
+        val unseenErrMsg = s"Unseen value %s in feature $featureIn. " +
+          s"To handle unseen values, set Param handleInvalid to ${TargetEncoder.KEEP_INVALID}."
+        val unseenErrCol = raise_error(printf(lit(unseenErrMsg), col(featureIn).cast(StringType)))
+
+        val fillUnseenCol = $(handleInvalid) match {
+          case TargetEncoder.KEEP_INVALID => lit(mapping(TargetEncoder.UNSEEN_CATEGORY))
+          case _ => unseenErrCol
         }
-      }
+        val fillNullCol = mapping.get(TargetEncoder.NULL_CATEGORY) match {
+          case Some(code) => lit(code)
+          case _ => fillUnseenCol
+        }
+        val filteredMapping = mapping.filter { case (k, _) =>
+          k != TargetEncoder.UNSEEN_CATEGORY && k != TargetEncoder.NULL_CATEGORY
+        }
 
-    dataset.withColumns(
-      inputFeatures.zip(outputFeatures).zip(encodings)
-        .map {
-          case ((featureIn, featureOut), mapping) =>
-            featureOut ->
-              apply_encodings(mapping)(col(featureIn))
-                .as(featureOut, NominalAttribute.defaultAttr
-                  .withName(featureOut)
-                  .withNumValues(mapping.values.toSet.size)
-                  .withValues(mapping.values.toSet.toArray.map(_.toString)).toMetadata())
-        }.toMap)
-
+        val castedCol = col(featureIn).cast(DoubleType)
+        val targetCol = try_element_at(typedlit(filteredMapping), castedCol)
+        when(castedCol.isNull, fillNullCol)
+          .when(!targetCol.isNull, targetCol)
+          .otherwise(fillUnseenCol)
+          .as(featureOut, NominalAttribute.defaultAttr
+            .withName(featureOut)
+            .withNumValues(mapping.values.toSet.size)
+            .withValues(mapping.values.toSet.toArray.map(_.toString)).toMetadata())
+    }
+    dataset.withColumns(outputFeatures.toIndexedSeq, newCols.toIndexedSeq)
   }
 
   @Since("4.0.0")

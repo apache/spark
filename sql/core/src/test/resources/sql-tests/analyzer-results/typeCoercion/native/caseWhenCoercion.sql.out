@@ -54,7 +54,7 @@ Project [CASE WHEN true THEN cast(cast(1 as tinyint) as bigint) ELSE cast(2 as b
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as float) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as tinyint) as float) ELSE cast(2 as float) END AS CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS FLOAT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as tinyint) as double) ELSE cast(cast(2 as float) as double) END AS CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS FLOAT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -87,7 +87,7 @@ Project [CASE WHEN true THEN cast(cast(1 as tinyint) as decimal(10,0)) ELSE cast
 -- !query
 SELECT CASE WHEN true THEN cast(1 as tinyint) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as tinyint) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as tinyint) as bigint) ELSE cast(cast(2 as string) as bigint) END AS CASE WHEN true THEN CAST(1 AS TINYINT) ELSE CAST(2 AS STRING) END#xL]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -230,7 +230,7 @@ Project [CASE WHEN true THEN cast(cast(1 as smallint) as bigint) ELSE cast(2 as 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as float) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as smallint) as float) ELSE cast(2 as float) END AS CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS FLOAT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as smallint) as double) ELSE cast(cast(2 as float) as double) END AS CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS FLOAT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -263,7 +263,7 @@ Project [CASE WHEN true THEN cast(cast(1 as smallint) as decimal(10,0)) ELSE cas
 -- !query
 SELECT CASE WHEN true THEN cast(1 as smallint) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as smallint) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as smallint) as bigint) ELSE cast(cast(2 as string) as bigint) END AS CASE WHEN true THEN CAST(1 AS SMALLINT) ELSE CAST(2 AS STRING) END#xL]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -406,7 +406,7 @@ Project [CASE WHEN true THEN cast(cast(1 as int) as bigint) ELSE cast(2 as bigin
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as float) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as int) as float) ELSE cast(2 as float) END AS CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS FLOAT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as int) as double) ELSE cast(cast(2 as float) as double) END AS CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS FLOAT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -439,7 +439,7 @@ Project [CASE WHEN true THEN cast(cast(1 as int) as decimal(10,0)) ELSE cast(2 a
 -- !query
 SELECT CASE WHEN true THEN cast(1 as int) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as int) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as int) as bigint) ELSE cast(cast(2 as string) as bigint) END AS CASE WHEN true THEN CAST(1 AS INT) ELSE CAST(2 AS STRING) END#xL]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -582,7 +582,7 @@ Project [CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as bigint) END AS CAS
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as float) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as bigint) as float) ELSE cast(2 as float) END AS CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS FLOAT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as bigint) as double) ELSE cast(cast(2 as float) as double) END AS CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS FLOAT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -615,7 +615,7 @@ Project [CASE WHEN true THEN cast(cast(1 as bigint) as decimal(20,0)) ELSE cast(
 -- !query
 SELECT CASE WHEN true THEN cast(1 as bigint) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as bigint) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(1 as bigint) ELSE cast(cast(2 as string) as bigint) END AS CASE WHEN true THEN CAST(1 AS BIGINT) ELSE CAST(2 AS STRING) END#xL]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -714,7 +714,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as tinyint) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as float) ELSE cast(cast(2 as tinyint) as float) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS TINYINT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as float) as double) ELSE cast(cast(2 as tinyint) as double) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS TINYINT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -725,7 +725,7 @@ Project [CASE WHEN true THEN cast(1 as float) ELSE cast(cast(2 as tinyint) as fl
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as smallint) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as float) ELSE cast(cast(2 as smallint) as float) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS SMALLINT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as float) as double) ELSE cast(cast(2 as smallint) as double) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS SMALLINT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -736,7 +736,7 @@ Project [CASE WHEN true THEN cast(1 as float) ELSE cast(cast(2 as smallint) as f
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as int) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as float) ELSE cast(cast(2 as int) as float) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS INT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as float) as double) ELSE cast(cast(2 as int) as double) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS INT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -747,7 +747,7 @@ Project [CASE WHEN true THEN cast(1 as float) ELSE cast(cast(2 as int) as float)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as bigint) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as float) ELSE cast(cast(2 as bigint) as float) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS BIGINT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as float) as double) ELSE cast(cast(2 as bigint) as double) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS BIGINT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -791,7 +791,7 @@ Project [CASE WHEN true THEN cast(cast(1 as float) as double) ELSE cast(cast(2 a
 -- !query
 SELECT CASE WHEN true THEN cast(1 as float) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as float) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as float) as double) ELSE cast(cast(2 as string) as double) END AS CASE WHEN true THEN CAST(1 AS FLOAT) ELSE CAST(2 AS STRING) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -967,7 +967,7 @@ Project [CASE WHEN true THEN cast(1 as double) ELSE cast(cast(2 as decimal(10,0)
 -- !query
 SELECT CASE WHEN true THEN cast(1 as double) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as double) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(1 as double) ELSE cast(cast(2 as string) as double) END AS CASE WHEN true THEN CAST(1 AS DOUBLE) ELSE CAST(2 AS STRING) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1143,7 +1143,7 @@ Project [CASE WHEN true THEN cast(1 as decimal(10,0)) ELSE cast(2 as decimal(10,
 -- !query
 SELECT CASE WHEN true THEN cast(1 as decimal(10, 0)) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(1 as decimal(10,0)) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as decimal(10,0)) as double) ELSE cast(cast(2 as string) as double) END AS CASE WHEN true THEN CAST(1 AS DECIMAL(10,0)) ELSE CAST(2 AS STRING) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1242,7 +1242,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as tinyint) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as tinyint) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS TINYINT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as bigint) ELSE cast(cast(2 as tinyint) as bigint) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS TINYINT) END#xL]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1253,7 +1253,7 @@ Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as tinyint) as s
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as smallint) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as smallint) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS SMALLINT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as bigint) ELSE cast(cast(2 as smallint) as bigint) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS SMALLINT) END#xL]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1264,7 +1264,7 @@ Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as smallint) as 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as int) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as int) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS INT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as bigint) ELSE cast(cast(2 as int) as bigint) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS INT) END#xL]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1275,7 +1275,7 @@ Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as int) as strin
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as bigint) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as bigint) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BIGINT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as bigint) ELSE cast(2 as bigint) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BIGINT) END#xL]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1286,7 +1286,7 @@ Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as bigint) as st
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as float) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as float) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS FLOAT) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as double) ELSE cast(cast(2 as float) as double) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS FLOAT) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1297,7 +1297,7 @@ Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as float) as str
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as double) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as double) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DOUBLE) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as double) ELSE cast(2 as double) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DOUBLE) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1308,7 +1308,7 @@ Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as double) as st
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as decimal(10, 0)) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2 as decimal(10,0)) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DECIMAL(10,0)) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as double) ELSE cast(cast(2 as decimal(10,0)) as double) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS DECIMAL(10,0)) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1330,51 +1330,29 @@ Project [CASE WHEN true THEN cast(1 as string) ELSE cast(2 as string) END AS CAS
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2' as binary) END FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "dataType" : "[\"STRING\", \"BINARY\"]",
-    "functionName" : "`casewhen`",
-    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BINARY) END\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 73,
-    "fragment" : "CASE WHEN true THEN cast(1 as string) ELSE cast('2' as binary) END"
-  } ]
-}
+Project [CASE WHEN true THEN cast(cast(1 as string) as binary) ELSE cast(2 as binary) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BINARY) END#x]
++- SubqueryAlias t
+   +- View (`t`, [1#x])
+      +- Project [cast(1#x as int) AS 1#x]
+         +- Project [1 AS 1#x]
+            +- OneRowRelation
 
 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast(2 as boolean) END FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "dataType" : "[\"STRING\", \"BOOLEAN\"]",
-    "functionName" : "`casewhen`",
-    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BOOLEAN) END\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 72,
-    "fragment" : "CASE WHEN true THEN cast(1 as string) ELSE cast(2 as boolean) END"
-  } ]
-}
+Project [CASE WHEN true THEN cast(cast(1 as string) as boolean) ELSE cast(2 as boolean) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2 AS BOOLEAN) END#x]
++- SubqueryAlias t
+   +- View (`t`, [1#x])
+      +- Project [cast(1#x as int) AS 1#x]
+         +- Project [1 AS 1#x]
+            +- OneRowRelation
 
 
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00.0' as timestamp) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2017-12-11 09:30:00.0 as timestamp) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as timestamp) ELSE cast(2017-12-11 09:30:00.0 as timestamp) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1385,7 +1363,7 @@ Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2017-12-11 09:30:0
 -- !query
 SELECT CASE WHEN true THEN cast(1 as string) ELSE cast('2017-12-11 09:30:00' as date) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(1 as string) ELSE cast(cast(2017-12-11 09:30:00 as date) as string) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2017-12-11 09:30:00 AS DATE) END#x]
+Project [CASE WHEN true THEN cast(cast(1 as string) as date) ELSE cast(2017-12-11 09:30:00 as date) END AS CASE WHEN true THEN CAST(1 AS STRING) ELSE CAST(2017-12-11 09:30:00 AS DATE) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1550,23 +1528,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as string) END FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "dataType" : "[\"BINARY\", \"STRING\"]",
-    "functionName" : "`casewhen`",
-    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS STRING) END\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 73,
-    "fragment" : "CASE WHEN true THEN cast('1' as binary) ELSE cast(2 as string) END"
-  } ]
-}
+Project [CASE WHEN true THEN cast(1 as binary) ELSE cast(cast(2 as string) as binary) END AS CASE WHEN true THEN CAST(1 AS BINARY) ELSE CAST(2 AS STRING) END#x]
++- SubqueryAlias t
+   +- View (`t`, [1#x])
+      +- Project [cast(1#x as int) AS 1#x]
+         +- Project [1 AS 1#x]
+            +- OneRowRelation
 
 
 -- !query
@@ -1803,23 +1770,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as string) END FROM t
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "dataType" : "[\"BOOLEAN\", \"STRING\"]",
-    "functionName" : "`casewhen`",
-    "sqlExpr" : "\"CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS STRING) END\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 72,
-    "fragment" : "CASE WHEN true THEN cast(1 as boolean) ELSE cast(2 as string) END"
-  } ]
-}
+Project [CASE WHEN true THEN cast(1 as boolean) ELSE cast(cast(2 as string) as boolean) END AS CASE WHEN true THEN CAST(1 AS BOOLEAN) ELSE CAST(2 AS STRING) END#x]
++- SubqueryAlias t
+   +- View (`t`, [1#x])
+      +- Project [cast(1#x as int) AS 1#x]
+         +- Project [1 AS 1#x]
+            +- OneRowRelation
 
 
 -- !query
@@ -2056,7 +2012,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00.0' as timestamp) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(2017-12-12 09:30:00.0 as timestamp) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(2017-12-12 09:30:00.0 as timestamp) ELSE cast(cast(2 as string) as timestamp) END AS CASE WHEN true THEN CAST(2017-12-12 09:30:00.0 AS TIMESTAMP) ELSE CAST(2 AS STRING) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -2287,7 +2243,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT CASE WHEN true THEN cast('2017-12-12 09:30:00' as date) ELSE cast(2 as string) END FROM t
 -- !query analysis
-Project [CASE WHEN true THEN cast(cast(2017-12-12 09:30:00 as date) as string) ELSE cast(2 as string) END AS CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS STRING) END#x]
+Project [CASE WHEN true THEN cast(2017-12-12 09:30:00 as date) ELSE cast(cast(2 as string) as date) END AS CASE WHEN true THEN CAST(2017-12-12 09:30:00 AS DATE) ELSE CAST(2 AS STRING) END#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]

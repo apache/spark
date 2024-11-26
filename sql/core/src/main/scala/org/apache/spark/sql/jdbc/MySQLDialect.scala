@@ -256,7 +256,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     // See SPARK-35446: MySQL treats REAL as a synonym to DOUBLE by default
     // We override getJDBCType so that FloatType is mapped to FLOAT instead
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
-    case _: StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
+    case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case ByteType => Option(JdbcType("TINYINT", java.sql.Types.TINYINT))
     case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     // scalastyle:off line.size.limit

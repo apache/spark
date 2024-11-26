@@ -21,7 +21,6 @@ import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -226,9 +225,8 @@ class SparkConnectSessionManager extends Logging {
   private def periodicMaintenance(
       defaultInactiveTimeoutMs: Long,
       ignoreCustomTimeout: Boolean): Unit = {
-    logInfo("Started periodic run of SparkConnectSessionManager maintenance.")
     // Find any sessions that expired and should be removed.
-    val toRemove = new mutable.ArrayBuffer[SessionHolder]()
+    logInfo("Started periodic run of SparkConnectSessionManager maintenance.")
 
     def shouldExpire(info: SessionHolderInfo, nowMs: Long): Boolean = {
       val timeoutMs = if (info.customInactiveTimeoutMs.isDefined && !ignoreCustomTimeout) {
@@ -242,15 +240,8 @@ class SparkConnectSessionManager extends Logging {
 
     val nowMs = System.currentTimeMillis()
     sessionStore.forEach((_, sessionHolder) => {
-      if (shouldExpire(sessionHolder.getSessionHolderInfo, nowMs)) {
-        toRemove += sessionHolder
-      }
-    })
-
-    // .. and remove them.
-    toRemove.foreach { sessionHolder =>
       val info = sessionHolder.getSessionHolderInfo
-      if (shouldExpire(info, System.currentTimeMillis())) {
+      if (shouldExpire(info, nowMs)) {
         logInfo(
           log"Found session ${MDC(SESSION_HOLD_INFO, info)} that expired " +
             log"and will be closed.")
@@ -261,7 +252,8 @@ class SparkConnectSessionManager extends Logging {
           case NonFatal(ex) => logWarning("Unexpected exception closing session", ex)
         }
       }
-    }
+    })
+
     logInfo("Finished periodic run of SparkConnectSessionManager maintenance.")
   }
 

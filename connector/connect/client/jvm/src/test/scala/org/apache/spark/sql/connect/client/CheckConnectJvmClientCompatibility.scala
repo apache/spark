@@ -186,9 +186,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UDTFRegistration"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.DataSourceRegistration"),
 
-      // DataFrame Reader & Writer
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // rdd
-
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.fillValue"),
 
@@ -201,16 +198,7 @@ object CheckConnectJvmClientCompatibility {
       // This is due to a potential bug in Mima that all methods in `class Dataset` are not being
       // checked for problems due to the presence of a private[sql] companion object.
       // Further investigation is needed.
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
-
-      // KeyValueGroupedDataset
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.KeyValueGroupedDataset.queryExecution"),
 
       // RelationalGroupedDataset
       ProblemFilters.exclude[MissingClassProblem](
@@ -218,35 +206,10 @@ object CheckConnectJvmClientCompatibility {
       ),
 
       // SparkSession
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sparkContext"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sharedState"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sessionState"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sqlContext"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.listenerManager"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.dataSource"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataFrame"),
-      ProblemFilters.exclude[Problem](
+      ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession.canUseSession"),
-
-      // SparkSession#implicits
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#implicits.session"),
-
-      // SparkSession#Builder
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#Builder.config"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#Builder.withExtensions"),
-
-      // RuntimeConfig
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.RuntimeConfig$"),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.RuntimeConfig.sqlConf"),
 
       // DataStreamWriter
       ProblemFilters.exclude[MissingClassProblem](
@@ -261,10 +224,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.TestGroupState$"),
 
-      // SQLImplicits
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
-
       // Artifact Manager, client has a totally different implementation.
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager"),
@@ -277,14 +236,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession.Converter"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$Converter$"),
-
-      // Missing expressions.
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.expressions.ReduceAggregator"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.expressions.ReduceAggregator$"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.javalang.*"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.expressions.scalalang.*"),
 
       // UDFRegistration
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -332,9 +283,7 @@ object CheckConnectJvmClientCompatibility {
     val excludeRules = Seq(
       // Skipped packages
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.application.*"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.connect.*"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.protobuf.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.internal.*"),
 
       // private[sql]
@@ -350,7 +299,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession#RichColumn.expr"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#RichColumn.typedExpr"),
-      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.package.column"),
 
       // New public APIs added in the client
       // Dataset
@@ -359,14 +307,6 @@ object CheckConnectJvmClientCompatibility {
       ), // developer API
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.Dataset.collectResult"),
-
-      // RuntimeConfig
-      ProblemFilters.exclude[MissingTypesProblem](
-        "org.apache.spark.sql.RuntimeConfig" // Client version extends Logging
-      ),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.RuntimeConfig.*" // Mute missing Logging methods
-      ),
 
       // SparkSession
       // developer API
@@ -379,16 +319,14 @@ object CheckConnectJvmClientCompatibility {
       // Experimental
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession.registerClassFinder"),
+      ProblemFilters.exclude[IncompatibleSignatureProblem](
+        "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       // SparkSession#Builder
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#Builder.remote"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.client"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.build" // deprecated
       ),
-      ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#Builder.create"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.interceptor"),
 
@@ -396,23 +334,13 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),
 
       // Steaming API
-      ProblemFilters.exclude[MissingTypesProblem](
-        "org.apache.spark.sql.streaming.DataStreamWriter" // Client version extends Logging
-      ),
-      ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.DataStreamWriter.*" // Mute missing Logging methods
-      ),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.RemoteStreamingQuery"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.streaming.RemoteStreamingQuery$"),
       // Skip client side listener specific class
       ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.streaming.StreamingQueryListenerBus"),
-
-      // Encoders are in the wrong JAR
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.Encoders$"))
+        "org.apache.spark.sql.streaming.StreamingQueryListenerBus"))
 
     checkMiMaCompatibility(sqlJar, clientJar, includedRules, excludeRules)
   }

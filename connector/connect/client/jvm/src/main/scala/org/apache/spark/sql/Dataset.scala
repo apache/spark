@@ -34,10 +34,12 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.OrderUtils
+import org.apache.spark.sql.connect.ConnectClientUnsupportedErrors
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.internal.{ColumnNodeToProtoConverter, DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, ToScalaUDF, UDFAdaptors, UnresolvedAttribute, UnresolvedRegex}
@@ -582,6 +584,19 @@ class Dataset[T] private[sql] (
   /** @inheritdoc */
   def transpose(): DataFrame =
     buildTranspose(Seq.empty)
+
+  // TODO(SPARK-50134): Support scalar Subquery API in Spark Connect
+  // scalastyle:off not.implemented.error.usage
+  /** @inheritdoc */
+  def scalar(): Column = {
+    ???
+  }
+
+  /** @inheritdoc */
+  def exists(): Column = {
+    ???
+  }
+  // scalastyle:on not.implemented.error.usage
 
   /** @inheritdoc */
   def limit(n: Int): Dataset[T] = sparkSession.newDataset(agnosticEncoder) { builder =>
@@ -1478,8 +1493,11 @@ class Dataset[T] private[sql] (
     super.groupByKey(func, encoder).asInstanceOf[KeyValueGroupedDataset[K, T]]
 
   /** @inheritdoc */
-  override def rdd: RDD[T] = throwRddNotSupportedException()
+  override def rdd: RDD[T] = throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
-  override def toJavaRDD: JavaRDD[T] = throwRddNotSupportedException()
+  override def toJavaRDD: JavaRDD[T] = throw ConnectClientUnsupportedErrors.rdd()
+
+  override def queryExecution: QueryExecution =
+    throw ConnectClientUnsupportedErrors.queryExecution()
 }

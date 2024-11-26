@@ -39,8 +39,8 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, Da
 case class HllSketchEstimate(child: Expression)
   extends UnaryExpression
     with CodegenFallback
-    with ExpectsInputTypes
-    with NullIntolerant {
+    with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override protected def withNewChildInternal(newChild: Expression): HllSketchEstimate =
     copy(child = newChild)
@@ -80,8 +80,8 @@ case class HllSketchEstimate(child: Expression)
 case class HllUnion(first: Expression, second: Expression, third: Expression)
   extends TernaryExpression
     with CodegenFallback
-    with ExpectsInputTypes
-    with NullIntolerant {
+    with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
 
   // The default target type (register size) to use.
   private val targetType = TgtHllType.HLL_8

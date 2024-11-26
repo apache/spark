@@ -401,15 +401,40 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
   }
 }
 
+// For each record, creates a timer to fire in 10 seconds that sleeps for 1 second.
+class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    inputRows.flatMap { _ =>
+      val currentTime = timerValues.getCurrentProcessingTimeInMs()
+      getHandle.registerTimer(currentTime + 10000)
+      None
+    }
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
+    Thread.sleep(1000)
+    Iterator.single(key)
+  }
+}
+
 /**
  * Class that adds tests for transformWithState stateful streaming operator
  */
 class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithChangelogCheckpointingEnabled with AlsoTestWithEncodingTypes {
 
   import testImplicits._
 
-  test("transformWithState - streaming with rocksdb and invalid processor should fail") {
+  test("transformWithState - streaming with rocksdb and" +
+    " invalid processor should fail") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -664,7 +689,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - streaming with rocksdb and event time based timer") {
+  test("transformWithState - streaming with rocksdb and event " +
+  "time based timer") {
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS()
@@ -708,7 +734,54 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  test("Use statefulProcessor without transformWithState - handle should be absent") {
+  test("transformWithState - timer duration should be reflected in metrics") {
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS()
+      .groupByKey(x => x)
+      .transformWithState(
+        new SleepingTimerProcessor, TimeMode.ProcessingTime(), OutputMode.Update())
+
+    testStream(result, OutputMode.Update())(
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      // Side effect: timer scheduled for t = 1 + 10 = 11.
+      CheckNewAnswer(),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+        assert(metrics.get("timerProcessingTimeMs") < 2000)
+      },
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(1 * 1000),
+      // Side effect: timer scheduled for t = 2 + 10 = 12.
+      CheckNewAnswer(),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+        assert(metrics.get("timerProcessingTimeMs") < 2000)
+      },
+
+      AddData(inputData, "c"),
+      // Time is currently 2 and we need to advance past 12. So, advance by 11 seconds.
+      AdvanceManualClock(11 * 1000),
+      CheckNewAnswer("a", "b"),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+
+        // Both timers should have fired and taken 1 second each to process.
+        assert(metrics.get("timerProcessingTimeMs") >= 2000)
+      },
+
+      StopStream
+    )
+  }
+
+  test("Use statefulProcessor without transformWithState -" +
+    " handle should be absent") {
     val processor = new RunningCountStatefulProcessor()
     val ex = intercept[Exception] {
       processor.getHandle
@@ -964,7 +1037,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify StateSchemaV3 writes correct SQL schema of key/value") {
+  test("transformWithState - verify StateSchemaV3 writes " +
+    "correct SQL schema of key/value") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1535,7 +1609,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify that schema file is kept after metadata is purged") {
+  test("transformWithState - verify that schema file " +
+    "is kept after metadata is purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->

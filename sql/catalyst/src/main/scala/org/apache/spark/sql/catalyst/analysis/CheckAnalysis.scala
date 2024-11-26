@@ -457,6 +457,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
 
+          case l: LazyAnalysisExpression =>
+            l.failAnalysis(
+              errorClass = "UNANALYZABLE_EXPRESSION",
+              messageParameters = Map("expr" -> toSQLExpr(l)))
+
           case _ =>
         })
 
@@ -598,7 +603,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case up: Unpivot if up.canBeCoercioned && !up.valuesTypeCoercioned =>
             throw QueryCompilationErrors.unpivotValueDataTypeMismatchError(up.values.get)
 
-          case Sort(orders, _, _) =>
+          case Sort(orders, _, _, _) =>
             orders.foreach { order =>
               if (!RowOrdering.isOrderable(order.dataType)) {
                 order.failAnalysis(
@@ -607,7 +612,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               }
             }
 
-          case Window(_, partitionSpec, _, _) =>
+          case Window(_, partitionSpec, _, _, _) =>
             // Both `partitionSpec` and `orderSpec` must be orderable. We only need an extra check
             // for `partitionSpec` here because `orderSpec` has the type check itself.
             partitionSpec.foreach { p =>
@@ -1062,6 +1067,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case _ =>
     }
 
+    def checkUnresolvedOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = {
+      expr.plan.foreachUp(_.expressions.foreach(_.foreachUp {
+        case o: UnresolvedOuterReference =>
+          val cols = p.inputSet.toSeq.map(attr => toSQLId(attr.name)).mkString(", ")
+          o.failAnalysis(
+            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            messageParameters = Map("objectName" -> toSQLId(o.name), "proposal" -> cols))
+        case _ =>
+      }))
+    }
+
+    // Check if there is unresolved outer attribute in the subquery plan.
+    checkUnresolvedOuterReference(plan, expr)
+
     // Validate the subquery plan.
     checkAnalysis0(expr.plan)
 
@@ -1069,7 +1088,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,
@@ -1546,10 +1565,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             .map(dt => col.field.copy(dataType = dt))
             .getOrElse(col.field)
           val newDataType = a.dataType.get
-          val sameTypeExceptCollations =
-            DataType.equalsIgnoreCompatibleCollation(field.dataType, newDataType)
           newDataType match {
-            case _ if sameTypeExceptCollations => // Allow changing type collations.
             case _: StructType => alter.failAnalysis(
               "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
               Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
@@ -1576,10 +1592,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             case (CharType(l1), CharType(l2)) => l1 == l2
             case (CharType(l1), VarcharType(l2)) => l1 <= l2
             case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
-            case _ => Cast.canUpCast(from, to)
+            case _ =>
+              Cast.canUpCast(from, to) ||
+                DataType.equalsIgnoreCompatibleCollation(field.dataType, newDataType)
           }
-
-          if (!sameTypeExceptCollations && !canAlterColumnType(field.dataType, newDataType)) {
+          if (!canAlterColumnType(field.dataType, newDataType)) {
             alter.failAnalysis(
               errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
               messageParameters = Map(
