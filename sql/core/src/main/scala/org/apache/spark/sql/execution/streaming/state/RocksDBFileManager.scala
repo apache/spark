@@ -189,8 +189,6 @@ class RocksDBFileManager(
     val changelogVersion = getChangelogWriterVersion(
       useColumnFamilies, enableStateStoreCheckpointIds)
 
-    println(s"wei== writer version: $version, changelogVersion: $changelogVersion")
-
     val changelogWriter = changelogVersion match {
       case 1 =>
         new StateStoreChangelogWriterV1(fm, changelogFile, codec)
@@ -369,17 +367,6 @@ class RocksDBFileManager(
       Array((0, None))
     }
   }
-
-
-  def listFiles(): Array[Path] = {
-    val path = new Path(dfsRootDir)
-    if (fm.exists(path)) {
-      fm.list(path).map(_.getPath)
-    } else {
-      Array.empty
-    }
-  }
-
 
   /** Get the latest version available in the DFS directory. If no data present, it returns 0. */
   def getLatestVersion(): Long = {

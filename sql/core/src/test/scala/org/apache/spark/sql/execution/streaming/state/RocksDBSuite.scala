@@ -16,7 +16,6 @@
  */
 
 package org.apache.spark.sql.execution.streaming.state
-// scalastyle:off
 
 import java.io._
 import java.nio.charset.Charset
@@ -2797,57 +2796,17 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
     override def load(
         version: Long,
-        ckptId: Option[String] = Some(""),
+        ckptId: Option[String] = None,
         readOnly: Boolean = false): RocksDB = {
-
-//      if (version == 0) {
-//        super.load(version, None, readOnly)
-//      } else {
-//        val checkpointUniqueId = versionToUniqueId
-//          .getOrElseUpdate(version, UUID.randomUUID().toString)
-//        var checkpointUniqueId = versionToUniqueId.get(version)
-//        // if checkpointUniqueId is not found, create one and put in to the map
-//        if (checkpointUniqueId.isEmpty) {
-//          val uniqueId = UUID.randomUUID().toString
-//          println(s"wei== put uniqueId: $version: $uniqueId")
-//          versionToUniqueId.put(version, uniqueId)
-//          checkpointUniqueId = Some(uniqueId)
-//        }
-
-        //      if (version == 0 || ckptId.isEmpty) {
-        //        println("wei== loading version 0 with None ckpt Id")
-        //        super.load(version, None, readOnly)
-        //      } else {
-        //        val checkpointUniqueId = ckptId match {
-        //          case Some("") =>
-        //            var checkpointUniqueId = versionToUniqueId.get(version)
-        //            // if checkpointUniqueId is not found, create one and put in to the map
-        //            if (checkpointUniqueId.isEmpty) {
-        //              val uniqueId = UUID.randomUUID().toString
-        //              versionToUniqueId.put(version, uniqueId)
-        //              checkpointUniqueId = Some(uniqueId)
-        //            }
-        //            checkpointUniqueId
-        //          case _ => ckptId
-        //        }
-
-        println(s"wei== versionToUniqueId for loading version: $version")
-        versionToUniqueId.foreach { x => println(s"${x._1}: ${x._2}") }
-
-        super.load(version, versionToUniqueId.get(version), readOnly)
-//      }
+      super.load(version, versionToUniqueId.get(version), readOnly)
     }
 
     override def commit(): Long = {
       val ret = super.commit()
-      // loadedVersion and loadedCheckpointId got updated after commit
-//      println(s"wei== commit put version: ${loadedVersion + 1} id: ${sessionStateStoreCkptId.get} ")
-//      versionToUniqueId.getOrElseUpdate(loadedVersion + 1, sessionStateStoreCkptId.get)
+      // update versionToUniqueId from lineageManager
       lineageManager.getLineage().foreach {
         case LineageItem(version, id) => versionToUniqueId.getOrElseUpdate(version, id)
       }
-      println("wei== versionToUniqueId in commit")
-      versionToUniqueId.foreach { x => println(s"${x._1}: ${x._2}") }
       ret
     }
   }

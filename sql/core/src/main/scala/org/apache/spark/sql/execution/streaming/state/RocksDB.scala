@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-// scalastyle:off
 import java.io.File
 import java.util.Locale
 import java.util.Set
@@ -176,13 +175,7 @@ class RocksDB(
   protected var lastCommittedStateStoreCkptId: Option[String] = None
   protected var loadedStateStoreCkptId: Option[String] = None
   protected var sessionStateStoreCkptId: Option[String] = None
-  // protected for test purpose
-//  @volatile protected[sql] var versionToUniqueIdLineage: Array[(Long, Option[String])] = Array.empty
   protected[sql] val lineageManager: RocksDBLineageManager = new RocksDBLineageManager
-
-  private def printLineage(lineage: Array[(Long, Option[String])]): String = lineage.map {
-    case (l, optStr) => s"$l:${optStr.getOrElse("")}"
-  }.mkString(" ")
 
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -287,70 +280,56 @@ class RocksDB(
   // We send snapshots that needs to be uploaded by the maintenance thread to this queue
   private val snapshotsToUploadQueue = new ConcurrentLinkedQueue[RocksDBSnapshot]()
 
-
   /**
- * In the case of checkpointFormatVersion 2, if we find multiple latest snapshot files of
- * the same version but they have different uniqueIds, we need to find the correct one based on
- * the lineage we have.
- *
- * When this happens, the stored file on the DFS must be a changelog file, because if not, the
- * latest snapshot is uniquely identified as the (version, stateStoreCkptId) pair.
- *
- * This method achieves traversing back the lineage and find the correct latest snapshot file
- * by creating a changelog reader and compare with the lineages stored there.
- */
+   * Based on the ground truth lineage loaded from changelog file (lineage) and
+   * the latest snapshot (version, uniqueId) pair from file listing, this function finds
+   * the ground truth latest snapshot (version, uniqueId) the db instance needs to load.
+   *
+   * @param lineage the ground truth lineage loaded from changelog file
+   * @param latestSnapshotVersionsAndUniqueIds
+   *   (version, uniqueId) pair of the latest snapshot version. In case of task re-execution,
+   *   the array could have more than one element.
+   * @return the ground truth latest snapshot (version, uniqueId) the db instance needs to load
+   */
   private def getLatestSnapshotVersionAndUniqueIdFromLineage(
-      currLineage: Array[LineageItem],
+      lineage: Array[LineageItem],
       latestSnapshotVersionsAndUniqueIds: Array[(Long, Option[String])]):
       (Long, Option[String]) = {
-    currLineage.foreach {
+    lineage.foreach {
       case LineageItem(version, uniqueId) =>
         if (latestSnapshotVersionsAndUniqueIds.contains((version, Some(uniqueId)))) {
           return (version, Some(uniqueId))
         }
     }
     throw QueryExecutionErrors.cannotGetLatestSnapshotVersionAndUniqueIdFromLineage(
-      printLineageItems(currLineage), printLineage(latestSnapshotVersionsAndUniqueIds)
+      printLineageItems(lineage), printLineage(latestSnapshotVersionsAndUniqueIds)
     )
   }
 
+  /**
+   * Read the lineage from the changelog files. It first get the changelog reader
+   * of the correct changelog version and then read the lineage information from the file.
+   * The changelog file is named as version_stateStoreCkptId.changelog
+   * @param version version of the changelog file, used to load changelog file.
+   * @param stateStoreCkptId uniqueId of the changelog file, used to load changelog file.
+   * @return
+   */
   private def getLineageFromChangelogFile(
       version: Long,
-      useColumnFamilies: Boolean,
       stateStoreCkptId: Option[String]): Array[LineageItem] = {
-
-    // It is possible that change log checkpointing is first enabled and then disabled.
-    // In this case, loading changelog reader will fail because there are only zip files.
-    // It is also possible that state store was previously ran under format version 1
-    // In that case, loading changelog reader with file format version_uniqueId.changelog
-    // will also fail.
-    // But either way, there is no lineage in either case so we can swallow the failure
-    // CANNOT_READ_STREAMING_STATE_FILE.
     var changelogReader: StateStoreChangelogReader = null
     var currLineage: Array[LineageItem] = Array.empty
     try {
       changelogReader = fileManager.getChangelogReader(version, stateStoreCkptId)
-      // currLineage contains the version -> uniqueId mapping from the previous snapshot file
-      // to current version's changelog file
-//      versionToUniqueIdLineage = changelogReader.lineage.map {
-//        case LineageItem(version, uniqueId) => (version, Option(uniqueId))
-//      }
       currLineage = changelogReader.lineage
-//      lineageManager.resetLineage(changelogReader.lineage)
-      logInfo(log"Loading versionToUniqueIdLineage: ${MDC(LogKeys.LINEAGE,
-        lineageManager)} from changelog version: ${MDC(
-        LogKeys.VERSION_NUM, version)} uniqueId: ${MDC(LogKeys.UUID,
-        stateStoreCkptId.getOrElse(""))}. " +
-        log"This would be an noop if changelog is not enabled, or the query was previously" +
-        log"ran under checkpoint format v1")
-//      currLineage = lineageManager.getLineage()
+      logInfo(log"Loading lineage: " +
+        log"${MDC(LogKeys.LINEAGE, lineageManager)} from " +
+        log"changelog version: ${MDC(LogKeys.VERSION_NUM, version)} " +
+        log"uniqueId: ${MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}.")
     } finally {
       if (changelogReader != null) {
         changelogReader.closeIfNeeded()
       }
-//      if (currLineage.isEmpty) {
-//        currLineage = Array(LineageItem(version, stateStoreCkptId.get))
-//      }
     }
     currLineage
   }
@@ -372,43 +351,29 @@ class RocksDB(
         stateStoreCkptId.get != loadedStateStoreCkptId.get)) {
       closeDB(ignoreException = false)
 
-      // scalastyle:off
-
-      println(s"wei== load version: $version, id: $stateStoreCkptId")
-      println(s"wei== all files: ")
-      fileManager.listFiles().foreach(println)
-
       val (latestSnapshotVersion, latestSnapshotUniqueId) = {
         // Special handling when version is 0.
         // When loading the very first version (0), stateStoreCkptId does not need to be defined
         // because there won't be 0.changelog / 0.zip file created in RocksDB.
         if (version == 0 && stateStoreCkptId.isEmpty) {
           (0L, None)
+        // When there is a snapshot file, it is the ground truth, we can skip
+        // reconstructing the lineage from changelog file.
         } else if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
-          println(s"wei== exists snapshot file $version $stateStoreCkptId")
           currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
           lineageManager.resetLineage(currVersionLineage)
           (version, stateStoreCkptId)
         } else {
           val latestSnapshotVersionsAndUniqueIds =
             fileManager.getLatestSnapshotVersionAndUniqueId(version, stateStoreCkptId)
-          println("wei== lineage from listing: ")
-          println(printLineage(latestSnapshotVersionsAndUniqueIds))
-          currVersionLineage = getLineageFromChangelogFile(version, useColumnFamilies, stateStoreCkptId) :+
+          currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
             LineageItem(version, stateStoreCkptId.get)
           lineageManager.resetLineage(currVersionLineage)
           if (latestSnapshotVersionsAndUniqueIds.length == 0) {
-            println("wei== 0 currLineage: " + printLineageItems(currVersionLineage))
             (0L, None)
-          } else if (latestSnapshotVersionsAndUniqueIds.length == 1) {
-            println("wei== 1 currLineage: " + printLineageItems(currVersionLineage))
-            getLatestSnapshotVersionAndUniqueIdFromLineage(
-              currVersionLineage, latestSnapshotVersionsAndUniqueIds)
           } else {
-            println("wei== 2 currLineage: " + printLineageItems(currVersionLineage))
-            logInfo(log"Multiple snapshots found for the version. Found: ${MDC(LogKeys.LINEAGE,
-              printLineage(latestSnapshotVersionsAndUniqueIds))}. " +
-              log"Loading the latest snapshot from lineage.")
+            logInfo(log"Latest snapshot version and uniqueId found: " +
+              log"${MDC(LogKeys.LINEAGE, printLineage(latestSnapshotVersionsAndUniqueIds))}.")
             getLatestSnapshotVersionAndUniqueIdFromLineage(
               currVersionLineage, latestSnapshotVersionsAndUniqueIds)
           }
@@ -418,8 +383,6 @@ class RocksDB(
       logInfo(log"Loaded latestSnapshotVersion: ${
         MDC(LogKeys.SNAPSHOT_VERSION, latestSnapshotVersion)}, latestSnapshotUniqueId: ${
         MDC(LogKeys.UUID, latestSnapshotUniqueId)}")
-
-      println(s"wei== Loaded latestSnapshotVersion: ${latestSnapshotVersion}, latestSnapshotUniqueId: $latestSnapshotUniqueId")
 
       val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
         workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
@@ -459,15 +422,12 @@ class RocksDB(
   if (enableChangelogCheckpointing && !readOnly) {
     // Make sure we don't leak resource.
     changelogWriter.foreach(_.abort())
-    // loadedVersion set to version in replayChangelog
-    println(s"wei== changelog writer: version: ${version + 1}, ckptid: $sessionStateStoreCkptId" )
-    // currLineage is only constructed when version is a change log version.
-    // When loading from snapshot, currLineage is None because snapshot files
-    // (version_uniqueId.zip) are source of truth.
-    // They don't need to store lineage up to the previous version.
-//    val lineage: Array[LineageItem] = versionToUniqueIdLineage.map(x => LineageItem(x._1, x._2.get)) ++
-//      Array(LineageItem(version + 1, sessionStateStoreCkptId.get))
-    println(s"wei== writer lineage: " + printLineageItems(currVersionLineage))
+    // Initialize the changelog writer with lineage info
+    // The lineage stored in changelog files should normally start with
+    // the version of a snapshot, except for the first few versions.
+    // Because they are solely loaded from changelog file.
+    // (e.g. with default minDeltasForSnapshot, there is only 1_uuid1.changelog, no 1_uuid1.zip)
+    // It should end with exactly one version before the change log's version.
     changelogWriter = Some(fileManager.getChangeLogWriter(
       version + 1, useColumnFamilies, sessionStateStoreCkptId, Some(currVersionLineage)))
   }
@@ -551,20 +511,11 @@ class RocksDB(
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
-    // Because state store checkpoint IDs are created in RocksDB instance, version 0
-    // does not have stateStoreCkptId defined
     if (enableStateStoreCheckpointIds) {
-      var ckptId = stateStoreCkptId
-//      if (stateStoreCkptId.isEmpty && version == 0) {
-//        logWarning(log"State Store V2 is enabled but stateStoreCkptId is None for version: " +
-//          log"${MDC(LogKeys.VERSION_NUM, version)}")
-//        ckptId = Some(java.util.UUID.randomUUID.toString)
-//      }
       loadV2(version, stateStoreCkptId, readOnly)
     } else {
       loadV1(version, readOnly)
     }
-    println(s"wei== after load() sessionStateStoreCkptId: $sessionStateStoreCkptId")
     this
   }
 
@@ -897,7 +848,6 @@ class RocksDB(
           // ensure that changelog files are always written
           try {
             assert(changelogWriter.isDefined)
-            println("wei== changelog writer commit")
             changelogWriter.foreach(_.commit())
             if (!isUploaded) {
               snapshot.foreach(snapshotsToUploadQueue.offer)
@@ -921,18 +871,12 @@ class RocksDB(
         lastCommitBasedStateStoreCkptId = loadedStateStoreCkptId
         lastCommittedStateStoreCkptId = sessionStateStoreCkptId
         loadedStateStoreCkptId = sessionStateStoreCkptId
-//        versionToUniqueIdLineage = versionToUniqueIdLineage :+ (newVersion, sessionStateStoreCkptId)
         lineageManager.appendLineageItem(LineageItem(newVersion, sessionStateStoreCkptId.get))
-        logWarning(log"wei=== Update checkpoint IDs and lineage: ${MDC(
+        logInfo(log"Update checkpoint IDs and lineage: ${MDC(
           LogKeys.LOADED_CHECKPOINT_ID, loadedStateStoreCkptId)}," +
           log" ${MDC(LogKeys.LAST_COMMITTED_CHECKPOINT_ID, lastCommittedStateStoreCkptId)}," +
           log" ${MDC(LogKeys.LAST_COMMIT_BASED_CHECKPOINT_ID, lastCommitBasedStateStoreCkptId)}," +
           log" ${MDC(LogKeys.LINEAGE, lineageManager)}")
-
-//        println("wei==commit Update checkpoint IDs and lineage:" +
-//          s"loadedStateStoreCkptId: $loadedStateStoreCkptId lastCommittedStateStoreCkptId:
-        // $lastCommittedStateStoreCkptId lastCommitBasedStateStoreCkptId: $lastCommitBasedStateStoreCkptId lineage:
-        // ${printLineage(versionToUniqueIdLineage)}")
       }
 
       // Set maxVersion when checkpoint files are synced to DFS successfully
@@ -983,7 +927,6 @@ class RocksDB(
       lastCommittedStateStoreCkptId = None
       loadedStateStoreCkptId = None
       sessionStateStoreCkptId = None
-//      versionToUniqueIdLineage = Array.empty
       lineageManager.clear()
       changelogWriter.foreach(_.abort())
       // Make sure changelogWriter gets recreated next time.
@@ -1294,17 +1237,13 @@ class RocksDB(
         // have been uploaded to DFS. We don't touch the file mapping here to avoid corrupting it.
         snapshotsPendingUpload.remove(snapshotInfo)
       }
-//      versionToUniqueIdLineage = versionToUniqueIdLineage.filter(_._1 >= snapshot.version)
       lineageManager.resetLineage(lineageManager.getLineage()
         .filter(i => i.version >= snapshot.version))
-      logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: Upload snapshot of version " +
-        log"${MDC(LogKeys.VERSION_NUM, snapshot.version)}, with uniqueId: ${MDC(LogKeys.UUID,
-          snapshot.uniqueId)} time taken: ${MDC(LogKeys.TIME_UNITS,
-          uploadTime)} ms. Current lineage:" +
-        log" ${MDC(LogKeys.LINEAGE, lineageManager)}")
-      println(s"Upload snapshot of version " +
-        s"${snapshot.version}, with uniqueId: ${
-          snapshot.uniqueId}Current lineage:" + lineageManager)
+      logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: " +
+        log"Upload snapshot of version ${MDC(LogKeys.VERSION_NUM, snapshot.version)}, " +
+        log"with uniqueId: ${MDC(LogKeys.UUID, snapshot.uniqueId)} " +
+        log"time taken: ${MDC(LogKeys.TIME_UNITS, uploadTime)} ms. " +
+        log"Current lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
     } finally {
       snapshot.close()
     }
@@ -1788,8 +1727,17 @@ case class AcquiredThreadInfo(
   }
 }
 
+/**
+ * A helper class to manage the lineage information when checkpoint unique id is enabled.
+ * "lineage" is an array of LineageItem (version, uniqueId) pair.
+ *
+ * The first item of "lineage" should normally be the version of a snapshot, except
+ * for the first few versions. Because they are solely loaded from changelog file.
+ * (i.e. with default minDeltasForSnapshot, there is only 1_uuid1.changelog, no 1_uuid1.zip)
+ *
+ * The last item of "lineage" corresponds to one version before the to-be-committed version.
+ */
 private[sql] class RocksDBLineageManager {
-  // lineage from [lastSnapshotVersion, loadedVersion)
   @volatile private var lineage: Array[LineageItem] = Array.empty
 
   override def toString: String = lineage.map {
