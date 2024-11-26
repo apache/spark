@@ -482,11 +482,11 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
     }
   }
 
-  // If we have a list for a key k1 -> [v1, v2, v3] and they _all_ expire, then there
-  // should be no remaining records in any primary (or secondary index) for that key.
-  // However, if we have a separate key k2 -> [v1] that hasn't expired yet, then it
+  // If we have a list for a key k1 -> [(v1, t1), (v2, t2), (v3, t3)] and they _all_ expire,
+  // then there should be no remaining records in any primary (or secondary index) for that key.
+  // However, if we have a separate key k2 -> [(v1, t4)] and the time is less than t4, then it
   // should still be present after the clearing for k1.
-  test("verify min-index doesn't insert when the new minimum is None") {
+  test("verify min-expiry index doesn't insert when the new minimum is None") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -547,7 +547,7 @@ class TransformWithListStateTTLSuite extends TransformWithStateTTLTest
           AdvanceManualClock((63 - 5) * 1000),
           CheckNewAnswer(),
 
-          // There should be 4 state rows left over: the primary, TTL, min index, and count
+          // There should be 4 state rows left over: the primary, TTL, min-expiry, and count
           // indexes for k2.
           //
           // It's important to check with assertNumStateRows, since the InputEvents

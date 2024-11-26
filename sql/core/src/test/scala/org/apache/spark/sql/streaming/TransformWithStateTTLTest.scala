@@ -143,8 +143,8 @@ abstract class TransformWithStateTTLTest
         AddData(inputStream, InputEvent("k1", "put", 1)),
         // advance clock to trigger processing
         AdvanceManualClock(1 * 1000),
-        // In the primary index, we should have that k1 -> [1].
-        // The TTL index has (6100, k1) -> empty. The min index has k1 -> 61000.
+        // In the primary index, we should have that k1 -> [(1, 61000)].
+        // The TTL index has (61000, k1) -> empty. The min-expiry index has k1 -> 61000.
         CheckNewAnswer(),
 
         // get this state, and make sure we get unexpired value
@@ -169,8 +169,9 @@ abstract class TransformWithStateTTLTest
         AdvanceManualClock(1 * 1000),
         // validate value is not expired
         //
-        // In the primary index, we still get that k1 -> [1].
-        // The TTL index should now have (9500, k1) -> empty. The min index should have k1 -> 95000.
+        // In the primary index, we still get that k1 -> [(1, 95000)].
+        // The TTL index should now have (95000, k1) -> empty, and the min-expiry index
+        // should have k1 -> 95000.
         CheckNewAnswer(OutputEvent("k1", 1, isTTLValue = false, -1)),
 
         // validate ttl value is updated in the state

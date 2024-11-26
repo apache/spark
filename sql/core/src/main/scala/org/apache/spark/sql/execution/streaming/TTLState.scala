@@ -70,31 +70,31 @@ import org.apache.spark.sql.types._
 trait TTLState {
   // Name of the state variable, e.g. the string the user passes to get{Value/List/Map}State
   // in the init() method of a StatefulProcessor.
-  def stateName: String
+  private[sql] def stateName: String
 
   // The StateStore instance used to store the state. There is only one instance shared
   // among the primary and secondary indexes, since it uses virtual column families
   // to keep the indexes separate.
-  def store: StateStore
+  private[sql] def store: StateStore
 
   // The schema of the primary key for the state variable. For value and list state, this
   // is the grouping key. For map state, this is the composite key of the grouping key and
   // a map key.
-  def elementKeySchema: StructType
+  private[sql] def elementKeySchema: StructType
 
   // The timestamp at which the batch is being processed. All state variables that have
   // an expiration at or before this timestamp must be cleaned up.
-  def batchTimestampMs: Long
+  private[sql] def batchTimestampMs: Long
 
   // The configuration for this run of the streaming query. It may change between runs
   // (e.g. user sets ttlConfig1, stops their query, updates to ttlConfig2, and then
   // resumes their query).
-  def ttlConfig: TTLConfig
+  private[sql] def ttlConfig: TTLConfig
 
   // A map from metric name to the underlying SQLMetric. This should not be updated
   // by the underlying state variable, as the TTL state implementation should be
   // handling all reads/writes/deletes to the indexes.
-  def metrics: Map[String, SQLMetric] = Map.empty
+  private[sql] def metrics: Map[String, SQLMetric] = Map.empty
 
   private final val TTL_INDEX = "$ttl_" + stateName
   private final val TTL_INDEX_KEY_SCHEMA = getTTLRowKeySchema(elementKeySchema)
@@ -107,7 +107,7 @@ trait TTLState {
   private final val TTL_EMPTY_VALUE_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 
-  protected final def ttlExpirationMs = StateTTL
+  private[sql] final def ttlExpirationMs = StateTTL
     .calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
 
   store.createColFamilyIfAbsent(
@@ -118,7 +118,7 @@ trait TTLState {
     isInternal = true
   )
 
-  protected def insertIntoTTLIndex(expirationMs: Long, elementKey: UnsafeRow): Unit = {
+  private[sql] def insertIntoTTLIndex(expirationMs: Long, elementKey: UnsafeRow): Unit = {
     val secondaryIndexKey = TTL_ENCODER.encodeTTLRow(expirationMs, elementKey)
     store.put(secondaryIndexKey, TTL_EMPTY_VALUE_ROW, TTL_INDEX)
   }
@@ -128,7 +128,7 @@ trait TTLState {
   //
   // If we know the timestamp to delete and the elementKey, but don't have a pre-constructed
   // UnsafeRow, then you should use this method to delete from the TTL index.
-  protected def deleteFromTTLIndex(expirationMs: Long, elementKey: UnsafeRow): Unit = {
+  private[sql] def deleteFromTTLIndex(expirationMs: Long, elementKey: UnsafeRow): Unit = {
     val secondaryIndexKey = TTL_ENCODER.encodeTTLRow(expirationMs, elementKey)
     store.remove(secondaryIndexKey, TTL_INDEX)
   }
@@ -139,18 +139,16 @@ trait TTLState {
   // If we were to use the other deleteFromTTLIndex method, we would have to re-encode the
   // components into an UnsafeRow. It is more efficient to just pass the UnsafeRow that we
   // read from the iterator.
-  protected def deleteFromTTLIndex(ttlKey: UnsafeRow): Unit = {
+  private[sql] def deleteFromTTLIndex(ttlKey: UnsafeRow): Unit = {
     store.remove(ttlKey, TTL_INDEX)
   }
 
-  // Exposed for testing.
   private[sql] def toTTLRow(ttlKey: UnsafeRow): TTLRow = {
     val expirationMs = ttlKey.getLong(0)
     val elementKey = ttlKey.getStruct(1, TTL_INDEX_KEY_SCHEMA.length)
     TTLRow(elementKey, expirationMs)
   }
 
-  // Exposed for testing.
   private[sql] def getTTLRows(): Iterator[TTLRow] = {
     store.iterator(TTL_INDEX).map(kv => toTTLRow(kv.key))
   }
@@ -160,7 +158,7 @@ trait TTLState {
   // to do so.
   //
   // The schema of the UnsafeRow returned by this iterator is (expirationMs, elementKey).
-  protected def ttlEvictionIterator(): Iterator[UnsafeRow] = {
+  private[sql] def ttlEvictionIterator(): Iterator[UnsafeRow] = {
     val ttlIterator = store.iterator(TTL_INDEX)
 
     // Recall that the format is (expirationMs, elementKey) -> TTL_EMPTY_VALUE_ROW, so
@@ -187,7 +185,7 @@ trait TTLState {
    *
    * @return number of values cleaned up.
    */
-  def clearExpiredStateForAllKeys(): Long
+  private[sql] def clearExpiredStateForAllKeys(): Long
 
   /**
    * When a user calls clear() on a stateful variable, this method is invoked to
@@ -198,7 +196,7 @@ trait TTLState {
    * example, every key in the map is its own elementKey), then this method should
    * be invoked for each of those keys.
    */
-  def clearAllStateForElementKey(elementKey: UnsafeRow): Unit
+  private[sql] def clearAllStateForElementKey(elementKey: UnsafeRow): Unit
 }
 
 /**
@@ -224,12 +222,12 @@ abstract class OneToOneTTLState(
     ttlConfigArg: TTLConfig,
     batchTimestampMsArg: Long,
     metricsArg: Map[String, SQLMetric]) extends TTLState {
-  override def stateName: String = stateNameArg
-  override def store: StateStore = storeArg
-  override def elementKeySchema: StructType = elementKeySchemaArg
-  override def ttlConfig: TTLConfig = ttlConfigArg
-  override def batchTimestampMs: Long = batchTimestampMsArg
-  override def metrics: Map[String, SQLMetric] = metricsArg
+  override private[sql] def stateName: String = stateNameArg
+  override private[sql] def store: StateStore = storeArg
+  override private[sql] def elementKeySchema: StructType = elementKeySchemaArg
+  override private[sql] def ttlConfig: TTLConfig = ttlConfigArg
+  override private[sql] def batchTimestampMs: Long = batchTimestampMsArg
+  override private[sql] def metrics: Map[String, SQLMetric] = metricsArg
 
   /**
    * This method updates the TTL for the given elementKey to be expirationMs,
@@ -248,7 +246,7 @@ abstract class OneToOneTTLState(
    *                     form (value, expirationMs).
    * @param expirationMs the new expiration timestamp to use for elementKey.
    */
-  def updatePrimaryAndSecondaryIndices(
+  private[sql] def updatePrimaryAndSecondaryIndices(
       elementKey: UnsafeRow,
       elementValue: UnsafeRow,
       expirationMs: Long): Unit = {
@@ -260,24 +258,24 @@ abstract class OneToOneTTLState(
       TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
       insertIntoTTLIndex(expirationMs, elementKey)
     } else {
-      // The new value and the existing one may differ in either timestamp or in actual
-      // value. In either case, we need to update the primary index.
+      // If the values are equal, then they must be equal in actual value and the expiration
+      // timestamp. We don't need to update any index in this case.
       if (elementValue != existingPrimaryValue) {
         store.put(elementKey, elementValue, stateName)
         TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-      }
 
-      // However, the TTL index might already have the correct mapping from expirationMs to
-      // elementKey. But if it doesn't, then we need to update the TTL index.
-      val existingExpirationMs = existingPrimaryValue.getLong(1)
-      if (existingExpirationMs != expirationMs) {
-        deleteFromTTLIndex(existingExpirationMs, elementKey)
-        insertIntoTTLIndex(expirationMs, elementKey)
+        // Small optimization: the value could have changed, but the expirationMs could have
+        // stayed the same. We only put into the TTL index if the expirationMs has changed.
+        val existingExpirationMs = existingPrimaryValue.getLong(1)
+        if (existingExpirationMs != expirationMs) {
+          deleteFromTTLIndex(existingExpirationMs, elementKey)
+          insertIntoTTLIndex(expirationMs, elementKey)
+        }
       }
     }
   }
 
-  override def clearExpiredStateForAllKeys(): Long = {
+  override private[sql] def clearExpiredStateForAllKeys(): Long = {
     var numValuesExpired = 0L
 
     ttlEvictionIterator().foreach { ttlKey =>
@@ -293,7 +291,7 @@ abstract class OneToOneTTLState(
     numValuesExpired
   }
 
-  override def clearAllStateForElementKey(elementKey: UnsafeRow): Unit = {
+  override private[sql] def clearAllStateForElementKey(elementKey: UnsafeRow): Unit = {
     val existingPrimaryValue = store.get(elementKey, stateName)
     if (existingPrimaryValue != null) {
       val existingExpirationMs = existingPrimaryValue.getLong(1)
@@ -330,7 +328,7 @@ abstract class OneToOneTTLState(
  *
  * Since a grouping key may have a large list and we need to quickly know what the
  * minimum expiration is, we need to reverse this work queue index. This reversed index
- * maps from key to the minimum expiration in the list, and it is called the "min-index".
+ * maps from key to the minimum expiration in the list, and it is called the "min-expiry" index.
  *
  * Note: currently, this is only used by ListState with TTL.
  */
@@ -341,14 +339,14 @@ abstract class OneToManyTTLState(
     ttlConfigArg: TTLConfig,
     batchTimestampMsArg: Long,
     metricsArg: Map[String, SQLMetric]) extends TTLState {
-  override def stateName: String = stateNameArg
-  override def store: StateStore = storeArg
-  override def elementKeySchema: StructType = elementKeySchemaArg
-  override def ttlConfig: TTLConfig = ttlConfigArg
-  override def batchTimestampMs: Long = batchTimestampMsArg
-  override def metrics: Map[String, SQLMetric] = metricsArg
+  override private[sql] def stateName: String = stateNameArg
+  override private[sql] def store: StateStore = storeArg
+  override private[sql] def elementKeySchema: StructType = elementKeySchemaArg
+  override private[sql] def ttlConfig: TTLConfig = ttlConfigArg
+  override private[sql] def batchTimestampMs: Long = batchTimestampMsArg
+  override private[sql] def metrics: Map[String, SQLMetric] = metricsArg
 
-  // Schema of the min index: elementKey -> minExpirationMs
+  // Schema of the min-expiry index: elementKey -> minExpirationMs
   private val MIN_INDEX = "$min_" + stateName
   private val MIN_INDEX_SCHEMA = elementKeySchema
   private val MIN_INDEX_VALUE_SCHEMA = getExpirationMsRowSchema()
@@ -383,12 +381,8 @@ abstract class OneToManyTTLState(
     isInternal = true
   )
 
-  /**
-   * Function to get the number of entries in the list state for a given grouping key
-   * @param elementKey - encoded grouping key
-   * @return - number of entries in the list state
-   */
-  def getEntryCount(elementKey: UnsafeRow): Long = {
+  // Helper method to get the number of entries in the list state for a given element key
+  private def getEntryCount(elementKey: UnsafeRow): Long = {
     val countRow = store.get(elementKey, COUNT_INDEX)
     if (countRow != null) {
       countRow.getLong(0)
@@ -397,12 +391,8 @@ abstract class OneToManyTTLState(
     }
   }
 
-  /**
-   * Function to update the number of entries in the list state for a given element key
-   * @param elementKey - encoded grouping key
-   * @param updatedCount - updated count of entries in the list state
-   */
-  def updateEntryCount(elementKey: UnsafeRow, updatedCount: Long): Unit = {
+  // Helper function to update the number of entries in the list state for a given element key
+  private def updateEntryCount(elementKey: UnsafeRow, updatedCount: Long): Unit = {
     reusedCountIndexValueRow.setLong(0, updatedCount)
     store.put(elementKey,
       countIndexValueProjector(reusedCountIndexValueRow.asInstanceOf[InternalRow]),
@@ -410,11 +400,8 @@ abstract class OneToManyTTLState(
     )
   }
 
-  /**
-   * Function to remove the number of entries in the list state for a given grouping key
-   * @param elementKey - encoded element key
-   */
-  def removeEntryCount(elementKey: UnsafeRow): Unit = {
+  // Helper function to remove the number of entries in the list state for a given element key
+  private def removeEntryCount(elementKey: UnsafeRow): Unit = {
     store.remove(elementKey, COUNT_INDEX)
   }
 
@@ -450,7 +437,7 @@ abstract class OneToManyTTLState(
     updateEntryCount(elementKey, initialEntryCount + numNewElements)
   }
 
-  protected def updatePrimaryAndSecondaryIndices(
+  private[sql] def updatePrimaryAndSecondaryIndices(
       overwritePrimaryIndex: Boolean,
       elementKey: UnsafeRow,
       elementValues: Iterator[UnsafeRow],
@@ -470,7 +457,7 @@ abstract class OneToManyTTLState(
       val existingMinExpiration = existingMinExpirationUnsafeRow.getLong(0)
 
       if (overwritePrimaryIndex || expirationMs < existingMinExpiration) {
-        // We don't actually have to delete from the min index, since we're going
+        // We don't actually have to delete from the min-expiry index, since we're going
         // to overwrite it on the next line. However, since the TTL index has the existing
         // minimum expiration in it, we need to delete that.
         deleteFromTTLIndex(existingMinExpiration, elementKey)
@@ -493,7 +480,7 @@ abstract class OneToManyTTLState(
   // Clears all the expired values for the given elementKey.
   protected def clearExpiredValues(elementKey: UnsafeRow): ValueExpirationResult
 
-  override def clearExpiredStateForAllKeys(): Long = {
+  override private[sql] def clearExpiredStateForAllKeys(): Long = {
     var totalNumValuesExpired = 0L
 
     ttlEvictionIterator().foreach { ttlKey =>
@@ -535,7 +522,7 @@ abstract class OneToManyTTLState(
     totalNumValuesExpired
   }
 
-  override def clearAllStateForElementKey(elementKey: UnsafeRow): Unit = {
+  override private[sql] def clearAllStateForElementKey(elementKey: UnsafeRow): Unit = {
     val existingMinExpirationUnsafeRow = store.get(elementKey, MIN_INDEX)
     if (existingMinExpirationUnsafeRow != null) {
       val existingMinExpiration = existingMinExpirationUnsafeRow.getLong(0)
