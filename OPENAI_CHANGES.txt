@@ -51,3 +51,4 @@
 - [INTERNAL] Update Spark Dockerfile to ignore already installed system packages
 - [INTERNAL] Ignore flaky tests
 - [INTERNAL] Add an config option to skip streaming metadata file check
+- [INTERNAL] Setup Buildkite to publish release artifacts
