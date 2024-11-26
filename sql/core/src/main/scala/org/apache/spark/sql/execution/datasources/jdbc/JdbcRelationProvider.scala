@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
 import org.apache.spark.sql.jdbc.JdbcDialects

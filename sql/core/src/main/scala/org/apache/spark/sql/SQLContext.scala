@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.util.Properties
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.{Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
@@ -29,7 +29,9 @@ import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedNames
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ShowTables
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
  * The entry point for working with structured data (rows and columns) in Spark 1.x.
@@ -49,12 +51,15 @@ import org.apache.spark.sql.types._
  * @since 1.0.0
  */
 @Stable
-class SQLContext private[sql](sparkSession: SparkSession)
+class SQLContext private[sql](override val sparkSession: SparkSession)
   extends api.SQLContext(sparkSession) {
 
   self =>
 
   sparkSession.sparkContext.assertNotStopped()
+
+  // Note: Since Spark 2.0 this class has become a wrapper of SparkSession, where the
+  // real functionality resides. This class remains mainly for backward compatibility.
 
   @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sc: SparkContext) = {
@@ -71,101 +76,103 @@ class SQLContext private[sql](sparkSession: SparkSession)
   @deprecated("Use SparkSession.sessionState.conf instead", "4.0.0")
   private[sql] def conf: SQLConf = sessionState.conf
 
-  /**
-   * Returns a [[SQLContext]] as new session, with separated SQL configurations, temporary
-   * tables, registered functions, but sharing the same `SparkContext`, cached data and
-   * other things.
-   *
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
+  override def sparkContext: SparkContext = sparkSession.sparkContext
+
+  /** @inheritdoc */
   override def newSession(): SQLContext = sparkSession.newSession().sqlContext
 
-  /**
-   * Set Spark SQL configuration properties.
-   *
-   * @group config
-   * @since 1.0.0
-   */
+  /** @inheritdoc */
+  override def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
+
+  /** @inheritdoc */
   override def setConf(props: Properties): Unit = {
     sessionState.conf.setConf(props)
   }
 
-  /**
-   * Set the given Spark SQL configuration property.
-   */
   private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     sessionState.conf.setConf(entry, value)
   }
+
+  @Experimental
+  @transient
+  @Unstable
+  /** @inheritdoc */
+  override def experimental: ExperimentalMethods = sparkSession.experimental
+
+  /** @inheritdoc */
+  override def udf: UDFRegistration = sparkSession.udf
+
+  // scalastyle:off
+  // Disable style checker so "implicits" object can start with lowercase i
+  /**
+   * (Scala-specific) Implicit methods available in Scala for converting
+   * common Scala objects into `DataFrame`s.
+   *
+   * {{{
+   *   val sqlContext = new SQLContext(sc)
+   *   import sqlContext.implicits._
+   * }}}
+   *
+   * @group basic
+   * @since 1.3.0
+   */
+  object implicits extends SQLImplicits {
+    /** @inheritdoc */
+    override protected def session: SparkSession = sparkSession
+  }
+  // scalastyle:on
 
   /**
    * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
    * converted to Catalyst rows.
    */
-  private[sql]
-  def internalCreateDataFrame(
+  private[sql] def internalCreateDataFrame(
       catalystRows: RDD[InternalRow],
       schema: StructType,
-      isStreaming: Boolean = false) = {
+      isStreaming: Boolean = false): DataFrame = {
     sparkSession.internalCreateDataFrame(catalystRows, schema, isStreaming)
   }
 
+  /** @inheritdoc */
+  override def read: DataFrameReader = sparkSession.read
+
+  /** @inheritdoc */
+  override def readStream: DataStreamReader = sparkSession.readStream
+
   /**
-   * Returns a `DataFrame` containing names of existing tables in the current database.
-   * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
-   * indicating if a table is a temporary one or not).
-   *
-   * @group ddl_ops
-   * @since 1.3.0
+   * Registers the given `DataFrame` as a temporary table in the catalog. Temporary tables exist
+   * only during the lifetime of this instance of SQLContext.
    */
+  private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
+    df.createOrReplaceTempView(tableName)
+  }
+
+  /** @inheritdoc */
   override def tables(): DataFrame = {
     Dataset.ofRows(sparkSession, ShowTables(CurrentNamespace, None))
   }
 
-  /**
-   * Returns a `DataFrame` containing names of existing tables in the given database.
-   * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
-   * indicating if a table is a temporary one or not).
-   *
-   * @group ddl_ops
-   * @since 1.3.0
-   */
-  def tables(databaseName: String): DataFrame = {
+  /** @inheritdoc */
+  override def tables(databaseName: String): DataFrame = {
     Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
   }
 
-  /**
-   * Returns the names of tables in the given database as an array.
-   *
-   * @group ddl_ops
-   * @since 1.3.0
-   */
-  def tableNames(databaseName: String): Array[String] = {
+  /** @inheritdoc */
+  override def streams: StreamingQueryManager = sparkSession.streams
+
+  /** @inheritdoc */
+  override def tableNames(databaseName: String): Array[String] = {
     sessionState.catalog.listTables(databaseName).map(_.table).toArray
   }
 }
 
-/**
- * This SQLContext object contains utility functions to create a singleton SQLContext instance,
- * or to get the created SQLContext instance.
- *
- * It also provides utility functions to support preference for threads in multiple sessions
- * scenario, setActive could set a SQLContext for current thread, which will be returned by
- * getOrCreate instead of the global one.
- */
-object SQLContext extends api.SQLContextCompanion[SQLContext] {
+object SQLContext extends api.SQLContextCompanion {
 
-  /**
-   * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
-   *
-   * This function can be used to create a singleton SQLContext object that can be shared across
-   * the JVM.
-   *
-   * If there is an active SQLContext for current thread, it will be returned instead of the global
-   * one.
-   *
-   * @since 1.5.0
-   */
-  @deprecated("Use SparkSession.builder instead", "2.0.0")
+  override private[sql] type SQLContextImpl = SQLContext
+  override private[sql] type SparkContextImpl = SparkContext
+
+  /** @inheritdoc */
   override def getOrCreate(sparkContext: SparkContext): SQLContext = {
     SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
   }

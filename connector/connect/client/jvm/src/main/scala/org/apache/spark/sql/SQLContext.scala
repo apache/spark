@@ -19,29 +19,81 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import scala.jdk.CollectionConverters.PropertiesHasAsScala
+
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.connect.ConnectClientUnsupportedErrors
+import org.apache.spark.sql.api.{DataStreamReader, StreamingQueryManager}
+import org.apache.spark.sql.catalog.Table
+import org.apache.spark.sql.util.ExecutionListenerManager
 
 @Stable
 class SQLContext private[sql](sparkSession: SparkSession)
   extends api.SQLContext(sparkSession) {
 
+  /** @inheritdoc */
   override def newSession(): api.SQLContext = {
-    new SQLContext(sparkSession.newSession())
+    sparkSession.newSession().sqlContext
   }
 
-  override def setConf(props: Properties): Unit =
-    throw ConnectClientUnsupportedErrors.sqlContext()
+  /** @inheritdoc */
+  override def listenerManager: ExecutionListenerManager = {
+    sparkSession.listenerManager
+  }
 
+  /** @inheritdoc */
+  override def setConf(props: Properties): Unit = sparkSession.conf.synchronized {
+    props.asScala.foreach { case (k, v) => sparkSession.conf.set(k, v) }
+  }
+
+  /** @inheritdoc */
+  override def experimental: ExperimentalMethods = {
+    sparkSession.experimental
+  }
+
+  /** @inheritdoc */
+  override def udf: api.UDFRegistration = {
+    sparkSession.udf
+  }
+
+  /** @inheritdoc */
+  override def read: api.DataFrameReader = {
+    sparkSession.read
+  }
+
+  /** @inheritdoc */
+  override def readStream: DataStreamReader = {
+    sparkSession.readStream
+  }
+
+  /** @inheritdoc */
   override def tables(): api.Dataset[Row] = {
-    throw ConnectClientUnsupportedErrors.sqlContext()
+    sparkSession.catalog.listTables()
+      .map(ListTableRow.fromTable)(Encoders.product[ListTableRow])
+      .toDF()
   }
 
+  /** @inheritdoc */
   override def tables(databaseName: String): api.Dataset[Row] = {
-    throw ConnectClientUnsupportedErrors.sqlContext()
+    sparkSession.catalog.listTables(databaseName)
+      .map(ListTableRow.fromTable)(Encoders.product[ListTableRow])
+      .toDF()
   }
 
+  /** @inheritdoc */
+  override def streams: StreamingQueryManager = {
+    sparkSession.streams
+  }
+
+  /** @inheritdoc */
   override def tableNames(databaseName: String): Array[String] = {
-    throw ConnectClientUnsupportedErrors.sqlContext()
+    sparkSession.catalog.listTables(databaseName).map(_.name)(Encoders.STRING).collect()
+  }
+}
+
+protected sealed case class ListTableRow(database: String, tableName: String, isTemporary: Boolean)
+
+protected object ListTableRow {
+  def fromTable(table: Table): ListTableRow = {
+    ListTableRow(table.database, table.name, table.isTemporary)
   }
 }

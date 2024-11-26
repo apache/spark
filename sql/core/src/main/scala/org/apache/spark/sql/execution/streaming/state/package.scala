@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
@@ -31,7 +31,7 @@ package object state {
 
     /** Map each partition of an RDD along with data in a [[StateStore]]. */
     def mapPartitionsWithStateStore[U: ClassTag](
-        sparkSession: SparkSession,
+        sqlContext: SQLContext,
         stateInfo: StatefulOperatorStateInfo,
         keySchema: StructType,
         valueSchema: StructType,
@@ -43,8 +43,8 @@ package object state {
         keySchema,
         valueSchema,
         keyStateEncoderSpec,
-        sparkSession.sessionState,
-        Some(sparkSession.streams.stateStoreCoordinator))(
+        sqlContext.sessionState,
+        Some(sqlContext.streams.stateStoreCoordinator))(
         storeUpdateFunction)
     }
 

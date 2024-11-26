@@ -71,7 +71,7 @@ abstract class SQLContext private[sql](val sparkSession: SparkSession)
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    */
-  def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
+  def listenerManager: ExecutionListenerManager
 
   /**
    * Set Spark SQL configuration properties.
@@ -134,7 +134,7 @@ abstract class SQLContext private[sql](val sparkSession: SparkSession)
   @Experimental
   @transient
   @Unstable
-  def experimental: ExperimentalMethods = sparkSession.experimental
+  def experimental: ExperimentalMethods
 
   /**
    * Returns a `DataFrame` with no rows or columns.
@@ -166,7 +166,7 @@ abstract class SQLContext private[sql](val sparkSession: SparkSession)
    * @group basic
    * @since 1.3.0
    */
-  def udf: UDFRegistration = sparkSession.udf
+  def udf: UDFRegistration
 
   /**
    * Returns true if the table is currently cached in-memory.
@@ -202,25 +202,6 @@ abstract class SQLContext private[sql](val sparkSession: SparkSession)
   def clearCache(): Unit = {
     sparkSession.catalog.clearCache()
   }
-
-  // scalastyle:off
-  // Disable style checker so "implicits" object can start with lowercase i
-  /**
-   * (Scala-specific) Implicit methods available in Scala for converting
-   * common Scala objects into `DataFrame`s.
-   *
-   * {{{
-   *   val sqlContext = new SQLContext(sc)
-   *   import sqlContext.implicits._
-   * }}}
-   *
-   * @group basic
-   * @since 1.3.0
-   */
-  object implicits extends SQLImplicits {
-    override protected def session: SparkSession = sparkSession
-  }
-  // scalastyle:on
 
   /**
    * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
@@ -429,7 +410,7 @@ abstract class SQLContext private[sql](val sparkSession: SparkSession)
    * @group genericdata
    * @since 1.4.0
    */
-  def read: DataFrameReader = sparkSession.read
+  def read: DataFrameReader
 
 
   /**
@@ -441,7 +422,7 @@ abstract class SQLContext private[sql](val sparkSession: SparkSession)
    *
    * @since 2.0.0
    */
-  def readStream: DataStreamReader = sparkSession.readStream
+  def readStream: DataStreamReader
 
 
   /**
@@ -633,7 +614,7 @@ abstract class SQLContext private[sql](val sparkSession: SparkSession)
    *
    * @since 2.0.0
    */
-  def streams: StreamingQueryManager = sparkSession.streams
+  def streams: StreamingQueryManager
 
   /**
    * Returns the names of tables in the current database as an array.
@@ -946,7 +927,9 @@ abstract class SQLContext private[sql](val sparkSession: SparkSession)
  * scenario, setActive could set a SQLContext for current thread, which will be returned by
  * getOrCreate instead of the global one.
  */
-trait SQLContextCompanion[A <: SQLContext] {
+trait SQLContextCompanion {
+  private[sql] type SQLContextImpl <: SQLContext
+  private[sql] type SparkContextImpl <: SparkContext
 
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
@@ -960,7 +943,7 @@ trait SQLContextCompanion[A <: SQLContext] {
    * @since 1.5.0
    */
   @deprecated("Use SparkSession.builder instead", "2.0.0")
-  def getOrCreate(sparkContext: SparkContext): A
+  def getOrCreate(sparkContext: SparkContextImpl): SQLContextImpl
 
   /**
    * Changes the SQLContext that will be returned in this thread and its children when
@@ -970,7 +953,7 @@ trait SQLContextCompanion[A <: SQLContext] {
    * @since 1.6.0
    */
   @deprecated("Use SparkSession.setActiveSession instead", "2.0.0")
-  def setActive(sqlContext: A): Unit = {
+  def setActive(sqlContext: SQLContextImpl): Unit = {
     SparkSession.setActiveSession(sqlContext.sparkSession)
   }
 
