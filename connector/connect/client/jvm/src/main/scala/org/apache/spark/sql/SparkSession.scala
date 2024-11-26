@@ -210,7 +210,6 @@ class SparkSession private[sql] (
     throw ConnectClientUnsupportedErrors.executeCommand()
 
   /** @inheritdoc */
-  @Experimental
   def sql(sqlText: String, args: Array[_]): DataFrame = {
     val sqlCommand = proto.SqlCommand
       .newBuilder()
@@ -221,13 +220,11 @@ class SparkSession private[sql] (
   }
 
   /** @inheritdoc */
-  @Experimental
   def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args.asJava)
   }
 
   /** @inheritdoc */
-  @Experimental
   override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     val sqlCommand = proto.SqlCommand
       .newBuilder()
