@@ -27,6 +27,7 @@ import threading
 import traceback
 import typing
 import socket
+import warnings
 from types import TracebackType
 from typing import Any, Callable, IO, Iterator, List, Optional, TextIO, Tuple, Union
 
@@ -366,7 +367,8 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKIP
 
-    If you're using Spark Connect, you should explicitly provide Spark session as follows:
+    If you're using Spark Connect or if you want to inherit the tags properly,
+    you should explicitly provide Spark session as follows:
 
     >>> @inheritable_thread_target(session)  # doctest: +SKIP
     ... def target_func():
@@ -435,6 +437,11 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
                 return wrapped
 
             return outer
+
+        warnings.warn(
+            "Spark Connect session is not provided. Tags will not be inherited.",
+            UserWarning,
+        )
 
         # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
         # copies local properties when the thread starts but `inheritable_thread_target`
