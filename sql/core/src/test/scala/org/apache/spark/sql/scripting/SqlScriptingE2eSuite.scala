@@ -18,7 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.exceptions.SqlScriptingException
@@ -151,7 +151,7 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
         |    SELECT ?;
         |  END IF;
         |END""".stripMargin
-    // Define an array with SQL parameters in the correct order
+    // Define an array with SQL parameters in the correct order.
     val args: Array[Any] = Array(5, "greater", "smaller")
     checkError(
       exception = intercept[SqlScriptingException] {
@@ -159,5 +159,30 @@ class SqlScriptingE2eSuite extends QueryTest with SharedSparkSession {
       },
       condition = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS",
       parameters = Map.empty)
+  }
+
+  test("named params with positional params - should fail") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  SELECT ?;
+        |  IF :param > 10 THEN
+        |    SELECT 1;
+        |  ELSE
+        |    SELECT 2;
+        |  END IF;
+        |END""".stripMargin
+    // Define a map with SQL parameters.
+    val args: Map[String, Any] = Map("param" -> 5)
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(sqlScriptText, args).asInstanceOf[CompoundBody]
+      },
+      condition = "UNBOUND_SQL_PARAMETER",
+      parameters = Map("name" -> "_16"),
+      context = ExpectedContext(
+        fragment = "?",
+        start = 16,
+        stop = 16))
   }
 }

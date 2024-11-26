@@ -1024,6 +1024,8 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
         |    END LOOP;
         |  END LOOP;
         |END""".stripMargin
+    // Execution immediately leaves the outer loop after SELECT,
+    //   so we expect only a single row in the result set.
     val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }

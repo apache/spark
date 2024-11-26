@@ -107,6 +107,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Logical plan of the parsed statement.
  * @param origin
  *   Origin descriptor for the statement.
+ * @param args
+ *   A map of parameter names to SQL literal expressions.
  * @param isInternal
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
@@ -148,7 +150,7 @@ class SingleStatementExec(
 
   /**
    * Builds a DataFrame from the parsedPlan of this SingleStatementExec
-   * @param session The SparkSession on which the parsedPlan is built
+   * @param session The SparkSession on which the parsedPlan is built.
    * @return
    *   The DataFrame.
    */

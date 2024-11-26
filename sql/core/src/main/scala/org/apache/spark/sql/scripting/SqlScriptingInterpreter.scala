@@ -37,6 +37,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *
    * @param compound
    *   CompoundBody for which to build the plan.
+   * @param args
+   *   A map of parameter names to SQL literal expressions.
    * @return
    *   Iterator through collection of statements to be executed.
    */
@@ -65,6 +67,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    *
    * @param node
    *   Root node of the parsed tree.
+   * @param args
+   *   A map of parameter names to SQL literal expressions.
    * @return
    *   Executable statement.
    */
@@ -102,7 +106,6 @@ case class SqlScriptingInterpreter(session: SparkSession) {
 
       case CaseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
-          // todo: what to put here for isInternal, in case of simple case statement
           new SingleStatementExec(
             condition.parsedPlan,
             condition.origin,

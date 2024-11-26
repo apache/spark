@@ -413,6 +413,14 @@ class SparkSession private(
    |  Everything else  |
    * ----------------- */
 
+  /**
+   * Executes given script and return the result of the last statement.
+   *
+   * @param script A SQL script to execute.
+   * @param args A map of parameter names to SQL literal expressions.
+   *
+   * @return The result as a `DataFrame`.
+   */
   private def executeSqlScript(
       script: CompoundBody,
       args: Map[String, Expression] = Map.empty): DataFrame = {
@@ -425,7 +433,7 @@ class SparkSession private(
         if (sse.hasNext) {
           df.write.format("noop").mode("overwrite").save()
         } else {
-          // Collect results from the last DataFrame
+          // Collect results from the last DataFrame.
           result = Some(df.collect().toSeq)
         }
       }
@@ -462,7 +470,7 @@ class SparkSession private(
         parsedPlan match {
           case compoundBody: CompoundBody =>
             if (args.nonEmpty) {
-              // Positional parameters are not supported for SQL scripting
+              // Positional parameters are not supported for SQL scripting.
               throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
             }
             compoundBody
@@ -477,10 +485,10 @@ class SparkSession private(
 
       plan match {
         case compoundBody: CompoundBody =>
-          // execute the SQL script
+          // Execute the SQL script.
           executeSqlScript(compoundBody)
         case logicalPlan: LogicalPlan =>
-          // execute the standalone SQL statement
+          // Execute the standalone SQL statement.
           Dataset.ofRows(self, plan, tracker)
       }
     }
@@ -528,10 +536,10 @@ class SparkSession private(
 
       plan match {
         case compoundBody: CompoundBody =>
-          // execute the SQL script
+          // Execute the SQL script.
           executeSqlScript(compoundBody, args.transform((_, v) => lit(v).expr))
         case logicalPlan: LogicalPlan =>
-          // execute the standalone SQL statement
+          // Execute the standalone SQL statement.
           Dataset.ofRows(self, plan, tracker)
       }
     }

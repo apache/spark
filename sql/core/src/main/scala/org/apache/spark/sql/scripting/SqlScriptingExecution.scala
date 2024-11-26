@@ -17,19 +17,25 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody, MultiResult}
 
 /**
  * SQL scripting executor - executes script and returns result statements.
+ * This supports returning multiple result statements from a single script.
+ *
+ * @param sqlScript CompoundBody which need to be executed.
+ * @param session Spark session that SQL script is executed within.
+ * @param args A map of parameter names to SQL literal expressions.
  */
 class SqlScriptingExecution(
     sqlScript: CompoundBody,
     session: SparkSession,
     args: Map[String, Expression]) extends Iterator[DataFrame] {
 
-  // Build the execution plan for the script
+  // Build the execution plan for the script.
   private val executionPlan: Iterator[CompoundStatementExec] =
     SqlScriptingInterpreter(session).buildExecutionPlan(sqlScript, args)
 
@@ -38,38 +44,41 @@ class SqlScriptingExecution(
   override def hasNext: Boolean = current.isDefined
 
   override def next(): DataFrame = {
-    if (!hasNext) {
-      throw new NoSuchElementException("No more statements to execute")
+    if (!hasNext) {throw SparkException.internalError(
+      "No more elements to iterate through.")
     }
     val nextDataFrame = current.get
     current = getNextResult
     nextDataFrame
   }
 
-  /** Helper method to iterate through statements until next result statement is encountered */
+  /** Helper method to iterate through statements until next result statement is encountered. */
   private def getNextResult: Option[DataFrame] = {
-    var currentStatement = if (executionPlan.hasNext) Some(executionPlan.next()) else None
-    // While we don't have a result statement, execute the statements
+
+    def getNextStatement: Option[CompoundStatementExec] =
+      if (executionPlan.hasNext) Some(executionPlan.next()) else None
+
+    var currentStatement = getNextStatement
+    // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
       currentStatement match {
         case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>
           withErrorHandling {
             val df = stmt.buildDataFrame(session)
-            if (!df.logicalPlan.isInstanceOf[CommandResult]
-              && !df.logicalPlan.isInstanceOf[MultiResult]) {
-              // If the statement is a result, we need to return it to the caller
-              return Some(df)
+            df.logicalPlan match {
+              case _: CommandResult | _: MultiResult => // pass
+              case _ => return Some(df) // If the statement is a result, return it to the caller.
             }
           }
         case _ => // pass
       }
-      currentStatement = if (executionPlan.hasNext) Some(executionPlan.next()) else None
+      currentStatement = getNextStatement
     }
     None
   }
 
-  private def handleException(e: Exception): Unit = {
-    // Rethrow the exception
+  private def handleException(e: Throwable): Unit = {
+    // Rethrow the exception.
     // TODO: SPARK-48353 Add error handling for SQL scripts
     throw e
   }
@@ -78,7 +87,7 @@ class SqlScriptingExecution(
     try {
       f
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         handleException(e)
     }
   }
