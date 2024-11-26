@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -60,15 +60,6 @@ class CollationExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val collateOnInt = Collate(Literal(1), UTF8_BINARY_COLLATION_NAME)
     assert(collateOnInt.checkInputDataTypes().isFailure)
-  }
-
-  test("collate on non existing collation") {
-    checkError(
-      exception = intercept[SparkException] { Collate(Literal("abc"),
-        UnresolvedCollation(Seq("UTF8_BS"))) },
-      condition = "COLLATION_INVALID_NAME",
-      sqlState = "42704",
-      parameters = Map("collationName" -> "UTF8_BS", "proposals" -> "UTF8_LCASE"))
   }
 
   test("collation on non-explicit default collation") {

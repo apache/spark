@@ -81,8 +81,7 @@ case class Collate(child: Expression, collation: Expression)
   override def right: Expression = collation
   override def dataType: DataType = collation.dataType
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation(supportsTrimCollation = true),
-      StringTypeWithCollation(supportsTrimCollation = true))
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyDataType)
 
   override def eval(row: InternalRow): Any = child.eval(row)
 
@@ -96,6 +95,8 @@ case class Collate(child: Expression, collation: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): Expression =
     copy(child = newLeft, collation = newRight)
+
+  override def foldable: Boolean = child.foldable
 }
 
 /**
@@ -117,14 +118,10 @@ case class UnresolvedCollation(collationName: Seq[String])
 /**
  * An expression that represents a resolved collation name.
  */
-case class ResolvedCollation(collationName: String) extends LeafExpression with CodegenFallback {
+case class ResolvedCollation(collationName: String) extends LeafExpression with Unevaluable {
   override def nullable: Boolean = false
 
-  override def foldable: Boolean = true
-
   override def dataType: DataType = StringType(CollationFactory.collationNameToId(collationName))
-
-  override def eval(input: InternalRow): Any = input
 
   override def toString: String = collationName
 
