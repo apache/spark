@@ -450,17 +450,17 @@ case class JsonTuple(children: Seq[Expression])
   with QueryErrorsBase {
 
   override def nullable: Boolean = {
-    // a row is always returned
+    // A row is always returned.
     false
   }
 
-  // the json body is the first child
+  // The json body is the first child.
   @transient private lazy val jsonExpr: Expression = children.head
 
-  // the fields to query are the remaining children
+  // The fields to query are the remaining children.
   @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
-  // eagerly evaluate any foldable the field names
+  // Eagerly evaluate any foldable the field names.
   @transient private lazy val foldableFieldNames: IndexedSeq[Option[String]] = {
     fieldExpressions.map {
       case expr if expr.foldable => Option(expr.eval()).map(_.asInstanceOf[UTF8String].toString)
@@ -468,7 +468,7 @@ case class JsonTuple(children: Seq[Expression])
     }.toIndexedSeq
   }
 
-  // and count the number of foldable fields, we'll use this later to optimize evaluation
+  // And count the number of foldable fields, we'll use this later to optimize evaluation.
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
 
   override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
@@ -499,20 +499,20 @@ case class JsonTuple(children: Seq[Expression])
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
 
-    // evaluate the field names as String rather than UTF8String to
-    // optimize lookups from the json token, which is also a String
+    // Evaluate the field names as String rather than UTF8String to
+    // optimize lookups from the json token, which is also a String.
     val fieldNames = if (constantFields == fieldExpressions.length) {
-      // typically the user will provide the field names as foldable expressions
-      // so we can use the cached copy
+      // Typically the user will provide the field names as foldable expressions
+      // so we can use the cached copy.
       foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
-      // none are foldable so all field names need to be evaluated from the input row
+      // None are foldable so all field names need to be evaluated from the input row.
       fieldExpressions.map { expr =>
         Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
       }
     } else {
-      // if there is a mix of constant and non-constant expressions
-      // prefer the cached copy when available
+      // If there is a mix of constant and non-constant expressions
+      // prefer the cached copy when available.
       foldableFieldNames.zip(fieldExpressions).map {
         case (null, expr) =>
           Option(expr.eval(input)).map(_.asInstanceOf[UTF8String].toString).orNull
@@ -533,7 +533,7 @@ case class JsonTuple(children: Seq[Expression])
     }
 
     val (fieldNamesEval, setFieldNames) = if (constantFields == fieldExpressions.length) {
-      // all field names are foldable, so we can use the cached copy
+      // All field names are foldable, so we can use the cached copy.
       val s = foldableFieldNames.zipWithIndex.map {
         case (v, i) =>
           if (v != null && v.isDefined) {
@@ -544,7 +544,7 @@ case class JsonTuple(children: Seq[Expression])
       }
       (Seq.empty[ExprCode], s)
     } else if (constantFields == 0) {
-      // none are foldable so all field names need to be evaluated from the input row
+      // None are foldable so all field names need to be evaluated from the input row.
       val f = fieldExpressions.map(_.genCode(ctx))
       val s = f.zipWithIndex.map {
         case (exprCode, i) =>
@@ -558,8 +558,8 @@ case class JsonTuple(children: Seq[Expression])
       }
       (f, s)
     } else {
-      // if there is a mix of constant and non-constant field name,
-      // prefer the cached copy when available
+      // If there is a mix of constant and non-constant field name,
+      // prefer the cached copy when available.
       val codes = foldableFieldNames.zip(fieldExpressions).zipWithIndex.map {
         case ((null, expr: Expression), i) =>
           val f = expr.genCode(ctx)

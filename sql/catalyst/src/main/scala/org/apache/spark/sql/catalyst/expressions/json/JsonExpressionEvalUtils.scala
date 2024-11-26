@@ -161,31 +161,34 @@ case class StructsToJsonEvaluator(
   }
 }
 
+/**
+ * The expression `JsonTuple` will utilize it to support codegen.
+ */
 case class JsonTupleEvaluator(fieldsLength: Int) {
 
   import SharedFactory._
 
-  // if processing fails this shared value will be returned
+  // If processing fails this shared value will be returned.
   @transient private lazy val nullRow: Seq[InternalRow] =
     new GenericInternalRow(Array.ofDim[Any](fieldsLength)) :: Nil
 
   private def parseRow(parser: JsonParser, fieldNames: Seq[String]): Seq[InternalRow] = {
-    // only objects are supported
+    // Only objects are supported.
     if (parser.nextToken() != JsonToken.START_OBJECT) return nullRow
 
     val row = Array.ofDim[Any](fieldNames.length)
 
-    // start reading through the token stream, looking for any requested field names
+    // Start reading through the token stream, looking for any requested field names.
     while (parser.nextToken() != JsonToken.END_OBJECT) {
       if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
-        // check to see if this field is desired in the output
+        // Check to see if this field is desired in the output.
         val jsonField = parser.currentName
         var idx = fieldNames.indexOf(jsonField)
         if (idx >= 0) {
-          // it is, copy the child tree to the correct location in the output row
+          // It is, copy the child tree to the correct location in the output row.
           val output = new ByteArrayOutputStream()
 
-          // write the output directly to UTF8 encoded byte array
+          // Write the output directly to UTF8 encoded byte array.
           if (parser.nextToken() != JsonToken.VALUE_NULL) {
             Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
               generator => copyCurrentStructure(generator, parser)
@@ -203,7 +206,7 @@ case class JsonTupleEvaluator(fieldsLength: Int) {
         }
       }
 
-      // always skip children, it's cheap enough to do even if copyCurrentStructure was called
+      // Always skip children, it's cheap enough to do even if copyCurrentStructure was called.
       parser.skipChildren()
     }
     new GenericInternalRow(row) :: Nil
@@ -211,25 +214,25 @@ case class JsonTupleEvaluator(fieldsLength: Int) {
 
   private def copyCurrentStructure(generator: JsonGenerator, parser: JsonParser): Unit = {
     parser.getCurrentToken match {
-      // if the user requests a string field it needs to be returned without enclosing
-      // quotes which is accomplished via JsonGenerator.writeRaw instead of JsonGenerator.write
+      // If the user requests a string field it needs to be returned without enclosing
+      // quotes which is accomplished via JsonGenerator.writeRaw instead of JsonGenerator.write.
       case JsonToken.VALUE_STRING if parser.hasTextCharacters =>
-        // slight optimization to avoid allocating a String instance, though the characters
-        // still have to be decoded... Jackson doesn't have a way to access the raw bytes
+        // Slight optimization to avoid allocating a String instance, though the characters
+        // still have to be decoded... Jackson doesn't have a way to access the raw bytes.
         generator.writeRaw(parser.getTextCharacters, parser.getTextOffset, parser.getTextLength)
 
       case JsonToken.VALUE_STRING =>
-        // the normal String case, pass it through to the output without enclosing quotes
+        // The normal String case, pass it through to the output without enclosing quotes.
         generator.writeRaw(parser.getText)
 
       case JsonToken.VALUE_NULL =>
-        // a special case that needs to be handled outside of this method.
-        // if a requested field is null, the result must be null. the easiest
-        // way to achieve this is just by ignoring null tokens entirely
+        // A special case that needs to be handled outside of this method.
+        // If a requested field is null, the result must be null. The easiest
+        // way to achieve this is just by ignoring null tokens entirely.
         throw SparkException.internalError("Do not attempt to copy a null field.")
 
       case _ =>
-        // handle other types including objects, arrays, booleans and numbers
+        // Handle other types including objects, arrays, booleans and numbers.
         generator.copyCurrentStructure(parser)
     }
   }
@@ -238,7 +241,7 @@ case class JsonTupleEvaluator(fieldsLength: Int) {
     if (json == null) return nullRow
     try {
       /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
-      detect character encoding which could fail for some malformed strings */
+      detect character encoding which could fail for some malformed strings. */
       Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
         parseRow(parser, fieldNames)
       }

@@ -1462,15 +1462,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       val df = Seq(("""{"a":1, "b":2, "c":3}""", "a", "b", "c")).toDF("json", "c1", "c2", "c3")
       df.createOrReplaceTempView("t")
 
-      // all field names are foldable
+      // All field names are foldable.
       val df1 = sql("SELECT json_tuple(json, 'a', 'b', 'c') from t")
       checkAnswer(df1, Row("1", "2", "3"))
 
-      // the field names some foldable, some non-foldable
+      // The field names some foldable, some non-foldable.
       val df2 = sql("SELECT json_tuple(json, 'a', c2, 'c') from t")
       checkAnswer(df2, Row("1", "2", "3"))
 
-      // all field names are non-foldable
+      // All field names are non-foldable.
       val df3 = sql("SELECT json_tuple(json, c1, c2, c3) from t")
       checkAnswer(df3, Row("1", "2", "3"))
     }
