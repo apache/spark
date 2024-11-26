@@ -64,7 +64,7 @@ class SqlScriptingExecution(
           withErrorHandling {
             val df = stmt.buildDataFrame(session)
             df.logicalPlan match {
-              case _: CommandResult | _: MultiResult => // pass
+              case _: CommandResult => // pass
               case _ => return Some(df) // If the statement is a result, return it to the caller.
             }
           }
