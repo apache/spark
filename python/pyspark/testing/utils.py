@@ -192,14 +192,16 @@ def eventually(
 
 class QuietTest:
     def __init__(self, sc):
-        self.log4j = sc._jvm.org.apache.log4j
+        self.sc = sc
 
     def __enter__(self):
-        self.old_level = self.log4j.LogManager.getRootLogger().getLevel()
-        self.log4j.LogManager.getRootLogger().setLevel(self.log4j.Level.FATAL)
+        self.old_level = (
+            self.sc._jvm.org.apache.log4j.LogManager.getRootLogger().getLevel().toString()
+        )
+        self.sc.setLogLevel("FATAL")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
+        self.sc.setLogLevel(self.old_level)
 
 
 class PySparkTestCase(unittest.TestCase):
