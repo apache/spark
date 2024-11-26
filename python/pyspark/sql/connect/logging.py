@@ -21,10 +21,10 @@ from pyspark.logger import PySparkLogger
 import os
 from typing import Optional
 
-__all__ = ["configure_logging", "getLogLevel"]
+__all__ = ["configureLogging", "getLogLevel"]
 
 
-def configure_logging(level: Optional[str] = None) -> logging.Logger:
+def configureLogging(level: Optional[str] = None) -> logging.Logger:
     """
     Configure log level for Spark Connect components.
     When not specified as a parameter, log level will be picked up from the SPARK_CONNECT_LOG_LEVEL environment variable.
@@ -49,7 +49,7 @@ def configure_logging(level: Optional[str] = None) -> logging.Logger:
 
 
 # Instantiate the logger based on the environment configuration.
-logger = configure_logging()
+logger = configureLogging()
 
 
 def getLogLevel() -> Optional[int]:
