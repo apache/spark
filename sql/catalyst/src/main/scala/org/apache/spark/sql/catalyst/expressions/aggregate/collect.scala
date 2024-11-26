@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, Growable}
+import scala.util.{Left, Right}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -465,31 +466,36 @@ case class ListAgg(
   }
 
   private[this] def concatSkippingNulls(buffer: mutable.ArrayBuffer[Any]): Any = {
-    val delimiterValue = getDelimiterValue
-    dataType match {
-      case BinaryType =>
+    getDelimiterValue match {
+      case Right(delimiterValue: Array[Byte]) =>
         val inputs = buffer.filter(_ != null).map(_.asInstanceOf[Array[Byte]])
-        ByteArray.concatWS(delimiterValue.asInstanceOf[Array[Byte]], inputs.toSeq: _*)
-      case _: StringType =>
+        ByteArray.concatWS(delimiterValue, inputs.toSeq: _*)
+      case Left(delimiterValue: UTF8String) =>
         val inputs = buffer.filter(_ != null).map(_.asInstanceOf[UTF8String])
-        UTF8String.concatWs(delimiterValue.asInstanceOf[UTF8String], inputs.toSeq : _*)
+        UTF8String.concatWs(delimiterValue, inputs.toSeq: _*)
+    }
+  }
+
+  /**
+   * @return delimiter value or default empty value if delimiter is null. Type respects [[dataType]]
+   */
+  private[this] def getDelimiterValue: Either[UTF8String, Array[Byte]] = {
+    val delimiterValue = delimiter.eval()
+    dataType match {
+      case _: StringType =>
+        Left(
+          if (delimiterValue == null) UTF8String.fromString("")
+          else delimiterValue.asInstanceOf[UTF8String]
+        )
+      case _: BinaryType =>
+        Right(
+          if (delimiterValue == null) ByteArray.EMPTY_BYTE
+          else delimiterValue.asInstanceOf[Array[Byte]]
+        )
     }
   }
 
   override def dataType: DataType = child.dataType
-
-  private[this] def getDelimiterValue: Any = {
-    val delimiterValue = delimiter.eval()
-    if (delimiterValue == null) {
-      // default delimiter value
-      dataType match {
-        case _: StringType => UTF8String.fromString("")
-        case _: BinaryType => ByteArray.EMPTY_BYTE
-      }
-    } else {
-      delimiterValue
-    }
-  }
 
   override def update(buffer: ArrayBuffer[Any], input: InternalRow): ArrayBuffer[Any] = {
     val value = child.eval(input)
