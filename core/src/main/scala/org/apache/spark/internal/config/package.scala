@@ -626,6 +626,26 @@ package object config {
       .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
       .createOptional
 
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_REPLICATION_DELAY =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.replicationDelay")
+      .doc("The maximum expected delay for files written by one executor to become " +
+        "available to other executors.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "Value must be positive.")
+      .createOptional
+
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_REPLICATION_WAIT =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.replicationWait")
+      .doc(
+        "When an executor cannot find a file in the fallback storage it waits " +
+          "this amount of time before attempting to open the file again, " +
+          f"while not exceeding ${STORAGE_DECOMMISSION_FALLBACK_STORAGE_REPLICATION_DELAY.key}.")
+      .version("4.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "Value must be positive.")
+      .createWithDefaultString("1s")
+
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxDiskSize")
       .doc("Maximum disk space to use to store shuffle blocks before rejecting remote " +
