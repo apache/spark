@@ -256,14 +256,14 @@ object JavaTypeInference {
       val isClientConnect = clientConnectFlag.get
       assert(typesToCheck.size == 1)
       typesToCheck.headOption.flatMap(c => {
-          if (!isClientConnect && classOf[KryoSerializable].isAssignableFrom(c)) {
-           Some(Encoders.kryo(c).asInstanceOf[AgnosticEncoder[_]])
-          } else if (classOf[java.io.Serializable].isAssignableFrom(c)) {
-            Some(Encoders.javaSerialization(c).asInstanceOf[AgnosticEncoder[_]])
-          } else {
-            None
-          }
-        })
+        if (!isClientConnect && classOf[KryoSerializable].isAssignableFrom(c)) {
+          Some(Encoders.kryo(c).asInstanceOf[AgnosticEncoder[_]])
+        } else if (classOf[java.io.Serializable].isAssignableFrom(c)) {
+          Some(Encoders.javaSerialization(c).asInstanceOf[AgnosticEncoder[_]])
+        } else {
+          None
+        }
+      })
     } else {
       // The code below attempts to find UDTbased Encoder if available, else resort to
       // Java/Kryo based encoder. The left option is placeholder for UDTEncoder.
