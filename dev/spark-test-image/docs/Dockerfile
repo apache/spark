@@ -35,14 +35,14 @@ RUN apt-get install -y \
     ruby-dev \
     && rm -rf /var/lib/apt/lists/*
 
-INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r \
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
 
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.python
 # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5
 # See 'ipython_genutils' in SPARK-38517
 # See 'docutils<0.18.0' in SPARK-39421
-INCLUDE+ ./dev/spark-test-image/base/Dockerfile.python
 RUN python3.9 -m pip install  \
     'sphinx==4.5.0'  \
     mkdocs  \

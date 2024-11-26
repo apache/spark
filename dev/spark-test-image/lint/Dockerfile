@@ -30,12 +30,7 @@ RUN rm -rf /var/lib/apt/lists/*
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r
 RUN Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
 
-# Install Python 3.9
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y python3.9 python3.9-distutils \
-    && rm -rf /var/lib/apt/lists/*
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
-
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.python
 RUN python3.9 -m pip install \
     'black==23.9.1' \
     'flake8==3.9.0' \

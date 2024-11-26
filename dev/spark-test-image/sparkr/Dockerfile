@@ -37,7 +37,7 @@ RUN gpg --keyserver hkps://keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57C
 RUN gpg -a --export E084DAB9 | apt-key add -
 RUN add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/'
 
-INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r \
+INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "install.packages(c('devtools', 'e1071', 'survival', 'arrow',  \
     'ggplot2', 'mvtnorm', 'statmod', 'xml2'), repos='https://cloud.r-project.org/')" && \
