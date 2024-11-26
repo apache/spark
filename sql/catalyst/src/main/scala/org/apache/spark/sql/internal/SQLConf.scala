@@ -778,15 +778,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
-  val ALLOW_READING_UNKNOWN_COLLATIONS =
-    buildConf(SqlApiConfHelper.ALLOW_READING_UNKNOWN_COLLATIONS)
-      .internal()
-      .doc("Enables spark to read unknown collation name as UTF8_BINARY. If the config is " +
-        "not enabled, when spark encounters an unknown collation name, it will throw an error.")
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
@@ -2229,6 +2220,17 @@ object SQLConf {
       .version("4.0.0")
       .intConf
       .createWithDefault(1)
+
+  val STREAMING_STATE_STORE_ENCODING_FORMAT =
+    buildConf("spark.sql.streaming.stateStore.encodingFormat")
+      .doc("The encoding format used for stateful operators to store information " +
+        "in the state store")
+      .version("4.0.0")
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValue(v => Set("unsaferow", "avro").contains(v),
+        "Valid values are 'unsaferow' and 'avro'")
+      .createWithDefault("unsaferow")
 
   val STATE_STORE_COMPRESSION_CODEC =
     buildConf("spark.sql.streaming.stateStore.compression.codec")
@@ -5582,8 +5584,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
-  override def allowReadingUnknownCollations: Boolean = getConf(ALLOW_READING_UNKNOWN_COLLATIONS)
-
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def adaptiveExecutionLogLevel: String = getConf(ADAPTIVE_EXECUTION_LOG_LEVEL)
@@ -5606,6 +5606,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 
   def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
+
+  def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 
   def checkpointRenamedFileCheck: Boolean = getConf(CHECKPOINT_RENAMEDFILE_CHECK_ENABLED)
 

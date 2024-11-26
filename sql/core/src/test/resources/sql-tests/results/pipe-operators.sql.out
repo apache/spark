@@ -457,9 +457,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
+    "clause" : "SELECT",
     "expr" : "sum(x#x)"
   },
   "queryContext" : [ {
@@ -480,9 +481,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
+    "clause" : "SELECT",
     "expr" : "sum(x#x)"
   },
   "queryContext" : [ {
@@ -492,6 +494,187 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 39,
     "fragment" : "sum(x)"
   } ]
+}
+
+
+-- !query
+table t
+|> extend 1 as z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	1
+1	def	1
+
+
+-- !query
+table t
+|> extend 1
+-- !query schema
+struct<x:int,y:string,pipeexpression(1):int>
+-- !query output
+0	abc	1
+1	def	1
+
+
+-- !query
+table t
+|> extend x as z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+table t
+|> extend x + length(y) as z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	3
+1	def	4
+
+
+-- !query
+table t
+|> extend x + length(y) as z, x + 1 as zz
+-- !query schema
+struct<x:int,y:string,z:int,zz:int>
+-- !query output
+0	abc	3	1
+1	def	4	2
+
+
+-- !query
+table t
+|> extend x + length(y) as z
+|> extend z + 1 as zz
+-- !query schema
+struct<x:int,y:string,z:int,zz:int>
+-- !query output
+0	abc	3	4
+1	def	4	5
+
+
+-- !query
+select col from st
+|> extend col.i1 as z
+-- !query schema
+struct<col:struct<i1:int,i2:int>,z:int>
+-- !query output
+{"i1":2,"i2":3}	2
+
+
+-- !query
+table t
+|> extend (select a from other where x = a limit 1) as z
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	NULL
+1	def	1
+
+
+-- !query
+table t
+|> where exists (
+    table other
+    |> extend t.x
+    |> select * except (a, b))
+-- !query schema
+struct<x:int,y:string>
+-- !query output
+0	abc
+1	def
+
+
+-- !query
+table t
+|> extend 1 as x
+-- !query schema
+struct<x:int,y:string,x:int>
+-- !query output
+0	abc	1
+1	def	1
+
+
+-- !query
+table t
+|> extend first_value(x) over (partition by y) as result
+-- !query schema
+struct<x:int,y:string,result:int>
+-- !query output
+0	abc	0
+1	def	1
+
+
+-- !query
+table t
+|> extend x + length(y) as z, z + 1 as plus_one
+-- !query schema
+struct<x:int,y:string,z:int,plus_one:int>
+-- !query output
+0	abc	3	4
+1	def	4	5
+
+
+-- !query
+table t
+|> extend sum(x) as z
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "clause" : "EXTEND",
+    "expr" : "sum(x#x)"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 19,
+    "stopIndex" : 24,
+    "fragment" : "sum(x)"
+  } ]
+}
+
+
+-- !query
+table t
+|> extend distinct x as z
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'as'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table t
+|> extend *
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_OR_REGEX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "elem" : "'*'",
+    "prettyName" : "expression `pipeexpression`"
+  }
 }
 
 
@@ -2005,7 +2188,7 @@ struct<1:int,2:int>
 table t
 |> aggregate sum(x)
 -- !query schema
-struct<sum(x):bigint>
+struct<pipeexpression(sum(x)):bigint>
 -- !query output
 1
 
@@ -2079,22 +2262,35 @@ struct<x:int>
 
 -- !query
 table other
-|> aggregate a group by a
+|> aggregate a + count(b) group by a
 -- !query schema
-struct<a:int,a:int>
+struct<a:int,pipeexpression((a + count(b))):bigint>
 -- !query output
-1	1
-2	2
+1	3
+2	3
 
 
 -- !query
 table other
-|> aggregate a + count(b) group by a
+|> aggregate a group by a
 -- !query schema
-struct<a:int,(a + count(b)):bigint>
+struct<>
 -- !query output
-1	3
-2	3
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "a#x"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 37,
+    "stopIndex" : 37,
+    "fragment" : "a"
+  } ]
+}
 
 
 -- !query
@@ -2265,16 +2461,19 @@ table other
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "MISSING_GROUP_BY",
-  "sqlState" : "42803",
+  "errorClass" : "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "expr" : "a#x"
+  },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 1,
+    "startIndex" : 26,
     "stopIndex" : 26,
-    "fragment" : "table other\n|> aggregate a"
+    "fragment" : "a"
   } ]
 }
 
@@ -2287,9 +2486,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION",
+  "errorClass" : "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION",
   "sqlState" : "0A000",
   "messageParameters" : {
+    "clause" : "SELECT",
     "expr" : "sum(a#x)"
   },
   "queryContext" : [ {
@@ -2411,23 +2611,6 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 97,
     "fragment" : "x"
   } ]
-}
-
-
--- !query
-table other
-|> aggregate b group by a
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "MISSING_AGGREGATION",
-  "sqlState" : "42803",
-  "messageParameters" : {
-    "expression" : "\"b\"",
-    "expressionAnyValue" : "\"any_value(b)\""
-  }
 }
 
 

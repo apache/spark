@@ -440,8 +440,12 @@ trait RuntimeReplaceable extends Expression {
   // are semantically equal.
   override lazy val canonicalized: Expression = replacement.canonicalized
 
-  final override def eval(input: InternalRow = null): Any =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override def eval(input: InternalRow = null): Any = {
+    // For convenience, we allow to evaluate `RuntimeReplaceable` expressions, in case we need to
+    // get a constant from foldable expression before the query execution starts.
+    assert(input == null)
+    replacement.eval()
+  }
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
