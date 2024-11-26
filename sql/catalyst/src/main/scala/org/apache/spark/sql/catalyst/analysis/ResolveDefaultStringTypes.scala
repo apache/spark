@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 
@@ -34,6 +35,9 @@ import org.apache.spark.sql.types.{DataType, StringType}
  * not change the plan after transformation.
  */
 class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
+
+  private val CAST_ADDED_TAG = new TreeNodeTag[Unit]("castAddedTag")
+
   def apply(plan: LogicalPlan): LogicalPlan = {
 
     val newPlan = if (isDDLCommand(plan)) {
@@ -141,7 +145,30 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
 
     case (Literal(value, dt), newType) if hasDefaultStringType(dt) =>
       Literal(value, replaceDefaultStringType(dt, newType))
+
+    case (expression, newType) if needsCast(expression) =>
+      val newDataType = replaceDefaultStringType(expression.dataType, newType)
+      expression.setTagValue(CAST_ADDED_TAG, ())
+      Cast(expression, newDataType)
   }
+
+  private def needsCast(expression: Expression): Boolean = {
+    if (expression.getTagValue(CAST_ADDED_TAG).isDefined) {
+      return false
+    } else if (!expression.resolved || !hasDefaultStringType(expression.dataType)) {
+      return false
+    } else if (expression.isInstanceOf[Unevaluable]) {
+      return false
+    }
+
+    // either has no children of string type
+    // or is a DefaultStringProducingExpression
+    !expression.children.exists(e => hasAnyStringType(e.dataType)) ||
+      expression.isInstanceOf[DefaultStringProducingExpression]
+  }
+
+  private def hasAnyStringType(dataType: DataType): Boolean =
+    dataType.existsRecursively(_.isInstanceOf[StringType])
 
   private def hasDefaultStringType(dataType: DataType): Boolean =
     dataType.existsRecursively(isDefaultStringType)

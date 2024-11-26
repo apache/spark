@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.xml
 
 import org.apache.spark.sql.catalyst.xml.XmlInferSchema
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, DataType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object XmlExpressionEvalUtils {
@@ -34,7 +33,7 @@ object XmlExpressionEvalUtils {
           .map(ArrayType(_, containsNull = at.containsNull))
           .getOrElse(ArrayType(StructType(Nil), containsNull = at.containsNull))
       case other: DataType =>
-        xmlInferSchema.canonicalizeType(other).getOrElse(SQLConf.get.defaultStringType)
+        xmlInferSchema.canonicalizeType(other).getOrElse(StringType)
     }
 
     UTF8String.fromString(dataType.sql)

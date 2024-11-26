@@ -128,13 +128,12 @@ private[this] object SharedFactory {
   group = "json_funcs",
   since = "1.5.0")
 case class GetJsonObject(json: Expression, path: Expression)
-  extends BinaryExpression with ExpectsInputTypes {
+  extends BinaryExpression with ExpectsInputTypes with DefaultStringProducingExpression {
 
   override def left: Expression = json
   override def right: Expression = path
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation, StringTypeWithCollation)
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
@@ -750,6 +749,7 @@ case class StructsToJson(
   with RuntimeReplaceable
   with ExpectsInputTypes
   with TimeZoneAwareExpression
+  with DefaultStringProducingExpression
   with QueryErrorsBase {
 
   override def nullable: Boolean = true
@@ -768,8 +768,6 @@ case class StructsToJson(
 
   @transient
   private lazy val inputSchema = child.dataType
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def checkInputDataTypes(): TypeCheckResult = inputSchema match {
     case dt @ (_: StructType | _: MapType | _: ArrayType | _: VariantType) =>
@@ -821,6 +819,7 @@ case class SchemaOfJson(
     options: Map[String, String])
   extends UnaryExpression
   with RuntimeReplaceable
+  with DefaultStringProducingExpression
   with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
@@ -828,8 +827,6 @@ case class SchemaOfJson(
   def this(child: Expression, options: Expression) = this(
       child = child,
       options = ExprUtils.convertToMapData(options))
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 
@@ -953,10 +950,10 @@ case class LengthOfJsonArray(child: Expression)
 case class JsonObjectKeys(child: Expression)
   extends UnaryExpression
   with ExpectsInputTypes
+  with DefaultStringProducingExpression
   with RuntimeReplaceable {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
-  override def dataType: DataType = ArrayType(SQLConf.get.defaultStringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 

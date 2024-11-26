@@ -1467,3 +1467,7 @@ case class MultiCommutativeOp(
 
   override protected final def otherCopyArgs: Seq[AnyRef] = originalRoot :: Nil
 }
+
+trait DefaultStringProducingExpression extends Expression {
+  override def dataType: DataType = StringType
+}

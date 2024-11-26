@@ -997,7 +997,7 @@ class AstBuilder extends DataTypeAstBuilder
         } else {
           // TODO For v2 commands, we will cast the string back to its actual value,
           //  which is a waste and can be improved in the future.
-          Cast(l, conf.defaultStringType, Some(conf.sessionLocalTimeZone)).eval().toString
+          Cast(l, StringType, Some(conf.sessionLocalTimeZone)).eval().toString
         }
       case other =>
         throw new SparkIllegalArgumentException(

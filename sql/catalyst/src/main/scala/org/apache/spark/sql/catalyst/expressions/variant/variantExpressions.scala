@@ -415,8 +415,7 @@ case object VariantGet {
             }
           case Type.BOOLEAN => Literal(v.getBoolean, BooleanType)
           case Type.LONG => Literal(v.getLong, LongType)
-          case Type.STRING => Literal(UTF8String.fromString(v.getString),
-            SQLConf.get.defaultStringType)
+          case Type.STRING => Literal(UTF8String.fromString(v.getString))
           case Type.DOUBLE => Literal(v.getDouble, DoubleType)
           case Type.DECIMAL =>
             val d = Decimal(v.getDecimal)
@@ -638,7 +637,7 @@ case class VariantExplode(child: Expression) extends UnaryExpression with Genera
   override def elementSchema: StructType = {
     new StructType()
       .add("pos", IntegerType, nullable = false)
-      .add("key", SQLConf.get.defaultStringType, nullable = true)
+      .add("key", StringType, nullable = true)
       .add("value", VariantType, nullable = false)
   }
 }
@@ -739,18 +738,17 @@ object VariantExplode {
 case class SchemaOfVariant(child: Expression)
   extends UnaryExpression
     with RuntimeReplaceable
+    with DefaultStringProducingExpression
     with ExpectsInputTypes {
   override lazy val replacement: Expression = StaticInvoke(
     SchemaOfVariant.getClass,
-    SQLConf.get.defaultStringType,
+    StringType,
     "schemaOfVariant",
     Seq(child),
     inputTypes,
     returnNullable = false)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def prettyName: String = "schema_of_variant"
 
@@ -810,7 +808,7 @@ object SchemaOfVariant {
     case Type.NULL => NullType
     case Type.BOOLEAN => BooleanType
     case Type.LONG => LongType
-    case Type.STRING => SQLConf.get.defaultStringType
+    case Type.STRING => StringType
     case Type.DOUBLE => DoubleType
     case Type.DECIMAL =>
       val d = Decimal(v.getDecimal)
@@ -850,12 +848,11 @@ case class SchemaOfVariantAgg(
     extends TypedImperativeAggregate[DataType]
     with ExpectsInputTypes
     with QueryErrorsBase
+    with DefaultStringProducingExpression
     with UnaryLike[Expression] {
   def this(child: Expression) = this(child, 0, 0)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 

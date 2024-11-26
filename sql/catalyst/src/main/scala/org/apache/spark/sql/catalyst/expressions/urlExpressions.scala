@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, BooleanType, DataType, ObjectType}
+import org.apache.spark.sql.types.{AbstractDataType, BooleanType, ObjectType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 // scalastyle:off line.size.limit
@@ -49,12 +49,15 @@ import org.apache.spark.unsafe.types.UTF8String
   group = "url_funcs")
 // scalastyle:on line.size.limit
 case class UrlEncode(child: Expression)
-  extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
+  extends RuntimeReplaceable
+  with UnaryLike[Expression]
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
 
   override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
-      SQLConf.get.defaultStringType,
+      StringType,
       "encode",
       Seq(child),
       Seq(StringTypeWithCollation))
@@ -93,7 +96,7 @@ case class UrlDecode(child: Expression, failOnError: Boolean = true)
   override lazy val replacement: Expression =
     StaticInvoke(
       UrlCodec.getClass,
-      SQLConf.get.defaultStringType,
+      StringType,
       "decode",
       Seq(child, Literal(failOnError)),
       Seq(StringTypeWithCollation, BooleanType))
@@ -205,6 +208,7 @@ case class ParseUrl(
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends Expression
   with ExpectsInputTypes
+  with DefaultStringProducingExpression
   with RuntimeReplaceable {
 
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
@@ -212,7 +216,6 @@ case class ParseUrl(
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq.fill(children.size)(StringTypeWithCollation)
-  override def dataType: DataType = SQLConf.get.defaultStringType
   override def prettyName: String = "parse_url"
 
   override def checkInputDataTypes(): TypeCheckResult = {

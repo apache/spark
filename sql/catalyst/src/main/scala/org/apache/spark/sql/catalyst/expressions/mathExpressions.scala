@@ -1008,7 +1008,7 @@ case class Bin(child: Expression)
   extends UnaryExpression with ImplicitCastInputTypes with Serializable {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(LongType)
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def dataType: DataType = StringType
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.toBinaryString(input.asInstanceOf[Long])
@@ -1122,7 +1122,7 @@ case class Hex(child: Expression)
 
   override def dataType: DataType = child.dataType match {
     case st: StringType => st
-    case _ => SQLConf.get.defaultStringType
+    case _ => StringType
   }
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {

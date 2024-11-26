@@ -153,6 +153,7 @@ case class SchemaOfXml(
     options: Map[String, String])
   extends UnaryExpression
   with RuntimeReplaceable
+  with DefaultStringProducingExpression
   with QueryErrorsBase {
 
   def this(child: Expression) = this(child, Map.empty[String, String])
@@ -160,8 +161,6 @@ case class SchemaOfXml(
   def this(child: Expression, options: Expression) = this(
     child = child,
     options = ExprUtils.convertToMapData(options))
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def nullable: Boolean = false
 
@@ -239,6 +238,7 @@ case class StructsToXml(
     timeZoneId: Option[String] = None)
   extends UnaryExpression
   with TimeZoneAwareExpression
+  with DefaultStringProducingExpression
   with ExpectsInputTypes {
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
@@ -292,8 +292,6 @@ case class StructsToXml(
       gen.write(row.asInstanceOf[InternalRow])
       getAndReset()
   }
-
-  override def dataType: DataType = SQLConf.get.defaultStringType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
