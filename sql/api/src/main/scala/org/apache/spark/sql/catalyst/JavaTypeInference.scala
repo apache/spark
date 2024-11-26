@@ -255,17 +255,15 @@ object JavaTypeInference {
     if (serializableEncodersOnly) {
       val isClientConnect = clientConnectFlag.get
       assert(typesToCheck.size == 1)
-      typesToCheck
-        .flatMap(c => {
+      typesToCheck.headOption.flatMap(c => {
           if (!isClientConnect && classOf[KryoSerializable].isAssignableFrom(c)) {
-            Seq(Encoders.kryo(c).asInstanceOf[AgnosticEncoder[_]])
+           Some(Encoders.kryo(c).asInstanceOf[AgnosticEncoder[_]])
           } else if (classOf[java.io.Serializable].isAssignableFrom(c)) {
-            Seq(Encoders.javaSerialization(c).asInstanceOf[AgnosticEncoder[_]])
+            Some(Encoders.javaSerialization(c).asInstanceOf[AgnosticEncoder[_]])
           } else {
-            Seq.empty
+            None
           }
         })
-        .headOption
     } else {
       // The code below attempts to find UDTbased Encoder if available, else resort to
       // Java/Kryo based encoder. The left option is placeholder for UDTEncoder.
@@ -283,16 +281,16 @@ object JavaTypeInference {
               // A Success cannot have any other encoder except UDT
               case Success(value: UDTEncoder[_]) =>
                 if (baseClass.exists(_.isAssignableFrom(value.udt.userClass))) {
-                  (Option(value), serEncoder)
+                  (Some(value), serEncoder)
                 } else {
                   r
                 }
 
               // This is not expected, but to silence the warning, is needed
-              case Success(value) => (Option(value), serEncoder)
+              case Success(value) => (Some(value), serEncoder)
 
               case Failure(UseSerializationEncoder(encoderProvider)) if serEncoder.isEmpty =>
-                None -> Option(encoderProvider(baseClass.getOrElse(bound)))
+                None -> Some(encoderProvider(baseClass.getOrElse(bound)))
 
               case Failure(_) => r
             }
