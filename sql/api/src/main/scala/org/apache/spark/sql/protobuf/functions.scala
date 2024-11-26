@@ -16,16 +16,12 @@
  */
 package org.apache.spark.sql.protobuf
 
-import java.io.FileNotFoundException
-import java.nio.file.{Files, NoSuchFileException, Paths}
-
 import scala.jdk.CollectionConverters._
-import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.util.ProtobufUtils
 
 // scalastyle:off: object.name
 object functions {
@@ -51,7 +47,7 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
-    val descriptorFileContent = readDescriptorFileContent(descFilePath)
+    val descriptorFileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
     from_protobuf(data, messageName, descriptorFileContent, options)
   }
 
@@ -98,7 +94,7 @@ object functions {
    */
   @Experimental
   def from_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
-    val fileContent = readDescriptorFileContent(descFilePath)
+    val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
     from_protobuf(data, messageName, fileContent)
   }
 
@@ -226,7 +222,7 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
-    val fileContent = readDescriptorFileContent(descFilePath)
+    val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
     to_protobuf(data, messageName, fileContent, options)
   }
 
@@ -298,19 +294,5 @@ object functions {
       messageClassName: String,
       options: java.util.Map[String, String]): Column = {
     Column.fnWithOptions("to_protobuf", options.asScala.iterator, data, lit(messageClassName))
-  }
-
-  // This method is copied from org.apache.spark.sql.protobuf.util.ProtobufUtils
-  private def readDescriptorFileContent(filePath: String): Array[Byte] = {
-    try {
-      Files.readAllBytes(Paths.get(filePath))
-    } catch {
-      case ex: FileNotFoundException =>
-        throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case ex: NoSuchFileException =>
-        throw CompilationErrors.cannotFindDescriptorFileError(filePath, ex)
-      case NonFatal(ex) =>
-        throw CompilationErrors.descriptorParseError(ex)
-    }
   }
 }

@@ -16,9 +16,9 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
@@ -33,15 +33,17 @@ import org.apache.spark.sql.streaming.{TTLConfig, ValueState}
  * @param valEncoder - Spark SQL encoder for value
  * @param ttlConfig  - TTL configuration for values  stored in this state
  * @param batchTimestampMs - current batch processing timestamp.
+ * @param metrics - metrics to be updated as part of stateful processing
  * @tparam S - data type of object that will be stored
  */
 class ValueStateImplWithTTL[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S],
+    valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
-    batchTimestampMs: Long)
+    batchTimestampMs: Long,
+    metrics: Map[String, SQLMetric] = Map.empty)
   extends SingleKeyTTLStateImpl(
     stateName, store, keyExprEnc, batchTimestampMs) with ValueState[S] {
 
@@ -77,7 +79,7 @@ class ValueStateImplWithTTL[S](
       val resState = stateTypesEncoder.decodeValue(retRow)
 
       if (!stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
-        resState
+        resState.asInstanceOf[S]
       } else {
         null.asInstanceOf[S]
       }
@@ -92,12 +94,14 @@ class ValueStateImplWithTTL[S](
     val serializedGroupingKey = stateTypesEncoder.encodeGroupingKey()
     store.put(serializedGroupingKey,
       encodedValue, stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
     upsertTTLForStateKey(ttlExpirationMs, serializedGroupingKey)
   }
 
   /** Function to remove state for given key */
   override def clear(): Unit = {
     store.remove(stateTypesEncoder.encodeGroupingKey(), stateName)
+    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
     clearTTLState()
   }
 
@@ -108,6 +112,7 @@ class ValueStateImplWithTTL[S](
     if (retRow != null) {
       if (stateTypesEncoder.isExpired(retRow, batchTimestampMs)) {
         store.remove(groupingKey, stateName)
+        TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows")
         result = 1L
       }
     }
@@ -130,7 +135,7 @@ class ValueStateImplWithTTL[S](
     val retRow = store.get(encodedGroupingKey, stateName)
 
     if (retRow != null) {
-      val resState = stateTypesEncoder.decodeValue(retRow)
+      val resState = stateTypesEncoder.decodeValue(retRow).asInstanceOf[S]
       Some(resState)
     } else {
       None
@@ -148,7 +153,8 @@ class ValueStateImplWithTTL[S](
     // ttlExpiration
     if (retRow != null) {
       val ttlExpiration = stateTypesEncoder.decodeTtlExpirationMs(retRow)
-      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(retRow), expiration))
+      ttlExpiration.map(expiration => (stateTypesEncoder.decodeValue(retRow).asInstanceOf[S],
+        expiration))
     } else {
       None
     }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -34,15 +34,16 @@ import org.apache.spark.unsafe.types.UTF8String
  * This is not the world's most efficient implementation due to type conversion, but works.
  */
 abstract class XPathExtract
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback with NullIntolerant {
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
   override def left: Expression = xml
   override def right: Expression = path
+  override def nullIntolerant: Boolean = true
 
   /** XPath expressions are always nullable, e.g. if the xml string is empty. */
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, StringTypeWithCaseAccentSensitivity)
+    Seq(StringTypeWithCollation, StringTypeWithCollation)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!path.foldable) {
@@ -50,7 +51,7 @@ abstract class XPathExtract
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> toSQLId("path"),
-          "inputType" -> toSQLType(StringTypeWithCaseAccentSensitivity),
+          "inputType" -> toSQLType(StringTypeWithCollation),
           "inputExpr" -> toSQLExpr(path)
         )
       )

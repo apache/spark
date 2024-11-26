@@ -210,7 +210,7 @@ abstract class StreamExecution(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
 
   /** Isolated spark session to run the batches with. */
-  private val sparkSessionForStream = sparkSession.cloneSession()
+  protected val sparkSessionForStream = sparkSession.cloneSession()
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -223,9 +223,7 @@ abstract class StreamExecution(
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        JobArtifactSet.withActiveJobArtifactState(jobArtifactState) {
-          runStream()
-        }
+        runStream()
       }
     }
 

@@ -38,6 +38,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from pyspark._globals import _NoValue, _NoValueType
 from pyspark.conf import SparkConf
 from pyspark.util import is_remote_only
 from pyspark.sql.conf import RuntimeConfig
@@ -62,7 +63,12 @@ from pyspark.sql.types import (
     _from_numpy_type,
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
-from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str, try_remote_session_classmethod
+from pyspark.sql.utils import (
+    is_timestamp_ntz_preferred,
+    to_str,
+    try_remote_session_classmethod,
+    remote_only,
+)
 from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
 
 if TYPE_CHECKING:
@@ -74,6 +80,7 @@ if TYPE_CHECKING:
     from pyspark.sql.catalog import Catalog
     from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
     from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.tvf import TableValuedFunction
     from pyspark.sql.udf import UDFRegistration
     from pyspark.sql.udtf import UDTFRegistration
     from pyspark.sql.datasource import DataSourceRegistration
@@ -138,15 +145,6 @@ def _monkey_patch_RDD(sparkSession: "SparkSession") -> None:
         RDD.toDF = toDF  # type: ignore[method-assign]
 
 
-# TODO(SPARK-38912): This method can be dropped once support for Python 3.8 is dropped
-# In Python 3.9, the @property decorator has been made compatible with the
-# @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-#
-# @classmethod + @property is also affected by a bug in Python's docstring which was backported
-# to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-#
-# Python 3.9 with MyPy complains about @classmethod + @property combination. We should fix
-# it together with MyPy.
 class classproperty(property):
     """Same as Python's @property decorator, but for class attributes.
 
@@ -557,6 +555,7 @@ class SparkSession(SparkConversionMixin):
                 return session
 
         # Spark Connect-specific API
+        @remote_only
         def create(self) -> "SparkSession":
             """Creates a new SparkSession. Can only be used in the context of Spark Connect
             and will throw an exception otherwise.
@@ -596,15 +595,6 @@ class SparkSession(SparkConversionMixin):
                     messageParameters={"feature": "SparkSession.builder.create"},
                 )
 
-    # TODO(SPARK-38912): Replace classproperty with @classmethod + @property once support for
-    # Python 3.8 is dropped.
-    #
-    # In Python 3.9, the @property decorator has been made compatible with the
-    # @classmethod decorator (https://docs.python.org/3.9/library/functions.html#classmethod)
-    #
-    # @classmethod + @property is also affected by a bug in Python's docstring which was backported
-    # to Python 3.9.6 (https://github.com/python/cpython/pull/28838)
-    #
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
     builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
@@ -1282,7 +1272,7 @@ class SparkSession(SparkConversionMixin):
         data: Iterable["RowLike"],
         schema: Union[StructType, str],
         *,
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1292,7 +1282,7 @@ class SparkSession(SparkConversionMixin):
         data: "RDD[RowLike]",
         schema: Union[StructType, str],
         *,
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1301,7 +1291,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "RDD[AtomicValue]",
         schema: Union[AtomicType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1310,7 +1300,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: Iterable["AtomicValue"],
         schema: Union[AtomicType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1329,7 +1319,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1338,7 +1328,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "pa.Table",
         schema: Union[StructType, str],
-        verifySchema: bool = ...,
+        verifySchema: Union[_NoValueType, bool] = ...,
     ) -> DataFrame:
         ...
 
@@ -1347,7 +1337,7 @@ class SparkSession(SparkConversionMixin):
         data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike", "ArrayLike", "pa.Table"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
-        verifySchema: bool = True,
+        verifySchema: Union[_NoValueType, bool] = _NoValue,
     ) -> DataFrame:
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`,
@@ -1391,11 +1381,14 @@ class SparkSession(SparkConversionMixin):
             if ``samplingRatio`` is ``None``. This option is effective only when the input is
             :class:`RDD`.
         verifySchema : bool, optional
-            verify data types of every row against schema. Enabled by default.
-            When the input is :class:`pyarrow.Table` or when the input class is
-            :class:`pandas.DataFrame` and `spark.sql.execution.arrow.pyspark.enabled` is enabled,
-            this option is not effective. It follows Arrow type coercion. This option is not
-            supported with Spark Connect.
+            verify data types of every row against schema.
+            If not provided, createDataFrame with
+            - pyarrow.Table, verifySchema=False
+            - pandas.DataFrame with Arrow optimization, verifySchema defaults to
+            `spark.sql.execution.pandas.convertToArrowArraySafely`
+            - pandas.DataFrame without Arrow optimization, verifySchema=True
+            - regular Python instances, verifySchema=True
+            Arrow optimization is enabled/disabled via `spark.sql.execution.arrow.pyspark.enabled`.
 
             .. versionadded:: 2.1.0
 
@@ -1595,8 +1588,13 @@ class SparkSession(SparkConversionMixin):
         data: Union["RDD[Any]", Iterable[Any]],
         schema: Optional[Union[DataType, List[str]]],
         samplingRatio: Optional[float],
-        verifySchema: bool,
+        verifySchema: Union[_NoValueType, bool],
     ) -> DataFrame:
+        if verifySchema is _NoValue:
+            # createDataFrame with regular Python instances
+            # or (without Arrow optimization) createDataFrame with Pandas DataFrame
+            verifySchema = True
+
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
@@ -1963,6 +1961,41 @@ class SparkSession(SparkConversionMixin):
         self._sqm: StreamingQueryManager = StreamingQueryManager(self._jsparkSession.streams())
         return self._sqm
 
+    @property
+    def tvf(self) -> "TableValuedFunction":
+        """
+        Returns a :class:`TableValuedFunction` that can be used to call a table-valued function
+        (TVF).
+
+        .. versionadded:: 4.0.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Returns
+        -------
+        :class:`TableValuedFunction`
+
+        Examples
+        --------
+        >>> spark.tvf
+        <pyspark...TableValuedFunction object ...>
+
+        >>> import pyspark.sql.functions as sf
+        >>> spark.tvf.explode(sf.array(sf.lit(1), sf.lit(2), sf.lit(3))).show()
+        +---+
+        |col|
+        +---+
+        |  1|
+        |  2|
+        |  3|
+        +---+
+        """
+        from pyspark.sql.tvf import TableValuedFunction
+
+        return TableValuedFunction(self)
+
     def stop(self) -> None:
         """
         Stop the underlying :class:`SparkContext`.
@@ -2040,6 +2073,7 @@ class SparkSession(SparkConversionMixin):
 
     # SparkConnect-specific API
     @property
+    @remote_only
     def client(self) -> "SparkConnectClient":
         """
         Gives access to the Spark Connect client. In normal cases this is not necessary to be used
@@ -2063,6 +2097,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.client"},
         )
 
+    @remote_only
     def addArtifacts(
         self, *path: str, pyfile: bool = False, archive: bool = False, file: bool = False
     ) -> None:
@@ -2098,6 +2133,7 @@ class SparkSession(SparkConversionMixin):
 
     addArtifact = addArtifacts
 
+    @remote_only
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:
         """
         Register a progress handler to be called when a progress update is received from the server.
@@ -2126,6 +2162,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.registerProgressHandler"},
         )
 
+    @remote_only
     def removeProgressHandler(self, handler: "ProgressHandler") -> None:
         """
         Remove a progress handler that was previously registered.
@@ -2142,6 +2179,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.removeProgressHandler"},
         )
 
+    @remote_only
     def clearProgressHandlers(self) -> None:
         """
         Clear all registered progress handlers.
@@ -2153,6 +2191,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.clearProgressHandlers"},
         )
 
+    @remote_only
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         """
         Copy file from local to cloud storage file system.
@@ -2181,6 +2220,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.copyFromLocalToFs"},
         )
 
+    @remote_only
     def interruptAll(self) -> List[str]:
         """
         Interrupt all operations of this session currently running on the connected server.
@@ -2201,6 +2241,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptAll"},
         )
 
+    @remote_only
     def interruptTag(self, tag: str) -> List[str]:
         """
         Interrupt all operations of this session with the given operation tag.
@@ -2221,6 +2262,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptTag"},
         )
 
+    @remote_only
     def interruptOperation(self, op_id: str) -> List[str]:
         """
         Interrupt an operation of this session with the given operationId.
@@ -2241,6 +2283,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptOperation"},
         )
 
+    @remote_only
     def addTag(self, tag: str) -> None:
         """
         Add a tag to be assigned to all the operations started by this thread in this session.
@@ -2265,6 +2308,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.addTag"},
         )
 
+    @remote_only
     def removeTag(self, tag: str) -> None:
         """
         Remove a tag previously added to be assigned to all the operations started by this thread in
@@ -2282,6 +2326,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.removeTag"},
         )
 
+    @remote_only
     def getTags(self) -> Set[str]:
         """
         Get the tags that are currently set to be assigned to all the operations started by this
@@ -2299,6 +2344,7 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.getTags"},
         )
 
+    @remote_only
     def clearTags(self) -> None:
         """
         Clear the current thread's operation tags.

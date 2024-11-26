@@ -272,13 +272,13 @@ trait AggregateCodegenSupport
 
     aggCodes.zip(aggregateExpressions.map(ae => (ae.mode, ae.filter))).map {
       case (aggCode, (Partial | Complete, Some(condition))) =>
-        // Note: wrap in "do { } while(false);", so the generated checks can jump out
+        // Note: wrap in "do { } while (false);", so the generated checks can jump out
         // with "continue;"
         s"""
            |do {
            |  ${generatePredicateCode(ctx, condition, inputAttrs, input)}
            |  $aggCode
-           |} while(false);
+           |} while (false);
          """.stripMargin
       case (aggCode, _) =>
         aggCode

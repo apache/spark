@@ -126,9 +126,6 @@ exported_table/*
 node_modules
 spark-events-broken/*
 SqlBaseLexer.tokens
-# Spark Connect related files with custom licence
-any.proto
-empty.proto
 .*\.explain
 .*\.proto.bin
 LimitedInputStream.java
@@ -139,5 +136,6 @@ people.xml
 ui-test/package.json
 ui-test/package-lock.json
 core/src/main/resources/org/apache/spark/ui/static/package.json
+testCommitLog
 .*\.har
 .nojekyll
