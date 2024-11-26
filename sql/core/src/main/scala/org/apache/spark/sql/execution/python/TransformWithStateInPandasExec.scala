@@ -73,6 +73,8 @@ case class TransformWithStateInPandasExec(
     initialStateSchema: StructType)
   extends BinaryExecNode with StateStoreWriter with WatermarkSupport {
 
+  override def shortName: String = "transformWithStateInPandasExec"
+
   private val pythonUDF = functionExpr.asInstanceOf[PythonUDF]
   private val pythonFunction = pythonUDF.func
   private val chainedFunc =

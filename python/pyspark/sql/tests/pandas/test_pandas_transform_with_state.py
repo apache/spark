@@ -728,36 +728,16 @@ class TransformWithStateInPandasTestsMixin:
         import pyspark.sql.functions as f
 
         input_path = tempfile.mkdtemp()
-        self._prepare_test_resource1(input_path)
-
-        def prepare_batch1(input_path):
-            with open(input_path + "/text-test3.txt", "w") as fw:
-                fw.write("a, 20\n")
-
-        def prepare_batch2(input_path):
-            with open(input_path + "/text-test4.txt", "w") as fw:
-                fw.write("a, 3\n")
-
-        def prepare_batch3(input_path):
-            with open(input_path + "/text-test1.txt", "w") as fw:
-                fw.write("a, 4\n")
-
-        def prepare_batch4(input_path):
-            with open(input_path + "/text-test2.txt", "w") as fw:
-                fw.write("a, 20\n")
-
-        prepare_batch1(input_path)
+        self._prepare_input_data(input_path + "/text-test3.txt", ["a", "b"], [10, 15])
         time.sleep(2)
-        prepare_batch2(input_path)
+        self._prepare_input_data(input_path + "/text-test4.txt", ["a", "c"], [11, 25])
         time.sleep(2)
-        prepare_batch3(input_path)
-        time.sleep(2)
-        prepare_batch4(input_path)
+        self._prepare_input_data(input_path + "/text-test1.txt", ["a"], [5])
 
         df = self._build_test_df(input_path)
         df = df.select(
             "id", f.from_unixtime(f.col("temperature")).alias("eventTime").cast("timestamp")
-        ).withWatermark("eventTime", "10 seconds")
+        ).withWatermark("eventTime", "5 seconds")
 
         for q in self.spark.streams.active:
             q.stop()
@@ -797,25 +777,22 @@ class TransformWithStateInPandasTestsMixin:
             import datetime
 
             if batch_id == 0:
-                assert set(
-                    batch_df.sort("outputTimestamp").select("outputTimestamp", "count").collect()
-                ) == {
-                    Row(outputTimestamp=datetime.datetime(1970, 1, 1, 0, 0, 20), count=1),
-                }
+                assert batch_df.isEmpty()
             elif batch_id == 1:
+                # watermark is 25 - 5 = 20, no more event for eventTime=10
                 assert set(
                     batch_df.sort("outputTimestamp").select("outputTimestamp", "count").collect()
                 ) == {
-                    Row(outputTimestamp=datetime.datetime(1970, 1, 1, 0, 0, 3), count=1),
+                    Row(outputTimestamp=datetime.datetime(1970, 1, 1, 0, 0, 10), count=1),
                 }
             elif batch_id == 2:
-                # as the late event watermark is 10, eventTime=3 is dropped
-                assert batch_df.isEmpty()
-            else:
+                # row with watermark=5 is dropped so it does not show up in the results
+                # watermark is still 20, so row with eventTime<=20 are finalized and emitted
                 assert set(
                     batch_df.sort("outputTimestamp").select("outputTimestamp", "count").collect()
                 ) == {
-                    Row(outputTimestamp=datetime.datetime(1970, 1, 1, 0, 0, 20), count=2),
+                    Row(outputTimestamp=datetime.datetime(1970, 1, 1, 0, 0, 11), count=1),
+                    Row(outputTimestamp=datetime.datetime(1970, 1, 1, 0, 0, 15), count=1),
                 }
 
         self._test_transform_with_state_in_pandas_chaining_ops(
