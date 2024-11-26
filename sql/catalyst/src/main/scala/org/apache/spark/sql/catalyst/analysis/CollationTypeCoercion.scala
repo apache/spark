@@ -178,14 +178,9 @@ object CollationTypeCoercion {
    * if expression has StringType in the first place.
    */
   def castStringType(expr: Expression, st: StringType): Expression = {
-    castStringType(expr.dataType, st) match {
-      case Some(dt) => expr match {
-        case lit: Literal => lit.copy(dataType = dt)
-        case cast: Cast => cast.copy(dataType = dt)
-        case _ => Cast(expr, dt)
-      }
-      case _ => expr
-    }
+    castStringType(expr.dataType, st)
+      .map(dt => Cast(expr, dt))
+      .getOrElse(expr)
   }
 
   private def castStringType(inType: DataType, castType: StringType): Option[DataType] = {
