@@ -1514,6 +1514,10 @@ def count(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.count_if`
+
     Examples
     --------
     Example 1: Count all rows in a DataFrame
@@ -1735,6 +1739,10 @@ def median(col: "ColumnOrName") -> Column:
     Notes
     -----
     Supports Spark Connect.
+
+    :meth:`pyspark.sql.functions.percentile`
+    :meth:`pyspark.sql.functions.approx_percentile`
+    :meth:`pyspark.sql.functions.percentile_approx`
 
     Examples
     --------
@@ -6078,10 +6086,11 @@ def dense_rank() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Window, types
-    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], "int")
     >>> w = Window.orderBy("value")
-    >>> df.withColumn("drank", dense_rank().over(w)).show()
+    >>> df.withColumn("drank", sf.dense_rank().over(w)).show()
     +-----+-----+
     |value|drank|
     +-----+-----+
@@ -6121,10 +6130,11 @@ def rank() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Window, types
-    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], "int")
     >>> w = Window.orderBy("value")
-    >>> df.withColumn("drank", rank().over(w)).show()
+    >>> df.withColumn("drank", sf.rank().over(w)).show()
     +-----+-----+
     |value|drank|
     +-----+-----+
@@ -6157,10 +6167,11 @@ def cume_dist() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Window, types
-    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], "int")
     >>> w = Window.orderBy("value")
-    >>> df.withColumn("cd", cume_dist().over(w)).show()
+    >>> df.withColumn("cd", sf.cume_dist().over(w)).show()
     +-----+---+
     |value| cd|
     +-----+---+
@@ -6191,10 +6202,11 @@ def percent_rank() -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Window, types
-    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> df = spark.createDataFrame([1, 1, 2, 3, 3, 4], "int")
     >>> w = Window.orderBy("value")
-    >>> df.withColumn("pr", percent_rank().over(w)).show()
+    >>> df.withColumn("pr", sf.percent_rank().over(w)).show()
     +-----+---+
     |value| pr|
     +-----+---+
@@ -6240,7 +6252,7 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The label of the column to count distinct values in.
     rsd : float, optional
         The maximum allowed relative standard deviation (default = 0.05).
@@ -6259,47 +6271,46 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     --------
     Example 1: Counting distinct values in a single column DataFrame representing integers
 
-    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "int")
-    >>> df.agg(approx_count_distinct("value").alias('distinct_values')).show()
-    +---------------+
-    |distinct_values|
-    +---------------+
-    |              3|
-    +---------------+
+    >>> df.agg(sf.approx_count_distinct("value")).show()
+    +----------------------------+
+    |approx_count_distinct(value)|
+    +----------------------------+
+    |                           3|
+    +----------------------------+
 
     Example 2: Counting distinct values in a single column DataFrame representing strings
 
-    >>> from pyspark.sql.functions import approx_count_distinct
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("apple",), ("orange",), ("apple",), ("banana",)], ['fruit'])
-    >>> df.agg(approx_count_distinct("fruit").alias('distinct_fruits')).show()
-    +---------------+
-    |distinct_fruits|
-    +---------------+
-    |              3|
-    +---------------+
+    >>> df.agg(sf.approx_count_distinct("fruit")).show()
+    +----------------------------+
+    |approx_count_distinct(fruit)|
+    +----------------------------+
+    |                           3|
+    +----------------------------+
 
     Example 3: Counting distinct values in a DataFrame with multiple columns
 
-    >>> from pyspark.sql.functions import approx_count_distinct, struct
-    >>> df = spark.createDataFrame([("Alice", 1),
-    ...                             ("Alice", 2),
-    ...                             ("Bob", 3),
-    ...                             ("Bob", 3)], ["name", "value"])
-    >>> df = df.withColumn("combined", struct("name", "value"))
-    >>> df.agg(approx_count_distinct("combined").alias('distinct_pairs')).show()
-    +--------------+
-    |distinct_pairs|
-    +--------------+
-    |             3|
-    +--------------+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [("Alice", 1), ("Alice", 2), ("Bob", 3), ("Bob", 3)], ["name", "value"])
+    >>> df = df.withColumn("combined", sf.struct("name", "value"))
+    >>> df.agg(sf.approx_count_distinct(df.combined)).show()
+    +-------------------------------+
+    |approx_count_distinct(combined)|
+    +-------------------------------+
+    |                              3|
+    +-------------------------------+
 
     Example 4: Counting distinct values with a specified relative standard deviation
 
-    >>> from pyspark.sql.functions import approx_count_distinct
-    >>> df = spark.range(100000)
-    >>> df.agg(approx_count_distinct("id").alias('with_default_rsd'),
-    ...        approx_count_distinct("id", 0.1).alias('with_rsd_0.1')).show()
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(100000).agg(
+    ...     sf.approx_count_distinct("id").alias('with_default_rsd'),
+    ...     sf.approx_count_distinct("id", 0.1).alias('with_rsd_0.1')
+    ... ).show()
     +----------------+------------+
     |with_default_rsd|with_rsd_0.1|
     +----------------+------------+
@@ -6331,10 +6342,10 @@ def broadcast(df: "ParentDataFrame") -> "ParentDataFrame":
 
     Examples
     --------
-    >>> from pyspark.sql import types
-    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], types.IntegerType())
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([1, 2, 3, 3, 4], "int")
     >>> df_small = spark.range(3)
-    >>> df_b = broadcast(df_small)
+    >>> df_b = sf.broadcast(df_small)
     >>> df.join(df_b, df.value == df_small.id).show()
     +-----+---+
     |value| id|
@@ -6360,7 +6371,7 @@ def coalesce(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         list of columns to work on.
 
     Returns
@@ -6370,8 +6381,9 @@ def coalesce(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> cDf = spark.createDataFrame([(None, None), (1, None), (None, 2)], ("a", "b"))
-    >>> cDf.show()
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(None, None), (1, None), (None, 2)], ("a", "b"))
+    >>> df.show()
     +----+----+
     |   a|   b|
     +----+----+
@@ -6380,16 +6392,16 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     |NULL|   2|
     +----+----+
 
-    >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
-    +--------------+
-    |coalesce(a, b)|
-    +--------------+
-    |          NULL|
-    |             1|
-    |             2|
-    +--------------+
+    >>> df.select('*', sf.coalesce("a", df["b"])).show()
+    +----+----+--------------+
+    |   a|   b|coalesce(a, b)|
+    +----+----+--------------+
+    |NULL|NULL|          NULL|
+    |   1|NULL|             1|
+    |NULL|   2|             2|
+    +----+----+--------------+
 
-    >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
+    >>> df.select('*', sf.coalesce(df["a"], lit(0.0))).show()
     +----+----+----------------+
     |   a|   b|coalesce(a, 0.0)|
     +----+----+----------------+
@@ -6413,9 +6425,9 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate correlation.
-    col2 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate correlation.
 
     Returns
@@ -6425,11 +6437,16 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
     >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(corr("a", "b").alias('c')).collect()
-    [Row(c=1.0)]
+    >>> df.agg(sf.corr("a", df.b)).show()
+    +----------+
+    |corr(a, b)|
+    +----------+
+    |       1.0|
+    +----------+
     """
     return _invoke_function_over_columns("corr", col1, col2)
 
@@ -6446,9 +6463,9 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate covariance.
-    col2 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate covariance.
 
     Returns
@@ -6456,13 +6473,22 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         covariance of these two column values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.covar_samp`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> a = [1] * 10
     >>> b = [1] * 10
     >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(covar_pop("a", "b").alias('c')).collect()
-    [Row(c=0.0)]
+    >>> df.agg(sf.covar_pop("a", df.b)).show()
+    +---------------+
+    |covar_pop(a, b)|
+    +---------------+
+    |            0.0|
+    +---------------+
     """
     return _invoke_function_over_columns("covar_pop", col1, col2)
 
@@ -6479,9 +6505,9 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
         first column to calculate covariance.
-    col2 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or column name
         second column to calculate covariance.
 
     Returns
@@ -6489,13 +6515,22 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         sample covariance of these two column values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.covar_pop`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> a = [1] * 10
     >>> b = [1] * 10
     >>> df = spark.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(covar_samp("a", "b").alias('c')).collect()
-    [Row(c=0.0)]
+    >>> df.agg(sf.covar_samp("a", df.b)).show()
+    +----------------+
+    |covar_samp(a, b)|
+    +----------------+
+    |             0.0|
+    +----------------+
     """
     return _invoke_function_over_columns("covar_samp", col1, col2)
 
@@ -6544,9 +6579,9 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         first column to compute on.
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         other columns to compute on.
 
     Returns
@@ -6616,7 +6651,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to fetch first value for.
     ignorenulls : bool
         if first value is null then look for first non-null value. ``False``` by default.
@@ -6628,9 +6663,10 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5), ("Alice", None)], ("name", "age"))
     >>> df = df.orderBy(df.age)
-    >>> df.groupby("name").agg(first("age")).orderBy("name").show()
+    >>> df.groupby("name").agg(sf.first("age")).orderBy("name").show()
     +-----+----------+
     | name|first(age)|
     +-----+----------+
@@ -6640,7 +6676,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     To ignore any null values, set ``ignorenulls`` to `True`
 
-    >>> df.groupby("name").agg(first("age", ignorenulls=True)).orderBy("name").show()
+    >>> df.groupby("name").agg(sf.first("age", ignorenulls=True)).orderBy("name").show()
     +-----+----------+
     | name|first(age)|
     +-----+----------+
@@ -6666,7 +6702,7 @@ def grouping(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to check if it's aggregated.
 
     Returns
@@ -6676,8 +6712,9 @@ def grouping(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.cube("name").agg(grouping("name"), sum("age")).orderBy("name").show()
+    >>> df.cube("name").agg(sf.grouping("name"), sf.sum("age")).orderBy("name").show()
     +-----+--------------+--------+
     | name|grouping(name)|sum(age)|
     +-----+--------------+--------+
@@ -6708,7 +6745,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         columns to check for.
 
     Returns
@@ -6718,10 +6755,10 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1, "a", "a"),
-    ...                             (3, "a", "a"),
-    ...                             (4, "b", "c")], ["c1", "c2", "c3"])
-    >>> df.cube("c2", "c3").agg(grouping_id(), sum("c1")).orderBy("c2", "c3").show()
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(1, "a", "a"), (3, "a", "a"), (4, "b", "c")], ["c1", "c2", "c3"])
+    >>> df.cube("c2", "c3").agg(sf.grouping_id(), sf.sum("c1")).orderBy("c2", "c3").show()
     +----+----+-------------+-------+
     |  c2|  c3|grouping_id()|sum(c1)|
     +----+----+-------------+-------+
@@ -6754,7 +6791,7 @@ def count_min_sketch(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
     eps : :class:`~pyspark.sql.Column` or float
         relative error, must be positive
@@ -6852,12 +6889,18 @@ def input_file_name() -> Column:
     :class:`~pyspark.sql.Column`
         file names.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.input_file_block_length`
+    :meth:`pyspark.sql.functions.input_file_block_start`
+
     Examples
     --------
     >>> import os
+    >>> from pyspark.sql import functions as sf
     >>> path = os.path.abspath(__file__)
     >>> df = spark.read.text(path)
-    >>> df.select(input_file_name()).first()
+    >>> df.select(sf.input_file_name()).first()
     Row(input_file_name()='file:///...')
     """
     return _invoke_function("input_file_name")
@@ -6874,7 +6917,7 @@ def isnan(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -6884,14 +6927,15 @@ def isnan(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
-    >>> df.select("a", "b", isnan("a").alias("r1"), isnan(df.b).alias("r2")).show()
-    +---+---+-----+-----+
-    |  a|  b|   r1|   r2|
-    +---+---+-----+-----+
-    |1.0|NaN|false| true|
-    |NaN|2.0| true|false|
-    +---+---+-----+-----+
+    >>> df.select("*", sf.isnan("a"), sf.isnan(df.b)).show()
+    +---+---+--------+--------+
+    |  a|  b|isnan(a)|isnan(b)|
+    +---+---+--------+--------+
+    |1.0|NaN|   false|    true|
+    |NaN|2.0|    true|   false|
+    +---+---+--------+--------+
     """
     return _invoke_function_over_columns("isnan", col)
 
@@ -6907,7 +6951,7 @@ def isnull(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -6917,14 +6961,15 @@ def isnull(col: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1, None), (None, 2)], ("a", "b"))
-    >>> df.select("a", "b", isnull("a").alias("r1"), isnull(df.b).alias("r2")).show()
-    +----+----+-----+-----+
-    |   a|   b|   r1|   r2|
-    +----+----+-----+-----+
-    |   1|NULL|false| true|
-    |NULL|   2| true|false|
-    +----+----+-----+-----+
+    >>> df.select("*", sf.isnull("a"), isnull(df.b)).show()
+    +----+----+-----------+-----------+
+    |   a|   b|(a IS NULL)|(b IS NULL)|
+    +----+----+-----------+-----------+
+    |   1|NULL|      false|       true|
+    |NULL|   2|       true|      false|
+    +----+----+-----------+-----------+
     """
     return _invoke_function_over_columns("isnull", col)
 
@@ -6948,7 +6993,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column to fetch last value for.
     ignorenulls : bool
         if last value is null then look for non-null value. ``False``` by default.
@@ -6960,9 +7005,10 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5), ("Alice", None)], ("name", "age"))
     >>> df = df.orderBy(df.age.desc())
-    >>> df.groupby("name").agg(last("age")).orderBy("name").show()
+    >>> df.groupby("name").agg(sf.last("age")).orderBy("name").show()
     +-----+---------+
     | name|last(age)|
     +-----+---------+
@@ -6972,7 +7018,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
 
     To ignore any null values, set ``ignorenulls`` to `True`
 
-    >>> df.groupby("name").agg(last("age", ignorenulls=True)).orderBy("name").show()
+    >>> df.groupby("name").agg(sf.last("age", ignorenulls=True)).orderBy("name").show()
     +-----+---------+
     | name|last(age)|
     +-----+---------+
@@ -7015,21 +7061,24 @@ def monotonically_increasing_id() -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(0, 10, 1, 2).select(sf.monotonically_increasing_id()).show()
-    +-----------------------------+
-    |monotonically_increasing_id()|
-    +-----------------------------+
-    |                            0|
-    |                            1|
-    |                            2|
-    |                            3|
-    |                            4|
-    |                   8589934592|
-    |                   8589934593|
-    |                   8589934594|
-    |                   8589934595|
-    |                   8589934596|
-    +-----------------------------+
+    >>> spark.range(0, 10, 1, 2).select(
+    ...     "*",
+    ...     sf.spark_partition_id(),
+    ...     sf.monotonically_increasing_id()).show()
+    +---+--------------------+-----------------------------+
+    | id|SPARK_PARTITION_ID()|monotonically_increasing_id()|
+    +---+--------------------+-----------------------------+
+    |  0|                   0|                            0|
+    |  1|                   0|                            1|
+    |  2|                   0|                            2|
+    |  3|                   0|                            3|
+    |  4|                   0|                            4|
+    |  5|                   1|                   8589934592|
+    |  6|                   1|                   8589934593|
+    |  7|                   1|                   8589934594|
+    |  8|                   1|                   8589934595|
+    |  9|                   1|                   8589934596|
+    +---+--------------------+-----------------------------+
     """
     return _invoke_function("monotonically_increasing_id")
 
@@ -7047,9 +7096,9 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
         first column to check.
-    col2 : :class:`~pyspark.sql.Column` or str
+    col2 : :class:`~pyspark.sql.Column` or column name
         second column to return if first is NaN.
 
     Returns
@@ -7059,9 +7108,15 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1.0, float('nan')), (float('nan'), 2.0)], ("a", "b"))
-    >>> df.select(nanvl("a", "b").alias("r1"), nanvl(df.a, df.b).alias("r2")).collect()
-    [Row(r1=1.0, r2=1.0), Row(r1=2.0, r2=2.0)]
+    >>> df.select("*", sf.nanvl("a", "b"), sf.nanvl(df.a, df.b)).show()
+    +---+---+-----------+-----------+
+    |  a|  b|nanvl(a, b)|nanvl(a, b)|
+    +---+---+-----------+-----------+
+    |1.0|NaN|        1.0|        1.0|
+    |NaN|2.0|        2.0|        2.0|
+    +---+---+-----------+-----------+
     """
     return _invoke_function_over_columns("nanvl", col1, col2)
 
@@ -7079,7 +7134,7 @@ def percentile(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str input column.
+    col : :class:`~pyspark.sql.Column` or column name
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
     frequency : :class:`~pyspark.sql.Column` or int is a positive numeric literal which
@@ -7090,30 +7145,37 @@ def percentile(
     :class:`~pyspark.sql.Column`
         the exact `percentile` of the numeric column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.median`
+    :meth:`pyspark.sql.functions.approx_percentile`
+    :meth:`pyspark.sql.functions.percentile_approx`
+
     Examples
     --------
-    >>> key = (col("id") % 3).alias("key")
-    >>> value = (randn(42) + key * 10).alias("value")
+    >>> from pyspark.sql import functions as sf
+    >>> key = (sf.col("id") % 3).alias("key")
+    >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
     >>> df.select(
-    ...     percentile("value", [0.25, 0.5, 0.75], lit(1)).alias("quantiles")
-    ... ).show()
-    +--------------------+
-    |           quantiles|
-    +--------------------+
-    |[0.74419914941216...|
-    +--------------------+
+    ...     sf.percentile("value", [0.25, 0.5, 0.75], sf.lit(1))
+    ... ).show(truncate=False)
+    +--------------------------------------------------------+
+    |percentile(value, array(0.25, 0.5, 0.75), 1)            |
+    +--------------------------------------------------------+
+    |[0.7441991494121..., 9.9900713756..., 19.33740203080...]|
+    +--------------------------------------------------------+
 
     >>> df.groupBy("key").agg(
-    ...     percentile("value", 0.5, lit(1)).alias("median")
-    ... ).show()
-    +---+--------------------+
-    |key|              median|
-    +---+--------------------+
-    |  0|-0.03449962216667901|
-    |  1|   9.990389751837329|
-    |  2|  19.967859769284075|
-    +---+--------------------+
+    ...     sf.percentile("value", sf.lit(0.5), sf.lit(1))
+    ... ).sort("key").show()
+    +---+-------------------------+
+    |key|percentile(value, 0.5, 1)|
+    +---+-------------------------+
+    |  0|     -0.03449962216667901|
+    |  1|        9.990389751837329|
+    |  2|       19.967859769284075|
+    +---+-------------------------+
     """
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("percentile", col, percentage, lit(frequency))
@@ -7137,7 +7199,7 @@ def percentile_approx(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column.
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
@@ -7154,24 +7216,37 @@ def percentile_approx(
     :class:`~pyspark.sql.Column`
         approximate `percentile` of the numeric column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.median`
+    :meth:`pyspark.sql.functions.percentile`
+    :meth:`pyspark.sql.functions.approx_percentile`
+
     Examples
     --------
-    >>> key = (col("id") % 3).alias("key")
-    >>> value = (randn(42) + key * 10).alias("value")
+    >>> from pyspark.sql import functions as sf
+    >>> key = (sf.col("id") % 3).alias("key")
+    >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
     >>> df.select(
-    ...     percentile_approx("value", [0.25, 0.5, 0.75], 1000000).alias("quantiles")
-    ... ).printSchema()
-    root
-     |-- quantiles: array (nullable = true)
-     |    |-- element: double (containsNull = false)
+    ...     sf.percentile_approx("value", [0.25, 0.5, 0.75], 1000000)
+    ... ).show(truncate=False)
+    +----------------------------------------------------------+
+    |percentile_approx(value, array(0.25, 0.5, 0.75), 1000000) |
+    +----------------------------------------------------------+
+    |[0.7264430125286..., 9.98975299938..., 19.335304783039...]|
+    +----------------------------------------------------------+
 
     >>> df.groupBy("key").agg(
-    ...     percentile_approx("value", 0.5, lit(1000000)).alias("median")
-    ... ).printSchema()
-    root
-     |-- key: long (nullable = true)
-     |-- median: double (nullable = true)
+    ...     sf.percentile_approx("value", sf.lit(0.5), sf.lit(1000000))
+    ... ).sort("key").show()
+    +---+--------------------------------------+
+    |key|percentile_approx(value, 0.5, 1000000)|
+    +---+--------------------------------------+
+    |  0|                  -0.03519435193070...|
+    |  1|                     9.990389751837...|
+    |  2|                    19.967859769284...|
+    +---+--------------------------------------+
     """
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("percentile_approx", col, percentage, lit(accuracy))
@@ -7191,7 +7266,7 @@ def approx_percentile(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column.
     percentage : :class:`~pyspark.sql.Column`, float, list of floats or tuple of floats
         percentage in decimal (must be between 0.0 and 1.0).
@@ -7208,25 +7283,37 @@ def approx_percentile(
     :class:`~pyspark.sql.Column`
         approximate `percentile` of the numeric column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.median`
+    :meth:`pyspark.sql.functions.percentile`
+    :meth:`pyspark.sql.functions.percentile_approx`
+
     Examples
     --------
-    >>> import pyspark.sql.functions as sf
+    >>> from pyspark.sql import functions as sf
     >>> key = (sf.col("id") % 3).alias("key")
     >>> value = (sf.randn(42) + key * 10).alias("value")
     >>> df = spark.range(0, 1000, 1, 1).select(key, value)
     >>> df.select(
     ...     sf.approx_percentile("value", [0.25, 0.5, 0.75], 1000000)
-    ... ).printSchema()
-    root
-     |-- approx_percentile(value, array(0.25, 0.5, 0.75), 1000000): array (nullable = true)
-     |    |-- element: double (containsNull = false)
+    ... ).show(truncate=False)
+    +----------------------------------------------------------+
+    |approx_percentile(value, array(0.25, 0.5, 0.75), 1000000) |
+    +----------------------------------------------------------+
+    |[0.7264430125286..., 9.98975299938..., 19.335304783039...]|
+    +----------------------------------------------------------+
 
     >>> df.groupBy("key").agg(
-    ...     sf.approx_percentile("value", 0.5, sf.lit(1000000))
-    ... ).printSchema()
-    root
-     |-- key: long (nullable = true)
-     |-- approx_percentile(value, 0.5, 1000000): double (nullable = true)
+    ...     sf.approx_percentile("value", sf.lit(0.5), sf.lit(1000000))
+    ... ).sort("key").show()
+    +---+--------------------------------------+
+    |key|approx_percentile(value, 0.5, 1000000)|
+    +---+--------------------------------------+
+    |  0|                  -0.03519435193070...|
+    |  1|                     9.990389751837...|
+    |  2|                    19.967859769284...|
+    +---+--------------------------------------+
     """
     percentage = lit(list(percentage)) if isinstance(percentage, (list, tuple)) else lit(percentage)
     return _invoke_function_over_columns("approx_percentile", col, percentage, lit(accuracy))
@@ -7261,22 +7348,22 @@ def rand(seed: Optional[int] = None) -> Column:
     Example 1: Generate a random column without a seed
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand()).show() # doctest: +SKIP
-    +---+-------------------+
-    | id|               rand|
-    +---+-------------------+
-    |  0|0.14879325244215424|
-    |  1| 0.4640631044275454|
-    +---+-------------------+
+    >>> spark.range(0, 2, 1, 1).select("*", sf.rand()).show() # doctest: +SKIP
+    +---+-------------------------+
+    | id|rand(-158884697681280011)|
+    +---+-------------------------+
+    |  0|       0.9253464547887...|
+    |  1|       0.6533254118758...|
+    +---+-------------------------+
 
     Example 2: Generate a random column with a specific seed
 
-    >>> spark.range(0, 2, 1, 1).withColumn('rand', sf.rand(seed=42) * 3).show()
+    >>> spark.range(0, 2, 1, 1).select("*", sf.rand(seed=42)).show()
     +---+------------------+
-    | id|              rand|
+    | id|          rand(42)|
     +---+------------------+
-    |  0|1.8575681106759028|
-    |  1|1.5288056527339444|
+    |  0| 0.619189370225...|
+    |  1|0.5096018842446...|
     +---+------------------+
     """
     if seed is not None:
@@ -7314,22 +7401,22 @@ def randn(seed: Optional[int] = None) -> Column:
     Example 1: Generate a random column without a seed
 
     >>> from pyspark.sql import functions as sf
-    >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn()).show() # doctest: +SKIP
-    +---+--------------------+
-    | id|               randn|
-    +---+--------------------+
-    |  0|-0.45011372342934214|
-    |  1|  0.6567304165329736|
-    +---+--------------------+
+    >>> spark.range(0, 2, 1, 1).select("*", sf.randn()).show() # doctest: +SKIP
+    +---+--------------------------+
+    | id|randn(3968742514375399317)|
+    +---+--------------------------+
+    |  0|      -0.47968645355788...|
+    |  1|       -0.4950952457305...|
+    +---+--------------------------+
 
     Example 2: Generate a random column with a specific seed
 
-    >>> spark.range(0, 2, 1, 1).withColumn('randn', sf.randn(seed=42)).show()
+    >>> spark.range(0, 2, 1, 1).select("*", sf.randn(seed=42)).show()
     +---+------------------+
-    | id|             randn|
+    | id|         randn(42)|
     +---+------------------+
-    |  0| 2.384479054241165|
-    |  1|0.1920934041293524|
+    |  0| 2.384479054241...|
+    |  1|0.1920934041293...|
     +---+------------------+
     """
     if seed is not None:
@@ -7351,7 +7438,7 @@ def round(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the round on.
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
@@ -7407,7 +7494,7 @@ def bround(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> C
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The target column or column name to compute the round on.
     scale : :class:`~pyspark.sql.Column` or int, optional
         An optional parameter to control the rounding behavior.
@@ -7477,7 +7564,7 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
     numBits : int
         number of bits to shift.
@@ -7489,8 +7576,16 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([(21,)], ['a']).select(shiftleft('a', 1).alias('r')).collect()
-    [Row(r=42)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select("*", sf.shiftleft('id', 1)).show()
+    +---+----------------+
+    | id|shiftleft(id, 1)|
+    +---+----------------+
+    |  0|               0|
+    |  1|               2|
+    |  2|               4|
+    |  3|               6|
+    +---+----------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -7524,7 +7619,7 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
     numBits : int
         number of bits to shift.
@@ -7536,8 +7631,16 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([(42,)], ['a']).select(shiftright('a', 1).alias('r')).collect()
-    [Row(r=21)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select("*", sf.shiftright('id', 1)).show()
+    +---+-----------------+
+    | id|shiftright(id, 1)|
+    +---+-----------------+
+    |  0|                0|
+    |  1|                0|
+    |  2|                1|
+    |  3|                1|
+    +---+-----------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -7571,7 +7674,7 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column of values to shift.
     numBits : int
         number of bits to shift.
@@ -7583,9 +7686,16 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(-42,)], ['a'])
-    >>> df.select(shiftrightunsigned('a', 1).alias('r')).collect()
-    [Row(r=9223372036854775787)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select("*", sf.shiftrightunsigned(sf.col('id') - 2, 1)).show()
+    +---+-------------------------------+
+    | id|shiftrightunsigned((id - 2), 1)|
+    +---+-------------------------------+
+    |  0|            9223372036854775807|
+    |  1|            9223372036854775807|
+    |  2|                              0|
+    |  3|                              0|
+    +---+-------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -7612,9 +7722,22 @@ def spark_partition_id() -> Column:
 
     Examples
     --------
-    >>> df = spark.range(2)
-    >>> df.repartition(1).select(spark_partition_id().alias("pid")).collect()
-    [Row(pid=0), Row(pid=0)]
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(10, numPartitions=5).select("*", sf.spark_partition_id()).show()
+    +---+--------------------+
+    | id|SPARK_PARTITION_ID()|
+    +---+--------------------+
+    |  0|                   0|
+    |  1|                   0|
+    |  2|                   1|
+    |  3|                   1|
+    |  4|                   2|
+    |  5|                   2|
+    |  6|                   3|
+    |  7|                   3|
+    |  8|                   4|
+    |  9|                   4|
+    +---+--------------------+
     """
     return _invoke_function("spark_partition_id")
 
@@ -7630,7 +7753,7 @@ def expr(str: str) -> Column:
 
     Parameters
     ----------
-    str : str
+    str : expression string
         expression defined in string.
 
     Returns
@@ -7640,8 +7763,9 @@ def expr(str: str) -> Column:
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([["Alice"], ["Bob"]], ["name"])
-    >>> df.select("name", expr("length(name)")).show()
+    >>> df.select("*", sf.expr("length(name)")).show()
     +-----+------------+
     | name|length(name)|
     +-----+------------+
@@ -7675,7 +7799,7 @@ def struct(
 
     Parameters
     ----------
-    cols : list, set, str or :class:`~pyspark.sql.Column`
+    cols : list, set, :class:`~pyspark.sql.Column` or column name
         column names or :class:`~pyspark.sql.Column`\\s to contain in the output struct.
 
     Returns
@@ -7683,13 +7807,21 @@ def struct(
     :class:`~pyspark.sql.Column`
         a struct type column of given columns.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.named_struct`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([("Alice", 2), ("Bob", 5)], ("name", "age"))
-    >>> df.select(struct('age', 'name').alias("struct")).collect()
-    [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
-    >>> df.select(struct([df.age, df.name]).alias("struct")).collect()
-    [Row(struct=Row(age=2, name='Alice')), Row(struct=Row(age=5, name='Bob'))]
+    >>> df.select("*", sf.struct('age', df.name)).show()
+    +-----+---+-----------------+
+    | name|age|struct(age, name)|
+    +-----+---+-----------------+
+    |Alice|  2|       {2, Alice}|
+    |  Bob|  5|         {5, Bob}|
+    +-----+---+-----------------+
     """
     if len(cols) == 1 and isinstance(cols[0], (list, set)):
         cols = cols[0]  # type: ignore[assignment]
@@ -7705,18 +7837,27 @@ def named_struct(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         list of columns to work on.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.struct`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([(1, 2, 3)], ['a', 'b', 'c'])
-    >>> df.select(named_struct(lit('x'), df.a, lit('y'), df.b).alias('r')).collect()
-    [Row(r=Row(x=1, y=2))]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1, 2)], ['a', 'b'])
+    >>> df.select("*", sf.named_struct(sf.lit('x'), df.a, sf.lit('y'), "b")).show()
+    +---+---+------------------------+
+    |  a|  b|named_struct(x, a, y, b)|
+    +---+---+------------------------+
+    |  1|  2|                  {1, 2}|
+    +---+---+------------------------+
     """
     return _invoke_function_over_seq_of_columns("named_struct", cols)
 
@@ -7734,7 +7875,7 @@ def greatest(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols: :class:`~pyspark.sql.Column` or str
+    cols: :class:`~pyspark.sql.Column` or column name
         columns to check for greatest value.
 
     Returns
@@ -7742,11 +7883,20 @@ def greatest(*cols: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         greatest value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.least`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
-    >>> df.select(greatest(df.a, df.b, df.c).alias("greatest")).collect()
-    [Row(greatest=4)]
+    >>> df.select("*", sf.greatest(df.a, "b", df.c)).show()
+    +---+---+---+-----------------+
+    |  a|  b|  c|greatest(a, b, c)|
+    +---+---+---+-----------------+
+    |  1|  4|  3|                4|
+    +---+---+---+-----------------+
     """
     if len(cols) < 2:
         raise PySparkValueError(
@@ -7769,7 +7919,7 @@ def least(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         column names or columns to be compared
 
     Returns
@@ -7777,11 +7927,20 @@ def least(*cols: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         least value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.greatest`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([(1, 4, 3)], ['a', 'b', 'c'])
-    >>> df.select(least(df.a, df.b, df.c).alias("least")).collect()
-    [Row(least=1)]
+    >>> df.select("*", sf.least(df.a, "b", df.c)).show()
+    +---+---+---+--------------+
+    |  a|  b|  c|least(a, b, c)|
+    +---+---+---+--------------+
+    |  1|  4|  3|             1|
+    +---+---+---+--------------+
     """
     if len(cols) < 2:
         raise PySparkValueError(
@@ -7814,26 +7973,32 @@ def when(condition: Column, value: Any) -> Column:
     :class:`~pyspark.sql.Column`
         column representing when expression.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.Column.when`
+    :meth:`pyspark.sql.Column.otherwise`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.range(3)
-    >>> df.select(when(df['id'] == 2, 3).otherwise(4).alias("age")).show()
-    +---+
-    |age|
-    +---+
-    |  4|
-    |  4|
-    |  3|
-    +---+
+    >>> df.select("*", sf.when(df['id'] == 2, 3).otherwise(4)).show()
+    +---+------------------------------------+
+    | id|CASE WHEN (id = 2) THEN 3 ELSE 4 END|
+    +---+------------------------------------+
+    |  0|                                   4|
+    |  1|                                   4|
+    |  2|                                   3|
+    +---+------------------------------------+
 
-    >>> df.select(when(df.id == 2, df.id + 1).alias("age")).show()
-    +----+
-    | age|
-    +----+
-    |NULL|
-    |NULL|
-    |   3|
-    +----+
+    >>> df.select("*", sf.when(df.id == 2, df.id + 1)).show()
+    +---+------------------------------------+
+    | id|CASE WHEN (id = 2) THEN (id + 1) END|
+    +---+------------------------------------+
+    |  0|                                NULL|
+    |  1|                                NULL|
+    |  2|                                   3|
+    +---+------------------------------------+
     """
     # Explicitly not using ColumnOrName type here to make reading condition less opaque
     if not isinstance(condition, Column):
@@ -8115,7 +8280,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         name of column or expression
     offset : int, optional default 1
         number of row to extend
@@ -8127,14 +8292,16 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     :class:`~pyspark.sql.Column`
         value before current row based on `offset`.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.lead`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql import Window
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
     >>> df.show()
     +---+---+
     | c1| c2|
@@ -8145,8 +8312,9 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  8|
     |  b|  2|
     +---+---+
+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("previous_value", lag("c2").over(w)).show()
+    >>> df.withColumn("previous_value", sf.lag("c2").over(w)).show()
     +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
@@ -8156,7 +8324,8 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  2|          NULL|
     |  b|  8|             2|
     +---+---+--------------+
-    >>> df.withColumn("previous_value", lag("c2", 1, 0).over(w)).show()
+
+    >>> df.withColumn("previous_value", sf.lag("c2", 1, 0).over(w)).show()
     +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
@@ -8166,7 +8335,8 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     |  b|  2|             0|
     |  b|  8|             2|
     +---+---+--------------+
-    >>> df.withColumn("previous_value", lag("c2", 2, -1).over(w)).show()
+
+    >>> df.withColumn("previous_value", sf.lag("c2", 2, -1).over(w)).show()
     +---+---+--------------+
     | c1| c2|previous_value|
     +---+---+--------------+
@@ -8200,7 +8370,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         name of column or expression
     offset : int, optional default 1
         number of row to extend
@@ -8212,14 +8382,16 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     :class:`~pyspark.sql.Column`
         value after current row based on `offset`.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.lag`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql import Window
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
     >>> df.show()
     +---+---+
     | c1| c2|
@@ -8230,8 +8402,9 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     |  b|  8|
     |  b|  2|
     +---+---+
+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("next_value", lead("c2").over(w)).show()
+    >>> df.withColumn("next_value", sf.lead("c2").over(w)).show()
     +---+---+----------+
     | c1| c2|next_value|
     +---+---+----------+
@@ -8241,7 +8414,8 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     |  b|  2|         8|
     |  b|  8|      NULL|
     +---+---+----------+
-    >>> df.withColumn("next_value", lead("c2", 1, 0).over(w)).show()
+
+    >>> df.withColumn("next_value", sf.lead("c2", 1, 0).over(w)).show()
     +---+---+----------+
     | c1| c2|next_value|
     +---+---+----------+
@@ -8251,7 +8425,8 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     |  b|  2|         8|
     |  b|  8|         0|
     +---+---+----------+
-    >>> df.withColumn("next_value", lead("c2", 2, -1).over(w)).show()
+
+    >>> df.withColumn("next_value", sf.lead("c2", 2, -1).over(w)).show()
     +---+---+----------+
     | c1| c2|next_value|
     +---+---+----------+
@@ -8287,7 +8462,7 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         name of column or expression
     offset : int
         number of row to use as the value
@@ -8302,12 +8477,10 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql import Window
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
     >>> df.show()
     +---+---+
     | c1| c2|
@@ -8318,8 +8491,9 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     |  b|  8|
     |  b|  2|
     +---+---+
+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("nth_value", nth_value("c2", 1).over(w)).show()
+    >>> df.withColumn("nth_value", sf.nth_value("c2", 1).over(w)).show()
     +---+---+---------+
     | c1| c2|nth_value|
     +---+---+---------+
@@ -8329,7 +8503,8 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     |  b|  2|        2|
     |  b|  8|        2|
     +---+---+---------+
-    >>> df.withColumn("nth_value", nth_value("c2", 2).over(w)).show()
+
+    >>> df.withColumn("nth_value", sf.nth_value("c2", 2).over(w)).show()
     +---+---+---------+
     | c1| c2|nth_value|
     +---+---+---------+
@@ -8355,7 +8530,7 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
     ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
@@ -8367,15 +8542,22 @@ def any_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] = 
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(None, 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
-    >>> df.select(any_value('c1'), any_value('c2')).collect()
-    [Row(any_value(c1)=None, any_value(c2)=1)]
-    >>> df.select(any_value('c1', True), any_value('c2', True)).collect()
-    [Row(any_value(c1)='a', any_value(c2)=1)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(None, 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
+    >>> df.select(sf.any_value('c1'), sf.any_value('c2')).show()
+    +-------------+-------------+
+    |any_value(c1)|any_value(c2)|
+    +-------------+-------------+
+    |         NULL|            1|
+    +-------------+-------------+
+
+    >>> df.select(sf.any_value('c1', True), sf.any_value('c2', True)).show()
+    +-------------+-------------+
+    |any_value(c1)|any_value(c2)|
+    +-------------+-------------+
+    |            a|            1|
+    +-------------+-------------+
     """
     if ignoreNulls is None:
         return _invoke_function_over_columns("any_value", col)
@@ -8396,7 +8578,7 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
     ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
@@ -8405,6 +8587,10 @@ def first_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] 
     -------
     :class:`~pyspark.sql.Column`
         some value of `col` for a group of rows.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.last_value`
 
     Examples
     --------
@@ -8447,7 +8633,7 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
     ignoreNulls : :class:`~pyspark.sql.Column` or bool, optional
         if first value is null then look for first non-null value.
@@ -8456,6 +8642,10 @@ def last_value(col: "ColumnOrName", ignoreNulls: Optional[Union[bool, Column]] =
     -------
     :class:`~pyspark.sql.Column`
         some value of `col` for a group of rows.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.first_value`
 
     Examples
     --------
@@ -8498,13 +8688,17 @@ def count_if(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         the number of `TRUE` values for the `col`.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.count`
 
     Examples
     --------
@@ -8545,13 +8739,13 @@ def count_if(col: "ColumnOrName") -> Column:
     Example 4: Counting the number of rows where a boolean column is True
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(True,), (False,), (True,), (False,), (True,)], ["bool"])
-    >>> df.select(sf.count_if(sf.col('bool'))).show()
-    +--------------+
-    |count_if(bool)|
-    +--------------+
-    |             3|
-    +--------------+
+    >>> df = spark.createDataFrame([(True,), (False,), (True,), (False,), (True,)], ["b"])
+    >>> df.select(sf.count('b'), sf.count_if('b')).show()
+    +--------+-----------+
+    |count(b)|count_if(b)|
+    +--------+-----------+
+    |       5|          3|
+    +--------+-----------+
     """
     return _invoke_function_over_columns("count_if", col)
 
@@ -8624,12 +8818,10 @@ def ntile(n: int) -> Column:
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> from pyspark.sql import Window
-    >>> df = spark.createDataFrame([("a", 1),
-    ...                             ("a", 2),
-    ...                             ("a", 3),
-    ...                             ("b", 8),
-    ...                             ("b", 2)], ["c1", "c2"])
+    >>> df = spark.createDataFrame(
+    ...     [("a", 1), ("a", 2), ("a", 3), ("b", 8), ("b", 2)], ["c1", "c2"])
     >>> df.show()
     +---+---+
     | c1| c2|
@@ -8640,8 +8832,9 @@ def ntile(n: int) -> Column:
     |  b|  8|
     |  b|  2|
     +---+---+
+
     >>> w = Window.partitionBy("c1").orderBy("c2")
-    >>> df.withColumn("ntile", ntile(2).over(w)).show()
+    >>> df.withColumn("ntile", sf.ntile(2).over(w)).show()
     +---+---+-----+
     | c1| c2|ntile|
     +---+---+-----+
@@ -8670,6 +8863,13 @@ def curdate() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         current date.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.now`
+    :meth:`pyspark.sql.functions.current_date`
+    :meth:`pyspark.sql.functions.current_timestamp`
+    :meth:`pyspark.sql.functions.localtimestamp`
 
     Examples
     --------
@@ -8700,6 +8900,13 @@ def current_date() -> Column:
     :class:`~pyspark.sql.Column`
         current date.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.now`
+    :meth:`pyspark.sql.functions.curdate`
+    :meth:`pyspark.sql.functions.current_timestamp`
+    :meth:`pyspark.sql.functions.localtimestamp`
+
     Examples
     --------
     >>> from pyspark.sql import functions as sf
@@ -8725,16 +8932,32 @@ def current_timezone() -> Column:
     :class:`~pyspark.sql.Column`
         current session local timezone.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.convert_timezone`
+
     Examples
     --------
-    >>> from pyspark.sql import functions as sf
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
+
+    >>> from pyspark.sql import functions as sf
     >>> spark.range(1).select(sf.current_timezone()).show()
     +-------------------+
     | current_timezone()|
     +-------------------+
     |America/Los_Angeles|
     +-------------------+
+
+    Switch the timezone to Shanghai.
+
+    >>> spark.conf.set("spark.sql.session.timeZone", "Asia/Shanghai")
+    >>> spark.range(1).select(sf.current_timezone()).show()
+    +------------------+
+    |current_timezone()|
+    +------------------+
+    |     Asia/Shanghai|
+    +------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function("current_timezone")
@@ -8755,6 +8978,13 @@ def current_timestamp() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         current date and time.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.now`
+    :meth:`pyspark.sql.functions.curdate`
+    :meth:`pyspark.sql.functions.current_date`
+    :meth:`pyspark.sql.functions.localtimestamp`
 
     Examples
     --------
@@ -8780,6 +9010,13 @@ def now() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         current timestamp at the start of query evaluation.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.curdate`
+    :meth:`pyspark.sql.functions.current_date`
+    :meth:`pyspark.sql.functions.current_timestamp`
+    :meth:`pyspark.sql.functions.localtimestamp`
 
     Examples
     --------
@@ -8810,6 +9047,13 @@ def localtimestamp() -> Column:
     -------
     :class:`~pyspark.sql.Column`
         current local date and time.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.now`
+    :meth:`pyspark.sql.functions.curdate`
+    :meth:`pyspark.sql.functions.current_date`
+    :meth:`pyspark.sql.functions.current_timestamp`
 
     Examples
     --------
@@ -8850,6 +9094,15 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
         input column of values to format.
     format: literal string
         format to use to represent datetime values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_date`
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
 
     Returns
     -------
@@ -8937,6 +9190,18 @@ def year(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         year part of the date/timestamp as integer.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
+
     Examples
     --------
     Example 1: Extract the year from a string column representing dates
@@ -9016,6 +9281,18 @@ def quarter(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         quarter of the date/timestamp as integer.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
+
     Examples
     --------
     Example 1: Extract the quarter from a string column representing dates
@@ -9094,6 +9371,19 @@ def month(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         month part of the date/timestamp as integer.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.monthname`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
 
     Examples
     --------
@@ -9175,6 +9465,12 @@ def dayofweek(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         day of the week for given date/timestamp as integer.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.dayofmonth`
+
     Examples
     --------
     Example 1: Extract the day of the week from a string column representing dates
@@ -9248,6 +9544,12 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
 
     Returns
     -------
@@ -9330,6 +9632,22 @@ def day(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         day of the month for given date/timestamp as integer.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.dayname`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.dayofmonth`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
+
     Examples
     --------
     Example 1: Extract the day of the month from a string column representing dates
@@ -9408,6 +9726,12 @@ def dayofyear(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         day of the year for given date/timestamp as integer.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.dayofmonth`
 
     Examples
     --------
@@ -9488,6 +9812,18 @@ def hour(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hour part of the timestamp as integer.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
+
     Examples
     --------
     Example 1: Extract the hours from a string column representing timestamp
@@ -9534,6 +9870,18 @@ def minute(col: "ColumnOrName") -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target date/timestamp column to work on.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
 
     Returns
     -------
@@ -9592,6 +9940,18 @@ def second(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         `seconds` part of the timestamp as integer.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.extract`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
+
     Examples
     --------
     Example 1: Extract the seconds from a string column representing timestamp
@@ -9645,6 +10005,10 @@ def weekofyear(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         `week` of the year for given date as integer.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.weekday`
 
     Examples
     --------
@@ -9722,6 +10086,11 @@ def weekday(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.weekofyear`
+
     Examples
     --------
     Example 1: Extract the day of the week from a string column representing dates
@@ -9797,6 +10166,11 @@ def monthname(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the three-letter abbreviation of month name for date/timestamp (Jan, Feb, Mar...)
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.dayname`
 
     Examples
     --------
@@ -9874,6 +10248,11 @@ def dayname(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the three-letter abbreviation of day name for date/timestamp (Mon, Tue, Wed...)
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.monthname`
+
     Examples
     --------
     Example 1: Extract the weekday name from a string column representing dates
@@ -9944,7 +10323,7 @@ def extract(field: Column, source: "ColumnOrName") -> Column:
     ----------
     field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted.
-    source : :class:`~pyspark.sql.Column` or str
+    source : :class:`~pyspark.sql.Column` or column name
         a date/timestamp or interval column from where `field` should be extracted.
 
     Returns
@@ -9952,19 +10331,37 @@ def extract(field: Column, source: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         a part of the date/timestamp or interval source.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.date_part`
+
     Examples
     --------
     >>> import datetime
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(
-    ...     extract(lit('YEAR'), 'ts').alias('year'),
-    ...     extract(lit('month'), 'ts').alias('month'),
-    ...     extract(lit('WEEK'), 'ts').alias('week'),
-    ...     extract(lit('D'), 'ts').alias('day'),
-    ...     extract(lit('M'), 'ts').alias('minute'),
-    ...     extract(lit('S'), 'ts').alias('second')
-    ... ).collect()
-    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
+    ...     '*',
+    ...     sf.extract(sf.lit('YEAR'), 'ts').alias('year'),
+    ...     sf.extract(sf.lit('month'), 'ts').alias('month'),
+    ...     sf.extract(sf.lit('WEEK'), 'ts').alias('week'),
+    ...     sf.extract(sf.lit('D'), df.ts).alias('day'),
+    ...     sf.extract(sf.lit('M'), df.ts).alias('minute'),
+    ...     sf.extract(sf.lit('S'), df.ts).alias('second')
+    ... ).show()
+    +-------------------+----+-----+----+---+------+---------+
+    |                 ts|year|month|week|day|minute|   second|
+    +-------------------+----+-----+----+---+------+---------+
+    |2015-04-08 13:08:15|2015|    4|  15|  8|     8|15.000000|
+    +-------------------+----+-----+----+---+------+---------+
     """
     return _invoke_function_over_columns("extract", field, source)
 
@@ -9981,7 +10378,7 @@ def date_part(field: Column, source: "ColumnOrName") -> Column:
     field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
-    source : :class:`~pyspark.sql.Column` or str
+    source : :class:`~pyspark.sql.Column` or column name
         a date/timestamp or interval column from where `field` should be extracted.
 
     Returns
@@ -9989,19 +10386,37 @@ def date_part(field: Column, source: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         a part of the date/timestamp or interval source.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.datepart`
+    :meth:`pyspark.sql.functions.extract`
+
     Examples
     --------
     >>> import datetime
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(
-    ...     date_part(lit('YEAR'), 'ts').alias('year'),
-    ...     date_part(lit('month'), 'ts').alias('month'),
-    ...     date_part(lit('WEEK'), 'ts').alias('week'),
-    ...     date_part(lit('D'), 'ts').alias('day'),
-    ...     date_part(lit('M'), 'ts').alias('minute'),
-    ...     date_part(lit('S'), 'ts').alias('second')
-    ... ).collect()
-    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
+    ...     '*',
+    ...     sf.date_part(sf.lit('YEAR'), 'ts').alias('year'),
+    ...     sf.date_part(sf.lit('month'), 'ts').alias('month'),
+    ...     sf.date_part(sf.lit('WEEK'), 'ts').alias('week'),
+    ...     sf.date_part(sf.lit('D'), df.ts).alias('day'),
+    ...     sf.date_part(sf.lit('M'), df.ts).alias('minute'),
+    ...     sf.date_part(sf.lit('S'), df.ts).alias('second')
+    ... ).show()
+    +-------------------+----+-----+----+---+------+---------+
+    |                 ts|year|month|week|day|minute|   second|
+    +-------------------+----+-----+----+---+------+---------+
+    |2015-04-08 13:08:15|2015|    4|  15|  8|     8|15.000000|
+    +-------------------+----+-----+----+---+------+---------+
     """
     return _invoke_function_over_columns("date_part", field, source)
 
@@ -10018,7 +10433,7 @@ def datepart(field: Column, source: "ColumnOrName") -> Column:
     field : :class:`~pyspark.sql.Column`
         selects which part of the source should be extracted, and supported string values
         are as same as the fields of the equivalent function `extract`.
-    source : :class:`~pyspark.sql.Column` or str
+    source : :class:`~pyspark.sql.Column` or column name
         a date/timestamp or interval column from where `field` should be extracted.
 
     Returns
@@ -10026,19 +10441,37 @@ def datepart(field: Column, source: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         a part of the date/timestamp or interval source.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.year`
+    :meth:`pyspark.sql.functions.quarter`
+    :meth:`pyspark.sql.functions.month`
+    :meth:`pyspark.sql.functions.day`
+    :meth:`pyspark.sql.functions.hour`
+    :meth:`pyspark.sql.functions.minute`
+    :meth:`pyspark.sql.functions.second`
+    :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.extract`
+
     Examples
     --------
     >>> import datetime
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(datetime.datetime(2015, 4, 8, 13, 8, 15),)], ['ts'])
     >>> df.select(
-    ...     datepart(lit('YEAR'), 'ts').alias('year'),
-    ...     datepart(lit('month'), 'ts').alias('month'),
-    ...     datepart(lit('WEEK'), 'ts').alias('week'),
-    ...     datepart(lit('D'), 'ts').alias('day'),
-    ...     datepart(lit('M'), 'ts').alias('minute'),
-    ...     datepart(lit('S'), 'ts').alias('second')
-    ... ).collect()
-    [Row(year=2015, month=4, week=15, day=8, minute=8, second=Decimal('15.000000'))]
+    ...     '*',
+    ...     sf.datepart(sf.lit('YEAR'), 'ts').alias('year'),
+    ...     sf.datepart(sf.lit('month'), 'ts').alias('month'),
+    ...     sf.datepart(sf.lit('WEEK'), 'ts').alias('week'),
+    ...     sf.datepart(sf.lit('D'), df.ts).alias('day'),
+    ...     sf.datepart(sf.lit('M'), df.ts).alias('minute'),
+    ...     sf.datepart(sf.lit('S'), df.ts).alias('second')
+    ... ).show()
+    +-------------------+----+-----+----+---+------+---------+
+    |                 ts|year|month|week|day|minute|   second|
+    +-------------------+----+-----+----+---+------+---------+
+    |2015-04-08 13:08:15|2015|    4|  15|  8|     8|15.000000|
+    +-------------------+----+-----+----+---+------+---------+
     """
     return _invoke_function_over_columns("datepart", field, source)
 
@@ -10055,11 +10488,11 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
 
     Parameters
     ----------
-    year : :class:`~pyspark.sql.Column` or str
+    year : :class:`~pyspark.sql.Column` or column name
         The year to build the date
-    month : :class:`~pyspark.sql.Column` or str
+    month : :class:`~pyspark.sql.Column` or column name
         The month to build the date
-    day : :class:`~pyspark.sql.Column` or str
+    day : :class:`~pyspark.sql.Column` or column name
         The day to build the date
 
     Returns
@@ -10067,11 +10500,22 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     :class:`~pyspark.sql.Column`
         a date built from given parts.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_timestamp`
+    :meth:`pyspark.sql.functions.make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_timestamp_ntz`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(2020, 6, 26)], ['Y', 'M', 'D'])
-    >>> df.select(make_date(df.Y, df.M, df.D).alias("datefield")).collect()
-    [Row(datefield=datetime.date(2020, 6, 26))]
+    >>> df.select('*', sf.make_date(df.Y, 'M', df.D)).show()
+    +----+---+---+------------------+
+    |   Y|  M|  D|make_date(Y, M, D)|
+    +----+---+---+------------------+
+    |2020|  6| 26|        2020-06-26|
+    +----+---+---+------------------+
     """
     return _invoke_function_over_columns("make_date", year, month, day)
 
@@ -10089,9 +10533,9 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
     Parameters
     ----------
-    start : :class:`~pyspark.sql.Column` or str
+    start : :class:`~pyspark.sql.Column` or column name
         date column to work on.
-    days : :class:`~pyspark.sql.Column` or str or int
+    days : :class:`~pyspark.sql.Column` or column name or int
         how many days after the given date to calculate.
         Accepts negative value as well to calculate backwards in time.
 
@@ -10100,15 +10544,38 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     :class:`~pyspark.sql.Column`
         a date after/before given number of days.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.dateadd`
+    :meth:`pyspark.sql.functions.date_sub`
+    :meth:`pyspark.sql.functions.datediff`
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_add`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'add'])
-    >>> df.select(date_add(df.dt, 1).alias('next_date')).collect()
-    [Row(next_date=datetime.date(2015, 4, 9))]
-    >>> df.select(date_add(df.dt, df.add.cast('integer')).alias('next_date')).collect()
-    [Row(next_date=datetime.date(2015, 4, 10))]
-    >>> df.select(date_add('dt', -1).alias('prev_date')).collect()
-    [Row(prev_date=datetime.date(2015, 4, 7))]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], 'struct<dt:string,a:int>')
+    >>> df.select('*', sf.date_add(df.dt, 1)).show()
+    +----------+---+---------------+
+    |        dt|  a|date_add(dt, 1)|
+    +----------+---+---------------+
+    |2015-04-08|  2|     2015-04-09|
+    +----------+---+---------------+
+
+    >>> df.select('*', sf.date_add('dt', 'a')).show()
+    +----------+---+---------------+
+    |        dt|  a|date_add(dt, a)|
+    +----------+---+---------------+
+    |2015-04-08|  2|     2015-04-10|
+    +----------+---+---------------+
+
+    >>> df.select('*', sf.date_add('dt', sf.lit(-1))).show()
+    +----------+---+----------------+
+    |        dt|  a|date_add(dt, -1)|
+    +----------+---+----------------+
+    |2015-04-08|  2|      2015-04-07|
+    +----------+---+----------------+
     """
     days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
@@ -10125,9 +10592,9 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
     Parameters
     ----------
-    start : :class:`~pyspark.sql.Column` or str
+    start : :class:`~pyspark.sql.Column` or column name
         date column to work on.
-    days : :class:`~pyspark.sql.Column` or str or int
+    days : :class:`~pyspark.sql.Column` or column name or int
         how many days after the given date to calculate.
         Accepts negative value as well to calculate backwards in time.
 
@@ -10136,37 +10603,38 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     :class:`~pyspark.sql.Column`
         a date after/before given number of days.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_add`
+    :meth:`pyspark.sql.functions.date_sub`
+    :meth:`pyspark.sql.functions.datediff`
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_add`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.createDataFrame(
-    ...     [('2015-04-08', 2,)], ['dt', 'add']
-    ... ).select(sf.dateadd("dt", 1)).show()
-    +---------------+
-    |date_add(dt, 1)|
-    +---------------+
-    |     2015-04-09|
-    +---------------+
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], 'struct<dt:string,a:int>')
+    >>> df.select('*', sf.dateadd(df.dt, 1)).show()
+    +----------+---+---------------+
+    |        dt|  a|date_add(dt, 1)|
+    +----------+---+---------------+
+    |2015-04-08|  2|     2015-04-09|
+    +----------+---+---------------+
 
-    >>> import pyspark.sql.functions as sf
-    >>> spark.createDataFrame(
-    ...     [('2015-04-08', 2,)], ['dt', 'add']
-    ... ).select(sf.dateadd("dt", sf.lit(2))).show()
-    +---------------+
-    |date_add(dt, 2)|
-    +---------------+
-    |     2015-04-10|
-    +---------------+
+    >>> df.select('*', sf.dateadd('dt', 'a')).show()
+    +----------+---+---------------+
+    |        dt|  a|date_add(dt, a)|
+    +----------+---+---------------+
+    |2015-04-08|  2|     2015-04-10|
+    +----------+---+---------------+
 
-    >>> import pyspark.sql.functions as sf
-    >>> spark.createDataFrame(
-    ...     [('2015-04-08', 2,)], ['dt', 'add']
-    ... ).select(sf.dateadd("dt", -1)).show()
-    +----------------+
-    |date_add(dt, -1)|
-    +----------------+
-    |      2015-04-07|
-    +----------------+
+    >>> df.select('*', sf.dateadd('dt', sf.lit(-1))).show()
+    +----------+---+----------------+
+    |        dt|  a|date_add(dt, -1)|
+    +----------+---+----------------+
+    |2015-04-08|  2|      2015-04-07|
+    +----------+---+----------------+
     """
     days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
@@ -10186,9 +10654,9 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
 
     Parameters
     ----------
-    start : :class:`~pyspark.sql.Column` or str
+    start : :class:`~pyspark.sql.Column` or column name
         date column to work on.
-    days : :class:`~pyspark.sql.Column` or str or int
+    days : :class:`~pyspark.sql.Column` or column name or int
         how many days before the given date to calculate.
         Accepts negative value as well to calculate forward in time.
 
@@ -10197,15 +10665,37 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     :class:`~pyspark.sql.Column`
         a date before/after given number of days.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.dateadd`
+    :meth:`pyspark.sql.functions.date_add`
+    :meth:`pyspark.sql.functions.datediff`
+    :meth:`pyspark.sql.functions.date_diff`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08', 2,)], ['dt', 'sub'])
-    >>> df.select(date_sub(df.dt, 1).alias('prev_date')).collect()
-    [Row(prev_date=datetime.date(2015, 4, 7))]
-    >>> df.select(date_sub(df.dt, df.sub.cast('integer')).alias('prev_date')).collect()
-    [Row(prev_date=datetime.date(2015, 4, 6))]
-    >>> df.select(date_sub('dt', -1).alias('next_date')).collect()
-    [Row(next_date=datetime.date(2015, 4, 9))]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], 'struct<dt:string,a:int>')
+    >>> df.select('*', sf.date_sub(df.dt, 1)).show()
+    +----------+---+---------------+
+    |        dt|  a|date_sub(dt, 1)|
+    +----------+---+---------------+
+    |2015-04-08|  2|     2015-04-07|
+    +----------+---+---------------+
+
+    >>> df.select('*', sf.date_sub('dt', 'a')).show()
+    +----------+---+---------------+
+    |        dt|  a|date_sub(dt, a)|
+    +----------+---+---------------+
+    |2015-04-08|  2|     2015-04-06|
+    +----------+---+---------------+
+
+    >>> df.select('*', sf.date_sub('dt', sf.lit(-1))).show()
+    +----------+---+----------------+
+    |        dt|  a|date_sub(dt, -1)|
+    +----------+---+----------------+
+    |2015-04-08|  2|      2015-04-09|
+    +----------+---+----------------+
     """
     days = _enum_to_value(days)
     days = lit(days) if isinstance(days, int) else days
@@ -10224,9 +10714,9 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    end : :class:`~pyspark.sql.Column` or str
+    end : :class:`~pyspark.sql.Column` or column name
         to date column to work on.
-    start : :class:`~pyspark.sql.Column` or str
+    start : :class:`~pyspark.sql.Column` or column name
         from date column to work on.
 
     Returns
@@ -10234,11 +10724,31 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         difference in days between two dates.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.dateadd`
+    :meth:`pyspark.sql.functions.date_add`
+    :meth:`pyspark.sql.functions.date_sub`
+    :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.timestamp_diff`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('2015-04-08','2015-05-10')], ['d1', 'd2'])
-    >>> df.select(datediff(df.d2, df.d1).alias('diff')).collect()
-    [Row(diff=32)]
+    >>> df.select('*', sf.datediff('d1', 'd2')).show()
+    +----------+----------+----------------+
+    |        d1|        d2|datediff(d1, d2)|
+    +----------+----------+----------------+
+    |2015-04-08|2015-05-10|             -32|
+    +----------+----------+----------------+
+
+    >>> df.select('*', sf.datediff(df.d2, df.d1)).show()
+    +----------+----------+----------------+
+    |        d1|        d2|datediff(d2, d1)|
+    +----------+----------+----------------+
+    |2015-04-08|2015-05-10|              32|
+    +----------+----------+----------------+
     """
     return _invoke_function_over_columns("datediff", end, start)
 
@@ -10252,9 +10762,9 @@ def date_diff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    end : :class:`~pyspark.sql.Column` or str
+    end : :class:`~pyspark.sql.Column` or column name
         to date column to work on.
-    start : :class:`~pyspark.sql.Column` or str
+    start : :class:`~pyspark.sql.Column` or column name
         from date column to work on.
 
     Returns
@@ -10262,11 +10772,31 @@ def date_diff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         difference in days between two dates.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.dateadd`
+    :meth:`pyspark.sql.functions.date_add`
+    :meth:`pyspark.sql.functions.date_sub`
+    :meth:`pyspark.sql.functions.datediff`
+    :meth:`pyspark.sql.functions.timestamp_diff`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('2015-04-08','2015-05-10')], ['d1', 'd2'])
-    >>> df.select(date_diff(df.d2, df.d1).alias('diff')).collect()
-    [Row(diff=32)]
+    >>> df.select('*', sf.date_diff('d1', 'd2')).show()
+    +----------+----------+-----------------+
+    |        d1|        d2|date_diff(d1, d2)|
+    +----------+----------+-----------------+
+    |2015-04-08|2015-05-10|              -32|
+    +----------+----------+-----------------+
+
+    >>> df.select('*', sf.date_diff(df.d2, df.d1)).show()
+    +----------+----------+-----------------+
+    |        d1|        d2|date_diff(d2, d1)|
+    +----------+----------+-----------------+
+    |2015-04-08|2015-05-10|               32|
+    +----------+----------+-----------------+
     """
     return _invoke_function_over_columns("date_diff", end, start)
 
@@ -10280,7 +10810,7 @@ def date_from_unix_date(days: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    days : :class:`~pyspark.sql.Column` or str
+    days : :class:`~pyspark.sql.Column` or column name
         the target column to work on.
 
     Returns
@@ -10288,15 +10818,23 @@ def date_from_unix_date(days: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the date from the number of days since 1970-01-01.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_unixtime`
+    :meth:`pyspark.sql.functions.unix_date`
+
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(date_from_unix_date(lit(1))).show()
-    +----------------------+
-    |date_from_unix_date(1)|
-    +----------------------+
-    |            1970-01-02|
-    +----------------------+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(4).select('*', sf.date_from_unix_date('id')).show()
+    +---+-----------------------+
+    | id|date_from_unix_date(id)|
+    +---+-----------------------+
+    |  0|             1970-01-01|
+    |  1|             1970-01-02|
+    |  2|             1970-01-03|
+    |  3|             1970-01-04|
+    +---+-----------------------+
     """
     return _invoke_function_over_columns("date_from_unix_date", days)
 
@@ -10314,9 +10852,9 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
 
     Parameters
     ----------
-    start : :class:`~pyspark.sql.Column` or str
+    start : :class:`~pyspark.sql.Column` or column name
         date column to work on.
-    months : :class:`~pyspark.sql.Column` or str or int
+    months : :class:`~pyspark.sql.Column` or column name or int
         how many months after the given date to calculate.
         Accepts negative value as well to calculate backwards.
 
@@ -10325,15 +10863,35 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     :class:`~pyspark.sql.Column`
         a date after/before given number of months.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.dateadd`
+    :meth:`pyspark.sql.functions.date_add`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-04-08', 2)], ['dt', 'add'])
-    >>> df.select(add_months(df.dt, 1).alias('next_month')).collect()
-    [Row(next_month=datetime.date(2015, 5, 8))]
-    >>> df.select(add_months(df.dt, df.add.cast('integer')).alias('next_month')).collect()
-    [Row(next_month=datetime.date(2015, 6, 8))]
-    >>> df.select(add_months('dt', -2).alias('prev_month')).collect()
-    [Row(prev_month=datetime.date(2015, 2, 8))]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08', 2,)], 'struct<dt:string,a:int>')
+    >>> df.select('*', sf.add_months(df.dt, 1)).show()
+    +----------+---+-----------------+
+    |        dt|  a|add_months(dt, 1)|
+    +----------+---+-----------------+
+    |2015-04-08|  2|       2015-05-08|
+    +----------+---+-----------------+
+
+    >>> df.select('*', sf.add_months('dt', 'a')).show()
+    +----------+---+-----------------+
+    |        dt|  a|add_months(dt, a)|
+    +----------+---+-----------------+
+    |2015-04-08|  2|       2015-06-08|
+    +----------+---+-----------------+
+
+    >>> df.select('*', sf.add_months('dt', sf.lit(-1))).show()
+    +----------+---+------------------+
+    |        dt|  a|add_months(dt, -1)|
+    +----------+---+------------------+
+    |2015-04-08|  2|        2015-03-08|
+    +----------+---+------------------+
     """
     months = _enum_to_value(months)
     months = lit(months) if isinstance(months, int) else months
@@ -10356,9 +10914,9 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
 
     Parameters
     ----------
-    date1 : :class:`~pyspark.sql.Column` or str
+    date1 : :class:`~pyspark.sql.Column` or column name
         first date column.
-    date2 : :class:`~pyspark.sql.Column` or str
+    date2 : :class:`~pyspark.sql.Column` or column name
         second date column.
     roundOff : bool, optional
         whether to round (to 8 digits) the final value or not (default: True).
@@ -10370,11 +10928,28 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['date1', 'date2'])
-    >>> df.select(months_between(df.date1, df.date2).alias('months')).collect()
-    [Row(months=3.94959677)]
-    >>> df.select(months_between(df.date1, df.date2, False).alias('months')).collect()
-    [Row(months=3.9495967741935485)]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['d1', 'd2'])
+    >>> df.select('*', sf.months_between(df.d1, df.d2)).show()
+    +-------------------+----------+----------------------------+
+    |                 d1|        d2|months_between(d1, d2, true)|
+    +-------------------+----------+----------------------------+
+    |1997-02-28 10:30:00|1996-10-30|                  3.94959677|
+    +-------------------+----------+----------------------------+
+
+    >>> df.select('*', sf.months_between('d2', 'd1')).show()
+    +-------------------+----------+----------------------------+
+    |                 d1|        d2|months_between(d2, d1, true)|
+    +-------------------+----------+----------------------------+
+    |1997-02-28 10:30:00|1996-10-30|                 -3.94959677|
+    +-------------------+----------+----------------------------+
+
+    >>> df.select('*', sf.months_between('d1', df.d2, False)).show()
+    +-------------------+----------+-----------------------------+
+    |                 d1|        d2|months_between(d1, d2, false)|
+    +-------------------+----------+-----------------------------+
+    |1997-02-28 10:30:00|1996-10-30|           3.9495967741935...|
+    +-------------------+----------+-----------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -10399,9 +10974,9 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column of values to convert.
-    format: str, optional
+    format: literal string, optional
         format to use to convert date values.
 
     Returns
@@ -10409,15 +10984,32 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :class:`~pyspark.sql.Column`
         date value as :class:`pyspark.sql.types.DateType` type.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
+    :meth:`pyspark.sql.functions.date_format`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(to_date(df.t).alias('date')).collect()
-    [Row(date=datetime.date(1997, 2, 28))]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
+    >>> df.select('*', sf.to_date(df.ts)).show()
+    +-------------------+-----------+
+    |                 ts|to_date(ts)|
+    +-------------------+-----------+
+    |1997-02-28 10:30:00| 1997-02-28|
+    +-------------------+-----------+
 
-    >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
-    >>> df.select(to_date(df.t, 'yyyy-MM-dd HH:mm:ss').alias('date')).collect()
-    [Row(date=datetime.date(1997, 2, 28))]
+    >>> df.select('*', sf.to_date('ts', 'yyyy-MM-dd HH:mm:ss')).show()
+    +-------------------+--------------------------------+
+    |                 ts|to_date(ts, yyyy-MM-dd HH:mm:ss)|
+    +-------------------+--------------------------------+
+    |1997-02-28 10:30:00|                      1997-02-28|
+    +-------------------+--------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -10433,12 +11025,37 @@ def unix_date(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of values to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of days since 1970-01-01.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_from_unix_date`
+    :meth:`pyspark.sql.functions.unix_seconds`
+    :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.unix_micros`
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([('1970-01-02',)], ['t'])
-    >>> df.select(unix_date(to_date(df.t)).alias('n')).collect()
-    [Row(n=1)]
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('1970-01-02',), ('2022-01-02',)], ['dt'])
+    >>> df.select('*', sf.unix_date(sf.to_date('dt'))).show()
+    +----------+----------------------+
+    |        dt|unix_date(to_date(dt))|
+    +----------+----------------------+
+    |1970-01-02|                     1|
+    |2022-01-02|                 18994|
+    +----------+----------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_date", col)
@@ -10450,12 +11067,37 @@ def unix_micros(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of values to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of microseconds since 1970-01-01 00:00:00 UTC.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unix_date`
+    :meth:`pyspark.sql.functions.unix_seconds`
+    :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.timestamp_micros`
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
-    >>> df.select(unix_micros(to_timestamp(df.t)).alias('n')).collect()
-    [Row(n=1437584400000000)]
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',), ('2022-10-09 11:12:13',)], ['ts'])
+    >>> df.select('*', sf.unix_micros(sf.to_timestamp('ts'))).show()
+    +-------------------+-----------------------------+
+    |                 ts|unix_micros(to_timestamp(ts))|
+    +-------------------+-----------------------------+
+    |2015-07-22 10:00:00|             1437584400000000|
+    |2022-10-09 11:12:13|             1665339133000000|
+    +-------------------+-----------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_micros", col)
@@ -10468,12 +11110,37 @@ def unix_millis(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of values to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of milliseconds since 1970-01-01 00:00:00 UTC.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unix_date`
+    :meth:`pyspark.sql.functions.unix_seconds`
+    :meth:`pyspark.sql.functions.unix_micros`
+    :meth:`pyspark.sql.functions.timestamp_millis`
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
-    >>> df.select(unix_millis(to_timestamp(df.t)).alias('n')).collect()
-    [Row(n=1437584400000)]
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',), ('2022-10-09 11:12:13',)], ['ts'])
+    >>> df.select('*', sf.unix_millis(sf.to_timestamp('ts'))).show()
+    +-------------------+-----------------------------+
+    |                 ts|unix_millis(to_timestamp(ts))|
+    +-------------------+-----------------------------+
+    |2015-07-22 10:00:00|                1437584400000|
+    |2022-10-09 11:12:13|                1665339133000|
+    +-------------------+-----------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_millis", col)
@@ -10486,12 +11153,38 @@ def unix_seconds(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of values to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of seconds since 1970-01-01 00:00:00 UTC.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unix_date`
+    :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.unix_micros`
+    :meth:`pyspark.sql.functions.from_unixtime`
+    :meth:`pyspark.sql.functions.timestamp_seconds`
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',)], ['t'])
-    >>> df.select(unix_seconds(to_timestamp(df.t)).alias('n')).collect()
-    [Row(n=1437584400)]
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-07-22 10:00:00',), ('2022-10-09 11:12:13',)], ['ts'])
+    >>> df.select('*', sf.unix_seconds(sf.to_timestamp('ts'))).show()
+    +-------------------+------------------------------+
+    |                 ts|unix_seconds(to_timestamp(ts))|
+    +-------------------+------------------------------+
+    |2015-07-22 10:00:00|                    1437584400|
+    |2022-10-09 11:12:13|                    1665339133|
+    +-------------------+------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("unix_seconds", col)
@@ -10523,9 +11216,9 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
-    format: str, optional
+    format: literal string, optional
         format to use to convert timestamp values.
 
     Returns
@@ -10535,7 +11228,13 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.to_date`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.try_to_timestamp`
+    :meth:`pyspark.sql.functions.date_format`
 
     Examples
     --------
@@ -10580,14 +11279,17 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
-    format: str, optional
+    format: literal string, optional
         format to use to convert timestamp values.
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.to_date`
     :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.date_format`
 
     Examples
     --------
@@ -10804,9 +11506,9 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
 
     Parameters
     ----------
-    date : :class:`~pyspark.sql.Column` or str
+    date : :class:`~pyspark.sql.Column` or column name
         input column of values to truncate.
-    format : str
+    format : literal string
         'year', 'yyyy', 'yy' to truncate by year,
         or 'month', 'mon', 'mm' to truncate by month
         Other options are: 'week', 'quarter'
@@ -10816,13 +11518,27 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     :class:`~pyspark.sql.Column`
         truncated date.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_trunc`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([('1997-02-28',)], ['d'])
-    >>> df.select(trunc(df.d, 'year').alias('year')).collect()
-    [Row(year=datetime.date(1997, 1, 1))]
-    >>> df.select(trunc(df.d, 'mon').alias('month')).collect()
-    [Row(month=datetime.date(1997, 2, 1))]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('1997-02-28',)], ['dt'])
+    >>> df.select('*', sf.trunc(df.dt, 'year')).show()
+    +----------+---------------+
+    |        dt|trunc(dt, year)|
+    +----------+---------------+
+    |1997-02-28|     1997-01-01|
+    +----------+---------------+
+
+    >>> df.select('*', sf.trunc('dt', 'mon')).show()
+    +----------+--------------+
+    |        dt|trunc(dt, mon)|
+    +----------+--------------+
+    |1997-02-28|    1997-02-01|
+    +----------+--------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -10841,13 +11557,13 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    format : str
+    format : literal string
         'year', 'yyyy', 'yy' to truncate by year,
         'month', 'mon', 'mm' to truncate by month,
         'day', 'dd' to truncate by day,
         Other options are:
         'microsecond', 'millisecond', 'second', 'minute', 'hour', 'week', 'quarter'
-    timestamp : :class:`~pyspark.sql.Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or column name
         input column of values to truncate.
 
     Returns
@@ -10855,13 +11571,27 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         truncated timestamp.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.trunc`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([('1997-02-28 05:02:11',)], ['t'])
-    >>> df.select(date_trunc('year', df.t).alias('year')).collect()
-    [Row(year=datetime.datetime(1997, 1, 1, 0, 0))]
-    >>> df.select(date_trunc('mon', df.t).alias('month')).collect()
-    [Row(month=datetime.datetime(1997, 2, 1, 0, 0))]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('1997-02-28 05:02:11',)], ['ts'])
+    >>> df.select('*', sf.date_trunc('year', df.ts)).show()
+    +-------------------+--------------------+
+    |                 ts|date_trunc(year, ts)|
+    +-------------------+--------------------+
+    |1997-02-28 05:02:11| 1997-01-01 00:00:00|
+    +-------------------+--------------------+
+
+    >>> df.select('*', sf.date_trunc('mon', 'ts')).show()
+    +-------------------+-------------------+
+    |                 ts|date_trunc(mon, ts)|
+    +-------------------+-------------------+
+    |1997-02-28 05:02:11|1997-02-01 00:00:00|
+    +-------------------+-------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -10881,9 +11611,9 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
 
     Parameters
     ----------
-    date : :class:`~pyspark.sql.Column` or str
+    date : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
-    dayOfWeek : str
+    dayOfWeek : literal string
         day of the week, case-insensitive, accepts:
             "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
 
@@ -10894,9 +11624,21 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('2015-07-27',)], ['d'])
-    >>> df.select(next_day(df.d, 'Sun').alias('date')).collect()
-    [Row(date=datetime.date(2015, 8, 2))]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2015-07-27',)], ['dt'])
+    >>> df.select('*', sf.next_day(df.dt, 'Sun')).show()
+    +----------+-----------------+
+    |        dt|next_day(dt, Sun)|
+    +----------+-----------------+
+    |2015-07-27|       2015-08-02|
+    +----------+-----------------+
+
+    >>> df.select('*', sf.next_day('dt', 'Sat')).show()
+    +----------+-----------------+
+    |        dt|next_day(dt, Sat)|
+    +----------+-----------------+
+    |2015-07-27|       2015-08-01|
+    +----------+-----------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -10915,7 +11657,7 @@ def last_day(date: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    date : :class:`~pyspark.sql.Column` or str
+    date : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -10925,9 +11667,21 @@ def last_day(date: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> df = spark.createDataFrame([('1997-02-10',)], ['d'])
-    >>> df.select(last_day(df.d).alias('date')).collect()
-    [Row(date=datetime.date(1997, 2, 28))]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('1997-02-10',)], ['dt'])
+    >>> df.select('*', sf.last_day(df.dt)).show()
+    +----------+------------+
+    |        dt|last_day(dt)|
+    +----------+------------+
+    |1997-02-10|  1997-02-28|
+    +----------+------------+
+
+    >>> df.select('*', sf.last_day('dt')).show()
+    +----------+------------+
+    |        dt|last_day(dt)|
+    +----------+------------+
+    |1997-02-10|  1997-02-28|
+    +----------+------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -10948,9 +11702,9 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
 
     Parameters
     ----------
-    timestamp : :class:`~pyspark.sql.Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or column name
         column of unix time values.
-    format : str, optional
+    format : literal string, optional
         format to use to convert to (default: yyyy-MM-dd HH:mm:ss)
 
     Returns
@@ -10958,12 +11712,24 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     :class:`~pyspark.sql.Column`
         formatted timestamp as string.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_from_unix_date`
+    :meth:`pyspark.sql.functions.unix_seconds`
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> time_df = spark.createDataFrame([(1428476400,)], ['unix_time'])
-    >>> time_df.select(from_unixtime('unix_time').alias('ts')).collect()
-    [Row(ts='2015-04-08 00:00:00')]
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1428476400,)], ['unix_time'])
+    >>> df.select('*', sf.from_unixtime('unix_time')).show()
+    +----------+---------------------------------------------+
+    | unix_time|from_unixtime(unix_time, yyyy-MM-dd HH:mm:ss)|
+    +----------+---------------------------------------------+
+    |1428476400|                          2015-04-08 00:00:00|
+    +----------+---------------------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     from pyspark.sql.classic.column import _to_java_column
@@ -10999,9 +11765,9 @@ def unix_timestamp(
 
     Parameters
     ----------
-    timestamp : :class:`~pyspark.sql.Column` or str, optional
+    timestamp : :class:`~pyspark.sql.Column` or column name, optional
         timestamps of string values.
-    format : str, optional
+    format : literal string, optional
         alternative format to use for converting (default: yyyy-MM-dd HH:mm:ss).
 
     Returns
@@ -11016,8 +11782,7 @@ def unix_timestamp(
     Example 1: Returns the current timestamp in UNIX.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(1).select(sf.unix_timestamp().alias('unix_time')).show()
-    ... # doctest: +SKIP
+    >>> spark.range(1).select(sf.unix_timestamp()).show() # doctest: +SKIP
     +----------+
     | unix_time|
     +----------+
@@ -11027,24 +11792,24 @@ def unix_timestamp(
     Example 2: Using default format 'yyyy-MM-dd HH:mm:ss' parses the timestamp string.
 
     >>> import pyspark.sql.functions as sf
-    >>> time_df = spark.createDataFrame([('2015-04-08 12:12:12',)], ['dt'])
-    >>> time_df.select(sf.unix_timestamp('dt').alias('unix_time')).show()
-    +----------+
-    | unix_time|
-    +----------+
-    |1428520332|
-    +----------+
+    >>> df = spark.createDataFrame([('2015-04-08 12:12:12',)], ['ts'])
+    >>> df.select('*', sf.unix_timestamp('ts')).show()
+    +-------------------+---------------------------------------+
+    |                 ts|unix_timestamp(ts, yyyy-MM-dd HH:mm:ss)|
+    +-------------------+---------------------------------------+
+    |2015-04-08 12:12:12|                             1428520332|
+    +-------------------+---------------------------------------+
 
     Example 3: Using user-specified format 'yyyy-MM-dd' parses the timestamp string.
 
     >>> import pyspark.sql.functions as sf
-    >>> time_df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> time_df.select(sf.unix_timestamp('dt', 'yyyy-MM-dd').alias('unix_time')).show()
-    +----------+
-    | unix_time|
-    +----------+
-    |1428476400|
-    +----------+
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select('*', sf.unix_timestamp('dt', 'yyyy-MM-dd')).show()
+    +----------+------------------------------+
+    |        dt|unix_timestamp(dt, yyyy-MM-dd)|
+    +----------+------------------------------+
+    |2015-04-08|                    1428476400|
+    +----------+------------------------------+
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
@@ -11078,9 +11843,9 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Col
 
     Parameters
     ----------
-    timestamp : :class:`~pyspark.sql.Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or column name
         the column that contains timestamps
-    tz : :class:`~pyspark.sql.Column` or str
+    tz : :class:`~pyspark.sql.Column` or literal string
         A string detailing the time zone ID that the input should be adjusted to. It should
         be in the format of either region-based zone IDs or zone offsets. Region IDs must
         have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
@@ -11096,13 +11861,30 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Col
     :class:`~pyspark.sql.Column`
         timestamp value represented in given timezone.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
-    >>> df.select(from_utc_timestamp(df.ts, "PST").alias('local_time')).collect()
-    [Row(local_time=datetime.datetime(1997, 2, 28, 2, 30))]
-    >>> df.select(from_utc_timestamp(df.ts, df.tz).alias('local_time')).collect()
-    [Row(local_time=datetime.datetime(1997, 2, 28, 19, 30))]
+    >>> df.select('*', sf.from_utc_timestamp('ts', 'PST')).show()
+    +-------------------+---+---------------------------+
+    |                 ts| tz|from_utc_timestamp(ts, PST)|
+    +-------------------+---+---------------------------+
+    |1997-02-28 10:30:00|JST|        1997-02-28 02:30:00|
+    +-------------------+---+---------------------------+
+
+    >>> df.select('*', sf.from_utc_timestamp(df.ts, df.tz)).show()
+    +-------------------+---+--------------------------+
+    |                 ts| tz|from_utc_timestamp(ts, tz)|
+    +-------------------+---+--------------------------+
+    |1997-02-28 10:30:00|JST|       1997-02-28 19:30:00|
+    +-------------------+---+--------------------------+
     """
     return _invoke_function_over_columns("from_utc_timestamp", timestamp, lit(tz))
 
@@ -11130,9 +11912,9 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Colum
 
     Parameters
     ----------
-    timestamp : :class:`~pyspark.sql.Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or column name
         the column that contains timestamps
-    tz : :class:`~pyspark.sql.Column` or str
+    tz : :class:`~pyspark.sql.Column` or literal string
         A string detailing the time zone ID that the input should be adjusted to. It should
         be in the format of either region-based zone IDs or zone offsets. Region IDs must
         have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
@@ -11148,13 +11930,30 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: Union[Column, str]) -> Colum
     :class:`~pyspark.sql.Column`
         timestamp value represented in UTC timezone.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.from_utc_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', 'JST')], ['ts', 'tz'])
-    >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
-    [Row(utc_time=datetime.datetime(1997, 2, 28, 18, 30))]
-    >>> df.select(to_utc_timestamp(df.ts, df.tz).alias('utc_time')).collect()
-    [Row(utc_time=datetime.datetime(1997, 2, 28, 1, 30))]
+    >>> df.select('*', sf.to_utc_timestamp('ts', "PST")).show()
+    +-------------------+---+-------------------------+
+    |                 ts| tz|to_utc_timestamp(ts, PST)|
+    +-------------------+---+-------------------------+
+    |1997-02-28 10:30:00|JST|      1997-02-28 18:30:00|
+    +-------------------+---+-------------------------+
+
+    >>> df.select('*', sf.to_utc_timestamp(df.ts, df.tz)).show()
+    +-------------------+---+------------------------+
+    |                 ts| tz|to_utc_timestamp(ts, tz)|
+    +-------------------+---+------------------------+
+    |1997-02-28 10:30:00|JST|     1997-02-28 01:30:00|
+    +-------------------+---+------------------------+
     """
     return _invoke_function_over_columns("to_utc_timestamp", timestamp, lit(tz))
 
@@ -11172,7 +11971,7 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         unix time values.
 
     Returns
@@ -11180,20 +11979,26 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         converted timestamp value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.timestamp_millis`
+    :meth:`pyspark.sql.functions.timestamp_micros`
+    :meth:`pyspark.sql.functions.unix_seconds`
+
     Examples
     --------
-    >>> from pyspark.sql.functions import timestamp_seconds
     >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
-    >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
-    >>> time_df.select(timestamp_seconds(time_df.unix_time).alias('ts')).show()
-    +-------------------+
-    |                 ts|
-    +-------------------+
-    |2008-12-25 15:30:00|
-    +-------------------+
-    >>> time_df.select(timestamp_seconds('unix_time').alias('ts')).printSchema()
-    root
-     |-- ts: timestamp (nullable = true)
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1230219000,), (1280219000,)], ['seconds'])
+    >>> df.select('*', sf.timestamp_seconds('seconds')).show()
+    +----------+--------------------------+
+    |   seconds|timestamp_seconds(seconds)|
+    +----------+--------------------------+
+    |1230219000|       2008-12-25 15:30:00|
+    |1280219000|       2010-07-27 08:23:20|
+    +----------+--------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
 
@@ -11209,7 +12014,7 @@ def timestamp_millis(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         unix time values.
 
     Returns
@@ -11217,19 +12022,26 @@ def timestamp_millis(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         converted timestamp value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.timestamp_seconds`
+    :meth:`pyspark.sql.functions.timestamp_micros`
+    :meth:`pyspark.sql.functions.unix_millis`
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
-    >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
-    >>> time_df.select(timestamp_millis(time_df.unix_time).alias('ts')).show()
-    +-------------------+
-    |                 ts|
-    +-------------------+
-    |1970-01-15 05:43:39|
-    +-------------------+
-    >>> time_df.select(timestamp_millis('unix_time').alias('ts')).printSchema()
-    root
-     |-- ts: timestamp (nullable = true)
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1230219000,), (1280219000,)], ['millis'])
+    >>> df.select('*', sf.timestamp_millis('millis')).show()
+    +----------+------------------------+
+    |    millis|timestamp_millis(millis)|
+    +----------+------------------------+
+    |1230219000|     1970-01-15 05:43:39|
+    |1280219000|     1970-01-15 19:36:59|
+    +----------+------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("timestamp_millis", col)
@@ -11244,7 +12056,7 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         unix time values.
 
     Returns
@@ -11252,19 +12064,26 @@ def timestamp_micros(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         converted timestamp value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.timestamp_seconds`
+    :meth:`pyspark.sql.functions.timestamp_millis`
+    :meth:`pyspark.sql.functions.unix_micros`
+
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
-    >>> time_df = spark.createDataFrame([(1230219000,)], ['unix_time'])
-    >>> time_df.select(timestamp_micros(time_df.unix_time).alias('ts')).show()
-    +--------------------+
-    |                  ts|
-    +--------------------+
-    |1970-01-01 00:20:...|
-    +--------------------+
-    >>> time_df.select(timestamp_micros('unix_time').alias('ts')).printSchema()
-    root
-     |-- ts: timestamp (nullable = true)
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(1230219000,), (1280219000,)], ['micros'])
+    >>> df.select('*', sf.timestamp_micros('micros')).show(truncate=False)
+    +----------+------------------------+
+    |micros    |timestamp_micros(micros)|
+    +----------+------------------------+
+    |1230219000|1970-01-01 00:20:30.219 |
+    |1280219000|1970-01-01 00:21:20.219 |
+    +----------+------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns("timestamp_micros", col)
@@ -11280,13 +12099,13 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
 
     Parameters
     ----------
-    unit : str
+    unit : literal string
         This indicates the units of the difference between the given timestamps.
         Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
         "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
-    start : :class:`~pyspark.sql.Column` or str
+    start : :class:`~pyspark.sql.Column` or column name
         A timestamp which the expression subtracts from `endTimestamp`.
-    end : :class:`~pyspark.sql.Column` or str
+    end : :class:`~pyspark.sql.Column` or column name
         A timestamp from which the expression subtracts `startTimestamp`.
 
     Returns
@@ -11294,31 +12113,38 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
     :class:`~pyspark.sql.Column`
         the difference between the timestamps.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.datediff`
+    :meth:`pyspark.sql.functions.date_diff`
+
     Examples
     --------
     >>> import datetime
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(
     ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), datetime.datetime(2024, 4, 2, 9, 0, 7))],
-    ... ).toDF("start", "end")
-    >>> df.select(sf.timestamp_diff("year", "start", "end")).show()
-    +-------------------------------+
-    |timestampdiff(year, start, end)|
-    +-------------------------------+
-    |                              8|
-    +-------------------------------+
-    >>> df.select(sf.timestamp_diff("WEEK", "start", "end")).show()
-    +-------------------------------+
-    |timestampdiff(WEEK, start, end)|
-    +-------------------------------+
-    |                            420|
-    +-------------------------------+
-    >>> df.select(sf.timestamp_diff("day", "end", "start")).show()
-    +------------------------------+
-    |timestampdiff(day, end, start)|
-    +------------------------------+
-    |                         -2944|
-    +------------------------------+
+    ...     ['ts1', 'ts2'])
+    >>> df.select('*', sf.timestamp_diff('year', 'ts1', 'ts2')).show()
+    +-------------------+-------------------+-----------------------------+
+    |                ts1|                ts2|timestampdiff(year, ts1, ts2)|
+    +-------------------+-------------------+-----------------------------+
+    |2016-03-11 09:00:07|2024-04-02 09:00:07|                            8|
+    +-------------------+-------------------+-----------------------------+
+
+    >>> df.select('*', sf.timestamp_diff('WEEK', 'ts1', 'ts2')).show()
+    +-------------------+-------------------+-----------------------------+
+    |                ts1|                ts2|timestampdiff(WEEK, ts1, ts2)|
+    +-------------------+-------------------+-----------------------------+
+    |2016-03-11 09:00:07|2024-04-02 09:00:07|                          420|
+    +-------------------+-------------------+-----------------------------+
+
+    >>> df.select('*', sf.timestamp_diff('day', df.ts2, df.ts1)).show()
+    +-------------------+-------------------+----------------------------+
+    |                ts1|                ts2|timestampdiff(day, ts2, ts1)|
+    +-------------------+-------------------+----------------------------+
+    |2016-03-11 09:00:07|2024-04-02 09:00:07|                       -2944|
+    +-------------------+-------------------+----------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -11340,13 +12166,13 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
     Parameters
     ----------
-    unit : str
+    unit : literal string
         This indicates the units of the difference between the given timestamps.
         Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
         "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
-    quantity : :class:`~pyspark.sql.Column` or str
+    quantity : :class:`~pyspark.sql.Column` or column name
         The number of units of time that you want to add.
-    ts : :class:`~pyspark.sql.Column` or str
+    ts : :class:`~pyspark.sql.Column` or column name
         A timestamp to which you want to add.
 
     Returns
@@ -11354,34 +12180,41 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     :class:`~pyspark.sql.Column`
         the difference between the timestamps.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.dateadd`
+    :meth:`pyspark.sql.functions.date_add`
+
     Examples
     --------
     >>> import datetime
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame(
     ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 2),
-    ...      (datetime.datetime(2024, 4, 2, 9, 0, 7), 3)], ["ts", "quantity"])
-    >>> df.select(sf.timestamp_add("year", "quantity", "ts")).show()
-    +--------------------------------+
-    |timestampadd(year, quantity, ts)|
-    +--------------------------------+
-    |             2018-03-11 09:00:07|
-    |             2027-04-02 09:00:07|
-    +--------------------------------+
-    >>> df.select(sf.timestamp_add("WEEK", sf.lit(5), "ts")).show()
-    +-------------------------+
-    |timestampadd(WEEK, 5, ts)|
-    +-------------------------+
-    |      2016-04-15 09:00:07|
-    |      2024-05-07 09:00:07|
-    +-------------------------+
-    >>> df.select(sf.timestamp_add("day", sf.lit(-5), "ts")).show()
-    +-------------------------+
-    |timestampadd(day, -5, ts)|
-    +-------------------------+
-    |      2016-03-06 09:00:07|
-    |      2024-03-28 09:00:07|
-    +-------------------------+
+    ...      (datetime.datetime(2024, 4, 2, 9, 0, 7), 3)], ['ts', 'quantity'])
+    >>> df.select('*', sf.timestamp_add('year', 'quantity', 'ts')).show()
+    +-------------------+--------+--------------------------------+
+    |                 ts|quantity|timestampadd(year, quantity, ts)|
+    +-------------------+--------+--------------------------------+
+    |2016-03-11 09:00:07|       2|             2018-03-11 09:00:07|
+    |2024-04-02 09:00:07|       3|             2027-04-02 09:00:07|
+    +-------------------+--------+--------------------------------+
+
+    >>> df.select('*', sf.timestamp_add('WEEK', sf.lit(5), df.ts)).show()
+    +-------------------+--------+-------------------------+
+    |                 ts|quantity|timestampadd(WEEK, 5, ts)|
+    +-------------------+--------+-------------------------+
+    |2016-03-11 09:00:07|       2|      2016-04-15 09:00:07|
+    |2024-04-02 09:00:07|       3|      2024-05-07 09:00:07|
+    +-------------------+--------+-------------------------+
+
+    >>> df.select('*', sf.timestamp_add('day', sf.lit(-5), 'ts')).show()
+    +-------------------+--------+-------------------------+
+    |                 ts|quantity|timestampadd(day, -5, ts)|
+    +-------------------+--------+-------------------------+
+    |2016-03-11 09:00:07|       2|      2016-03-06 09:00:07|
+    |2024-04-02 09:00:07|       3|      2024-03-28 09:00:07|
+    +-------------------+--------+-------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -11425,22 +12258,22 @@ def window(
 
     Parameters
     ----------
-    timeColumn : :class:`~pyspark.sql.Column`
+    timeColumn : :class:`~pyspark.sql.Column` or column name
         The column or the expression to use as the timestamp for windowing by time.
         The time column must be of TimestampType or TimestampNTZType.
-    windowDuration : str
+    windowDuration : literal string
         A string specifying the width of the window, e.g. `10 minutes`,
         `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
         valid duration identifiers. Note that the duration is a fixed length of
         time, and does not vary over time according to a calendar. For example,
         `1 day` always means 86,400,000 milliseconds, not a calendar day.
-    slideDuration : str, optional
+    slideDuration : literal string, optional
         A new window will be generated every `slideDuration`. Must be less than
         or equal to the `windowDuration`. Check
         `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
         identifiers. This duration is likewise absolute, and does not vary
         according to a calendar.
-    startTime : str, optional
+    startTime : literal string, optional
         The offset with respect to 1970-01-01 00:00:00 UTC with which to start
         window intervals. For example, in order to have hourly tumbling windows that
         start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
@@ -11451,24 +12284,30 @@ def window(
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.window_time`
+    :meth:`pyspark.sql.functions.session_window`
+
     Examples
     --------
     >>> import datetime
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame(
-    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)],
-    ... ).toDF("date", "val")
-    >>> w = df.groupBy(sf.window("date", "5 seconds")).agg(sf.sum("val").alias("sum"))
-    >>> w.select(
-    ...     w.window.start.cast("string").alias("start"),
-    ...     w.window.end.cast("string").alias("end"),
-    ...     "sum"
-    ... ).show()
-    +-------------------+-------------------+---+
-    |              start|                end|sum|
-    +-------------------+-------------------+---+
-    |2016-03-11 09:00:05|2016-03-11 09:00:10|  1|
-    +-------------------+-------------------+---+
+    >>> df = spark.createDataFrame([(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)], ['dt', 'v'])
+    >>> df2 = df.groupBy(sf.window('dt', '5 seconds')).agg(sf.sum('v'))
+    >>> df2.show(truncate=False)
+    +------------------------------------------+------+
+    |window                                    |sum(v)|
+    +------------------------------------------+------+
+    |{2016-03-11 09:00:05, 2016-03-11 09:00:10}|1     |
+    +------------------------------------------+------+
+
+    >>> df2.printSchema()
+    root
+     |-- window: struct (nullable = false)
+     |    |-- start: timestamp (nullable = true)
+     |    |-- end: timestamp (nullable = true)
+     |-- sum(v): long (nullable = true)
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -11514,7 +12353,7 @@ def window_time(
 
     Parameters
     ----------
-    windowColumn : :class:`~pyspark.sql.Column`
+    windowColumn : :class:`~pyspark.sql.Column` or column name
         The window column of a window aggregate records.
 
     Returns
@@ -11522,29 +12361,29 @@ def window_time(
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
-    Notes
-    -----
-    Supports Spark Connect.
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.window`
+    :meth:`pyspark.sql.functions.session_window`
 
     Examples
     --------
     >>> import datetime
-    >>> df = spark.createDataFrame(
-    ...     [(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)],
-    ... ).toDF("date", "val")
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(datetime.datetime(2016, 3, 11, 9, 0, 7), 1)], ['dt', 'v'])
 
     Group the data into 5 second time windows and aggregate as sum.
 
-    >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
+    >>> df2 = df.groupBy(sf.window('dt', '5 seconds')).agg(sf.sum('v'))
 
     Extract the window event time using the window_time function.
 
-    >>> w.select(
-    ...     w.window.end.cast("string").alias("end"),
-    ...     window_time(w.window).cast("string").alias("window_time"),
-    ...     "sum"
-    ... ).collect()
-    [Row(end='2016-03-11 09:00:10', window_time='2016-03-11 09:00:09.999999', sum=1)]
+    >>> df2.select('*', sf.window_time('window')).show(truncate=False)
+    +------------------------------------------+------+--------------------------+
+    |window                                    |sum(v)|window_time(window)       |
+    +------------------------------------------+------+--------------------------+
+    |{2016-03-11 09:00:05, 2016-03-11 09:00:10}|1     |2016-03-11 09:00:09.999999|
+    +------------------------------------------+------+--------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -11578,10 +12417,10 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
 
     Parameters
     ----------
-    timeColumn : :class:`~pyspark.sql.Column` or str
+    timeColumn : :class:`~pyspark.sql.Column` or column name
         The column name or column to use as the timestamp for windowing by time.
         The time column must be of TimestampType or TimestampNTZType.
-    gapDuration : :class:`~pyspark.sql.Column` or str
+    gapDuration : :class:`~pyspark.sql.Column` or literal string
         A Python string literal or column specifying the timeout of the session. It could be
         static value, e.g. `10 minutes`, `1 second`, or an expression/UDF that specifies gap
         duration dynamically based on the input row.
@@ -11591,17 +12430,29 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.window`
+    :meth:`pyspark.sql.functions.window_time`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
-    >>> w = df.groupBy(session_window("date", "5 seconds")).agg(sum("val").alias("sum"))
-    >>> w.select(w.session_window.start.cast("string").alias("start"),
-    ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
-    [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
-    >>> w = df.groupBy(session_window("date", lit("5 seconds"))).agg(sum("val").alias("sum"))
-    >>> w.select(w.session_window.start.cast("string").alias("start"),
-    ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
-    [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('2016-03-11 09:00:07', 1)], ['dt', 'v'])
+    >>> df2 = df.groupBy(sf.session_window('dt', '5 seconds')).agg(sf.sum('v'))
+    >>> df2.show(truncate=False)
+    +------------------------------------------+------+
+    |session_window                            |sum(v)|
+    +------------------------------------------+------+
+    |{2016-03-11 09:00:07, 2016-03-11 09:00:12}|1     |
+    +------------------------------------------+------+
+
+    >>> df2.printSchema()
+    root
+     |-- session_window: struct (nullable = false)
+     |    |-- start: timestamp (nullable = true)
+     |    |-- end: timestamp (nullable = true)
+     |-- sum(v): long (nullable = true)
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -11631,37 +12482,57 @@ def to_unix_timestamp(
 
     Parameters
     ----------
-    timestamp : :class:`~pyspark.sql.Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
-    format : :class:`~pyspark.sql.Column` or str, optional
+    format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert UNIX timestamp values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_date`
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
 
     Examples
     --------
     >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
-    Example 1: Using default format 'yyyy-MM-dd HH:mm:ss' parses the timestamp string.
+    Example 1: Using default format to parse the timestamp string.
 
     >>> import pyspark.sql.functions as sf
-    >>> time_df = spark.createDataFrame([('2015-04-08 12:12:12',)], ['dt'])
-    >>> time_df.select(sf.to_unix_timestamp('dt').alias('unix_time')).show()
-    +----------+
-    | unix_time|
-    +----------+
-    |1428520332|
-    +----------+
+    >>> df = spark.createDataFrame([('2015-04-08 12:12:12',)], ['ts'])
+    >>> df.select('*', sf.to_unix_timestamp('ts')).show()
+    +-------------------+------------------------------------------+
+    |                 ts|to_unix_timestamp(ts, yyyy-MM-dd HH:mm:ss)|
+    +-------------------+------------------------------------------+
+    |2015-04-08 12:12:12|                                1428520332|
+    +-------------------+------------------------------------------+
 
-    Example 2: Using user-specified format 'yyyy-MM-dd' parses the timestamp string.
+    Example 2: Using user-specified format 'yyyy-MM-dd' to parse the date string.
 
     >>> import pyspark.sql.functions as sf
-    >>> time_df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> time_df.select(
-    ...     sf.to_unix_timestamp('dt', sf.lit('yyyy-MM-dd')).alias('unix_time')).show()
-    +----------+
-    | unix_time|
-    +----------+
-    |1428476400|
-    +----------+
+    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
+    >>> df.select('*', sf.to_unix_timestamp(df.dt, sf.lit('yyyy-MM-dd'))).show()
+    +----------+---------------------------------+
+    |        dt|to_unix_timestamp(dt, yyyy-MM-dd)|
+    +----------+---------------------------------+
+    |2015-04-08|                       1428476400|
+    +----------+---------------------------------+
+
+    Example 3: Using a format column to represent different formats.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('2015-04-08', 'yyyy-MM-dd'), ('2025+01+09', 'yyyy+MM+dd')], ['dt', 'fmt'])
+    >>> df.select('*', sf.to_unix_timestamp('dt', 'fmt')).show()
+    +----------+----------+--------------------------+
+    |        dt|       fmt|to_unix_timestamp(dt, fmt)|
+    +----------+----------+--------------------------+
+    |2015-04-08|yyyy-MM-dd|                1428476400|
+    |2025+01+09|yyyy+MM+dd|                1736409600|
+    +----------+----------+--------------------------+
 
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
@@ -11677,29 +12548,63 @@ def to_timestamp_ltz(
     format: Optional["ColumnOrName"] = None,
 ) -> Column:
     """
-    Parses the `timestamp` with the `format` to a timestamp without time zone.
+    Parses the `timestamp` with the `format` to a timestamp with time zone.
     Returns null with invalid input.
 
     .. versionadded:: 3.5.0
 
     Parameters
     ----------
-    timestamp : :class:`~pyspark.sql.Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
-    format : :class:`~pyspark.sql.Column` or str, optional
+    format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampType` timestamp values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_date`
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ntz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.to_unix_timestamp`
+    :meth:`pyspark.sql.functions.date_format`
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
-    >>> df.select(to_timestamp_ltz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
-    ... # doctest: +SKIP
-    [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
+    Example 1: Using default format to parse the timestamp string.
 
-    >>> df = spark.createDataFrame([("2016-12-31",)], ["e"])
-    >>> df.select(to_timestamp_ltz(df.e).alias('r')).collect()
-    ... # doctest: +SKIP
-    [Row(r=datetime.datetime(2016, 12, 31, 0, 0))]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 12:12:12',)], ['ts'])
+    >>> df.select('*', sf.to_timestamp_ltz('ts')).show()
+    +-------------------+--------------------+
+    |                 ts|to_timestamp_ltz(ts)|
+    +-------------------+--------------------+
+    |2015-04-08 12:12:12| 2015-04-08 12:12:12|
+    +-------------------+--------------------+
+
+    Example 2: Using user-specified format to parse the date string.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2016-12-31',)], ['dt'])
+    >>> df.select('*', sf.to_timestamp_ltz(df.dt, sf.lit('yyyy-MM-dd'))).show()
+    +----------+--------------------------------+
+    |        dt|to_timestamp_ltz(dt, yyyy-MM-dd)|
+    +----------+--------------------------------+
+    |2016-12-31|             2016-12-31 00:00:00|
+    +----------+--------------------------------+
+
+    Example 3: Using a format column to represent different formats.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('2015-04-08', 'yyyy-MM-dd'), ('2025+01+09', 'yyyy+MM+dd')], ['dt', 'fmt'])
+    >>> df.select('*', sf.to_timestamp_ltz('dt', 'fmt')).show()
+    +----------+----------+-------------------------+
+    |        dt|       fmt|to_timestamp_ltz(dt, fmt)|
+    +----------+----------+-------------------------+
+    |2015-04-08|yyyy-MM-dd|      2015-04-08 00:00:00|
+    |2025+01+09|yyyy+MM+dd|      2025-01-09 00:00:00|
+    +----------+----------+-------------------------+
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ltz", timestamp, format)
@@ -11720,22 +12625,56 @@ def to_timestamp_ntz(
 
     Parameters
     ----------
-    timestamp : :class:`~pyspark.sql.Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
-    format : :class:`~pyspark.sql.Column` or str, optional
+    format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampNTZType` timestamp values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_date`
+    :meth:`pyspark.sql.functions.to_timestamp`
+    :meth:`pyspark.sql.functions.to_timestamp_ltz`
+    :meth:`pyspark.sql.functions.to_utc_timestamp`
+    :meth:`pyspark.sql.functions.to_unix_timestamp`
+    :meth:`pyspark.sql.functions.date_format`
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
-    >>> df.select(to_timestamp_ntz(df.e, lit("yyyy-MM-dd")).alias('r')).collect()
-    ... # doctest: +SKIP
-    [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
+    Example 1: Using default format to parse the timestamp string.
 
-    >>> df = spark.createDataFrame([("2016-04-08",)], ["e"])
-    >>> df.select(to_timestamp_ntz(df.e).alias('r')).collect()
-    ... # doctest: +SKIP
-    [Row(r=datetime.datetime(2016, 4, 8, 0, 0))]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 12:12:12',)], ['ts'])
+    >>> df.select('*', sf.to_timestamp_ntz('ts')).show()
+    +-------------------+--------------------+
+    |                 ts|to_timestamp_ntz(ts)|
+    +-------------------+--------------------+
+    |2015-04-08 12:12:12| 2015-04-08 12:12:12|
+    +-------------------+--------------------+
+
+    Example 2: Using user-specified format 'yyyy-MM-dd' to parse the date string.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2016-12-31',)], ['dt'])
+    >>> df.select('*', sf.to_timestamp_ntz(df.dt, sf.lit('yyyy-MM-dd'))).show()
+    +----------+--------------------------------+
+    |        dt|to_timestamp_ntz(dt, yyyy-MM-dd)|
+    +----------+--------------------------------+
+    |2016-12-31|             2016-12-31 00:00:00|
+    +----------+--------------------------------+
+
+    Example 3: Using a format column to represent different formats.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [('2015-04-08', 'yyyy-MM-dd'), ('2025+01+09', 'yyyy+MM+dd')], ['dt', 'fmt'])
+    >>> df.select('*', sf.to_timestamp_ntz('dt', 'fmt')).show()
+    +----------+----------+-------------------------+
+    |        dt|       fmt|to_timestamp_ntz(dt, fmt)|
+    +----------+----------+-------------------------+
+    |2015-04-08|yyyy-MM-dd|      2015-04-08 00:00:00|
+    |2025+01+09|yyyy+MM+dd|      2025-01-09 00:00:00|
+    +----------+----------+-------------------------+
     """
     if format is not None:
         return _invoke_function_over_columns("to_timestamp_ntz", timestamp, format)
@@ -11752,9 +12691,15 @@ def current_catalog() -> Column:
 
     .. versionadded:: 3.5.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_schema`
+
     Examples
     --------
-    >>> spark.range(1).select(current_catalog()).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_catalog()).show()
     +-----------------+
     |current_catalog()|
     +-----------------+
@@ -11770,9 +12715,15 @@ def current_database() -> Column:
 
     .. versionadded:: 3.5.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_catalog`
+    :meth:`pyspark.sql.functions.current_schema`
+
     Examples
     --------
-    >>> spark.range(1).select(current_database()).show()
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_database()).show()
     +----------------+
     |current_schema()|
     +----------------+
@@ -11787,6 +12738,11 @@ def current_schema() -> Column:
     """Returns the current database.
 
     .. versionadded:: 3.5.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_catalog`
+    :meth:`pyspark.sql.functions.current_database`
 
     Examples
     --------
@@ -11807,9 +12763,15 @@ def current_user() -> Column:
 
     .. versionadded:: 3.5.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.user`
+    :meth:`pyspark.sql.functions.session_user`
+
     Examples
     --------
-    >>> spark.range(1).select(current_user()).show() # doctest: +SKIP
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_user()).show() # doctest: +SKIP
     +--------------+
     |current_user()|
     +--------------+
@@ -11824,6 +12786,11 @@ def user() -> Column:
     """Returns the current database.
 
     .. versionadded:: 3.5.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_user`
+    :meth:`pyspark.sql.functions.session_user`
 
     Examples
     --------
@@ -11844,6 +12811,11 @@ def session_user() -> Column:
 
     .. versionadded:: 4.0.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.user`
+    :meth:`pyspark.sql.functions.current_user`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -11860,7 +12832,7 @@ def session_user() -> Column:
 @_try_remote_functions
 def crc32(col: "ColumnOrName") -> Column:
     """
-    Calculates the cyclic redundancy check value  (CRC32) of a binary column and
+    Calculates the cyclic redundancy check value (CRC32) of a binary column and
     returns the value as a bigint.
 
     .. versionchanged:: 3.4.0
@@ -11868,7 +12840,7 @@ def crc32(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -11880,8 +12852,14 @@ def crc32(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([('ABC',)], ['a']).select(crc32('a').alias('crc32')).collect()
-    [Row(crc32=2743272264)]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('ABC',)], ['a'])
+    >>> df.select('*', sf.crc32('a')).show(truncate=False)
+    +---+----------+
+    |a  |crc32(a)  |
+    +---+----------+
+    |ABC|2743272264|
+    +---+----------+
     """
     return _invoke_function_over_columns("crc32", col)
 
@@ -11897,7 +12875,7 @@ def md5(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -11907,8 +12885,14 @@ def md5(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> spark.createDataFrame([('ABC',)], ['a']).select(md5('a').alias('hash')).collect()
-    [Row(hash='902fbdd2b1df0c4f70b4a5d23525e932')]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('ABC',)], ['a'])
+    >>> df.select('*', sf.md5('a')).show(truncate=False)
+    +---+--------------------------------+
+    |a  |md5(a)                          |
+    +---+--------------------------------+
+    |ABC|902fbdd2b1df0c4f70b4a5d23525e932|
+    +---+--------------------------------+
     """
     return _invoke_function_over_columns("md5", col)
 
@@ -11924,7 +12908,7 @@ def sha1(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
 
     Returns
@@ -11932,10 +12916,21 @@ def sha1(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sha`
+    :meth:`pyspark.sql.functions.sha2`
+
     Examples
     --------
-    >>> spark.createDataFrame([('ABC',)], ['a']).select(sha1('a').alias('hash')).collect()
-    [Row(hash='3c01bdbb26f358bab27f267924aa2c9a03fcfdb8')]
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('ABC',)], ['a'])
+    >>> df.select('*', sf.sha1('a')).show(truncate=False)
+    +---+----------------------------------------+
+    |a  |sha1(a)                                 |
+    +---+----------------------------------------+
+    |ABC|3c01bdbb26f358bab27f267924aa2c9a03fcfdb8|
+    +---+----------------------------------------+
     """
     return _invoke_function_over_columns("sha1", col)
 
@@ -11953,7 +12948,7 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
     numBits : int
         the desired bit length of the result, which must have a
@@ -11964,12 +12959,18 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sha`
+    :meth:`pyspark.sql.functions.sha1`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([["Alice"], ["Bob"]], ["name"])
-    >>> df.withColumn("sha2", sha2(df.name, 256)).show(truncate=False)
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([['Alice'], ['Bob']], ['name'])
+    >>> df.select('*', sf.sha2('name', 256)).show(truncate=False)
     +-----+----------------------------------------------------------------+
-    |name |sha2                                                            |
+    |name |sha2(name, 256)                                                 |
     +-----+----------------------------------------------------------------+
     |Alice|3bc51062973c458d5a6f2d8d64a023246354ad7e064b1e4e009ec8a0699a3043|
     |Bob  |cd9fb1e148ccd8442e5aa74904cc73bf6fb54d1d54d333bd596aa9bb4bb4e961|
@@ -11999,7 +13000,7 @@ def hash(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         one or more columns to compute on.
 
     Returns
@@ -12007,27 +13008,34 @@ def hash(*cols: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hash value as int column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.xxhash64`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('ABC', 'DEF')], ['c1', 'c2'])
+    >>> df.select('*', sf.hash('c1')).show()
+    +---+---+----------+
+    | c1| c2|  hash(c1)|
+    +---+---+----------+
+    |ABC|DEF|-757602832|
+    +---+---+----------+
 
-    Hash for one column
+    >>> df.select('*', sf.hash('c1', df.c2)).show()
+    +---+---+------------+
+    | c1| c2|hash(c1, c2)|
+    +---+---+------------+
+    |ABC|DEF|   599895104|
+    +---+---+------------+
 
-    >>> df.select(hash('c1').alias('hash')).show()
-    +----------+
-    |      hash|
-    +----------+
-    |-757602832|
-    +----------+
-
-    Two or more columns
-
-    >>> df.select(hash('c1', 'c2').alias('hash')).show()
-    +---------+
-    |     hash|
-    +---------+
-    |599895104|
-    +---------+
+    >>> df.select('*', sf.hash('*')).show()
+    +---+---+------------+
+    | c1| c2|hash(c1, c2)|
+    +---+---+------------+
+    |ABC|DEF|   599895104|
+    +---+---+------------+
     """
     return _invoke_function_over_seq_of_columns("hash", cols)
 
@@ -12044,7 +13052,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         one or more columns to compute on.
 
     Returns
@@ -12052,27 +13060,34 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         hash value as long column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hash`
+
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([('ABC', 'DEF')], ['c1', 'c2'])
+    >>> df.select('*', sf.xxhash64('c1')).show()
+    +---+---+-------------------+
+    | c1| c2|       xxhash64(c1)|
+    +---+---+-------------------+
+    |ABC|DEF|4105715581806190027|
+    +---+---+-------------------+
 
-    Hash for one column
+    >>> df.select('*', sf.xxhash64('c1', df.c2)).show()
+    +---+---+-------------------+
+    | c1| c2|   xxhash64(c1, c2)|
+    +---+---+-------------------+
+    |ABC|DEF|3233247871021311208|
+    +---+---+-------------------+
 
-    >>> df.select(xxhash64('c1').alias('hash')).show()
-    +-------------------+
-    |               hash|
-    +-------------------+
-    |4105715581806190027|
-    +-------------------+
-
-    Two or more columns
-
-    >>> df.select(xxhash64('c1', 'c2').alias('hash')).show()
-    +-------------------+
-    |               hash|
-    +-------------------+
-    |3233247871021311208|
-    +-------------------+
+    >>> df.select('*', sf.xxhash64('*')).show()
+    +---+---+-------------------+
+    | c1| c2|   xxhash64(c1, c2)|
+    +---+---+-------------------+
+    |ABC|DEF|3233247871021311208|
+    +---+---+-------------------+
     """
     return _invoke_function_over_seq_of_columns("xxhash64", cols)
 
@@ -12090,9 +13105,9 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         column name or column that represents the input column to test
-    errMsg : :class:`~pyspark.sql.Column` or str, optional
+    errMsg : :class:`~pyspark.sql.Column` or literal string, optional
         A Python string literal or column containing the error message
 
     Returns
@@ -12100,16 +13115,36 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     :class:`~pyspark.sql.Column`
         `null` if the input column is `true` otherwise throws an error with specified message.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.raise_error`
+
     Examples
     --------
-    >>> df = spark.createDataFrame([(0,1)], ['a', 'b'])
-    >>> df.select(assert_true(df.a < df.b).alias('r')).collect()
-    [Row(r=None)]
-    >>> df.select(assert_true(df.a < df.b, df.a).alias('r')).collect()
-    [Row(r=None)]
-    >>> df.select(assert_true(df.a < df.b, 'error').alias('r')).collect()
-    [Row(r=None)]
-    >>> df.select(assert_true(df.a > df.b, 'My error msg').alias('r')).collect() # doctest: +SKIP
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([(0, 1)], ['a', 'b'])
+    >>> df.select('*', sf.assert_true(df.a < df.b)).show() # doctest: +SKIP
+    +------------------------------------------------------+
+    |assert_true((a < b), '(a#788L < b#789L)' is not true!)|
+    +------------------------------------------------------+
+    |                                                  NULL|
+    +------------------------------------------------------+
+
+    >>> df.select('*', sf.assert_true(df.a < df.b, df.a)).show()
+    +---+---+-----------------------+
+    |  a|  b|assert_true((a < b), a)|
+    +---+---+-----------------------+
+    |  0|  1|                   NULL|
+    +---+---+-----------------------+
+
+    >>> df.select('*', sf.assert_true(df.a < df.b, 'error')).show()
+    +---+---+---------------------------+
+    |  a|  b|assert_true((a < b), error)|
+    +---+---+---------------------------+
+    |  0|  1|                       NULL|
+    +---+---+---------------------------+
+
+    >>> df.select('*', sf.assert_true(df.a > df.b, 'My error msg')).show() # doctest: +SKIP
     ...
     java.lang.RuntimeException: My error msg
     ...
@@ -12137,7 +13172,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
 
     Parameters
     ----------
-    errMsg : :class:`~pyspark.sql.Column` or str
+    errMsg : :class:`~pyspark.sql.Column` or literal string
         A Python string literal or column containing the error message
 
     Returns
@@ -12145,10 +13180,14 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     :class:`~pyspark.sql.Column`
         throws an error with specified message.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.assert_true`
+
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(raise_error("My error message")).show() # doctest: +SKIP
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.raise_error("My error message")).show() # doctest: +SKIP
     ...
     java.lang.RuntimeException: My error message
     ...
@@ -21705,7 +22744,7 @@ def convert_timezone(
         the current session time zone is used as the source time zone.
     targetTz : :class:`~pyspark.sql.Column`
         The time zone to which the input timestamp should be converted.
-    sourceTs : :class:`~pyspark.sql.Column`
+    sourceTs : :class:`~pyspark.sql.Column` or column name
         A timestamp without time zone.
 
     Returns
@@ -21713,35 +22752,43 @@ def convert_timezone(
     :class:`~pyspark.sql.Column`
         A new column that contains a timestamp for converted time zone.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_timezone`
+
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
-    Example 1: Converts the timestamp without time zone `sourceTs`,
-        the source time zone `sourceTz` is None.
-
-    >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(sf.convert_timezone(   # doctest: +SKIP
-    ...     None, sf.lit('Asia/Hong_Kong'), 'dt')
-    ... ).show()
-    +--------------------------------------------------------+
-    |convert_timezone(current_timezone(), Asia/Hong_Kong, dt)|
-    +--------------------------------------------------------+
-    |                                     2015-04-08 00:00:00|
-    +--------------------------------------------------------+
-
-    Example 2: Converts the timestamp without time zone `sourceTs`.
+    Example 1: Converts the timestamp without time zone `sourceTs`.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([('2015-04-08',)], ['dt'])
-    >>> df.select(sf.convert_timezone(
-    ...     sf.lit('America/Los_Angeles'), sf.lit('Asia/Hong_Kong'), 'dt')
+    >>> df = spark.createDataFrame([('2015-04-08 00:00:00',)], ['ts'])
+    >>> df.select(
+    ...     '*',
+    ...     sf.convert_timezone(None, sf.lit('Asia/Hong_Kong'), 'ts')
+    ... ).show() # doctest: +SKIP
+    +-------------------+--------------------------------------------------------+
+    |                 ts|convert_timezone(current_timezone(), Asia/Hong_Kong, ts)|
+    +-------------------+--------------------------------------------------------+
+    |2015-04-08 00:00:00|                                     2015-04-08 15:00:00|
+    +-------------------+--------------------------------------------------------+
+
+    Example 2: Converts the timestamp with time zone `sourceTs`.
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('2015-04-08 15:00:00',)], ['ts'])
+    >>> df.select(
+    ...     '*',
+    ...     sf.convert_timezone(sf.lit('Asia/Hong_Kong'), sf.lit('America/Los_Angeles'), df.ts)
     ... ).show()
-    +---------------------------------------------------------+
-    |convert_timezone(America/Los_Angeles, Asia/Hong_Kong, dt)|
-    +---------------------------------------------------------+
-    |                                      2015-04-08 15:00:00|
-    +---------------------------------------------------------+
+    +-------------------+---------------------------------------------------------+
+    |                 ts|convert_timezone(Asia/Hong_Kong, America/Los_Angeles, ts)|
+    +-------------------+---------------------------------------------------------+
+    |2015-04-08 15:00:00|                                      2015-04-08 00:00:00|
+    +-------------------+---------------------------------------------------------+
+
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if sourceTz is None:
         return _invoke_function_over_columns("convert_timezone", targetTz, sourceTs)
@@ -21763,13 +22810,13 @@ def make_dt_interval(
 
     Parameters
     ----------
-    days : :class:`~pyspark.sql.Column` or str, optional
+    days : :class:`~pyspark.sql.Column` or column name, optional
         The number of days, positive or negative.
-    hours : :class:`~pyspark.sql.Column` or str, optional
+    hours : :class:`~pyspark.sql.Column` or column name, optional
         The number of hours, positive or negative.
-    mins : :class:`~pyspark.sql.Column` or str, optional
+    mins : :class:`~pyspark.sql.Column` or column name, optional
         The number of minutes, positive or negative.
-    secs : :class:`~pyspark.sql.Column` or str, optional
+    secs : :class:`~pyspark.sql.Column` or column name, optional
         The number of seconds with the fractional part in microsecond precision.
 
     Returns
@@ -21777,63 +22824,62 @@ def make_dt_interval(
     :class:`~pyspark.sql.Column`
         A new column that contains a DayTimeIntervalType duration.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.make_ym_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
-
     Example 1: Make DayTimeIntervalType duration from days, hours, mins and secs.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
-    ...     ["day", "hour", "min", "sec"])
-    >>> df.select(sf.make_dt_interval(df.day, df.hour, df.min, df.sec)).show(truncate=False)
-    +------------------------------------------+
-    |make_dt_interval(day, hour, min, sec)     |
-    +------------------------------------------+
-    |INTERVAL '1 12:30:01.001001' DAY TO SECOND|
-    +------------------------------------------+
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]], ['day', 'hour', 'min', 'sec'])
+    >>> df.select('*', sf.make_dt_interval(df.day, df.hour, df.min, df.sec)).show(truncate=False)
+    +---+----+---+--------+------------------------------------------+
+    |day|hour|min|sec     |make_dt_interval(day, hour, min, sec)     |
+    +---+----+---+--------+------------------------------------------+
+    |1  |12  |30 |1.001001|INTERVAL '1 12:30:01.001001' DAY TO SECOND|
+    +---+----+---+--------+------------------------------------------+
 
     Example 2: Make DayTimeIntervalType duration from days, hours and mins.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
-    ...     ["day", "hour", "min", "sec"])
-    >>> df.select(sf.make_dt_interval(df.day, df.hour, df.min)).show(truncate=False)
-    +-----------------------------------+
-    |make_dt_interval(day, hour, min, 0)|
-    +-----------------------------------+
-    |INTERVAL '1 12:30:00' DAY TO SECOND|
-    +-----------------------------------+
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]], ['day', 'hour', 'min', 'sec'])
+    >>> df.select('*', sf.make_dt_interval(df.day, 'hour', df.min)).show(truncate=False)
+    +---+----+---+--------+-----------------------------------+
+    |day|hour|min|sec     |make_dt_interval(day, hour, min, 0)|
+    +---+----+---+--------+-----------------------------------+
+    |1  |12  |30 |1.001001|INTERVAL '1 12:30:00' DAY TO SECOND|
+    +---+----+---+--------+-----------------------------------+
 
     Example 3: Make DayTimeIntervalType duration from days and hours.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
-    ...     ["day", "hour", "min", "sec"])
-    >>> df.select(sf.make_dt_interval(df.day, df.hour)).show(truncate=False)
-    +-----------------------------------+
-    |make_dt_interval(day, hour, 0, 0)  |
-    +-----------------------------------+
-    |INTERVAL '1 12:00:00' DAY TO SECOND|
-    +-----------------------------------+
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]], ['day', 'hour', 'min', 'sec'])
+    >>> df.select('*', sf.make_dt_interval(df.day, df.hour)).show(truncate=False)
+    +---+----+---+--------+-----------------------------------+
+    |day|hour|min|sec     |make_dt_interval(day, hour, 0, 0)  |
+    +---+----+---+--------+-----------------------------------+
+    |1  |12  |30 |1.001001|INTERVAL '1 12:00:00' DAY TO SECOND|
+    +---+----+---+--------+-----------------------------------+
 
     Example 4: Make DayTimeIntervalType duration from days.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
-    ...     ["day", "hour", "min", "sec"])
-    >>> df.select(sf.make_dt_interval(df.day)).show(truncate=False)
-    +-----------------------------------+
-    |make_dt_interval(day, 0, 0, 0)     |
-    +-----------------------------------+
-    |INTERVAL '1 00:00:00' DAY TO SECOND|
-    +-----------------------------------+
+    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]], ['day', 'hour', 'min', 'sec'])
+    >>> df.select('*', sf.make_dt_interval('day')).show(truncate=False)
+    +---+----+---+--------+-----------------------------------+
+    |day|hour|min|sec     |make_dt_interval(day, 0, 0, 0)     |
+    +---+----+---+--------+-----------------------------------+
+    |1  |12  |30 |1.001001|INTERVAL '1 00:00:00' DAY TO SECOND|
+    +---+----+---+--------+-----------------------------------+
 
-    Example 5: Make DayTimeIntervalType duration.
+    Example 5: Make empty interval.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[1, 12, 30, 01.001001]],
-    ...     ["day", "hour", "min", "sec"])
-    >>> df.select(sf.make_dt_interval()).show(truncate=False)
+    >>> spark.range(1).select(sf.make_dt_interval()).show(truncate=False)
     +-----------------------------------+
     |make_dt_interval(0, 0, 0, 0)       |
     +-----------------------------------+
@@ -21865,19 +22911,19 @@ def try_make_interval(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str, optional
+    years : :class:`~pyspark.sql.Column` or column name, optional
         The number of years, positive or negative.
-    months : :class:`~pyspark.sql.Column` or str, optional
+    months : :class:`~pyspark.sql.Column` or column name, optional
         The number of months, positive or negative.
-    weeks : :class:`~pyspark.sql.Column` or str, optional
+    weeks : :class:`~pyspark.sql.Column` or column name, optional
         The number of weeks, positive or negative.
-    days : :class:`~pyspark.sql.Column` or str, optional
+    days : :class:`~pyspark.sql.Column` or column name, optional
         The number of days, positive or negative.
-    hours : :class:`~pyspark.sql.Column` or str, optional
+    hours : :class:`~pyspark.sql.Column` or column name, optional
         The number of hours, positive or negative.
-    mins : :class:`~pyspark.sql.Column` or str, optional
+    mins : :class:`~pyspark.sql.Column` or column name, optional
         The number of minutes, positive or negative.
-    secs : :class:`~pyspark.sql.Column` or str, optional
+    secs : :class:`~pyspark.sql.Column` or column name, optional
         The number of seconds with the fractional part in microsecond precision.
 
     Returns
@@ -21885,16 +22931,21 @@ def try_make_interval(
     :class:`~pyspark.sql.Column`
         A new column that contains an interval.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.make_dt_interval`
+    :meth:`pyspark.sql.functions.make_ym_interval`
+
     Examples
     --------
-
     Example 1: Try make interval from years, months, weeks, days, hours, mins and secs.
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.try_make_interval(df.year, df.month, 'week', df.day, 'hour', df.min, df.sec)
     ... ).show(truncate=False)
     +---------------------------------------------------------------+
     |try_make_interval(year, month, week, day, hour, min, sec)      |
@@ -21906,9 +22957,9 @@ def try_make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour, df.min)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.try_make_interval(df.year, df.month, 'week', df.day, df.hour, df.min)
     ... ).show(truncate=False)
     +-------------------------------------------------------+
     |try_make_interval(year, month, week, day, hour, min, 0)|
@@ -21920,9 +22971,9 @@ def try_make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.try_make_interval(df.year, df.month, 'week', df.day, df.hour)
     ... ).show(truncate=False)
     +-----------------------------------------------------+
     |try_make_interval(year, month, week, day, hour, 0, 0)|
@@ -21934,8 +22985,8 @@ def try_make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_interval(df.year, df.month, df.week, df.day)).show(truncate=False)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(sf.try_make_interval(df.year, 'month', df.week, df.day)).show(truncate=False)
     +--------------------------------------------------+
     |try_make_interval(year, month, week, day, 0, 0, 0)|
     +--------------------------------------------------+
@@ -21946,8 +22997,8 @@ def try_make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_interval(df.year, df.month, df.week)).show(truncate=False)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(sf.try_make_interval(df.year, 'month', df.week)).show(truncate=False)
     +------------------------------------------------+
     |try_make_interval(year, month, week, 0, 0, 0, 0)|
     +------------------------------------------------+
@@ -21958,8 +23009,8 @@ def try_make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_interval(df.year, df.month)).show(truncate=False)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(sf.try_make_interval(df.year, 'month')).show(truncate=False)
     +---------------------------------------------+
     |try_make_interval(year, month, 0, 0, 0, 0, 0)|
     +---------------------------------------------+
@@ -21970,7 +23021,7 @@ def try_make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
     >>> df.select(sf.try_make_interval(df.year)).show(truncate=False)
     +-----------------------------------------+
     |try_make_interval(year, 0, 0, 0, 0, 0, 0)|
@@ -21978,18 +23029,25 @@ def try_make_interval(
     |100 years                                |
     +-----------------------------------------+
 
-    Example 8: Try make interval from years with overflow.
+    Example 8: Try make empty interval.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[2147483647, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_interval(df.year)).show(truncate=False)
-    +-----------------------------------------+
-    |try_make_interval(year, 0, 0, 0, 0, 0, 0)|
-    +-----------------------------------------+
-    |NULL                                     |
-    +-----------------------------------------+
+    >>> spark.range(1).select(sf.try_make_interval()).show(truncate=False)
+    +--------------------------------------+
+    |try_make_interval(0, 0, 0, 0, 0, 0, 0)|
+    +--------------------------------------+
+    |0 seconds                             |
+    +--------------------------------------+
 
+    Example 9: Try make interval from years with overflow.
+
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.try_make_interval(sf.lit(2147483647))).show(truncate=False)
+    +-----------------------------------------------+
+    |try_make_interval(2147483647, 0, 0, 0, 0, 0, 0)|
+    +-----------------------------------------------+
+    |NULL                                           |
+    +-----------------------------------------------+
     """
     _years = lit(0) if years is None else years
     _months = lit(0) if months is None else months
@@ -22020,19 +23078,19 @@ def make_interval(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str, optional
+    years : :class:`~pyspark.sql.Column` or column name, optional
         The number of years, positive or negative.
-    months : :class:`~pyspark.sql.Column` or str, optional
+    months : :class:`~pyspark.sql.Column` or column name, optional
         The number of months, positive or negative.
-    weeks : :class:`~pyspark.sql.Column` or str, optional
+    weeks : :class:`~pyspark.sql.Column` or column name, optional
         The number of weeks, positive or negative.
-    days : :class:`~pyspark.sql.Column` or str, optional
+    days : :class:`~pyspark.sql.Column` or column name, optional
         The number of days, positive or negative.
-    hours : :class:`~pyspark.sql.Column` or str, optional
+    hours : :class:`~pyspark.sql.Column` or column name, optional
         The number of hours, positive or negative.
-    mins : :class:`~pyspark.sql.Column` or str, optional
+    mins : :class:`~pyspark.sql.Column` or column name, optional
         The number of minutes, positive or negative.
-    secs : :class:`~pyspark.sql.Column` or str, optional
+    secs : :class:`~pyspark.sql.Column` or column name, optional
         The number of seconds with the fractional part in microsecond precision.
 
     Returns
@@ -22040,16 +23098,21 @@ def make_interval(
     :class:`~pyspark.sql.Column`
         A new column that contains an interval.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_dt_interval`
+    :meth:`pyspark.sql.functions.make_ym_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
-
     Example 1: Make interval from years, months, weeks, days, hours, mins and secs.
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.make_interval(df.year, df.month, 'week', df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
     +---------------------------------------------------------------+
     |make_interval(year, month, week, day, hour, min, sec)          |
@@ -22061,9 +23124,9 @@ def make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour, df.min)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.make_interval(df.year, df.month, 'week', df.day, df.hour, df.min)
     ... ).show(truncate=False)
     +---------------------------------------------------+
     |make_interval(year, month, week, day, hour, min, 0)|
@@ -22075,9 +23138,9 @@ def make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.make_interval(
-    ...     df.year, df.month, df.week, df.day, df.hour)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.make_interval(df.year, df.month, 'week', df.day, df.hour)
     ... ).show(truncate=False)
     +-------------------------------------------------+
     |make_interval(year, month, week, day, hour, 0, 0)|
@@ -22089,8 +23152,8 @@ def make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.make_interval(df.year, df.month, df.week, df.day)).show(truncate=False)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(sf.make_interval(df.year, df.month, 'week', df.day)).show(truncate=False)
     +----------------------------------------------+
     |make_interval(year, month, week, day, 0, 0, 0)|
     +----------------------------------------------+
@@ -22101,8 +23164,8 @@ def make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.make_interval(df.year, df.month, df.week)).show(truncate=False)
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(sf.make_interval(df.year, df.month, 'week')).show(truncate=False)
     +--------------------------------------------+
     |make_interval(year, month, week, 0, 0, 0, 0)|
     +--------------------------------------------+
@@ -22113,7 +23176,7 @@ def make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
     >>> df.select(sf.make_interval(df.year, df.month)).show(truncate=False)
     +-----------------------------------------+
     |make_interval(year, month, 0, 0, 0, 0, 0)|
@@ -22125,7 +23188,7 @@ def make_interval(
 
     >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
+    ...     ['year', 'month', 'week', 'day', 'hour', 'min', 'sec'])
     >>> df.select(sf.make_interval(df.year)).show(truncate=False)
     +-------------------------------------+
     |make_interval(year, 0, 0, 0, 0, 0, 0)|
@@ -22133,12 +23196,10 @@ def make_interval(
     |100 years                            |
     +-------------------------------------+
 
-    Example 8: Make interval.
+    Example 8: Make empty interval.
 
     >>> import pyspark.sql.functions as sf
-    >>> df = spark.createDataFrame([[100, 11, 1, 1, 12, 30, 01.001001]],
-    ...     ["year", "month", "week", "day", "hour", "min", "sec"])
-    >>> df.select(sf.make_interval()).show(truncate=False)
+    >>> spark.range(1).select(sf.make_interval()).show(truncate=False)
     +----------------------------------+
     |make_interval(0, 0, 0, 0, 0, 0, 0)|
     +----------------------------------+
@@ -22177,22 +23238,22 @@ def make_timestamp(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str
+    years : :class:`~pyspark.sql.Column` or column name
         The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or str
+    months : :class:`~pyspark.sql.Column` or column name
         The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or str
+    days : :class:`~pyspark.sql.Column` or column name
         The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or str
+    hours : :class:`~pyspark.sql.Column` or column name
         The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or str
+    mins : :class:`~pyspark.sql.Column` or column name
         The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or str
+    secs : :class:`~pyspark.sql.Column` or column name
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
         to 0 and 1 minute is added to the final timestamp.
-    timezone : :class:`~pyspark.sql.Column` or str, optional
+    timezone : :class:`~pyspark.sql.Column` or column name, optional
         The time zone identifier. For example, CET, UTC and etc.
 
     Returns
@@ -22200,38 +23261,48 @@ def make_timestamp(
     :class:`~pyspark.sql.Column`
         A new column that contains a timestamp.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.try_make_timestamp`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
     Example 1: Make timestamp from years, months, days, hours, mins and secs.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.make_timestamp(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.make_timestamp(df.year, df.month, df.day, 'hour', df.min, df.sec, 'tz')
     ... ).show(truncate=False)
-    +----------------------------------------------------------+
-    |make_timestamp(year, month, day, hour, min, sec, timezone)|
-    +----------------------------------------------------------+
-    |2014-12-27 21:30:45.887                                   |
-    +----------------------------------------------------------+
+    +----------------------------------------------------+
+    |make_timestamp(year, month, day, hour, min, sec, tz)|
+    +----------------------------------------------------+
+    |2014-12-27 21:30:45.887                             |
+    +----------------------------------------------------+
 
     Example 2: Make timestamp without timezone.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.make_timestamp(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.make_timestamp(df.year, df.month, df.day, 'hour', df.min, df.sec)
     ... ).show(truncate=False)
     +------------------------------------------------+
     |make_timestamp(year, month, day, hour, min, sec)|
     +------------------------------------------------+
     |2014-12-28 06:30:45.887                         |
     +------------------------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timezone is not None:
@@ -22286,17 +23357,27 @@ def try_make_timestamp(
     :class:`~pyspark.sql.Column`
         A new column that contains a timestamp or NULL in case of an error.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_timestamp`
+    :meth:`pyspark.sql.functions.make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
     Example 1: Make timestamp from years, months, days, hours, mins and secs.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.try_make_timestamp(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.try_make_timestamp(df.year, df.month, df.day, 'hour', df.min, df.sec, 'tz')
     ... ).show(truncate=False)
     +----------------------------------------------------+
     |try_make_timestamp(year, month, day, hour, min, sec)|
@@ -22307,11 +23388,10 @@ def try_make_timestamp(
     Example 2: Make timestamp without timezone.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.try_make_timestamp(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.try_make_timestamp(df.year, df.month, df.day, 'hour', df.min, df.sec)
     ... ).show(truncate=False)
     +----------------------------------------------------+
     |try_make_timestamp(year, month, day, hour, min, sec)|
@@ -22323,17 +23403,17 @@ def try_make_timestamp(
     Example 3: Make timestamp with invalid input.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 13, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.try_make_timestamp(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.try_make_timestamp(df.year, df.month, df.day, 'hour', df.min, df.sec)
     ... ).show(truncate=False)
     +----------------------------------------------------+
     |try_make_timestamp(year, month, day, hour, min, sec)|
     +----------------------------------------------------+
     |NULL                                                |
     +----------------------------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timezone is not None:
@@ -22388,38 +23468,48 @@ def make_timestamp_ltz(
     :class:`~pyspark.sql.Column`
         A new column that contains a current timestamp.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_timestamp`
+    :meth:`pyspark.sql.functions.make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.try_make_timestamp`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
     Example 1: Make the current timestamp from years, months, days, hours, mins and secs.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.make_timestamp_ltz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.make_timestamp_ltz(df.year, df.month, 'day', df.hour, df.min, df.sec, 'tz')
     ... ).show(truncate=False)
-    +--------------------------------------------------------------+
-    |make_timestamp_ltz(year, month, day, hour, min, sec, timezone)|
-    +--------------------------------------------------------------+
-    |2014-12-27 21:30:45.887                                       |
-    +--------------------------------------------------------------+
+    +--------------------------------------------------------+
+    |make_timestamp_ltz(year, month, day, hour, min, sec, tz)|
+    +--------------------------------------------------------+
+    |2014-12-27 21:30:45.887                                 |
+    +--------------------------------------------------------+
 
     Example 2: Make the current timestamp without timezone.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.make_timestamp_ltz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.make_timestamp_ltz(df.year, df.month, 'day', df.hour, df.min, df.sec)
     ... ).show(truncate=False)
     +----------------------------------------------------+
     |make_timestamp_ltz(year, month, day, hour, min, sec)|
     +----------------------------------------------------+
     |2014-12-28 06:30:45.887                             |
     +----------------------------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timezone is not None:
@@ -22474,54 +23564,62 @@ def try_make_timestamp_ltz(
     :class:`~pyspark.sql.Column`
         A new column that contains a current timestamp, or NULL in case of an error.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_timestamp`
+    :meth:`pyspark.sql.functions.make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.try_make_timestamp`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
     Example 1: Make the current timestamp from years, months, days, hours, mins and secs.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.try_make_timestamp_ltz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec, df.timezone)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.try_make_timestamp_ltz('year', 'month', df.day, df.hour, df.min, df.sec, 'tz')
     ... ).show(truncate=False)
-    +------------------------------------------------------------------+
-    |try_make_timestamp_ltz(year, month, day, hour, min, sec, timezone)|
-    +------------------------------------------------------------------+
-    |2014-12-27 21:30:45.887                                           |
-    +------------------------------------------------------------------+
+    +------------------------------------------------------------+
+    |try_make_timestamp_ltz(year, month, day, hour, min, sec, tz)|
+    +------------------------------------------------------------+
+    |2014-12-27 21:30:45.887                                     |
+    +------------------------------------------------------------+
 
     Example 2: Make the current timestamp without timezone.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.try_make_timestamp_ltz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.try_make_timestamp_ltz('year', 'month', df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
     +--------------------------------------------------------+
     |try_make_timestamp_ltz(year, month, day, hour, min, sec)|
     +--------------------------------------------------------+
     |2014-12-28 06:30:45.887                                 |
     +--------------------------------------------------------+
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
     Example 3: Make the current timestamp with invalid input.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 13, 28, 6, 30, 45.887, 'CET']],
-    ...     ["year", "month", "day", "hour", "min", "sec", "timezone"])
-    >>> df.select(sf.try_make_timestamp_ltz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec', 'tz'])
+    >>> df.select(
+    ...     sf.try_make_timestamp_ltz('year', 'month', df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
     +--------------------------------------------------------+
     |try_make_timestamp_ltz(year, month, day, hour, min, sec)|
     +--------------------------------------------------------+
     |NULL                                                    |
     +--------------------------------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     if timezone is not None:
@@ -22552,17 +23650,17 @@ def make_timestamp_ntz(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str
+    years : :class:`~pyspark.sql.Column` or column name
         The year to represent, from 1 to 9999
-    months : :class:`~pyspark.sql.Column` or str
+    months : :class:`~pyspark.sql.Column` or column name
         The month-of-year to represent, from 1 (January) to 12 (December)
-    days : :class:`~pyspark.sql.Column` or str
+    days : :class:`~pyspark.sql.Column` or column name
         The day-of-month to represent, from 1 to 31
-    hours : :class:`~pyspark.sql.Column` or str
+    hours : :class:`~pyspark.sql.Column` or column name
         The hour-of-day to represent, from 0 to 23
-    mins : :class:`~pyspark.sql.Column` or str
+    mins : :class:`~pyspark.sql.Column` or column name
         The minute-of-hour to represent, from 0 to 59
-    secs : :class:`~pyspark.sql.Column` or str
+    secs : :class:`~pyspark.sql.Column` or column name
         The second-of-minute and its micro-fraction to represent, from 0 to 60.
         The value can be either an integer like 13 , or a fraction like 13.123.
         If the sec argument equals to 60, the seconds field is set
@@ -22573,23 +23671,32 @@ def make_timestamp_ntz(
     :class:`~pyspark.sql.Column`
         A new column that contains a local date-time.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_timestamp`
+    :meth:`pyspark.sql.functions.make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.try_make_timestamp`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
-
-    Example 1: Make local date-time from years, months, days, hours, mins, secs.
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
-    ...     ["year", "month", "day", "hour", "min", "sec"])
-    >>> df.select(sf.make_timestamp_ntz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.make_timestamp_ntz('year', 'month', df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
     +----------------------------------------------------+
     |make_timestamp_ntz(year, month, day, hour, min, sec)|
     +----------------------------------------------------+
     |2014-12-28 06:30:45.887                             |
     +----------------------------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns(
@@ -22635,39 +23742,48 @@ def try_make_timestamp_ntz(
     :class:`~pyspark.sql.Column`
         A new column that contains a local date-time, or NULL in case of an error.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_timestamp`
+    :meth:`pyspark.sql.functions.make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_timestamp_ntz`
+    :meth:`pyspark.sql.functions.try_make_timestamp`
+    :meth:`pyspark.sql.functions.try_make_timestamp_ltz`
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
     Example 1: Make local date-time from years, months, days, hours, mins, secs.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 12, 28, 6, 30, 45.887]],
-    ...     ["year", "month", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_timestamp_ntz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.try_make_timestamp_ntz('year', 'month', df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
     +--------------------------------------------------------+
     |try_make_timestamp_ntz(year, month, day, hour, min, sec)|
     +--------------------------------------------------------+
     |2014-12-28 06:30:45.887                                 |
     +--------------------------------------------------------+
-    >>> spark.conf.unset("spark.sql.session.timeZone")
 
     Example 2: Make local date-time with invalid input
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> df = spark.createDataFrame([[2014, 13, 28, 6, 30, 45.887]],
-    ...     ["year", "month", "day", "hour", "min", "sec"])
-    >>> df.select(sf.try_make_timestamp_ntz(
-    ...     df.year, df.month, df.day, df.hour, df.min, df.sec)
+    ...     ['year', 'month', 'day', 'hour', 'min', 'sec'])
+    >>> df.select(
+    ...     sf.try_make_timestamp_ntz('year', 'month', df.day, df.hour, df.min, df.sec)
     ... ).show(truncate=False)
     +--------------------------------------------------------+
     |try_make_timestamp_ntz(year, month, day, hour, min, sec)|
     +--------------------------------------------------------+
     |NULL                                                    |
     +--------------------------------------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     return _invoke_function_over_columns(
@@ -22687,9 +23803,9 @@ def make_ym_interval(
 
     Parameters
     ----------
-    years : :class:`~pyspark.sql.Column` or str, optional
+    years : :class:`~pyspark.sql.Column` or column name, optional
         The number of years, positive or negative
-    months : :class:`~pyspark.sql.Column` or str, optional
+    months : :class:`~pyspark.sql.Column` or column name, optional
         The number of months, positive or negative
 
     Returns
@@ -22697,44 +23813,48 @@ def make_ym_interval(
     :class:`~pyspark.sql.Column`
         A new column that contains a year-month interval.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.make_interval`
+    :meth:`pyspark.sql.functions.make_dt_interval`
+    :meth:`pyspark.sql.functions.try_make_interval`
+
     Examples
     --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
 
     Example 1: Make year-month interval from years, months.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([[2014, 12]], ["year", "month"])
-    >>> df.select(sf.make_ym_interval(df.year, df.month)).show(truncate=False)
-    +-------------------------------+
-    |make_ym_interval(year, month)  |
-    +-------------------------------+
-    |INTERVAL '2015-0' YEAR TO MONTH|
-    +-------------------------------+
+    >>> df = spark.createDataFrame([[2014, 12]], ['year', 'month'])
+    >>> df.select('*', sf.make_ym_interval('year', df.month)).show(truncate=False)
+    +----+-----+-------------------------------+
+    |year|month|make_ym_interval(year, month)  |
+    +----+-----+-------------------------------+
+    |2014|12   |INTERVAL '2015-0' YEAR TO MONTH|
+    +----+-----+-------------------------------+
 
     Example 2: Make year-month interval from years.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([[2014, 12]], ["year", "month"])
-    >>> df.select(sf.make_ym_interval(df.year)).show(truncate=False)
-    +-------------------------------+
-    |make_ym_interval(year, 0)      |
-    +-------------------------------+
-    |INTERVAL '2014-0' YEAR TO MONTH|
-    +-------------------------------+
+    >>> df = spark.createDataFrame([[2014, 12]], ['year', 'month'])
+    >>> df.select('*', sf.make_ym_interval(df.year)).show(truncate=False)
+    +----+-----+-------------------------------+
+    |year|month|make_ym_interval(year, 0)      |
+    +----+-----+-------------------------------+
+    |2014|12   |INTERVAL '2014-0' YEAR TO MONTH|
+    +----+-----+-------------------------------+
 
-    Example 3: Make year-month interval.
+    Example 3: Make empty interval.
 
     >>> import pyspark.sql.functions as sf
-    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
-    >>> df = spark.createDataFrame([[2014, 12]], ["year", "month"])
-    >>> df.select(sf.make_ym_interval()).show(truncate=False)
+    >>> spark.range(1).select(sf.make_ym_interval()).show(truncate=False)
     +----------------------------+
     |make_ym_interval(0, 0)      |
     +----------------------------+
     |INTERVAL '0-0' YEAR TO MONTH|
     +----------------------------+
+
     >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     _years = lit(0) if years is None else years
@@ -22937,7 +24057,7 @@ def hll_sketch_agg(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
     lgConfigK : :class:`~pyspark.sql.Column` or int, optional
         The log-base-2 of K, where K is the number of buckets or slots for the HllSketch
 
@@ -22946,33 +24066,29 @@ def hll_sketch_agg(
     :class:`~pyspark.sql.Column`
         The binary representation of the HllSketch.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hll_union`
+    :meth:`pyspark.sql.functions.hll_union_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_estimate`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df1 = df.agg(hll_sketch_estimate(hll_sketch_agg("value")).alias("distinct_cnt"))
-    >>> df1.show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           3|
-    +------------+
-    >>> df2 = df.agg(hll_sketch_estimate(
-    ...     hll_sketch_agg("value", lit(12))
-    ... ).alias("distinct_cnt"))
-    >>> df2.show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           3|
-    +------------+
-    >>> df3 = df.agg(hll_sketch_estimate(
-    ...     hll_sketch_agg(col("value"), lit(12))).alias("distinct_cnt"))
-    >>> df3.show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           3|
-    +------------+
+    >>> df.agg(sf.hll_sketch_estimate(sf.hll_sketch_agg("value"))).show()
+    +----------------------------------------------+
+    |hll_sketch_estimate(hll_sketch_agg(value, 12))|
+    +----------------------------------------------+
+    |                                             3|
+    +----------------------------------------------+
+
+    >>> df.agg(sf.hll_sketch_estimate(sf.hll_sketch_agg("value", 12))).show()
+    +----------------------------------------------+
+    |hll_sketch_estimate(hll_sketch_agg(value, 12))|
+    +----------------------------------------------+
+    |                                             3|
+    +----------------------------------------------+
     """
     if lgConfigK is None:
         return _invoke_function_over_columns("hll_sketch_agg", col)
@@ -22995,7 +24111,7 @@ def hll_union_agg(
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
     allowDifferentLgConfigK : :class:`~pyspark.sql.Column` or bool, optional
         Allow sketches with different lgConfigK values to be merged (defaults to false).
 
@@ -23004,39 +24120,33 @@ def hll_union_agg(
     :class:`~pyspark.sql.Column`
         The binary representation of the merged HllSketch.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hll_union`
+    :meth:`pyspark.sql.functions.hll_sketch_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_estimate`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df1 = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df1 = df1.agg(hll_sketch_agg("value").alias("sketch"))
+    >>> df1 = df1.agg(sf.hll_sketch_agg("value").alias("sketch"))
     >>> df2 = spark.createDataFrame([4,5,5,6], "INT")
-    >>> df2 = df2.agg(hll_sketch_agg("value").alias("sketch"))
-    >>> df3 = df1.union(df2).agg(hll_sketch_estimate(
-    ...     hll_union_agg("sketch")
-    ... ).alias("distinct_cnt"))
-    >>> df3.drop("sketch").show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           6|
-    +------------+
-    >>> df4 = df1.union(df2).agg(hll_sketch_estimate(
-    ...     hll_union_agg("sketch", lit(False))
-    ... ).alias("distinct_cnt"))
-    >>> df4.drop("sketch").show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           6|
-    +------------+
-    >>> df5 = df1.union(df2).agg(hll_sketch_estimate(
-    ...     hll_union_agg(col("sketch"), lit(False))
-    ... ).alias("distinct_cnt"))
-    >>> df5.drop("sketch").show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           6|
-    +------------+
+    >>> df2 = df2.agg(sf.hll_sketch_agg("value").alias("sketch"))
+    >>> df3 = df1.union(df2)
+    >>> df3.agg(sf.hll_sketch_estimate(sf.hll_union_agg("sketch"))).show()
+    +-------------------------------------------------+
+    |hll_sketch_estimate(hll_union_agg(sketch, false))|
+    +-------------------------------------------------+
+    |                                                6|
+    +-------------------------------------------------+
+
+    >>> df3.agg(sf.hll_sketch_estimate(sf.hll_union_agg("sketch", False))).show()
+    +-------------------------------------------------+
+    |hll_sketch_estimate(hll_union_agg(sketch, false))|
+    +-------------------------------------------------+
+    |                                                6|
+    +-------------------------------------------------+
     """
     if allowDifferentLgConfigK is None:
         return _invoke_function_over_columns("hll_union_agg", col)
@@ -23054,23 +24164,29 @@ def hll_sketch_estimate(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Returns
     -------
     :class:`~pyspark.sql.Column`
         The estimated number of unique values for the HllSketch.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hll_union`
+    :meth:`pyspark.sql.functions.hll_union_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_agg`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([1,2,2,3], "INT")
-    >>> df = df.agg(hll_sketch_estimate(hll_sketch_agg("value")).alias("distinct_cnt"))
-    >>> df.show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           3|
-    +------------+
+    >>> df.agg(sf.hll_sketch_estimate(sf.hll_sketch_agg("value"))).show()
+    +----------------------------------------------+
+    |hll_sketch_estimate(hll_sketch_agg(value, 12))|
+    +----------------------------------------------+
+    |                                             3|
+    +----------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -23090,8 +24206,8 @@ def hll_union(
 
     Parameters
     ----------
-    col1 : :class:`~pyspark.sql.Column` or str
-    col2 : :class:`~pyspark.sql.Column` or str
+    col1 : :class:`~pyspark.sql.Column` or column name
+    col2 : :class:`~pyspark.sql.Column` or column name
     allowDifferentLgConfigK : bool, optional
         Allow sketches with different lgConfigK values to be merged (defaults to false).
 
@@ -23100,17 +24216,26 @@ def hll_union(
     :class:`~pyspark.sql.Column`
         The binary representation of the merged HllSketch.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.hll_union_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_agg`
+    :meth:`pyspark.sql.functions.hll_sketch_estimate`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,4),(2,5),(2,5),(3,6)], "struct<v1:int,v2:int>")
-    >>> df = df.agg(hll_sketch_agg("v1").alias("sketch1"), hll_sketch_agg("v2").alias("sketch2"))
-    >>> df = df.withColumn("distinct_cnt", hll_sketch_estimate(hll_union("sketch1", "sketch2")))
-    >>> df.drop("sketch1", "sketch2").show()
-    +------------+
-    |distinct_cnt|
-    +------------+
-    |           6|
-    +------------+
+    >>> df = df.agg(
+    ...     sf.hll_sketch_agg("v1").alias("sketch1"),
+    ...     sf.hll_sketch_agg("v2").alias("sketch2")
+    ... )
+    >>> df.select(sf.hll_sketch_estimate(sf.hll_union(df.sketch1, "sketch2"))).show()
+    +-------------------------------------------------------+
+    |hll_sketch_estimate(hll_union(sketch1, sketch2, false))|
+    +-------------------------------------------------------+
+    |                                                      6|
+    +-------------------------------------------------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
@@ -23334,21 +24459,21 @@ def aes_encrypt(
 
     Parameters
     ----------
-    input : :class:`~pyspark.sql.Column` or str
+    input : :class:`~pyspark.sql.Column` or column name
         The binary value to encrypt.
-    key : :class:`~pyspark.sql.Column` or str
+    key : :class:`~pyspark.sql.Column` or column name
         The passphrase to use to encrypt the data.
     mode : :class:`~pyspark.sql.Column` or str, optional
         Specifies which block cipher mode should be used to encrypt messages. Valid modes: ECB,
         GCM, CBC.
-    padding : :class:`~pyspark.sql.Column` or str, optional
+    padding : :class:`~pyspark.sql.Column` or column name, optional
         Specifies how to pad messages whose length is not a multiple of the block size. Valid
         values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
         for CBC.
-    iv : :class:`~pyspark.sql.Column` or str, optional
+    iv : :class:`~pyspark.sql.Column` or column name, optional
         Optional initialization vector. Only supported for CBC and GCM modes. Valid values: None or
         "". 16-byte array for CBC mode. 12-byte array for GCM mode.
-    aad : :class:`~pyspark.sql.Column` or str, optional
+    aad : :class:`~pyspark.sql.Column` or column name, optional
         Optional additional authenticated data. Only supported for GCM mode. This can be any
         free-form input and must be provided for both encryption and decryption.
 
@@ -23356,6 +24481,11 @@ def aes_encrypt(
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains an encrypted value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.aes_decrypt`
+    :meth:`pyspark.sql.functions.try_aes_decrypt`
 
     Examples
     --------
@@ -23369,7 +24499,7 @@ def aes_encrypt(
     ...     ["input", "key", "mode", "padding", "iv", "aad"]
     ... )
     >>> df.select(sf.base64(sf.aes_encrypt(
-    ...     df.input, df.key, df.mode, df.padding, sf.to_binary(df.iv, sf.lit("hex")), df.aad)
+    ...     df.input, df.key, "mode", df.padding, sf.to_binary(df.iv, sf.lit("hex")), df.aad)
     ... )).show(truncate=False)
     +-----------------------------------------------------------------------+
     |base64(aes_encrypt(input, key, mode, padding, to_binary(iv, hex), aad))|
@@ -23386,7 +24516,7 @@ def aes_encrypt(
     ...     ["input", "key", "mode", "padding", "iv", "aad"]
     ... )
     >>> df.select(sf.base64(sf.aes_encrypt(
-    ...     df.input, df.key, df.mode, df.padding, sf.to_binary(df.iv, sf.lit("hex")))
+    ...     df.input, df.key, "mode", df.padding, sf.to_binary(df.iv, sf.lit("hex")))
     ... )).show(truncate=False)
     +--------------------------------------------------------------------+
     |base64(aes_encrypt(input, key, mode, padding, to_binary(iv, hex), ))|
@@ -23401,7 +24531,7 @@ def aes_encrypt(
     ...     "Spark SQL", "1234567890abcdef", "ECB", "PKCS",)],
     ...     ["input", "key", "mode", "padding"]
     ... )
-    >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, df.mode, df.padding),
+    >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, "mode", df.padding),
     ...     df.key, df.mode, df.padding
     ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------------------------------+
@@ -23417,7 +24547,7 @@ def aes_encrypt(
     ...     "Spark SQL", "0000111122223333", "ECB",)],
     ...     ["input", "key", "mode"]
     ... )
-    >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, df.mode),
+    >>> df.select(sf.aes_decrypt(sf.aes_encrypt(df.input, df.key, "mode"),
     ...     df.key, df.mode
     ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------------------------------+
@@ -23468,18 +24598,18 @@ def aes_decrypt(
 
     Parameters
     ----------
-    input : :class:`~pyspark.sql.Column` or str
+    input : :class:`~pyspark.sql.Column` or column name
         The binary value to decrypt.
-    key : :class:`~pyspark.sql.Column` or str
+    key : :class:`~pyspark.sql.Column` or column name
         The passphrase to use to decrypt the data.
-    mode : :class:`~pyspark.sql.Column` or str, optional
+    mode : :class:`~pyspark.sql.Column` or column name, optional
         Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
         GCM, CBC.
-    padding : :class:`~pyspark.sql.Column` or str, optional
+    padding : :class:`~pyspark.sql.Column` or column name, optional
         Specifies how to pad messages whose length is not a multiple of the block size. Valid
         values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
         for CBC.
-    aad : :class:`~pyspark.sql.Column` or str, optional
+    aad : :class:`~pyspark.sql.Column` or column name, optional
         Optional additional authenticated data. Only supported for GCM mode. This can be any
         free-form input and must be provided for both encryption and decryption.
 
@@ -23487,6 +24617,11 @@ def aes_decrypt(
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains a decrypted value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.aes_encrypt`
+    :meth:`pyspark.sql.functions.try_aes_decrypt`
 
     Examples
     --------
@@ -23501,7 +24636,7 @@ def aes_decrypt(
     ...     ["input", "key", "mode", "padding", "aad"]
     ... )
     >>> df.select(sf.aes_decrypt(
-    ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
+    ...     sf.unbase64(df.input), df.key, "mode", df.padding, df.aad
     ... ).cast("STRING")).show(truncate=False)
     +---------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
@@ -23518,7 +24653,7 @@ def aes_decrypt(
     ...     ["input", "key", "mode", "padding"]
     ... )
     >>> df.select(sf.aes_decrypt(
-    ...     sf.unbase64(df.input), df.key, df.mode, df.padding
+    ...     sf.unbase64(df.input), df.key, "mode", df.padding
     ... ).cast("STRING")).show(truncate=False)
     +------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, padding, ) AS STRING)|
@@ -23535,7 +24670,7 @@ def aes_decrypt(
     ...     ["input", "key", "mode", "padding"]
     ... )
     >>> df.select(sf.aes_decrypt(
-    ...     sf.unbase64(df.input), df.key, df.mode
+    ...     sf.unbase64(df.input), df.key, "mode"
     ... ).cast("STRING")).show(truncate=False)
     +------------------------------------------------------------------+
     |CAST(aes_decrypt(unbase64(input), key, mode, DEFAULT, ) AS STRING)|
@@ -23587,18 +24722,18 @@ def try_aes_decrypt(
 
     Parameters
     ----------
-    input : :class:`~pyspark.sql.Column` or str
+    input : :class:`~pyspark.sql.Column` or column name
         The binary value to decrypt.
-    key : :class:`~pyspark.sql.Column` or str
+    key : :class:`~pyspark.sql.Column` or column name
         The passphrase to use to decrypt the data.
-    mode : :class:`~pyspark.sql.Column` or str, optional
+    mode : :class:`~pyspark.sql.Column` or column name, optional
         Specifies which block cipher mode should be used to decrypt messages. Valid modes: ECB,
         GCM, CBC.
-    padding : :class:`~pyspark.sql.Column` or str, optional
+    padding : :class:`~pyspark.sql.Column` or column name, optional
         Specifies how to pad messages whose length is not a multiple of the block size. Valid
         values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS
         for CBC.
-    aad : :class:`~pyspark.sql.Column` or str, optional
+    aad : :class:`~pyspark.sql.Column` or column name, optional
         Optional additional authenticated data. Only supported for GCM mode. This can be any
         free-form input and must be provided for both encryption and decryption.
 
@@ -23606,6 +24741,11 @@ def try_aes_decrypt(
     -------
     :class:`~pyspark.sql.Column`
         A new column that contains a decrypted value or a NULL value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.aes_encrypt`
+    :meth:`pyspark.sql.functions.aes_decrypt`
 
     Examples
     --------
@@ -23620,7 +24760,7 @@ def try_aes_decrypt(
     ...     ["input", "key", "mode", "padding", "aad"]
     ... )
     >>> df.select(sf.try_aes_decrypt(
-    ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
+    ...     sf.unbase64(df.input), df.key, "mode", df.padding, df.aad
     ... ).cast("STRING")).show(truncate=False)
     +-------------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
@@ -23638,7 +24778,7 @@ def try_aes_decrypt(
     ...     ["input", "key", "mode", "padding", "aad"]
     ... )
     >>> df.select(sf.try_aes_decrypt(
-    ...     sf.unbase64(df.input), df.key, df.mode, df.padding, df.aad
+    ...     sf.unbase64(df.input), df.key, "mode", df.padding, df.aad
     ... ).cast("STRING")).show(truncate=False)
     +-------------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, aad) AS STRING)|
@@ -23655,7 +24795,7 @@ def try_aes_decrypt(
     ...     ["input", "key", "mode", "padding"]
     ... )
     >>> df.select(sf.try_aes_decrypt(
-    ...     sf.unbase64(df.input), df.key, df.mode, df.padding
+    ...     sf.unbase64(df.input), df.key, "mode", df.padding
     ... ).cast("STRING")).show(truncate=False)
     +----------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, padding, ) AS STRING)|
@@ -23672,7 +24812,7 @@ def try_aes_decrypt(
     ...     ["input", "key", "mode", "padding"]
     ... )
     >>> df.select(sf.try_aes_decrypt(
-    ...     sf.unbase64(df.input), df.key, df.mode
+    ...     sf.unbase64(df.input), df.key, "mode"
     ... ).cast("STRING")).show(truncate=False)
     +----------------------------------------------------------------------+
     |CAST(try_aes_decrypt(unbase64(input), key, mode, DEFAULT, ) AS STRING)|
@@ -23712,7 +24852,12 @@ def sha(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sha1`
+    :meth:`pyspark.sql.functions.sha2`
 
     Examples
     --------
@@ -23734,11 +24879,28 @@ def input_file_block_length() -> Column:
 
     .. versionadded:: 3.5.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.input_file_name`
+    :meth:`pyspark.sql.functions.input_file_block_start`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.read.text("python/test_support/sql/ages_newlines.csv", lineSep=",")
-    >>> df.select(input_file_block_length().alias('r')).first()
-    Row(r=87)
+    >>> df.select(sf.input_file_block_length()).show()
+    +-------------------------+
+    |input_file_block_length()|
+    +-------------------------+
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    |                       87|
+    +-------------------------+
     """
     return _invoke_function_over_columns("input_file_block_length")
 
@@ -23750,11 +24912,28 @@ def input_file_block_start() -> Column:
 
     .. versionadded:: 3.5.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.input_file_name`
+    :meth:`pyspark.sql.functions.input_file_block_length`
+
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.read.text("python/test_support/sql/ages_newlines.csv", lineSep=",")
-    >>> df.select(input_file_block_start().alias('r')).first()
-    Row(r=0)
+    >>> df.select(sf.input_file_block_start()).show()
+    +------------------------+
+    |input_file_block_start()|
+    +------------------------+
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    |                       0|
+    +------------------------+
     """
     return _invoke_function_over_columns("input_file_block_start")
 
@@ -23768,18 +24947,28 @@ def reflect(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
-        the first element should be a literal string for the class name,
-        and the second element should be a literal string for the method name,
-        and the remaining are input arguments to the Java method.
+    cols : :class:`~pyspark.sql.Column` or column name
+        the first element should be a Column representing literal string for the class name,
+        and the second element should be a Column representing literal string for the method name,
+        and the remaining are input arguments (Columns or column names) to the Java method.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.java_method`
+    :meth:`pyspark.sql.functions.try_reflect`
 
     Examples
     --------
-    >>> df = spark.createDataFrame([("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2",)], ["a"])
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('a5cf6c42-0c85-418f-af6c-3e4e5b1328f2',)], ['a'])
     >>> df.select(
-    ...     reflect(lit("java.util.UUID"), lit("fromString"), df.a).alias('r')
-    ... ).collect()
-    [Row(r='a5cf6c42-0c85-418f-af6c-3e4e5b1328f2')]
+    ...     sf.reflect(sf.lit('java.util.UUID'), sf.lit('fromString'), 'a')
+    ... ).show(truncate=False)
+    +--------------------------------------+
+    |reflect(java.util.UUID, fromString, a)|
+    +--------------------------------------+
+    |a5cf6c42-0c85-418f-af6c-3e4e5b1328f2  |
+    +--------------------------------------+
     """
     return _invoke_function_over_seq_of_columns("reflect", cols)
 
@@ -23793,13 +24982,20 @@ def java_method(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
-        the first element should be a literal string for the class name,
-        and the second element should be a literal string for the method name,
-        and the remaining are input arguments to the Java method.
+    cols : :class:`~pyspark.sql.Column` or column name
+        the first element should be a Column representing literal string for the class name,
+        and the second element should be a Column representing literal string for the method name,
+        and the remaining are input arguments (Columns or column names) to the Java method.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.reflect`
+    :meth:`pyspark.sql.functions.try_reflect`
 
     Examples
     --------
+    Example 1: Reflecting a method call with a column argument
+
     >>> import pyspark.sql.functions as sf
     >>> spark.range(1).select(
     ...     sf.java_method(
@@ -23813,6 +25009,19 @@ def java_method(*cols: "ColumnOrName") -> Column:
     +-----------------------------------------------------------------------------+
     |a5cf6c42-0c85-418f-af6c-3e4e5b1328f2                                         |
     +-----------------------------------------------------------------------------+
+
+    Example 2: Reflecting a method call with a column name argument
+
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.createDataFrame([('a5cf6c42-0c85-418f-af6c-3e4e5b1328f2',)], ['a'])
+    >>> df.select(
+    ...     sf.java_method(sf.lit('java.util.UUID'), sf.lit('fromString'), 'a')
+    ... ).show(truncate=False)
+    +------------------------------------------+
+    |java_method(java.util.UUID, fromString, a)|
+    +------------------------------------------+
+    |a5cf6c42-0c85-418f-af6c-3e4e5b1328f2      |
+    +------------------------------------------+
     """
     return _invoke_function_over_seq_of_columns("java_method", cols)
 
@@ -23828,10 +25037,15 @@ def try_reflect(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
-        the first element should be a literal string for the class name,
-        and the second element should be a literal string for the method name,
-        and the remaining are input arguments to the Java method.
+    cols : :class:`~pyspark.sql.Column` or column name
+        the first element should be a Column representing literal string for the class name,
+        and the second element should be a Column representing literal string for the method name,
+        and the remaining are input arguments (Columns or column names) to the Java method.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.reflect`
+    :meth:`pyspark.sql.functions.java_method`
 
     Examples
     --------
@@ -23840,25 +25054,24 @@ def try_reflect(*cols: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("a5cf6c42-0c85-418f-af6c-3e4e5b1328f2",)], ["a"])
     >>> df.select(
-    ...     sf.try_reflect(sf.lit("java.util.UUID"), sf.lit("fromString"), df.a)
-    ... ).show()
+    ...     sf.try_reflect(sf.lit("java.util.UUID"), sf.lit("fromString"), "a")
+    ... ).show(truncate=False)
     +------------------------------------------+
     |try_reflect(java.util.UUID, fromString, a)|
     +------------------------------------------+
-    |                      a5cf6c42-0c85-418...|
+    |a5cf6c42-0c85-418f-af6c-3e4e5b1328f2      |
     +------------------------------------------+
 
     Example 2: Exception in the reflection call, resulting in null
 
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.range(1)
-    >>> df.select(
+    >>> spark.range(1).select(
     ...     sf.try_reflect(sf.lit("scala.Predef"), sf.lit("require"), sf.lit(False))
-    ... ).show()
+    ... ).show(truncate=False)
     +-----------------------------------------+
     |try_reflect(scala.Predef, require, false)|
     +-----------------------------------------+
-    |                                     NULL|
+    |NULL                                     |
     +-----------------------------------------+
     """
     return _invoke_function_over_seq_of_columns("try_reflect", cols)
@@ -23874,12 +25087,12 @@ def version() -> Column:
 
     Examples
     --------
-    >>> df = spark.range(1)
-    >>> df.select(version()).show(truncate=False) # doctest: +SKIP
+    >>> from pyspark.sql import functions as sf
+    >>> spark.range(1).select(sf.version()).show(truncate=False) # doctest: +SKIP
     +----------------------------------------------+
     |version()                                     |
     +----------------------------------------------+
-    |3.5.0 cafbea5b13623276517a9d716f75745eff91f616|
+    |4.0.0 4f8d1f575e99aeef8990c63a9614af0fc5479330|
     +----------------------------------------------+
     """
     return _invoke_function_over_columns("version")
@@ -23894,13 +25107,18 @@ def typeof(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1,)], ["a"])
-    >>> df.select(typeof(df.a).alias('r')).collect()
-    [Row(r='bigint')]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(True, 1, 1.0, 'xyz',)], ['a', 'b', 'c', 'd'])
+    >>> df.select(sf.typeof(df.a), sf.typeof(df.b), sf.typeof('c'), sf.typeof('d')).show()
+    +---------+---------+---------+---------+
+    |typeof(a)|typeof(b)|typeof(c)|typeof(d)|
+    +---------+---------+---------+---------+
+    |  boolean|   bigint|   double|   string|
+    +---------+---------+---------+---------+
     """
     return _invoke_function_over_columns("typeof", col)
 
@@ -23915,20 +25133,48 @@ def stack(*cols: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    cols : :class:`~pyspark.sql.Column` or str
+    cols : :class:`~pyspark.sql.Column` or column name
         the first element should be a literal int for the number of rows to be separated,
         and the remaining are input elements to be separated.
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(1, 2, 3)], ["a", "b", "c"])
-    >>> df.select(stack(lit(2), df.a, df.b, df.c)).show(truncate=False)
-    +----+----+
-    |col0|col1|
-    +----+----+
-    |1   |2   |
-    |3   |NULL|
-    +----+----+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(1, 2, 3)], ['a', 'b', 'c'])
+    >>> df.select('*', sf.stack(sf.lit(2), df.a, df.b, 'c')).show()
+    +---+---+---+----+----+
+    |  a|  b|  c|col0|col1|
+    +---+---+---+----+----+
+    |  1|  2|  3|   1|   2|
+    |  1|  2|  3|   3|NULL|
+    +---+---+---+----+----+
+
+    >>> df.select('*', sf.stack(sf.lit(2), df.a, df.b, 'c').alias('x', 'y')).show()
+    +---+---+---+---+----+
+    |  a|  b|  c|  x|   y|
+    +---+---+---+---+----+
+    |  1|  2|  3|  1|   2|
+    |  1|  2|  3|  3|NULL|
+    +---+---+---+---+----+
+
+    >>> df.select('*', sf.stack(sf.lit(3), df.a, df.b, 'c')).show()
+    +---+---+---+----+
+    |  a|  b|  c|col0|
+    +---+---+---+----+
+    |  1|  2|  3|   1|
+    |  1|  2|  3|   2|
+    |  1|  2|  3|   3|
+    +---+---+---+----+
+
+    >>> df.select('*', sf.stack(sf.lit(4), df.a, df.b, 'c')).show()
+    +---+---+---+----+
+    |  a|  b|  c|col0|
+    +---+---+---+----+
+    |  1|  2|  3|   1|
+    |  1|  2|  3|   2|
+    |  1|  2|  3|   3|
+    |  1|  2|  3|NULL|
+    +---+---+---+----+
     """
     return _invoke_function_over_seq_of_columns("stack", cols)
 
@@ -23942,14 +25188,26 @@ def bitmap_bit_position(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The input column.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(123,)], ["a"])
-    >>> df.select(bitmap_bit_position(df.a).alias("r")).collect()
-    [Row(r=122)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(123,)], ['a'])
+    >>> df.select('*', sf.bitmap_bit_position('a')).show()
+    +---+----------------------+
+    |  a|bitmap_bit_position(a)|
+    +---+----------------------+
+    |123|                   122|
+    +---+----------------------+
     """
     return _invoke_function_over_columns("bitmap_bit_position", col)
 
@@ -23963,14 +25221,26 @@ def bitmap_bucket_number(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The input column.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
 
     Examples
     --------
-    >>> df = spark.createDataFrame([(123,)], ["a"])
-    >>> df.select(bitmap_bucket_number(df.a).alias("r")).collect()
-    [Row(r=1)]
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(123,)], ['a'])
+    >>> df.select('*', sf.bitmap_bucket_number('a')).show()
+    +---+-----------------------+
+    |  a|bitmap_bucket_number(a)|
+    +---+-----------------------+
+    |123|                      1|
+    +---+-----------------------+
     """
     return _invoke_function_over_columns("bitmap_bucket_number", col)
 
@@ -23985,16 +25255,28 @@ def bitmap_construct_agg(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The input column will most likely be bitmap_bit_position().
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_count`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(1,),(2,),(3,)], ["a"])
-    >>> df.select(substring(hex(
-    ...     bitmap_construct_agg(bitmap_bit_position(df.a))
-    ... ), 0, 6).alias("r")).collect()
-    [Row(r='070000')]
+    >>> df.select(
+    ...     sf.bitmap_construct_agg(sf.bitmap_bit_position('a'))
+    ... ).show()
+    +--------------------------------------------+
+    |bitmap_construct_agg(bitmap_bit_position(a))|
+    +--------------------------------------------+
+    |                        [07 00 00 00 00 0...|
+    +--------------------------------------------+
     """
     return _invoke_function_over_columns("bitmap_construct_agg", col)
 
@@ -24008,14 +25290,26 @@ def bitmap_count(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The input bitmap.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_or_agg`
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("FFFF",)], ["a"])
-    >>> df.select(bitmap_count(to_binary(df.a, lit("hex"))).alias('r')).collect()
-    [Row(r=16)]
+    >>> df.select(sf.bitmap_count(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +-------------------------------+
+    |bitmap_count(to_binary(a, hex))|
+    +-------------------------------+
+    |                             16|
+    +-------------------------------+
     """
     return _invoke_function_over_columns("bitmap_count", col)
 
@@ -24028,18 +25322,28 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
 
     .. versionadded:: 3.5.0
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.bitmap_bit_position`
+    :meth:`pyspark.sql.functions.bitmap_bucket_number`
+    :meth:`pyspark.sql.functions.bitmap_construct_agg`
+    :meth:`pyspark.sql.functions.bitmap_count`
+
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         The input column should be bitmaps created from bitmap_construct_agg().
 
     Examples
     --------
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("10",),("20",),("40",)], ["a"])
-    >>> df.select(substring(hex(
-    ...     bitmap_or_agg(to_binary(df.a, lit("hex")))
-    ... ), 0, 6).alias("r")).collect()
-    [Row(r='700000')]
+    >>> df.select(sf.bitmap_or_agg(sf.to_binary(df.a, sf.lit("hex")))).show()
+    +--------------------------------+
+    |bitmap_or_agg(to_binary(a, hex))|
+    +--------------------------------+
+    |            [70 00 00 00 00 0...|
+    +--------------------------------+
     """
     return _invoke_function_over_columns("bitmap_or_agg", col)
 

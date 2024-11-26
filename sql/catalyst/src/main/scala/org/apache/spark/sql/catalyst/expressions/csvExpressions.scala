@@ -19,17 +19,16 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.io.CharArrayWriter
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.csv._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.expressions.csv.SchemaOfCsvEvaluator
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.csv.{CsvToStructsEvaluator, SchemaOfCsvEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils._
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
@@ -58,15 +57,17 @@ case class CsvToStructs(
     timeZoneId: Option[String] = None,
     requiredSchema: Option[StructType] = None)
   extends UnaryExpression
-    with TimeZoneAwareExpression
-    with CodegenFallback
-    with ExpectsInputTypes {
-  override def nullIntolerant: Boolean = true
+  with RuntimeReplaceable
+  with ExpectsInputTypes
+  with TimeZoneAwareExpression {
+
   override def nullable: Boolean = child.nullable
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(RUNTIME_REPLACEABLE)
 
   // The CSV input data might be missing certain fields. We force the nullability
   // of the user-provided schema to avoid data corruptions.
-  val nullableSchema: StructType = schema.asNullable
+  private val nullableSchema: StructType = schema.asNullable
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -85,55 +86,7 @@ case class CsvToStructs(
       child = child,
       timeZoneId = None)
 
-  // This converts parsed rows to the desired output by the given schema.
-  @transient
-  lazy val converter = (rows: Iterator[InternalRow]) => {
-    if (rows.hasNext) {
-      val result = rows.next()
-      // CSV's parser produces one record only.
-      assert(!rows.hasNext)
-      result
-    } else {
-      throw SparkException.internalError("Expected one row from CSV parser.")
-    }
-  }
-
-  val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
-
-  @transient lazy val parser = {
-    // 'lineSep' is a plan-wise option so we set a noncharacter, according to
-    // the unicode specification, which should not appear in Java's strings.
-    // See also SPARK-38955 and https://www.unicode.org/charts/PDF/UFFF0.pdf.
-    // scalastyle:off nonascii
-    val exprOptions = options ++ Map("lineSep" -> '\uFFFF'.toString)
-    // scalastyle:on nonascii
-    val parsedOptions = new CSVOptions(
-      exprOptions,
-      columnPruning = true,
-      defaultTimeZoneId = timeZoneId.get,
-      defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
-    val mode = parsedOptions.parseMode
-    if (mode != PermissiveMode && mode != FailFastMode) {
-      throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)
-    }
-    ExprUtils.verifyColumnNameOfCorruptRecord(
-      nullableSchema,
-      parsedOptions.columnNameOfCorruptRecord)
-
-    val actualSchema =
-      StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    val actualRequiredSchema =
-      StructType(requiredSchema.map(_.asNullable).getOrElse(nullableSchema)
-        .filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    val rawParser = new UnivocityParser(actualSchema,
-      actualRequiredSchema,
-      parsedOptions)
-    new FailureSafeParser[String](
-      input => rawParser.parse(input),
-      mode,
-      nullableSchema,
-      parsedOptions.columnNameOfCorruptRecord)
-  }
+  private val nameOfCorruptRecord = SQLConf.get.getConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD)
 
   override def dataType: DataType = requiredSchema.getOrElse(schema).asNullable
 
@@ -141,14 +94,20 @@ case class CsvToStructs(
     copy(timeZoneId = Option(timeZoneId))
   }
 
-  override def nullSafeEval(input: Any): Any = {
-    val csv = input.asInstanceOf[UTF8String].toString
-    converter(parser.parse(csv))
-  }
-
   override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
 
   override def prettyName: String = "from_csv"
+
+  @transient
+  private lazy val evaluator: CsvToStructsEvaluator = CsvToStructsEvaluator(
+    options, nullableSchema, nameOfCorruptRecord, timeZoneId, requiredSchema)
+
+  override def replacement: Expression = Invoke(
+    Literal.create(evaluator, ObjectType(classOf[CsvToStructsEvaluator])),
+    "evaluate",
+    dataType,
+    Seq(child),
+    Seq(child.dataType))
 
   override protected def withNewChildInternal(newChild: Expression): CsvToStructs =
     copy(child = newChild)

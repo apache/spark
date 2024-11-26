@@ -553,9 +553,11 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="a-expired", timestamp="0"),
                 }
             else:
-                # watermark has not progressed, so timer registered in batch 1(watermark = 10)
-                # has not yet expired
-                assert set(batch_df.sort("id").collect()) == {Row(id="a", timestamp="15")}
+                # verify that rows and expired timer produce the expected result
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="15"),
+                    Row(id="a-expired", timestamp="10000"),
+                }
 
         self._test_transform_with_state_in_pandas_event_time(
             EventTimeStatefulProcessor(), check_results

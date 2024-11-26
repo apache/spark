@@ -210,15 +210,38 @@ class SparkSession private[sql] (
     throw ConnectClientUnsupportedErrors.executeCommand()
 
   /** @inheritdoc */
-  @Experimental
-  def sql(sqlText: String, args: Array[_]): DataFrame = newDataFrame { builder =>
+  def sql(sqlText: String, args: Array[_]): DataFrame = {
+    val sqlCommand = proto.SqlCommand
+      .newBuilder()
+      .setSql(sqlText)
+      .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)
+      .build()
+    sql(sqlCommand)
+  }
+
+  /** @inheritdoc */
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
+    sql(sqlText, args.asJava)
+  }
+
+  /** @inheritdoc */
+  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
+    val sqlCommand = proto.SqlCommand
+      .newBuilder()
+      .setSql(sqlText)
+      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)
+      .build()
+    sql(sqlCommand)
+  }
+
+  /** @inheritdoc */
+  override def sql(query: String): DataFrame = {
+    sql(query, Array.empty)
+  }
+
+  private def sql(sqlCommand: proto.SqlCommand): DataFrame = newDataFrame { builder =>
     // Send the SQL once to the server and then check the output.
-    val cmd = newCommand(b =>
-      b.setSqlCommand(
-        proto.SqlCommand
-          .newBuilder()
-          .setSql(sqlText)
-          .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
+    val cmd = newCommand(b => b.setSqlCommand(sqlCommand))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     val responseIter = client.execute(plan.build())
 
@@ -232,43 +255,6 @@ class SparkSession private[sql] (
       // consume the rest of the iterator
       responseIter.foreach(_ => ())
     }
-  }
-
-  /** @inheritdoc */
-  @Experimental
-  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
-    sql(sqlText, args.asJava)
-  }
-
-  /** @inheritdoc */
-  @Experimental
-  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = newDataFrame {
-    builder =>
-      // Send the SQL once to the server and then check the output.
-      val cmd = newCommand(b =>
-        b.setSqlCommand(
-          proto.SqlCommand
-            .newBuilder()
-            .setSql(sqlText)
-            .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)))
-      val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseIter = client.execute(plan.build())
-
-      try {
-        val response = responseIter
-          .find(_.hasSqlCommandResult)
-          .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-        // Update the builder with the values from the result.
-        builder.mergeFrom(response.getSqlCommandResult.getRelation)
-      } finally {
-        // consume the rest of the iterator
-        responseIter.foreach(_ => ())
-      }
-  }
-
-  /** @inheritdoc */
-  override def sql(query: String): DataFrame = {
-    sql(query, Array.empty)
   }
 
   /** @inheritdoc */

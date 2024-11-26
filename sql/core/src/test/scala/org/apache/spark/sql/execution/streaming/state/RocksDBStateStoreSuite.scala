@@ -43,6 +43,7 @@ import org.apache.spark.util.Utils
 @ExtendedSQLTest
 class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvider]
   with AlsoTestWithRocksDBFeatures
+  with AlsoTestWithEncodingTypes
   with SharedSparkSession
   with BeforeAndAfter {
 
