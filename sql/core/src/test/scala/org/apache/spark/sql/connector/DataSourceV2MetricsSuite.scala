@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.util
 
-import org.apache.spark.sql.QueryTest.withPhysicalPlansCaptured
+import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.expressions.Transform
@@ -98,7 +98,7 @@ class DataSourceV2MetricsSuite extends DatasourceV2SQLBase {
   private val existingTable = "existing_table"
 
   private def captureStagedTableWrite(thunk: => Unit): SparkPlan = {
-    val physicalPlans = withPhysicalPlansCaptured(spark, thunk)
+    val physicalPlans = withQueryExecutionsCaptured(spark)(thunk).map(_.executedPlan)
     val stagedTableWrites = physicalPlans.filter {
       case _: AtomicCreateTableAsSelectExec | _: CreateTableAsSelectExec |
            _: AtomicReplaceTableAsSelectExec | _: ReplaceTableAsSelectExec |
