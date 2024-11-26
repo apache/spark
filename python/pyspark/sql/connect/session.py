@@ -113,13 +113,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.shell.progress import ProgressHandler
     from pyspark.sql.connect.datasource import DataSourceRegistration
 
-try:
-    import memory_profiler  # noqa: F401
-
-    has_memory_profiler = True
-except Exception:
-    has_memory_profiler = False
-
 
 class SparkSession:
     # The active SparkSession for the current thread
