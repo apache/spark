@@ -44,9 +44,7 @@ class SqlScriptingExecution(
   override def hasNext: Boolean = current.isDefined
 
   override def next(): DataFrame = {
-    if (!hasNext) {throw SparkException.internalError(
-      "No more elements to iterate through.")
-    }
+    if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
     val nextDataFrame = current.get
     current = getNextResult
     nextDataFrame

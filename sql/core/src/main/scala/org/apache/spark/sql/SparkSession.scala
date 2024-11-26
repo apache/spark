@@ -415,6 +415,7 @@ class SparkSession private(
 
   /**
    * Executes given script and return the result of the last statement.
+   * If script contains no queries, an empty `DataFrame` is returned.
    *
    * @param script A SQL script to execute.
    * @param args A map of parameter names to SQL literal expressions.
