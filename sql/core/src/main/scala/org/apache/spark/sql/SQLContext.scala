@@ -26,11 +26,11 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.api.Dataset
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ShowTables
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}

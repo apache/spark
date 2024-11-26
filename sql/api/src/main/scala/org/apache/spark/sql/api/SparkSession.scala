@@ -31,7 +31,6 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row, RuntimeConfig, SparkSessionExtensions}
-import org.apache.spark.sql.api.SQLContext
 import org.apache.spark.sql.internal.{SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
