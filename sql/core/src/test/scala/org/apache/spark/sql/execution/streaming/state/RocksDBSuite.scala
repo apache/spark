@@ -297,37 +297,16 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       withDB(remoteDir, useColumnFamilies = colFamiliesEnabled,
           enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
           versionToUniqueId = versionToUniqueId) { db =>
-        db.load(1)
         ex = intercept[SparkException] {
           db.load(1)
         }
-        if (enableStateStoreCheckpointIds && db.conf.enableChangelogCheckpointing) {
-          checkError(
-            ex,
-            condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
-            parameters = Map(
-              "fileToRead" -> s"$remoteDir/1.changelog"
-            )
+        checkError(
+          ex,
+          condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
+          parameters = Map(
+            "fileToRead" -> s"$remoteDir/1.changelog"
           )
-        } else if (enableStateStoreCheckpointIds && !db.conf.enableChangelogCheckpointing) {
-          checkError(
-            ex,
-            condition = "CANNOT_LOAD_STATE_STORE." +
-              "CANNOT_GET_LATEST_SNAPSHOT_VERSION_AND_UNIQUE_ID_FROM_LINEAGE",
-            parameters = Map(
-              "lineage" -> s"1:${versionToUniqueId.getOrElse(1, "")}",
-              "snapshotVersionAndUniqueIds" -> s"0:"
-            )
-          )
-        } else {
-          checkError(
-            ex,
-            condition = "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE",
-            parameters = Map(
-              "fileToRead" -> s"$remoteDir/1.changelog"
-            )
-          )
-        }
+        )
       }
   }
 
@@ -1187,8 +1166,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
-  testWithColumnFamilies("RocksDBFileManager: delete orphan files",
-    TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+  testWithStateStoreCheckpointIdsAndColumnFamilies("RocksDBFileManager: delete orphan files",
+    TestWithBothChangelogCheckpointingEnabledAndDisabled) {
+    case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       // Use 2 file managers here to emulate concurrent execution
@@ -1216,7 +1196,6 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         case false => None
         case true => Some(UUID.randomUUID().toString)
       }
-      val rocksDBFileMapping = new RocksDBFileMapping()
       saveCheckpointFiles(fileManager, cpFiles1, version = 1,
         numKeys = 101, rocksDBFileMapping, uuid)
       assert(fileManager.getLatestVersion() === 1)

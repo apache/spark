@@ -188,6 +188,9 @@ class RocksDBFileManager(
     val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
     val changelogVersion = getChangelogWriterVersion(
       useColumnFamilies, enableStateStoreCheckpointIds)
+
+    println(s"wei== writer version: $version, changelogVersion: $changelogVersion")
+
     val changelogWriter = changelogVersion match {
       case 1 =>
         new StateStoreChangelogWriterV1(fm, changelogFile, codec)

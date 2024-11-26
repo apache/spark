@@ -38,7 +38,7 @@ import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.rocksdb.CompressionType._
 import org.rocksdb.TickerType._
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MDC}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -329,38 +329,28 @@ class RocksDB(
     var changelogReader: StateStoreChangelogReader = null
     var currLineage: Array[LineageItem] = Array.empty
     try {
-      changelogReader = fileManager.getChangelogReader(
-        version, useColumnFamilies, stateStoreCkptId)
+      changelogReader = fileManager.getChangelogReader(version, stateStoreCkptId)
       // currLineage contains the version -> uniqueId mapping from the previous snapshot file
       // to current version's changelog file
 //      versionToUniqueIdLineage = changelogReader.lineage.map {
 //        case LineageItem(version, uniqueId) => (version, Option(uniqueId))
 //      }
-      lineageManager.resetLineage(changelogReader.lineage)
+      currLineage = changelogReader.lineage
+//      lineageManager.resetLineage(changelogReader.lineage)
       logInfo(log"Loading versionToUniqueIdLineage: ${MDC(LogKeys.LINEAGE,
         lineageManager)} from changelog version: ${MDC(
         LogKeys.VERSION_NUM, version)} uniqueId: ${MDC(LogKeys.UUID,
         stateStoreCkptId.getOrElse(""))}. " +
         log"This would be an noop if changelog is not enabled, or the query was previously" +
         log"ran under checkpoint format v1")
-      currLineage = lineageManager.getLineage()
-    } catch {
-      // This can happen when you first load with changelog enabled and then disable it,
-      // or the state store was previously ran under format version 1, or when you first
-      // load from version 0 with v2 (because the checkpointIds are created in rocksDB file,
-      // the first load() will have stateStoreCkptId as None.
-      case e: SparkException
-        if e.getCondition == "CANNOT_LOAD_STATE_STORE.CANNOT_READ_STREAMING_STATE_FILE" =>
-      // do nothing
-      case e: Throwable =>
-        throw e
+//      currLineage = lineageManager.getLineage()
     } finally {
       if (changelogReader != null) {
         changelogReader.closeIfNeeded()
       }
-      if (currLineage.isEmpty) {
-        currLineage = Array(LineageItem(version, stateStoreCkptId.get))
-      }
+//      if (currLineage.isEmpty) {
+//        currLineage = Array(LineageItem(version, stateStoreCkptId.get))
+//      }
     }
     currLineage
   }
@@ -375,7 +365,8 @@ class RocksDB(
         version: Long,
         stateStoreCkptId: Option[String],
         readOnly: Boolean = false): RocksDB = {
-  var currLineage: Array[LineageItem] = Array.empty
+  // An array contains lineage information from [snapShotVersion, version] (inclusive both end)
+  var currVersionLineage: Array[LineageItem] = lineageManager.getLineage()
   try {
     if (loadedVersion != version || (loadedStateStoreCkptId.isEmpty ||
         stateStoreCkptId.get != loadedStateStoreCkptId.get)) {
@@ -388,34 +379,38 @@ class RocksDB(
       fileManager.listFiles().foreach(println)
 
       val (latestSnapshotVersion, latestSnapshotUniqueId) = {
+        // Special handling when version is 0.
+        // When loading the very first version (0), stateStoreCkptId does not need to be defined
+        // because there won't be 0.changelog / 0.zip file created in RocksDB.
         if (version == 0 && stateStoreCkptId.isEmpty) {
           (0L, None)
-        }
-        else if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
+        } else if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
           println(s"wei== exists snapshot file $version $stateStoreCkptId")
-          currLineage = Array(LineageItem(version, stateStoreCkptId.get))
+          currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
+          lineageManager.resetLineage(currVersionLineage)
           (version, stateStoreCkptId)
         } else {
           val latestSnapshotVersionsAndUniqueIds =
             fileManager.getLatestSnapshotVersionAndUniqueId(version, stateStoreCkptId)
           println("wei== lineage from listing: ")
           println(printLineage(latestSnapshotVersionsAndUniqueIds))
-          currLineage = getLineageFromChangelogFile(version, useColumnFamilies, stateStoreCkptId)
+          currVersionLineage = getLineageFromChangelogFile(version, useColumnFamilies, stateStoreCkptId) :+
+            LineageItem(version, stateStoreCkptId.get)
+          lineageManager.resetLineage(currVersionLineage)
           if (latestSnapshotVersionsAndUniqueIds.length == 0) {
-            println("wei== 0 currLineage: " + printLineageItems(currLineage))
+            println("wei== 0 currLineage: " + printLineageItems(currVersionLineage))
             (0L, None)
           } else if (latestSnapshotVersionsAndUniqueIds.length == 1) {
-            println("wei== 1 currLineage: " + printLineageItems(currLineage))
+            println("wei== 1 currLineage: " + printLineageItems(currVersionLineage))
             getLatestSnapshotVersionAndUniqueIdFromLineage(
-              currLineage, latestSnapshotVersionsAndUniqueIds)
+              currVersionLineage, latestSnapshotVersionsAndUniqueIds)
           } else {
-            currLineage = getLineageFromChangelogFile(version, useColumnFamilies, stateStoreCkptId)
-            println("wei== 2 currLineage: " + printLineageItems(currLineage))
+            println("wei== 2 currLineage: " + printLineageItems(currVersionLineage))
             logInfo(log"Multiple snapshots found for the version. Found: ${MDC(LogKeys.LINEAGE,
               printLineage(latestSnapshotVersionsAndUniqueIds))}. " +
               log"Loading the latest snapshot from lineage.")
             getLatestSnapshotVersionAndUniqueIdFromLineage(
-              currLineage, latestSnapshotVersionsAndUniqueIds)
+              currVersionLineage, latestSnapshotVersionsAndUniqueIds)
           }
         }
       }
@@ -432,7 +427,7 @@ class RocksDB(
       init(version, latestSnapshotVersion, metadata)
 
       if (loadedVersion != version) {
-        replayChangelog(version, Some(currLineage))
+        replayChangelog(version, Some(currVersionLineage))
       }
       // After changelog replay the numKeysOnWritingVersion will be updated to
       // the correct number of keys in the loaded version.
@@ -458,7 +453,6 @@ class RocksDB(
       lastCommittedStateStoreCkptId = None
       loadedStateStoreCkptId = None
       sessionStateStoreCkptId = None
-//      versionToUniqueIdLineage = Array.empty
       lineageManager.clear()
       throw t
   }
@@ -473,10 +467,9 @@ class RocksDB(
     // They don't need to store lineage up to the previous version.
 //    val lineage: Array[LineageItem] = versionToUniqueIdLineage.map(x => LineageItem(x._1, x._2.get)) ++
 //      Array(LineageItem(version + 1, sessionStateStoreCkptId.get))
-    val lineage: Array[LineageItem] = lineageManager.getLineage() :+
-      LineageItem(version + 1, sessionStateStoreCkptId.get)
+    println(s"wei== writer lineage: " + printLineageItems(currVersionLineage))
     changelogWriter = Some(fileManager.getChangeLogWriter(
-      version + 1, useColumnFamilies, sessionStateStoreCkptId, Some(lineage)))
+      version + 1, useColumnFamilies, sessionStateStoreCkptId, Some(currVersionLineage)))
   }
   this
 }
@@ -667,7 +660,7 @@ class RocksDB(
 
       var changelogReader: StateStoreChangelogReader = null
       try {
-        changelogReader = fileManager.getChangelogReader(v)
+        changelogReader = fileManager.getChangelogReader(v, uniqueId)
         changelogReader.foreach { case (recordType, key, value) =>
           recordType match {
             case RecordType.PUT_RECORD =>
@@ -1796,6 +1789,7 @@ case class AcquiredThreadInfo(
 }
 
 private[sql] class RocksDBLineageManager {
+  // lineage from [lastSnapshotVersion, loadedVersion)
   @volatile private var lineage: Array[LineageItem] = Array.empty
 
   override def toString: String = lineage.map {
@@ -1812,6 +1806,10 @@ private[sql] class RocksDBLineageManager {
 
   def getLineage(): Array[LineageItem] = {
     lineage.clone()
+  }
+
+  def contains(item: LineageItem): Boolean = {
+    lineage.contains(item)
   }
 
   def clear(): Unit = {
