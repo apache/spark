@@ -781,15 +781,17 @@ class TransformWithStateInPandasTestsMixin:
             if batch_id == 0:
                 assert batch_df.isEmpty()
             elif batch_id == 1:
-                # watermark is 25 - 5 = 20, no more event for eventTime=10
+                # eviction watermark = 15 - 5 = 10 (max event time from batch 0),
+                # late event watermark = 0 (eviction event time from batch 0)
                 assert set(
                     batch_df.sort("outputTimestamp").select("outputTimestamp", "count").collect()
                 ) == {
                     Row(outputTimestamp=datetime.datetime(1970, 1, 1, 0, 0, 10), count=1),
                 }
             elif batch_id == 2:
-                # row with watermark=5 is dropped so it does not show up in the results
-                # watermark is still 20, so row with eventTime<=20 are finalized and emitted
+                # eviction watermark = 25 - 5 = 20, late event watermark = 10;
+                # row with watermark=5<10 is dropped so it does not show up in the results;
+                # row with eventTime<=20 are finalized and emitted
                 assert set(
                     batch_df.sort("outputTimestamp").select("outputTimestamp", "count").collect()
                 ) == {
