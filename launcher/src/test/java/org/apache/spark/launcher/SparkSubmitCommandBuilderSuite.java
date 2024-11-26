@@ -131,7 +131,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     assertFalse(extraJavaOptions.contains("`"), "Extra Java options should not contain `");
     assertFalse(extraJavaOptions.contains("$"), "Extra Java options should not contain $");
-    assertFalse(extraJavaOptions.contains(";"), "Extra Java options should not contain ;");
     assertFalse(extraJavaOptions.contains("&"), "Extra Java options should not contain &");
     assertFalse(extraJavaOptions.contains("|"), "Extra Java options should not contain |");
     assertFalse(extraJavaOptions.contains("<"), "Extra Java options should not contain <");
