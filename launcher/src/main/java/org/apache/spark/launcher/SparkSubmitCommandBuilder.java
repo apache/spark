@@ -212,8 +212,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
 
     for (Map.Entry<String, String> e : conf.entrySet()) {
+      String key = e.getKey();
+      String value = e.getValue();
+      if ("spark.executor.extraJavaOptions".equals(key)) {
+        value = sanitizeExtraJavaOptions(value);
+      }
       args.add(parser.CONF);
-      args.add(String.format("%s=%s", e.getKey(), sanitizeConfValue(e.getValue())));
+      args.add(String.format("%s=%s", key, value));
     }
 
     if (propertiesFile != null) {
@@ -347,9 +352,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * - OWASP Command Injection Prevention Cheat Sheet
    * (https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html)
    */
-  private String sanitizeConfValue(String value) {
+  private String sanitizeExtraJavaOptions(String value) {
     if (value != null) {
-      String[] unsafeChars = {"`", "$(", ")", "&", "|", "<", ">", "*", "?"};
+      String[] unsafeChars = {"`", "$(", ")", "&", "|", "<", ";", ">", "*", "?"};
       for (String unsafeChar : unsafeChars) {
         value = value.replace(unsafeChar, "");
       }
