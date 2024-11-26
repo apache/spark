@@ -38,6 +38,8 @@ RUN apt-get install -y \
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r
 # See more in SPARK-39959, roxygen2 < 7.2.1
 RUN Rscript -e "devtools::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
+# See more in SPARK-39735
+ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile.python
 # Should unpin 'sphinxcontrib-*' after upgrading sphinx>5

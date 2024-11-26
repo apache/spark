@@ -29,6 +29,8 @@ RUN rm -rf /var/lib/apt/lists/*
 
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile.r
 RUN Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
+# See more in SPARK-39735
+ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
 INCLUDE+ ./dev/spark-test-image/base/Dockerfile.python
 RUN python3.9 -m pip install \
