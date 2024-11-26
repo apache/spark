@@ -439,7 +439,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             return outer
 
         warnings.warn(
-            "Spark Connect session is not provided. Tags will not be inherited.",
+            "Spark session is not provided. Tags will not be inherited.",
             UserWarning,
         )
 
