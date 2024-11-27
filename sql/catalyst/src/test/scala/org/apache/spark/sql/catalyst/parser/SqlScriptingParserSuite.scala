@@ -453,6 +453,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(ifStmt.conditions.head.getText == "1=1")
   }
 
+  test("if with empty body") {
+    val sqlScriptText =
+      """BEGIN
+        | IF 1 = 1 THEN
+        | END IF;
+        |END
+      """.stripMargin
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'IF'", "hint" -> ""))
+  }
+
   test("if else") {
     val sqlScriptText =
       """BEGIN
@@ -635,6 +650,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(whileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
 
     assert(whileStmt.label.contains("lbl"))
+  }
+
+  test("while with empty body") {
+    val sqlScriptText =
+      """BEGIN
+        | WHILE 1 = 1 DO
+        | END WHILE lbl;
+        |END
+      """.stripMargin
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WHILE'", "hint" -> ""))
   }
 
   test("while with complex condition") {
@@ -1081,6 +1111,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(repeatStmt.label.contains("lbl"))
   }
 
+  test("repeat with empty body") {
+    val sqlScriptText =
+      """BEGIN
+        | REPEAT UNTIL 1 = 1
+        | END REPEAT;
+        |END
+      """.stripMargin
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'1'", "hint" -> ""))
+  }
+
   test("repeat with complex condition") {
     val sqlScriptText =
       """
@@ -1209,6 +1254,22 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(caseStmt.conditions.length == 1)
     assert(caseStmt.conditions.head.isInstanceOf[SingleStatement])
     assert(caseStmt.conditions.head.getText == "1 = 1")
+  }
+
+  test("searched case statement with empty body") {
+    val sqlScriptText =
+      """BEGIN
+        | CASE
+        |  WHEN 1 = 1 THEN
+        | END CASE;
+        |END
+      """.stripMargin
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'CASE'", "hint" -> ""))
   }
 
   test("searched case statement - multi when") {
@@ -1349,6 +1410,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     checkSimpleCaseStatementCondition(caseStmt.conditions.head, _ == Literal(1), _ == Literal(1))
   }
 
+  test("simple case statement with empty body") {
+    val sqlScriptText =
+      """BEGIN
+        | CASE 1
+        |  WHEN 1 THEN
+        | END CASE;
+        |END
+      """.stripMargin
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'CASE'", "hint" -> ""))
+  }
 
   test("simple case statement - multi when") {
     val sqlScriptText =
@@ -1494,6 +1570,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(whileStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
 
     assert(whileStmt.label.contains("lbl"))
+  }
+
+  test("loop with empty body") {
+    val sqlScriptText =
+      """BEGIN
+        | LOOP
+        | END LOOP;
+        |END
+      """.stripMargin
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'LOOP'", "hint" -> ""))
   }
 
   test("loop with if else block") {
