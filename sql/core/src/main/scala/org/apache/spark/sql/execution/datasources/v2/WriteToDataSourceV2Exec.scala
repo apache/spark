@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagingTableCatalog, Table, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
@@ -109,6 +109,8 @@ case class AtomicCreateTableAsSelectExec(
     ifNotExists: Boolean) extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
+
+  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -196,6 +198,8 @@ case class AtomicReplaceTableAsSelectExec(
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
+
+  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
 
   override protected def run(): Seq[InternalRow] = {
     val columns = getV2Columns(query.schema, catalog.useNullableQuerySchema)
@@ -612,16 +616,10 @@ case class DeltaWithMetadataWritingSparkTask(
 private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   override def output: Seq[Attribute] = Nil
 
-  def catalog: TableCatalog
-
-  override val metrics: Map[String, SQLMetric] = {
-    catalog match {
-      case stagingCatalog: StagingTableCatalog =>
-        stagingCatalog.supportedCustomMetrics().map {
-          metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
-        }.toMap
-      case _ => Map.empty
-    }
+  protected def commitMetrics(tableCatalog: StagingTableCatalog): Map[String, SQLMetric] = {
+    tableCatalog.supportedCustomMetrics().map {
+      metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
+    }.toMap
   }
 
   protected def getV2Columns(schema: StructType, forceNullable: Boolean): Array[Column] = {
@@ -636,14 +634,22 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       writeOptions: Map[String, String],
       ident: Identifier,
       query: LogicalPlan): Seq[InternalRow] = {
-    val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-    val append = AppendData.byPosition(relation, query, writeOptions)
-    val qe = session.sessionState.executePlan(append)
-    qe.assertCommandExecuted()
+    Utils.tryWithSafeFinallyAndFailureCallbacks({
+      val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+      val append = AppendData.byPosition(relation, query, writeOptions)
+      val qe = session.sessionState.executePlan(append)
+      qe.assertCommandExecuted()
 
-    DataSourceV2Utils.commitOrAbortStagedChanges(sparkContext, table, metrics)
+      DataSourceV2Utils.commitStagedChanges(sparkContext, table, metrics)
 
-    Nil
+      Nil
+    })(catchBlock = {
+      table match {
+        // Failure rolls back the staged writes and metadata changes.
+        case st: StagedTable => st.abortStagedChanges()
+        case _ => catalog.dropTable(ident)
+      }
+    })
   }
 }
 

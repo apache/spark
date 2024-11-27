@@ -39,7 +39,6 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.Utils
 
 private[sql] object DataSourceV2Utils extends Logging {
 
@@ -186,27 +185,23 @@ private[sql] object DataSourceV2Utils extends Logging {
 
   /**
    * If `table` is a StagedTable, commit the staged changes and report the commit metrics.
-   * Abort the changes in case of an error. Do nothing if the table is not a StagedTable.
+   * Do nothing if the table is not a StagedTable.
    */
-  def commitOrAbortStagedChanges(
+  def commitStagedChanges(
       sparkContext: SparkContext, table: Table, metrics: Map[String, SQLMetric]): Unit = {
     table match {
       case stagedTable: StagedTable =>
-        Utils.tryWithSafeFinallyAndFailureCallbacks({
-          stagedTable.commitStagedChanges()
+        stagedTable.commitStagedChanges()
 
-          val driverMetrics = stagedTable.reportDriverMetrics()
-          if (driverMetrics.nonEmpty) {
-            for (taskMetric <- driverMetrics) {
-              metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
-            }
-
-            val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-            SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+        val driverMetrics = stagedTable.reportDriverMetrics()
+        if (driverMetrics.nonEmpty) {
+          for (taskMetric <- driverMetrics) {
+            metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
           }
-        })(catchBlock = {
-          stagedTable.abortStagedChanges()
-        })
+
+          val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+        }
       case _ =>
     }
   }
