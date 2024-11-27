@@ -109,26 +109,7 @@ abstract class DataType extends AbstractDataType {
    * Recursively applies the provided partial function `f` to transform this DataType tree.
    */
   private[spark] def transformRecursively(f: PartialFunction[DataType, DataType]): DataType = {
-    this match {
-      case _ if f.isDefinedAt(this) =>
-        f(this)
-
-      case ArrayType(elementType, containsNull) =>
-        ArrayType(elementType.transformRecursively(f), containsNull)
-
-      case MapType(keyType, valueType, valueContainsNull) =>
-        MapType(
-          keyType.transformRecursively(f),
-          valueType.transformRecursively(f),
-          valueContainsNull)
-
-      case StructType(fields) =>
-        StructType(fields.map { field =>
-          field.copy(dataType = field.dataType.transformRecursively(f))
-        })
-
-      case _ => this
-    }
+    if (f.isDefinedAt(this)) f(this) else this
   }
 
   final override private[sql] def defaultConcreteType: DataType = this

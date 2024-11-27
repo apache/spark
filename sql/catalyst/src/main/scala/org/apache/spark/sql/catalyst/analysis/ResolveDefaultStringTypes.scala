@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 
@@ -36,21 +36,37 @@ import org.apache.spark.sql.types.{DataType, StringType}
 class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
 
-    val newPlan = if (isDDLCommand(plan)) {
-      transformDDL(plan)
-    } else {
-      val newType = stringTypeForDMLCommand
-      transformPlan(plan, newType)
+    val newPlan = plan match {
+      case _ if isDDLCommand(plan) => transformDDL(plan)
+      case _ if isDefaultSessionCollationUsed => plan
+      case _ => transformPlan(plan, stringTypeForDMLCommand)
     }
 
     if (!replaceWithTempType || newPlan.fastEquals(plan)) {
+      newPlan.unsetTagValue(RuleExecutor.FORCE_ANOTHER_BATCH_ITER)
       newPlan
     } else {
       // Due to how tree transformations work and StringType object being equal to
       // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
       // to ensure the correct results for occurrences of default string type.
-      ResolveDefaultStringTypesWithoutTempType.apply(newPlan)
+      val finalPlan = ResolveDefaultStringTypesWithoutTempType.apply(newPlan)
+      finalPlan.setTagValue(RuleExecutor.FORCE_ANOTHER_BATCH_ITER, ())
+      finalPlan
     }
+  }
+
+  /**
+   * Returns whether any of the given `plan` needs to have its
+   * default string type resolved.
+   */
+  def needsResolution(plan: LogicalPlan): Boolean = {
+    if (isDDLCommand(plan)) {
+      return true
+    } else if (!isDefaultSessionCollationUsed) {
+      return false
+    }
+
+    plan.exists(node => needsResolution(node.expressions))
   }
 
   /**

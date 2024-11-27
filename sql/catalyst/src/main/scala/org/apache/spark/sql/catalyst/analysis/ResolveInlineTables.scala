@@ -35,6 +35,6 @@ object ResolveInlineTables extends Rule[LogicalPlan] with EvalHelper {
   }
 
   private def canResolveTable(table: UnresolvedInlineTable): Boolean = {
-    table.expressionsResolved && !ResolveDefaultStringTypes.needsResolution(table.expressions)
+    table.expressionsResolved && !ResolveDefaultStringTypes.needsResolution(table)
   }
 }
