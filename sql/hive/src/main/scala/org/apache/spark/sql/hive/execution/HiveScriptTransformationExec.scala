@@ -299,7 +299,7 @@ object HiveScriptIOSchema extends HiveInspectors {
       val instance = Utils.classForName[RecordReader](klass).getConstructor().
         newInstance()
       val props = new Properties()
-      props.putAll(ioschema.outputSerdeProps.toMap)
+      props.putAll(ioschema.outputSerdeProps.toMap.asJava)
       instance.initialize(inputStream, conf, props)
       instance
     }
