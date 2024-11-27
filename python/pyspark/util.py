@@ -581,7 +581,8 @@ class InheritableThread(threading.Thread):
                 self._props = (
                     SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
                 )
-                self._tags = self._session.getTags()
+                if self._session is not None:
+                    self._tags = self._session.getTags()
 
         return super(InheritableThread, self).start()
 
