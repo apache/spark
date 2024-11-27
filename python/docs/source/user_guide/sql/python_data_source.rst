@@ -520,4 +520,4 @@ The following example demonstrates how to implement a basic Data Source using Ar
 Usage Notes
 -----------
 
-- During data source resolution, built-in and Java data sources take precedence over Python data sources with the same name; to explicitly use a Python data source, make sure its name does not conflict with any other loaded Java data sources.
+- During Data Source resolution, built-in and Scala/Java Data Sources take precedence over Python Data Sources with the same name; to explicitly use a Python Data Source, make sure its name does not conflict with the other Data Sources.
