@@ -99,6 +99,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       extends SingleStatementExec(
         DummyLogicalPlan(),
         Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+        Map.empty,
         isInternal = false) {
     override def buildDataFrame(session: SparkSession): DataFrame = {
       val data = Seq.range(0, numberOfRows).map(Row(_))
