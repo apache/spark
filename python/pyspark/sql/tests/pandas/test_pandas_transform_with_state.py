@@ -568,13 +568,13 @@ class TransformWithStateInPandasTestsMixin:
                 # value state is cleared in batch 0, so timestamp=4 is returned here
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="4"),
-                    Row(id='a-expired', timestamp='10000'),
+                    Row(id="a-expired", timestamp="10000"),
                 }
             elif batch_id == 2:
                 # event time is still 20-10=10, so we will see expired row with timestamp=10s
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="15"),
-                    Row(id='a-expired', timestamp='10000'),
+                    Row(id="a-expired", timestamp="10000"),
                 }
             else:
                 for q in self.spark.streams.active:
