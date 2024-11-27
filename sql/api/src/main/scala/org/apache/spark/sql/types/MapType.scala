@@ -95,7 +95,10 @@ case class MapType(keyType: DataType, valueType: DataType, valueContainsNull: Bo
     if (f.isDefinedAt(this)) {
       f(this)
     } else {
-      MapType(keyType.transformRecursively(f), valueType.transformRecursively(f), valueContainsNull)
+      MapType(
+        keyType.transformRecursively(f),
+        valueType.transformRecursively(f),
+        valueContainsNull)
     }
   }
 }
