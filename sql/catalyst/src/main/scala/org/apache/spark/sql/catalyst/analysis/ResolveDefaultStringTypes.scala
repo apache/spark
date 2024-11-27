@@ -62,7 +62,7 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
   def needsResolution(plan: LogicalPlan): Boolean = {
     if (isDDLCommand(plan)) {
       return true
-    } else if (!isDefaultSessionCollationUsed) {
+    } else if (isDefaultSessionCollationUsed) {
       return false
     }
 
