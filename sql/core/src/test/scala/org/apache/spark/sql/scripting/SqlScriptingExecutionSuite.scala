@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.{SparkConf, SparkException, SparkNumberFormatException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row}
-import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
-import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -32,7 +30,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Output from the interpreter (iterator over executable statements) is then checked - statements
  *   are executed and output DataFrames are compared with expected outputs.
  */
-class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
+class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
 
   // Tests setup
   override protected def sparkConf: SparkConf = {
@@ -42,25 +40,19 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
   // Helpers
   private def runSqlScript(
       sqlText: String,
-      args: Map[String, Expression] = Map.empty): Array[DataFrame] = {
-    val interpreter = SqlScriptingInterpreter(spark)
+      args: Map[String, Expression] = Map.empty): Seq[Array[Row]] = {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
-    val executionPlan = interpreter.buildExecutionPlan(compoundBody, args)
-    executionPlan.flatMap {
-      case statement: SingleStatementExec =>
-        if (statement.isExecuted) {
-          None
-        } else {
-          Some(Dataset.ofRows(spark, statement.parsedPlan, new QueryPlanningTracker))
-        }
-      case _ => None
-    }.toArray
+    val sse = new SqlScriptingExecution(compoundBody, spark, args)
+    sse.map { df => df.collect() }.toList
   }
 
   private def verifySqlScriptResult(sqlText: String, expected: Seq[Seq[Row]]): Unit = {
     val result = runSqlScript(sqlText)
     assert(result.length == expected.length)
-    result.zip(expected).foreach { case (df, expectedAnswer) => checkAnswer(df, expectedAnswer) }
+    result.zip(expected).foreach {
+      case (actualAnswer, expectedAnswer) =>
+        assert(actualAnswer.sameElements(expectedAnswer))
+    }
   }
 
   // Tests
@@ -76,9 +68,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |END
           |""".stripMargin
       val expected = Seq(
-        Seq.empty[Row], // create table
-        Seq.empty[Row], // insert
-        Seq.empty[Row], // select with filter
+        Seq.empty[Row], // select
         Seq(Row(1)) // select
       )
       verifySqlScriptResult(sqlScript, expected)
@@ -100,12 +90,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |FROM t;
           |END
           |""".stripMargin
-      val expected = Seq(
-        Seq.empty[Row], // create table
-        Seq.empty[Row], // insert #1
-        Seq.empty[Row], // insert #2
-        Seq(Row(false)) // select
-      )
+      val expected = Seq(Seq(Row(false)))
       verifySqlScriptResult(sqlScript, expected)
     }
   }
@@ -119,12 +104,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |SELECT var;
         |END
         |""".stripMargin
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row] // drop var
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScript, expected)
   }
 
@@ -137,12 +117,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |SELECT var;
         |END
         |""".stripMargin
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row] // drop var
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScript, expected)
   }
 
@@ -166,45 +141,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare var
       Seq(Row(1)), // select
-      Seq.empty[Row], // drop var
-      Seq.empty[Row], // declare var
       Seq(Row(2)), // select
-      Seq.empty[Row], // drop var
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(4)), // select
-      Seq.empty[Row] // drop var
+      Seq(Row(4)) // select
     )
     verifySqlScriptResult(sqlScript, expected)
-  }
-
-  test("session vars - var out of scope") {
-    val varName: String = "testVarName"
-    val e = intercept[AnalysisException] {
-      val sqlScript =
-        s"""
-          |BEGIN
-          | BEGIN
-          |   DECLARE $varName = 1;
-          |   SELECT $varName;
-          | END;
-          | SELECT $varName;
-          |END
-          |""".stripMargin
-      verifySqlScriptResult(sqlScript, Seq.empty)
-    }
-    checkError(
-      exception = e,
-      condition = "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-      sqlState = "42703",
-      parameters = Map("objectName" -> s"`$varName`"),
-      context = ExpectedContext(
-        fragment = s"$varName",
-        start = 79,
-        stop = 89)
-    )
   }
 
   test("session vars - drop var statement") {
@@ -217,13 +158,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |DROP TEMPORARY VARIABLE var;
         |END
         |""".stripMargin
-    val expected = Seq(
-      Seq.empty[Row], // declare var
-      Seq.empty[Row], // set var
-      Seq(Row(2)), // select
-      Seq.empty[Row], // drop var - explicit
-      Seq.empty[Row] // drop var - implicit
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScript, expected)
   }
 
@@ -269,7 +204,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END IF;
         |END
         |""".stripMargin
-
     val expected = Seq(Seq(Row(42)))
     verifySqlScriptResult(commands, expected)
   }
@@ -289,7 +223,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  END IF;
         |END
         |""".stripMargin
-
     val expected = Seq(Seq(Row(43)))
     verifySqlScriptResult(commands, expected)
   }
@@ -306,7 +239,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END IF;
         |END
         |""".stripMargin
-
     val expected = Seq(Seq(Row(43)))
     verifySqlScriptResult(commands, expected)
   }
@@ -326,7 +258,6 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  END IF;
         |END
         |""".stripMargin
-
     val expected = Seq(Seq(Row(44)))
     verifySqlScriptResult(commands, expected)
   }
@@ -346,8 +277,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           | END IF;
           |END
           |""".stripMargin
-
-      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
   }
@@ -369,8 +299,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  END IF;
           |END
           |""".stripMargin
-
-      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
   }
@@ -460,8 +389,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           | END CASE;
           |END
           |""".stripMargin
-
-      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
   }
@@ -484,8 +412,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  END CASE;
           |END
           |""".stripMargin
-
-      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(43)))
+      val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
     }
   }
@@ -502,77 +429,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END CASE;
         |END
         |""".stripMargin
-    val expected = Seq()
+    val expected = Seq.empty
     verifySqlScriptResult(commands, expected)
-  }
-
-  test("searched case when evaluates to null") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          |  CREATE TABLE t (a BOOLEAN) USING parquet;
-          |  CASE
-          |  WHEN (SELECT * FROM t) THEN
-          |   SELECT 42;
-          |  END CASE;
-          |END
-          |""".stripMargin
-
-      checkError(
-        exception = intercept[SqlScriptingException] (
-          runSqlScript(commands)
-        ),
-        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
-        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
-      )
-    }
-  }
-
-  test("searched case with non boolean condition - constant") {
-    val commands =
-      """
-        |BEGIN
-        |  CASE
-        |  WHEN 1 THEN
-        |   SELECT 42;
-        |  END CASE;
-        |END
-        |""".stripMargin
-
-    checkError(
-      exception = intercept[SqlScriptingException] (
-        runSqlScript(commands)
-      ),
-      condition = "INVALID_BOOLEAN_STATEMENT",
-      parameters = Map("invalidStatement" -> "1")
-    )
-  }
-
-  test("searched case with too many rows in subquery condition") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          | CREATE TABLE t (a BOOLEAN) USING parquet;
-          | INSERT INTO t VALUES (true);
-          | INSERT INTO t VALUES (true);
-          | CASE
-          |   WHEN (SELECT * FROM t) THEN
-          |     SELECT 1;
-          | END CASE;
-          |END
-          |""".stripMargin
-
-      checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands)
-        ),
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-        parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 124, stop = 140)
-      )
-    }
   }
 
   test("simple case") {
@@ -662,8 +520,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           | END CASE;
           |END
           |""".stripMargin
-
-      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(42)))
+      val expected = Seq(Seq(Row(42)))
       verifySqlScriptResult(commands, expected)
     }
   }
@@ -686,8 +543,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  END CASE;
           |END
           |""".stripMargin
-
-      val expected = Seq(Seq.empty[Row], Seq.empty[Row], Seq.empty[Row], Seq(Row(44)))
+      val expected = Seq(Seq(Row(44)))
       verifySqlScriptResult(commands, expected)
     }
   }
@@ -704,40 +560,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END CASE;
         |END
         |""".stripMargin
-    val expected = Seq()
+    val expected = Seq.empty
     verifySqlScriptResult(commands, expected)
-  }
-
-  test("simple case mismatched types") {
-    val commands =
-      """
-        |BEGIN
-        | CASE 1
-        |   WHEN "one" THEN
-        |     SELECT 42;
-        | END CASE;
-        |END
-        |""".stripMargin
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkError(
-        exception = intercept[SparkNumberFormatException](
-          runSqlScript(commands)
-        ),
-        condition = "CAST_INVALID_INPUT",
-        parameters = Map(
-          "expression" -> "'one'",
-          "sourceType" -> "\"STRING\"",
-          "targetType" -> "\"BIGINT\""),
-        context = ExpectedContext(fragment = "\"one\"", start = 23, stop = 27))
-    }
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[SqlScriptingException](
-          runSqlScript(commands)
-        ),
-        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
-        parameters = Map("invalidStatement" -> "\"ONE\""))
-    }
   }
 
   test("simple case compare with null") {
@@ -754,78 +578,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |  END CASE;
           |END
           |""".stripMargin
-
-      val expected = Seq(Seq.empty[Row], Seq(Row(43)))
+      val expected = Seq(Seq(Row(43)))
       verifySqlScriptResult(commands, expected)
-    }
-  }
-
-  test("if's condition must be a boolean statement") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          |  IF 1 THEN
-          |    SELECT 45;
-          |  END IF;
-          |END
-          |""".stripMargin
-      val exception = intercept[SqlScriptingException] {
-        runSqlScript(commands)
-      }
-      checkError(
-        exception = exception,
-        condition = "INVALID_BOOLEAN_STATEMENT",
-        parameters = Map("invalidStatement" -> "1")
-      )
-      assert(exception.origin.line.isDefined)
-      assert(exception.origin.line.get == 3)
-    }
-  }
-
-  test("if's condition must return a single row data") {
-    withTable("t1", "t2") {
-      // empty row
-      val commands1 =
-        """
-          |BEGIN
-          |  CREATE TABLE t1 (a BOOLEAN) USING parquet;
-          |  IF (SELECT * FROM t1) THEN
-          |    SELECT 46;
-          |  END IF;
-          |END
-          |""".stripMargin
-      val exception = intercept[SqlScriptingException] {
-        runSqlScript(commands1)
-      }
-      checkError(
-        exception = exception,
-        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
-        parameters = Map("invalidStatement" -> "(SELECT * FROM T1)")
-      )
-      assert(exception.origin.line.isDefined)
-      assert(exception.origin.line.get == 4)
-
-      // too many rows ( > 1 )
-      val commands2 =
-        """
-          |BEGIN
-          |  CREATE TABLE t2 (a BOOLEAN) USING parquet;
-          |  INSERT INTO t2 VALUES (true);
-          |  INSERT INTO t2 VALUES (true);
-          |  IF (SELECT * FROM t2) THEN
-          |    SELECT 46;
-          |  END IF;
-          |END
-          |""".stripMargin
-      checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands2)
-        ),
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-        parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t2)", start = 121, stop = 138)
-      )
     }
   }
 
@@ -840,16 +594,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END WHILE;
         |END
         |""".stripMargin
-
     val expected = Seq(
-      Seq.empty[Row], // declare i
       Seq(Row(0)), // select i
-      Seq.empty[Row], // set i
       Seq(Row(1)), // select i
-      Seq.empty[Row], // set i
-      Seq(Row(2)), // select i
-      Seq.empty[Row], // set i
-      Seq.empty[Row] // drop var
+      Seq(Row(2)) // select i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -865,11 +613,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END WHILE;
         |END
         |""".stripMargin
-
-    val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq.empty[Row] // drop i
-    )
+    val expected = Seq.empty
     verifySqlScriptResult(commands, expected)
   }
 
@@ -889,24 +633,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END WHILE;
         |END
         |""".stripMargin
-
     val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq.empty[Row], // declare j
-      Seq.empty[Row], // set j to 0
       Seq(Row(0, 0)), // select i, j
-      Seq.empty[Row], // increase j
       Seq(Row(0, 1)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // set j to 0
       Seq(Row(1, 0)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq(Row(1, 1)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // drop j
-      Seq.empty[Row] // drop i
+      Seq(Row(1, 1)) // select i, j
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -923,13 +654,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |END WHILE;
           |END
           |""".stripMargin
-
       val expected = Seq(
-        Seq.empty[Row], // create table
         Seq(Row(42)), // select
-        Seq.empty[Row], // insert
-        Seq(Row(42)), // select
-        Seq.empty[Row] // insert
+        Seq(Row(42)) // select
       )
       verifySqlScriptResult(commands, expected)
     }
@@ -948,16 +675,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         | END REPEAT;
         |END
         |""".stripMargin
-
     val expected = Seq(
-      Seq.empty[Row], // declare i
       Seq(Row(0)), // select i
-      Seq.empty[Row], // set i
       Seq(Row(1)), // select i
-      Seq.empty[Row], // set i
-      Seq(Row(2)), // select i
-      Seq.empty[Row], // set i
-      Seq.empty[Row] // drop var
+      Seq(Row(2)) // select i
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -976,12 +697,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |END
         |""".stripMargin
 
-    val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq(Row(3)), // select i
-      Seq.empty[Row], // set i
-      Seq.empty[Row] // drop i
-    )
+    val expected = Seq(Seq(Row(3)))
     verifySqlScriptResult(commands, expected)
   }
 
@@ -1005,22 +721,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
 
     val expected = Seq(
-      Seq.empty[Row], // declare i
-      Seq.empty[Row], // declare j
-      Seq.empty[Row], // set j to 0
       Seq(Row(0, 0)), // select i, j
-      Seq.empty[Row], // increase j
       Seq(Row(0, 1)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // set j to 0
       Seq(Row(1, 0)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq(Row(1, 1)), // select i, j
-      Seq.empty[Row], // increase j
-      Seq.empty[Row], // increase i
-      Seq.empty[Row], // drop j
-      Seq.empty[Row] // drop i
+      Seq(Row(1, 1)) // select i, j
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1040,87 +744,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin
 
       val expected = Seq(
-        Seq.empty[Row], // create table
         Seq(Row(42)), // select
-        Seq.empty[Row], // insert
-        Seq(Row(42)), // select
-        Seq.empty[Row] // insert
+        Seq(Row(42)) // select
       )
       verifySqlScriptResult(commands, expected)
-    }
-  }
-
-  test("repeat with non boolean condition - constant") {
-    val commands =
-      """
-        |BEGIN
-        | DECLARE i = 0;
-        | REPEAT
-        |   SELECT i;
-        |   SET VAR i = i + 1;
-        | UNTIL
-        |   1
-        | END REPEAT;
-        |END
-        |""".stripMargin
-
-    checkError(
-      exception = intercept[SqlScriptingException] (
-        runSqlScript(commands)
-      ),
-      condition = "INVALID_BOOLEAN_STATEMENT",
-      parameters = Map("invalidStatement" -> "1")
-    )
-  }
-
-  test("repeat with empty subquery condition") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          | CREATE TABLE t (a BOOLEAN) USING parquet;
-          | REPEAT
-          |   SELECT 1;
-          | UNTIL
-          |   (SELECT * FROM t)
-          | END REPEAT;
-          |END
-          |""".stripMargin
-
-      checkError(
-        exception = intercept[SqlScriptingException] (
-          runSqlScript(commands)
-        ),
-        condition = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
-        parameters = Map("invalidStatement" -> "(SELECT * FROM T)")
-      )
-    }
-  }
-
-  test("repeat with too many rows in subquery condition") {
-    withTable("t") {
-      val commands =
-        """
-          |BEGIN
-          | CREATE TABLE t (a BOOLEAN) USING parquet;
-          | INSERT INTO t VALUES (true);
-          | INSERT INTO t VALUES (true);
-          | REPEAT
-          |   SELECT 1;
-          | UNTIL
-          |   (SELECT * FROM t)
-          | END REPEAT;
-          |END
-          |""".stripMargin
-
-      checkError(
-        exception = intercept[SparkException] (
-          runSqlScript(commands)
-        ),
-        condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
-        parameters = Map.empty,
-        context = ExpectedContext(fragment = "(SELECT * FROM t)", start = 141, stop = 157)
-      )
     }
   }
 
@@ -1134,9 +761,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |    SELECT 2;
         |  END;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1149,9 +774,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |    LEAVE lbl;
         |  END WHILE;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1165,27 +788,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  UNTIL 1 = 2
         |  END REPEAT;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select 1
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
-  }
-
-  test("iterate compound block - should fail") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  lbl: BEGIN
-        |    SELECT 1;
-        |    ITERATE lbl;
-        |  END;
-        |END""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        runSqlScript(sqlScriptText)
-      },
-      condition = "INVALID_LABEL_USAGE.ITERATE_IN_COMPOUND",
-      parameters = Map("labelName" -> "LBL"))
   }
 
   test("iterate while loop") {
@@ -1201,14 +805,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  END WHILE;
         |  SELECT x;
         |END""".stripMargin
-    val expected = Seq(
-      Seq.empty[Row], // declare
-      Seq.empty[Row], // set x = 0
-      Seq.empty[Row], // set x = 1
-      Seq.empty[Row], // set x = 2
-      Seq(Row(2)), // select
-      Seq.empty[Row] // drop
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1226,49 +823,8 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  END REPEAT;
         |  SELECT x;
         |END""".stripMargin
-    val expected = Seq(
-      Seq.empty[Row], // declare
-      Seq.empty[Row], // set x = 0
-      Seq.empty[Row], // set x = 1
-      Seq.empty[Row], // set x = 2
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScriptText, expected)
-  }
-
-  test("leave with wrong label - should fail") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  lbl: BEGIN
-        |    SELECT 1;
-        |    LEAVE randomlbl;
-        |  END;
-        |END""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        runSqlScript(sqlScriptText)
-      },
-      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
-      parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "LEAVE"))
-  }
-
-  test("iterate with wrong label - should fail") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  lbl: BEGIN
-        |    SELECT 1;
-        |    ITERATE randomlbl;
-        |  END;
-        |END""".stripMargin
-    checkError(
-      exception = intercept[SqlScriptingException] {
-        runSqlScript(sqlScriptText)
-      },
-      condition = "INVALID_LABEL_USAGE.DOES_NOT_EXIST",
-      parameters = Map("labelName" -> "RANDOMLBL", "statementType" -> "ITERATE"))
   }
 
   test("leave outer loop from nested repeat loop") {
@@ -1284,9 +840,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  UNTIL 1 = 2
         |  END REPEAT;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select 1
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1301,9 +855,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |    END WHILE;
         |  END WHILE;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select
-    )
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1323,14 +875,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  SELECT x;
         |END""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare
-      Seq.empty[Row], // set x = 0
-      Seq.empty[Row], // set x = 1
       Seq(Row(1)), // select 1
-      Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1355,16 +902,11 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  SELECT x;
         |END""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare
-      Seq.empty[Row], // set x = 0
-      Seq.empty[Row], // set x = 1
       Seq(Row(1)), // select 1
       Seq(Row(2)), // select 2
-      Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
       Seq(Row(2)), // select 2
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1387,14 +929,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  SELECT x;
         |END""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare
-      Seq.empty[Row], // set x = 0
-      Seq.empty[Row], // set x = 1
       Seq(Row(1)), // select 1
-      Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(2)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1416,16 +953,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  SELECT x;
         |END""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare
-      Seq.empty[Row], // set x = 0
-      Seq.empty[Row], // set x = 1
       Seq(Row(1)), // select x
-      Seq.empty[Row], // set x = 2
       Seq(Row(2)), // select x
-      Seq.empty[Row], // set x = 3
       Seq(Row(3)), // select x
-      Seq(Row(3)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(3)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
@@ -1454,22 +985,10 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin
 
     val expected = Seq(
-      Seq.empty[Row], // declare x
-      Seq.empty[Row], // declare y
-      Seq.empty[Row], // set y to 0
       Seq(Row(0, 0)), // select x, y
-      Seq.empty[Row], // increase y
       Seq(Row(0, 1)), // select x, y
-      Seq.empty[Row], // increase y
-      Seq.empty[Row], // increase x
-      Seq.empty[Row], // set y to 0
       Seq(Row(1, 0)), // select x, y
-      Seq.empty[Row], // increase y
-      Seq(Row(1, 1)), // select x, y
-      Seq.empty[Row], // increase y
-      Seq.empty[Row], // increase x
-      Seq.empty[Row], // drop y
-      Seq.empty[Row] // drop x
+      Seq(Row(1, 1)) // select x, y
     )
     verifySqlScriptResult(commands, expected)
   }
@@ -1490,14 +1009,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  END LOOP;
         |  SELECT x;
         |END""".stripMargin
-    val expected = Seq(
-      Seq.empty[Row], // declare
-      Seq.empty[Row], // set x = 0
-      Seq.empty[Row], // set x = 1
-      Seq.empty[Row], // set x = 2
-      Seq(Row(2)), // select x
-      Seq.empty[Row] // drop
-    )
+    val expected = Seq(Seq(Row(2)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1512,9 +1024,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |    END LOOP;
         |  END LOOP;
         |END""".stripMargin
-    val expected = Seq(
-      Seq(Row(1)) // select 1
-    )
+    // Execution immediately leaves the outer loop after SELECT,
+    //   so we expect only a single row in the result set.
+    val expected = Seq(Seq(Row(1)))
     verifySqlScriptResult(sqlScriptText, expected)
   }
 
@@ -1538,15 +1050,9 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
         |  SELECT x;
         |END""".stripMargin
     val expected = Seq(
-      Seq.empty[Row], // declare
-      Seq.empty[Row], // set x = 0
-      Seq.empty[Row], // set x = 1
       Seq(Row(1)), // select 1
-      Seq.empty[Row], // set x = 2
       Seq(Row(1)), // select 1
-      Seq.empty[Row], // set x = 3
-      Seq(Row(3)), // select x
-      Seq.empty[Row] // drop
+      Seq(Row(3)) // select x
     )
     verifySqlScriptResult(sqlScriptText, expected)
   }
