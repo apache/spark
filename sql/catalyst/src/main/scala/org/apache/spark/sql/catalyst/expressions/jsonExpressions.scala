@@ -886,8 +886,8 @@ case class SchemaOfJson(
       Literal(jsonOptions, jsonOptionsObjectType),
       Literal(jsonInferSchema, jsonInferSchemaObjectType),
       child),
-    Seq(jsonFactoryObjectType, jsonOptionsObjectType, jsonInferSchemaObjectType, child.dataType)
-  )
+    Seq(jsonFactoryObjectType, jsonOptionsObjectType, jsonInferSchemaObjectType, child.dataType),
+    returnNullable = false)
 
   override def prettyName: String = "schema_of_json"
 
