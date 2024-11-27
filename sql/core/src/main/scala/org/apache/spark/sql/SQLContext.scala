@@ -160,7 +160,12 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
     Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
   }
 
-  /** @inheritdoc */
+  /**
+   * Returns a `StreamingQueryManager` that allows managing all the
+   * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
+   *
+   * @since 2.0.0
+   */
   def streams: StreamingQueryManager = sparkSession.streams
 
   /** @inheritdoc */

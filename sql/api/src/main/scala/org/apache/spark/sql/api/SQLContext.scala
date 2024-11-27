@@ -27,7 +27,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, Encoders, ExperimentalMethods, Row}
+import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -68,8 +68,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   def newSession(): SQLContext
 
   /**
-   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s that
-   * listen for execution metrics.
+   * An interface to register custom QueryExecutionListener that listen for execution metrics.
    */
   def listenerManager: ExecutionListenerManager
 
@@ -272,7 +271,8 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
    * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL
    * representation) that is generally created automatically through implicits from a
-   * `SparkSession`, or can be created explicitly by calling static methods on [[Encoders]].
+   * `SparkSession`, or can be created explicitly by calling static methods on
+   * [[org.apache.spark.sql.Encoders Encoders]].
    *
    * ==Example==
    *
@@ -304,7 +304,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * Creates a [[Dataset]] from an RDD of a given type. This method requires an encoder (to
    * convert a JVM object of type `T` to and from the internal Spark SQL representation) that is
    * generally created automatically through implicits from a `SparkSession`, or can be created
-   * explicitly by calling static methods on [[Encoders]].
+   * explicitly by calling static methods on [[org.apache.spark.sql.Encoders Encoders]].
    *
    * @since 2.0.0
    * @group dataset
@@ -317,7 +317,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * Creates a [[Dataset]] from a `JavaList` of a given type. This method requires an encoder (to
    * convert a JVM object of type `T` to and from the internal Spark SQL representation) that is
    * generally created automatically through implicits from a `SparkSession`, or can be created
-   * explicitly by calling static methods on [[Encoders]].
+   * explicitly by calling static methods on [[org.apache.spark.sql.Encoders Encoders]].
    *
    * ==Java Example==
    *
@@ -599,7 +599,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
-   * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
+   * [[org.apache.spark.sql.api.StreamingQuery StreamingQueries]] active on `this` context.
    *
    * @since 2.0.0
    */
