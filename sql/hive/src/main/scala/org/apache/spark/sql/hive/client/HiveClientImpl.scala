@@ -62,6 +62,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
+import org.apache.spark.sql.hive.HiveUtils.QUOTE_HIVE_STRUCT_FIELD_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -467,7 +468,7 @@ private[hive] class HiveClientImpl(
       (h.getCols.asScala.map(fromHiveColumn), h.getPartCols.asScala.map(fromHiveColumn))
     } catch {
       case ex: SparkException =>
-        throw QueryExecutionErrors.convertHiveTableToCatalogTableError(
+      throw QueryExecutionErrors.convertHiveTableToCatalogTableError(
           ex, h.getDbName, h.getTableName)
     }
     val schema = StructType((cols ++ partCols).toArray)
@@ -580,7 +581,6 @@ private[hive] class HiveClientImpl(
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
-    verifyColumnDataType(table.dataSchema)
     shim.createTable(client, toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
@@ -600,7 +600,6 @@ private[hive] class HiveClientImpl(
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
     // these user-specified values.
-    verifyColumnDataType(table.dataSchema)
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
@@ -624,7 +623,6 @@ private[hive] class HiveClientImpl(
       newDataSchema: StructType,
       schemaProps: Map[String, String]): Unit = withHiveState {
     val oldTable = shim.getTable(client, dbName, tableName)
-    verifyColumnDataType(newDataSchema)
     val hiveCols = newDataSchema.map(toHiveColumn)
     oldTable.setFields(hiveCols.asJava)
 
@@ -1111,7 +1109,12 @@ private[hive] object HiveClientImpl extends Logging {
     //   struct<x:int,y.z:int> -> struct<`x`:int,`y.z`:int>
     //   array<struct<x:int,y.z:int>> -> array<struct<`x`:int,`y.z`:int>>
     //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
-    val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
+    val typeStr = if (SQLConf.get.getConf(QUOTE_HIVE_STRUCT_FIELD_NAME) &&
+        hc.getType.indexOf('`') < 0) {
+      hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
+    } else {
+      hc.getType
+    }
     try {
       CatalystSqlParser.parseDataType(typeStr)
     } catch {
@@ -1128,10 +1131,6 @@ private[hive] object HiveClientImpl extends Logging {
       dataType = columnType,
       nullable = true)
     Option(hc.getComment).map(field.withComment).getOrElse(field)
-  }
-
-  private def verifyColumnDataType(schema: StructType): Unit = {
-    schema.foreach(col => getSparkSQLDataType(toHiveColumn(col)))
   }
 
   private def toInputFormat(name: String) =

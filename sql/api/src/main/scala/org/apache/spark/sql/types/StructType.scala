@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.SqlApiAnalysis
 import org.apache.spark.sql.catalyst.parser.{DataTypeParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, SparkStringUtils, StringConcat}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, QuotingUtils, SparkStringUtils, StringConcat}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SqlApiConf
@@ -433,7 +433,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     stringConcat.append("struct<")
     var i = 0
     while (i < len) {
-      stringConcat.append(s"${fields(i).name}:${fields(i).dataType.catalogString}")
+        val name = QuotingUtils.quoteIfNeeded(fields(i).name)
+        stringConcat.append(s"$name:${fields(i).dataType.catalogString}")
       i += 1
       if (i < len) stringConcat.append(",")
     }
