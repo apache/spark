@@ -22,7 +22,7 @@ import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeTag}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -30,6 +30,14 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object RuleExecutor {
+
+  /**
+   * A tag to indicate that we should do another batch iteration even if the plan
+   * hasn't changed between the start and end of the batch.
+   * Use with caution as it can lead to infinite loops.
+   */
+  private[spark] val FORCE_ANOTHER_BATCH_ITER = TreeNodeTag[Unit]("forceAnotherBatchIter")
+
   protected val queryExecutionMeter = QueryExecutionMetering()
 
   /** Dump statistics about time spent running specific rules. */
@@ -303,7 +311,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           continue = false
         }
 
-        if (curPlan.fastEquals(lastPlan)) {
+        if (isFixedPointReached(lastPlan, curPlan)) {
           logTrace(
             s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
           continue = false
@@ -316,5 +324,10 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     planChangeLogger.logMetrics(name, RuleExecutor.getCurrentMetrics() - beforeMetrics)
 
     curPlan
+  }
+
+  def isFixedPointReached(oldPlan: TreeType, newPlan: TreeType): Boolean = {
+    oldPlan.fastEquals(newPlan) &&
+      newPlan.getTagValue(RuleExecutor.FORCE_ANOTHER_BATCH_ITER).isEmpty
   }
 }
