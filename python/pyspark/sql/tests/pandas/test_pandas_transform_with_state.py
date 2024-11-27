@@ -732,6 +732,13 @@ class TransformWithStateInPandasTestsMixin:
             StatefulProcessorWithInitialStateTimers(), check_results, "processingTime"
         )
 
+    # run the same test suites again but with single shuffle partition
+    def test_transform_with_state_with_timers_single_partition(self):
+        with self.sql_conf({"spark.sql.shuffle.partitions": "1"}):
+            self.test_transform_with_state_init_state_with_timers()
+            self.test_transform_with_state_in_pandas_event_time()
+            self.test_transform_with_state_in_pandas_proc_timer()
+
 
 class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
     # this dict is the same as input initial state dataframe
@@ -777,13 +784,8 @@ class SimpleStatefulProcessorWithInitialState(StatefulProcessor):
 
 class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitialState):
     def handleExpiredTimer(self, key, timer_values, expired_timer_info) -> Iterator[pd.DataFrame]:
-        print(
-            f"before delete Timers for key: {key}, "
-            f"timestamp: {expired_timer_info.get_expiry_time_in_ms()}\n"
-        )
         self.handle.deleteTimer(expired_timer_info.get_expiry_time_in_ms())
         str_key = f"{str(key[0])}-expired"
-        print(f"after delete Timers for key: {key}, " f"return key: {str_key}\n")
         yield pd.DataFrame(
             {"id": (str_key,), "value": str(expired_timer_info.get_expiry_time_in_ms())}
         )
@@ -791,10 +793,6 @@ class StatefulProcessorWithInitialStateTimers(SimpleStatefulProcessorWithInitial
     def handleInitialState(self, key, initialState, timer_values) -> None:
         super().handleInitialState(key, initialState, timer_values)
         self.handle.registerTimer(timer_values.get_current_processing_time_in_ms() - 1)
-        print(
-            f"after register Timers for key: {key}, "
-            f"timestamp: {timer_values.get_current_processing_time_in_ms() - 1}\n"
-        )
 
 
 # A stateful processor that output the max event time it has seen. Register timer for

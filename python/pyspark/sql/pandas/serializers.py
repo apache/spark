@@ -1218,6 +1218,18 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
         # Clone the original iterator to get additional args
         cloned_iterator, result_iterator = tee(iterator)
+        # since we return Tuple[iterator["PandasDataframeLike"], StatefulProcessorApiClient,
+        # StatefulProcessor, str of timeMode] from `transformWithStateUDF` and
+        # `transformWithStateWithInitStateUDF`, the iterator of result grouped for all keys on a
+        # partition is of type:
+        # Iterator[List[Tuple[
+        #   Tuple[
+        #       iterator["PandasDataframeLike"], StatefulProcessorApiClient,
+        #       StatefulProcessor, str of timeMode
+        #    ], outputStructType]]
+        #  ]
+        # We want to convert the result iterator to a list of pandas dataframe,
+        # and get the remaining args to further perform timer handling operations
         result = [(pd, t) for x in cloned_iterator for y, t in x for pd in y[0]]
         args = [(y[1], y[2], t, y[3]) for x in result_iterator for y, t in x]
 
@@ -1231,20 +1243,6 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         statefulProcessor = args[0][1]
         outputType = args[0][2]
         timeMode = args[0][3]
-
-        batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps()
-
-        result_iter_list = []
-        if timeMode.lower() == "processingtime":
-            expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
-                batch_timestamp
-            )
-        elif timeMode.lower() == "eventtime":
-            expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
-                watermark_timestamp
-            )
-        else:
-            expiry_list_iter = iter([[]])
 
         def timer_iter_wrapper(func, *args, **kwargs):
             """
@@ -1266,6 +1264,20 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
                     statefulProcessorApiClient.remove_implicit_key()
 
             return wrapper()
+
+        batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps()
+
+        result_iter_list = []
+        if timeMode.lower() == "processingtime":
+            expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
+                batch_timestamp
+            )
+        elif timeMode.lower() == "eventtime":
+            expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
+                watermark_timestamp
+            )
+        else:
+            expiry_list_iter = iter([[]])
 
         # process with expiry timers, only timer related rows will be emitted
         for expiry_list in expiry_list_iter:
