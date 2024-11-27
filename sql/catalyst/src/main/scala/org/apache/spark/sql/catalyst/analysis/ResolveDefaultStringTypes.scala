@@ -43,14 +43,13 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     }
 
     if (!replaceWithTempType || newPlan.fastEquals(plan)) {
-      newPlan.unsetTagValue(RuleExecutor.FORCE_ANOTHER_BATCH_ITER)
       newPlan
     } else {
       // Due to how tree transformations work and StringType object being equal to
       // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
       // to ensure the correct results for occurrences of default string type.
       val finalPlan = ResolveDefaultStringTypesWithoutTempType.apply(newPlan)
-      finalPlan.setTagValue(RuleExecutor.FORCE_ANOTHER_BATCH_ITER, ())
+      RuleExecutor.forceAdditionalIteration(finalPlan)
       finalPlan
     }
   }
