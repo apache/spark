@@ -51,6 +51,8 @@ sealed trait RocksDBValueStateEncoder {
   def encodeValue(row: UnsafeRow): Array[Byte]
   def decodeValue(valueBytes: Array[Byte]): UnsafeRow
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
+
+  // TODO we probably don't need schema Id in value row
   def getSchemaId(): Short
 }
 
