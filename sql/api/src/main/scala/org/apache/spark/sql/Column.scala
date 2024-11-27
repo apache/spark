@@ -1383,10 +1383,10 @@ class Column(val node: ColumnNode) extends Logging {
   def over(): Column = over(Window.spec)
 
   /**
-   * Mark this column as an outer column if its expression refers to columns from an outer query. This
-   * is used to trigger lazy analysis of Spark Classic DataFrame, so that we can use it to build
-   * subquery expressions. Spark Connect DataFrame is always lazily analyzed and does not need to
-   * use this function.
+   * Mark this column as an outer column if its expression refers to columns from an outer query.
+   * This is used to trigger lazy analysis of Spark Classic DataFrame, so that we can use it to
+   * build subquery expressions. Spark Connect DataFrame is always lazily analyzed and does not
+   * need to use this function.
    *
    * {{{
    *   // Spark can't analyze this `df` now as it doesn't know how to resolve `t1.col`.
