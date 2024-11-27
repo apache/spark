@@ -559,18 +559,22 @@ class TransformWithStateInPandasTestsMixin:
     def test_transform_with_state_in_pandas_event_time(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
+                # check timer registered in the same batch is expired
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="20"),
+                    Row(id="a-expired", timestamp="0"),
                 }
             elif batch_id == 1:
+                # value state is cleared in batch 0, so timestamp=4 is returned here
                 assert set(batch_df.sort("id").collect()) == {
-                    Row(id="a", timestamp="20"),
-                    Row(id="a-expired", timestamp="1"),
+                    Row(id="a", timestamp="4"),
+                    Row(id='a-expired', timestamp='10000'),
                 }
             elif batch_id == 2:
-                # verify that rows and expired timer produce the expected result
+                # event time is still 20-10=10, so we will see expired row with timestamp=10s
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="15"),
+                    Row(id='a-expired', timestamp='10000'),
                 }
             else:
                 for q in self.spark.streams.active:
@@ -934,7 +938,7 @@ class EventTimeStatefulProcessor(StatefulProcessor):
         max_event_time = str(max(cur_max, max(timestamp_list)))
 
         self.max_state.update((max_event_time,))
-        self.handle.registerTimer(timer_values.get_current_watermark_in_ms() + 1)
+        self.handle.registerTimer(timer_values.get_current_watermark_in_ms())
 
         yield pd.DataFrame({"id": key, "timestamp": max_event_time})
 
