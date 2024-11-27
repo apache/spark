@@ -792,7 +792,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   test("randomSplit") {
     val n = 600
     val data = sc.parallelize(1 to n, 2)
-    for(seed <- 1 to 5) {
+    for (seed <- 1 to 5) {
       val splits = data.randomSplit(Array(1.0, 2.0, 3.0), seed)
       assert(splits.length == 3, "wrong number of splits")
       assert(splits.flatMap(_.collect()).sorted.toList == data.collect().toList,

@@ -375,6 +375,7 @@ class PandasGroupedOpsMixin:
         outputMode: str,
         timeMode: str,
         initialState: Optional["GroupedData"] = None,
+        eventTimeColumnName: str = "",
     ) -> DataFrame:
         """
         Invokes methods defined in the stateful processor used in arbitrary state API v2. It
@@ -693,6 +694,7 @@ class PandasGroupedOpsMixin:
             outputMode,
             timeMode,
             initial_state_java_obj,
+            eventTimeColumnName,
         )
         return DataFrame(jdf, self.session)
 

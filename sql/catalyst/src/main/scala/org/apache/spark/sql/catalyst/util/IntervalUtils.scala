@@ -797,6 +797,15 @@ object IntervalUtils extends SparkIntervalUtils {
     }
   }
 
+  def makeYearMonthInterval(year: Int, month: Int, context: QueryContext): Int = {
+    try {
+      Math.toIntExact(Math.addExact(month, Math.multiplyExact(year, MONTHS_PER_YEAR)))
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context)
+    }
+  }
+
   def intToYearMonthInterval(v: Int, startField: Byte, endField: Byte): Int = {
     endField match {
       case YEAR =>

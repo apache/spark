@@ -261,13 +261,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       ev
     }
 
-    // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
+    // Note: wrap in "do { } while (false);", so the generated checks can jump out with "continue;"
     s"""
        |do {
        |  $predicateCode
        |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
-       |} while(false);
+       |} while (false);
      """.stripMargin
   }
 

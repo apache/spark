@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException, Strategy}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
@@ -106,28 +106,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     private def planTakeOrdered(plan: LogicalPlan): Option[SparkPlan] = plan match {
       // We should match the combination of limit and offset first, to get the optimal physical
       // plan, instead of planning limit and offset separately.
-      case LimitAndOffset(limit, offset, Sort(order, true, child))
+      case LimitAndOffset(limit, offset, Sort(order, true, child, _))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, child.output, planLater(child), offset))
-      case LimitAndOffset(limit, offset, Project(projectList, Sort(order, true, child)))
+      case LimitAndOffset(limit, offset, Project(projectList, Sort(order, true, child, _)))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, projectList, planLater(child), offset))
       // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-      case OffsetAndLimit(offset, limit, Sort(order, true, child))
+      case OffsetAndLimit(offset, limit, Sort(order, true, child, _))
           if offset + limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           offset + limit, order, child.output, planLater(child), offset))
-      case OffsetAndLimit(offset, limit, Project(projectList, Sort(order, true, child)))
+      case OffsetAndLimit(offset, limit, Project(projectList, Sort(order, true, child, _)))
           if offset + limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           offset + limit, order, projectList, planLater(child), offset))
-      case Limit(IntegerLiteral(limit), Sort(order, true, child))
+      case Limit(IntegerLiteral(limit), Sort(order, true, child, _))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, child.output, planLater(child)))
-      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child)))
+      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child, _)))
           if limit < conf.topKSortFallbackThreshold =>
         Some(TakeOrderedAndProjectExec(
           limit, order, projectList, planLater(child)))
@@ -966,6 +966,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case _: FlatMapGroupsInPandasWithState =>
         // TODO(SPARK-40443): support applyInPandasWithState in batch query
         throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3176")
+      case t: TransformWithStateInPandas =>
+        // TODO(SPARK-50428): support TransformWithStateInPandas in batch query
+        throw new ExtendedAnalysisException(
+          new AnalysisException(
+            "_LEGACY_ERROR_TEMP_3102",
+            Map(
+              "msg" -> "TransformWithStateInPandas is not supported with batch DataFrames/Datasets")
+          ), plan = t)
       case logical.CoGroup(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, lOrder, rOrder, oAttr, left, right) =>
         execution.CoGroupExec(
@@ -978,7 +986,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
-      case logical.Sort(sortExprs, global, child) =>
+      case logical.Sort(sortExprs, global, child, _) =>
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.ProjectExec(projectList, planLater(child)) :: Nil

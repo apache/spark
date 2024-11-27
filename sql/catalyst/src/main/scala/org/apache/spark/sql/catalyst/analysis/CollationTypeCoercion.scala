@@ -17,95 +17,51 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import javax.annotation.Nullable
-
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveSameType}
-import org.apache.spark.sql.catalyst.expressions.{
-  ArrayAppend,
-  ArrayContains,
-  ArrayExcept,
-  ArrayIntersect,
-  ArrayJoin,
-  ArrayPosition,
-  ArrayRemove,
-  ArraysOverlap,
-  ArrayUnion,
-  CaseWhen,
-  Cast,
-  Coalesce,
-  Collate,
-  Concat,
-  ConcatWs,
-  Contains,
-  CreateArray,
-  CreateMap,
-  Elt,
-  EndsWith,
-  EqualNullSafe,
-  EqualTo,
-  Expression,
-  FindInSet,
-  GetMapValue,
-  GreaterThan,
-  GreaterThanOrEqual,
-  Greatest,
-  If,
-  In,
-  InSubquery,
-  Lag,
-  Lead,
-  Least,
-  LessThan,
-  LessThanOrEqual,
-  Levenshtein,
-  Literal,
-  Mask,
-  Overlay,
-  RaiseError,
-  RegExpReplace,
-  SplitPart,
-  StartsWith,
-  StringInstr,
-  StringLocate,
-  StringLPad,
-  StringReplace,
-  StringRPad,
-  StringSplitSQL,
-  StringToMap,
-  StringTranslate,
-  StringTrim,
-  StringTrimLeft,
-  StringTrimRight,
-  SubstringIndex,
-  ToNumber,
-  TryToNumber
-}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Type coercion helper that matches against expressions in order to apply collation type coercion.
  */
 object CollationTypeCoercion {
+
+  private val COLLATION_CONTEXT_TAG = new TreeNodeTag[CollationContext]("collationContext")
+
+  private def hasCollationContextTag(expr: Expression): Boolean = {
+    expr.getTagValue(COLLATION_CONTEXT_TAG).isDefined
+  }
+
   def apply(expression: Expression): Expression = expression match {
+    case cast: Cast if shouldRemoveCast(cast) =>
+      cast.child
+
     case ifExpr: If =>
       ifExpr.withNewChildren(
         ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue))
       )
 
     case caseWhenExpr: CaseWhen if !haveSameType(caseWhenExpr.inputTypesForMerging) =>
-      val outputStringType =
-        getOutputCollation(caseWhenExpr.branches.map(_._2) ++ caseWhenExpr.elseValue)
-      val newBranches = caseWhenExpr.branches.map {
-        case (condition, value) =>
-          (condition, castStringType(value, outputStringType).getOrElse(value))
+      val outputStringType = findLeastCommonStringType(
+        caseWhenExpr.branches.map(_._2) ++ caseWhenExpr.elseValue)
+      outputStringType match {
+        case Some(st) =>
+          val newBranches = caseWhenExpr.branches.map { case (condition, value) =>
+            (condition, castStringType(value, st))
+          }
+          val newElseValue =
+            caseWhenExpr.elseValue.map(e => castStringType(e, st))
+          CaseWhen(newBranches, newElseValue)
+
+        case _ =>
+          caseWhenExpr
       }
-      val newElseValue =
-        caseWhenExpr.elseValue.map(e => castStringType(e, outputStringType).getOrElse(e))
-      CaseWhen(newBranches, newElseValue)
 
     case stringLocate: StringLocate =>
       stringLocate.withNewChildren(
@@ -156,6 +112,12 @@ object CollationTypeCoercion {
       val newValues = collateToSingleType(mapCreate.values)
       mapCreate.withNewChildren(newKeys.zip(newValues).flatMap(pair => Seq(pair._1, pair._2)))
 
+    case namedStruct: CreateNamedStruct if namedStruct.children.size % 2 == 0 =>
+      val newNames = collateToSingleType(namedStruct.nameExprs)
+      val newValues = collateToSingleType(namedStruct.valExprs)
+      val interleaved = newNames.zip(newValues).flatMap(pair => Seq(pair._1, pair._2))
+      namedStruct.withNewChildren(interleaved)
+
     case splitPart: SplitPart =>
       val Seq(str, delimiter, partNum) = splitPart.children
       val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
@@ -194,87 +156,220 @@ object CollationTypeCoercion {
   }
 
   /**
+   * If childType is collated and target is UTF8_BINARY, the collation of the output
+   * should be that of the childType.
+   */
+  private def shouldRemoveCast(cast: Cast): Boolean = {
+    val isUserDefined = cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
+    val isChildTypeCollatedString = cast.child.dataType match {
+      case st: StringType => !st.isUTF8BinaryCollation
+      case _ => false
+    }
+    val targetType = cast.dataType
+
+    isUserDefined && isChildTypeCollatedString && targetType == StringType
+  }
+
+  /**
    * Extracts StringTypes from filtered hasStringType
    */
   @tailrec
-  private def extractStringType(dt: DataType): StringType = dt match {
-    case st: StringType => st
+  private def extractStringType(dt: DataType): Option[StringType] = dt match {
+    case st: StringType => Some(st)
     case ArrayType(et, _) => extractStringType(et)
+    case _ => None
   }
 
   /**
    * Casts given expression to collated StringType with id equal to collationId only
    * if expression has StringType in the first place.
-   * @param expr
-   * @param collationId
-   * @return
    */
-  def castStringType(expr: Expression, st: StringType): Option[Expression] =
-    castStringType(expr.dataType, st).map { dt => Cast(expr, dt)}
+  def castStringType(expr: Expression, st: StringType): Expression = {
+    castStringType(expr.dataType, st)
+      .map(dt => Cast(expr, dt))
+      .getOrElse(expr)
+  }
 
   private def castStringType(inType: DataType, castType: StringType): Option[DataType] = {
-    @Nullable val ret: DataType = inType match {
-      case st: StringType if st.collationId != castType.collationId => castType
+    inType match {
+      case st: StringType if st.collationId != castType.collationId =>
+        Some(castType)
       case ArrayType(arrType, nullable) =>
-        castStringType(arrType, castType).map(ArrayType(_, nullable)).orNull
-      case _ => null
+        castStringType(arrType, castType).map(ArrayType(_, nullable))
+      case _ => None
     }
-    Option(ret)
   }
 
   /**
    * Collates input expressions to a single collation.
    */
-  def collateToSingleType(exprs: Seq[Expression]): Seq[Expression] = {
-    val st = getOutputCollation(exprs)
+  def collateToSingleType(expressions: Seq[Expression]): Seq[Expression] = {
+    val lctOpt = findLeastCommonStringType(expressions)
 
-    exprs.map(e => castStringType(e, st).getOrElse(e))
+    lctOpt match {
+      case Some(lct) =>
+        expressions.map(e => castStringType(e, lct))
+      case _ =>
+        expressions
+    }
   }
 
   /**
-   * Based on the data types of the input expressions this method determines
-   * a collation type which the output will have. This function accepts Seq of
-   * any expressions, but will only be affected by collated StringTypes or
-   * complex DataTypes with collated StringTypes (e.g. ArrayType)
+   * Tries to find the least common StringType among the given expressions.
    */
-  def getOutputCollation(expr: Seq[Expression]): StringType = {
-    val explicitTypes = expr.filter {
-        case _: Collate => true
-        case _ => false
-      }
-      .map(_.dataType.asInstanceOf[StringType].collationId)
-      .distinct
+  private def findLeastCommonStringType(expressions: Seq[Expression]): Option[StringType] = {
+    if (!expressions.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
+      return None
+    }
 
-    explicitTypes.size match {
-      // We have 1 explicit collation
-      case 1 => StringType(explicitTypes.head)
-      // Multiple explicit collations occurred
-      case size if size > 1 =>
-        throw QueryCompilationErrors
-          .explicitCollationMismatchError(
-            explicitTypes.map(t => StringType(t))
-          )
-      // Only implicit or default collations present
-      case 0 =>
-        val implicitTypes = expr.filter {
-            case Literal(_, _: StringType) => false
-            case cast: Cast if cast.getTagValue(Cast.USER_SPECIFIED_CAST).isEmpty =>
-              cast.child.dataType.isInstanceOf[StringType]
-            case _ => true
+    val collationContextWinner = expressions.foldLeft(findCollationContext(expressions.head)) {
+      case (Some(left), right) =>
+        findCollationContext(right).flatMap { ctx =>
+          collationPrecedenceWinner(left, ctx)
+        }
+      case (None, _) => return None
+    }
+
+    collationContextWinner.flatMap { cc =>
+      extractStringType(cc.dataType)
+    }
+  }
+
+  /**
+   * Tries to find the collation context for the given expression.
+   * If found, it will also set the [[COLLATION_CONTEXT_TAG]] on the expression,
+   * so that the context can be reused later.
+   */
+  private def findCollationContext(expr: Expression): Option[CollationContext] = {
+    val contextOpt = expr match {
+      case _ if hasCollationContextTag(expr) =>
+        Some(expr.getTagValue(COLLATION_CONTEXT_TAG).get)
+
+      // if `expr` doesn't have a string in its dataType then it doesn't
+      // have the collation context either
+      case _ if !expr.dataType.existsRecursively(_.isInstanceOf[StringType]) =>
+        None
+
+      case collate: Collate =>
+        Some(CollationContext(collate.dataType, Explicit))
+
+      case _: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference =>
+        Some(CollationContext(expr.dataType, Implicit))
+
+      case _: Literal =>
+        Some(CollationContext(expr.dataType, Default))
+
+      // if it does have a string type but none of its children do
+      // then the collation context strength is default
+      case _ if !expr.children.exists(_.dataType.existsRecursively(_.isInstanceOf[StringType])) =>
+        Some(CollationContext(expr.dataType, Default))
+
+      case _ =>
+        val contextWinnerOpt = getContextRelevantChildren(expr)
+          .flatMap(findCollationContext)
+          .foldLeft(Option.empty[CollationContext]) {
+            case (Some(left), right) =>
+              collationPrecedenceWinner(left, right)
+            case (None, right) =>
+              Some(right)
           }
-          .map(_.dataType)
-          .filter(hasStringType)
-          .map(extractStringType(_).collationId)
-          .distinct
 
-        if (implicitTypes.length > 1) {
-          throw QueryCompilationErrors.implicitCollationMismatchError(
-            implicitTypes.map(t => StringType(t))
-          )
+        contextWinnerOpt.map { context =>
+          if (hasStringType(expr.dataType)) {
+            CollationContext(expr.dataType, context.strength)
+          } else {
+            context
+          }
         }
-        else {
-          implicitTypes.headOption.map(StringType(_)).getOrElse(SQLConf.get.defaultStringType)
-        }
+    }
+
+    contextOpt.foreach(expr.setTagValue(COLLATION_CONTEXT_TAG, _))
+    contextOpt
+  }
+
+  /**
+   * Returns the children of the given expression that should be used for calculating the
+   * winning collation context.
+   */
+  private def getContextRelevantChildren(expression: Expression): Seq[Expression] = {
+    expression match {
+      // collation context for named struct should be calculated based on its values only
+      case createStruct: CreateNamedStruct =>
+        createStruct.valExprs
+
+      // collation context does not depend on the key for extracting the value
+      case extract: ExtractValue =>
+        Seq(extract.child)
+
+      // we currently don't support collation precedence for maps,
+      // as this would involve calculating them for keys and values separately
+      case _: CreateMap =>
+        Seq.empty
+
+      case _ =>
+        expression.children
+    }
+  }
+
+  /**
+   * Returns the collation context that wins in precedence between left and right.
+   */
+  private def collationPrecedenceWinner(
+      left: CollationContext,
+      right: CollationContext): Option[CollationContext] = {
+
+    val (leftStringType, rightStringType) =
+      (extractStringType(left.dataType), extractStringType(right.dataType)) match {
+        case (Some(l), Some(r)) =>
+          (l, r)
+        case (None, None) =>
+          return None
+        case (Some(_), None) =>
+          return Some(left)
+        case (None, Some(_)) =>
+          return Some(right)
+      }
+
+    (left.strength, right.strength) match {
+      case (Explicit, Explicit) if leftStringType != rightStringType =>
+        throw QueryCompilationErrors.explicitCollationMismatchError(
+          Seq(leftStringType, rightStringType))
+
+      case (Explicit, _) => Some(left)
+      case (_, Explicit) => Some(right)
+
+      case (Implicit, Implicit) if leftStringType != rightStringType =>
+        throw QueryCompilationErrors.implicitCollationMismatchError(
+          Seq(leftStringType, rightStringType))
+
+      case (Implicit, _) => Some(left)
+      case (_, Implicit) => Some(right)
+
+      case (Default, Default) if leftStringType != rightStringType =>
+        throw QueryCompilationErrors.implicitCollationMismatchError(
+          Seq(leftStringType, rightStringType))
+
+      case _ =>
+        Some(left)
     }
   }
 }
+
+/**
+ * Represents the strength of collation used for determining precedence in collation resolution.
+ */
+private sealed trait CollationStrength {}
+
+  private object CollationStrength {
+  case object Explicit extends CollationStrength {}
+  case object Implicit extends CollationStrength {}
+  case object Default extends CollationStrength {}
+}
+
+/**
+ * Encapsulates the context for collation, including data type and strength.
+ *
+ * @param dataType The data type associated with this collation context.
+ * @param strength The strength level of the collation, which determines its precedence.
+ */
+private case class CollationContext(dataType: DataType, strength: CollationStrength) {}

@@ -37,9 +37,21 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamExecution}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{NextIterator, ThreadUtils, Utils}
+
+sealed trait StateStoreEncoding {
+  override def toString: String = this match {
+    case StateStoreEncoding.UnsafeRow => "unsaferow"
+    case StateStoreEncoding.Avro => "avro"
+  }
+}
+
+object StateStoreEncoding {
+  case object UnsafeRow extends StateStoreEncoding
+  case object Avro extends StateStoreEncoding
+}
 
 /**
  * Base trait for a versioned key-value store which provides read operations. Each instance of a
@@ -769,6 +781,7 @@ object StateStore extends Logging {
     if (version < 0) {
       throw QueryExecutionErrors.unexpectedStateStoreVersion(version)
     }
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, storeProviderId.queryRunId.toString)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
       keyStateEncoderSpec, useColumnFamilies, storeConf, hadoopConf, useMultipleValuesPerKey)
     storeProvider.getStore(version, stateStoreCkptId)

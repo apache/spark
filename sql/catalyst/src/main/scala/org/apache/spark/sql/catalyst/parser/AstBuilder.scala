@@ -131,19 +131,20 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCompoundOrSingleStatement(
-      ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
+      ctx: CompoundOrSingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_ENABLED)) {
+        throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
+      }
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
-      val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        Some(java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)))
+      visitSingleStatement(ctx.singleStatement())
     }
   }
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
     val labelCtx = new SqlScriptingLabelContext()
-    visitBeginEndCompoundBlockImpl(ctx.beginEndCompoundBlock(), labelCtx)
+    visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = true, labelCtx)
   }
 
   private def visitCompoundBodyImpl(
@@ -1235,7 +1236,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Add a regular (SELECT) query specification to a logical plan. The query specification
    * is the core of the logical plan, this is where sourcing (FROM clause), projection (SELECT),
    * aggregation (GROUP BY ... HAVING ...) and filtering (WHERE) takes place.
-   * If 'isPipeOperatorSelect' is true, wraps each projected expression with a [[PipeSelect]]
+   * If 'isPipeOperatorSelect' is true, wraps each projected expression with a [[PipeExpression]]
    * expression for future validation of the expressions during analysis.
    *
    * Note that query hints are ignored (both by the parser and the builder).
@@ -1292,11 +1293,12 @@ class AstBuilder extends DataTypeAstBuilder
 
     def createProject() = if (namedExpressions.nonEmpty) {
       val newProjectList: Seq[NamedExpression] = if (isPipeOperatorSelect) {
-        // If this is a pipe operator |> SELECT clause, add a [[PipeSelect]] expression wrapping
+        // If this is a pipe operator |> SELECT clause, add a [[PipeExpression]] wrapping
         // each alias in the project list, so the analyzer can check invariants later.
         namedExpressions.map {
           case a: Alias =>
-            a.withNewChildren(Seq(PipeSelect(a.child)))
+            a.withNewChildren(Seq(
+                PipeExpression(a.child, isAggregate = false, PipeOperators.selectClause)))
               .asInstanceOf[NamedExpression]
           case other =>
             other
@@ -5932,6 +5934,24 @@ class AstBuilder extends DataTypeAstBuilder
         windowClause = ctx.windowClause,
         relation = left,
         isPipeOperatorSelect = true)
+    }.getOrElse(Option(ctx.EXTEND).map { _ =>
+      // Visit each expression in the EXTEND operator, and add a PipeExpression expression on top of
+      // it to generate clear error messages if the expression contains any aggregate functions
+      // (this is not allowed in the EXTEND operator).
+      val extendExpressions: Seq[NamedExpression] =
+        Option(ctx.extendList).map { n: NamedExpressionSeqContext =>
+          visitNamedExpressionSeq(n).map {
+            case (a: Alias, _) =>
+              a.copy(
+                child = PipeExpression(a.child, isAggregate = false, PipeOperators.extendClause))(
+                a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+            case (e: Expression, aliasFunc) =>
+              UnresolvedAlias(
+                PipeExpression(e, isAggregate = false, PipeOperators.extendClause), aliasFunc)
+          }
+        }.get
+      val projectList: Seq[NamedExpression] = Seq(UnresolvedStar(None)) ++ extendExpressions
+      Project(projectList, left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
         throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
@@ -5958,7 +5978,7 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    ))))))))
+    )))))))))
   }
 
   private def visitOperatorPipeAggregate(
@@ -5969,11 +5989,18 @@ class AstBuilder extends DataTypeAstBuilder
         "The AGGREGATE clause requires a list of aggregate expressions " +
           "or a list of grouping expressions, or both", ctx)
     }
+    // Visit each aggregate expression, and add a PipeAggregate expression on top of it to generate
+    // clear error messages if the expression does not contain at least one aggregate function.
     val aggregateExpressions: Seq[NamedExpression] =
       Option(ctx.namedExpressionSeq()).map { n: NamedExpressionSeqContext =>
         visitNamedExpressionSeq(n).map {
-          case (e: NamedExpression, _) => e
-          case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+          case (a: Alias, _) =>
+            a.copy(child =
+              PipeExpression(a.child, isAggregate = true, PipeOperators.aggregateClause))(
+              a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+          case (e: Expression, aliasFunc) =>
+            UnresolvedAlias(
+              PipeExpression(e, isAggregate = true, PipeOperators.aggregateClause), aliasFunc)
         }
       }.getOrElse(Seq.empty)
     Option(ctx.aggregationClause()).map { c: AggregationClauseContext =>
