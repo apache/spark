@@ -165,14 +165,17 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     case (expression, newType) if needsCast(expression) =>
       val newDataType = replaceDefaultStringType(expression.dataType, newType)
       expression.setTagValue(CAST_ADDED_TAG, ())
-      Cast(expression, newDataType)
+      if (newDataType == expression.dataType) {
+        expression
+      } else {
+        Cast(expression, newDataType)
+      }
   }
 
   private def needsCast(expression: Expression): Boolean = expression match {
     // TODO: is there a better way to figure out how not to add casts infinitely?
     case _ if expression.getTagValue(CAST_ADDED_TAG).isDefined => false
-    case _: DefaultStringProducingExpression => true
-    case _ => false
+    case other => other.isInstanceOf[DefaultStringProducingExpression]
   }
 
   private def hasDefaultStringType(dataType: DataType): Boolean =

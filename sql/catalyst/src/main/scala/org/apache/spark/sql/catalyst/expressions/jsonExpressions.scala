@@ -950,10 +950,11 @@ case class LengthOfJsonArray(child: Expression)
 case class JsonObjectKeys(child: Expression)
   extends UnaryExpression
   with ExpectsInputTypes
-  with DefaultStringProducingExpression
-  with RuntimeReplaceable {
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCollation)
+  override def dataType: DataType = ArrayType(StringType)
   override def nullable: Boolean = true
   override def prettyName: String = "json_object_keys"
 

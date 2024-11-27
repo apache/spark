@@ -211,8 +211,8 @@ case class ParseUrl(
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends Expression
   with ExpectsInputTypes
-  with DefaultStringProducingExpression
-  with RuntimeReplaceable {
+  with RuntimeReplaceable
+  with DefaultStringProducingExpression {
 
   def this(children: Seq[Expression]) = this(children, SQLConf.get.ansiEnabled)
 
