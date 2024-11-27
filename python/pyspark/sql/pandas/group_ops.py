@@ -527,24 +527,6 @@ class PandasGroupedOpsMixin:
         def handle_expired_timers(
             statefulProcessorApiClient: StatefulProcessorApiClient,
         ) -> Iterator["PandasDataFrameLike"]:
-            def timer_iter_wrapper(func, *args, **kwargs):
-                def wrapper():
-                    timer_cur_key = kwargs.get("key", args[0] if len(args) > 0 else None)
-                    expired_timer_info = kwargs.get("expired_timer_info", args[2] if len(args) > 2 else None)
-                    # set implicit key for the timer row before calling UDF
-                    statefulProcessorApiClient.set_implicit_key(timer_cur_key)
-                    # Call handleExpiredTimer UDF
-                    iter = func(*args, **kwargs)
-                    try:
-                        for e in iter:
-                            yield e
-                    finally:
-                        statefulProcessorApiClient.delete_timer(expired_timer_info.get_expiry_time_in_ms())
-                        statefulProcessorApiClient.remove_implicit_key()
-                return wrapper()
-
-            result_iter_list = []
-
             batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
                 timeMode
             )
@@ -563,15 +545,14 @@ class PandasGroupedOpsMixin:
             # process with expiry timers, only timer related rows will be emitted
             for expiry_list in expiry_list_iter:
                 for key_obj, expiry_timestamp in expiry_list:
-                    result_iter_list.append(
-                        timer_iter_wrapper(
-                            statefulProcessor.handleExpiredTimer,
-                            key=key_obj,
-                            timer_values=TimerValues(batch_timestamp, watermark_timestamp),
-                            expired_timer_info=ExpiredTimerInfo(expiry_timestamp))
-                    )
-
-            return itertools.chain(*result_iter_list)
+                    statefulProcessorApiClient.set_implicit_key(key_obj)
+                    for pd in statefulProcessor.handleExpiredTimer(
+                        key=key_obj,
+                        timer_values=TimerValues(batch_timestamp, watermark_timestamp),
+                        expired_timer_info=ExpiredTimerInfo(expiry_timestamp),
+                    ):
+                        yield pd
+                    statefulProcessorApiClient.delete_timer(expiry_timestamp)
 
         def transformWithStateUDF(
             statefulProcessorApiClient: StatefulProcessorApiClient,

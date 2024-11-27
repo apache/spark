@@ -559,17 +559,18 @@ class TransformWithStateInPandasTestsMixin:
     def test_transform_with_state_in_pandas_event_time(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
-                assert set(batch_df.sort("id").collect()) == {Row(id="a", timestamp="20")}
+                assert set(batch_df.sort("id").collect()) == {
+                    Row(id="a", timestamp="20"),
+                }
             elif batch_id == 1:
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="20"),
-                    Row(id="a-expired", timestamp="0"),
+                    Row(id="a-expired", timestamp="1"),
                 }
             elif batch_id == 2:
                 # verify that rows and expired timer produce the expected result
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="15"),
-                    Row(id="a-expired", timestamp="10000"),
                 }
             else:
                 for q in self.spark.streams.active:
@@ -933,7 +934,7 @@ class EventTimeStatefulProcessor(StatefulProcessor):
         max_event_time = str(max(cur_max, max(timestamp_list)))
 
         self.max_state.update((max_event_time,))
-        self.handle.registerTimer(timer_values.get_current_watermark_in_ms())
+        self.handle.registerTimer(timer_values.get_current_watermark_in_ms() + 1)
 
         yield pd.DataFrame({"id": key, "timestamp": max_event_time})
 
@@ -961,8 +962,6 @@ class ProcTimeStatefulProcessor(StatefulProcessor):
             idx += 1
 
         if len(timer_list_1) > 0:
-            # before deleting the expiring timers, there are 2 timers -
-            # one timer we just registered, and one that is going to be deleted
             assert len(timer_list_1) == 2
         self.count_state.clear()
         self.handle.deleteTimer(expired_timer_info.get_expiry_time_in_ms())
@@ -981,7 +980,7 @@ class ProcTimeStatefulProcessor(StatefulProcessor):
             count = int(self.count_state.get()[0])
 
         if key == ("0",):
-            self.handle.registerTimer(timer_values.get_current_processing_time_in_ms())
+            self.handle.registerTimer(timer_values.get_current_processing_time_in_ms() + 1)
 
         rows_count = 0
         for pdf in rows:
@@ -1041,9 +1040,7 @@ class StatefulProcessorChainingOps(StatefulProcessor):
     def init(self, handle: StatefulProcessorHandle) -> None:
         pass
 
-    def handleInputRows(
-        self, key, rows, timer_values, expired_timer_info
-    ) -> Iterator[pd.DataFrame]:
+    def handleInputRows(self, key, rows, timer_values) -> Iterator[pd.DataFrame]:
         for pdf in rows:
             timestamp_list = pdf["eventTime"].tolist()
         yield pd.DataFrame({"id": key, "outputTimestamp": timestamp_list[0]})
