@@ -656,7 +656,7 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     val sqlScriptText =
       """BEGIN
         | WHILE 1 = 1 DO
-        | END WHILE lbl;
+        | END WHILE;
         |END
       """.stripMargin
     checkError(
