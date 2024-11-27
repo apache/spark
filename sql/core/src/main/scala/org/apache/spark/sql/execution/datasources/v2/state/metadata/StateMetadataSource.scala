@@ -270,7 +270,7 @@ class StateMetadataPartitionReader(
               operatorStateMetadata.version,
               v2.operatorPropertiesJson,
               -1, // numColsPrefixKey is not available in OperatorStateMetadataV2
-              Some(stateStoreMetadata.stateSchemaFilePath)
+              Some(stateStoreMetadata.stateSchemaFilePath(stateStoreMetadata.stateSchemaId))
             )
           }
         }
