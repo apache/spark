@@ -20,10 +20,11 @@ import java.util.Locale
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExtractValue, LateralColumnAliasReference, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExtractValue, LateralColumnAliasReference, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, UNRESOLVED_ATTRIBUTE}
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -104,22 +105,25 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
     }
 
     def resolve(e: Expression): Expression = {
-      e.transformUpWithPruning(
-        _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, LATERAL_COLUMN_ALIAS_REFERENCE)) {
+      e.transformUpWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE)) {
         case u: UnresolvedAttribute =>
           // Lateral column alias does not have qualifiers. We always use the first name part to
           // look up lateral column aliases.
-          val lowerCasedName = u.nameParts.head.toLowerCase(Locale.ROOT)
-          aliasMap.get(lowerCasedName).map {
-            case scala.util.Left(alias) if alias.resolved =>
-              LateralColumnAliasReference(alias, u.nameParts, alias.toAttribute)
-            case scala.util.Left(alias) =>
-              LateralColumnAliasReference(u, u.nameParts, alias.toAttribute)
-            case scala.util.Right(count) =>
+          aliasMap.get(u.nameParts.head.toLowerCase(Locale.ROOT)).map {
+            case Left(alias) if alias.resolved =>
+              try {
+                val resolvedAttr = resolveExpressionByPlanOutput(
+                  u, LocalRelation(Seq(alias.toAttribute))).asInstanceOf[NamedExpression]
+                LateralColumnAliasReference(resolvedAttr, u.nameParts, alias.toAttribute)
+              } catch {
+                case ae: AnalysisException =>
+                  logDebug(ae.getMessage)
+                  u
+              }
+            case Right(count) =>
               throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, count)
+            case _ => u
           }.getOrElse(u)
-        case LateralColumnAliasReference(u: UnresolvedAttribute, _, _) =>
-          resolve(u)
       }
     }
     if (aliasMap.nonEmpty) {

@@ -2,11 +2,10 @@
 -- !query
 SELECT id % 2 AS id2, id + id2 + 1 FROM range(4) ORDER BY id2
 -- !query analysis
-Project [id2#xL, ((id + lateralAliasReference(id2)) + 1)#xL]
-+- Sort [(id#xL % cast(2 as bigint)) ASC NULLS FIRST], true
-   +- Project [id2#xL, ((id#xL + id2#xL) + cast(1 as bigint)) AS ((id + lateralAliasReference(id2)) + 1)#xL, id#xL]
-      +- Project [id#xL, (id#xL % cast(2 as bigint)) AS id2#xL]
-         +- Range (0, 4, step=1)
+Sort [id2#xL ASC NULLS FIRST], true
++- Project [id2#xL, ((id#xL + id2#xL) + cast(1 as bigint)) AS ((id + lateralAliasReference(id2)) + 1)#xL]
+   +- Project [id#xL, (id#xL % cast(2 as bigint)) AS id2#xL]
+      +- Range (0, 4, step=1)
 
 
 -- !query
@@ -114,10 +113,9 @@ Sort [(cast(id2#xL as double) / cast(2 as double)) ASC NULLS FIRST], true
 -- !query
 SELECT id % 2 AS id FROM range(4) ORDER BY id
 -- !query analysis
-Project [id#xL]
-+- Sort [(id#xL % cast(2 as bigint)) ASC NULLS FIRST], true
-   +- Project [(id#xL % cast(2 as bigint)) AS id#xL, id#xL]
-      +- Range (0, 4, step=1)
+Sort [id#xL ASC NULLS FIRST], true
++- Project [(id#xL % cast(2 as bigint)) AS id#xL]
+   +- Range (0, 4, step=1)
 
 
 -- !query
