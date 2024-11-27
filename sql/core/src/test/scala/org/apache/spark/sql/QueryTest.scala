@@ -27,7 +27,7 @@ import org.scalatest.Assertions
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.storage.StorageLevel
@@ -449,12 +449,12 @@ object QueryTest extends Assertions {
     }
   }
 
-  def withPhysicalPlansCaptured(spark: SparkSession, thunk: => Unit): Seq[SparkPlan] = {
-    var capturedPlans = Seq.empty[SparkPlan]
+  def withQueryExecutionsCaptured(spark: SparkSession)(thunk: => Unit): Seq[QueryExecution] = {
+    var capturedQueryExecutions = Seq.empty[QueryExecution]
 
     val listener = new QueryExecutionListener {
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        capturedPlans = capturedPlans :+ qe.executedPlan
+        capturedQueryExecutions = capturedQueryExecutions :+ qe
       }
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
@@ -468,7 +468,7 @@ object QueryTest extends Assertions {
       spark.listenerManager.unregister(listener)
     }
 
-    capturedPlans
+    capturedQueryExecutions
   }
 }
 

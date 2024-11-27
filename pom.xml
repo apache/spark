@@ -121,7 +121,7 @@
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.7.1</asm.version>
     <slf4j.version>2.0.16</slf4j.version>
-    <log4j.version>2.24.1</log4j.version>
+    <log4j.version>2.24.2</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.4.1</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
@@ -334,7 +334,7 @@
     <postgresql.version>42.7.4</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>12.8.1.jre11</mssql.jdbc.version>
-    <ojdbc11.version>23.6.0.24.10</ojdbc11.version>
+    <ojdbc17.version>23.6.0.24.10</ojdbc17.version>
     <!-- Used for SBT build to retrieve the Spark version -->
     <spark.version>${project.version}</spark.version>
   </properties>
@@ -839,7 +839,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.6-7</version>
+        <version>1.5.6-8</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1348,7 +1348,7 @@
       <dependency>
         <groupId>com.oracle.database.jdbc</groupId>
         <artifactId>ojdbc17</artifactId>
-        <version>${ojdbc11.version}</version>
+        <version>${ojdbc17.version}</version>
         <scope>test</scope>
       </dependency>
       <dependency>
