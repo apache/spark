@@ -292,7 +292,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     //   +- LocalRelation [col1#28, col2#29]
     //
     // Note that the Aggregate node contains the IN-subquery and the left-hand
-    // side of the IN-subquery is an aggregate expression (sum(col2#28)).
+    // side of the IN-subquery is an aggregate expression (sum(col2#29)).
     //
     // This handler transforms the above plan into the following:
     //
@@ -303,7 +303,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     //
     // The transformation pulled the IN-subquery up into a Project. The left-hand side of the
     // IN-subquery is now an attribute (sum(col2)#36L) that refers to the actual aggregation
-    // which is still performed in the Aggregate node (sum(col2#28) AS sum(col2)#36L). The Unary
+    // which is still performed in the Aggregate node (sum(col2#29) AS sum(col2)#36L). The Unary
     // node handler will use that attribute in the join condition (rather than the aggregate
     // expression).
     //
