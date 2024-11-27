@@ -61,6 +61,7 @@ class TransformWithStateInPandasTestsMixin:
             "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
         )
         cfg.set("spark.sql.execution.arrow.transformWithStateInPandas.maxRecordsPerBatch", "2")
+        cfg.set("spark.sql.session.timeZone", "UTC")
         return cfg
 
     def _prepare_input_data(self, input_path, col1, col2):
