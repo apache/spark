@@ -826,13 +826,16 @@ class TransformWithStateInPandasTestsMixin:
                     Row(id="0", value=str(789 + 123 + 46)),
                     Row(id="1", value=str(146 + 346)),
                 }
-            else:
+            elif batch_id == 1:
                 # handleInitialState is only processed in the first batch,
                 # no more timer is registered so no more expired timers
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="0", value=str(789 + 123 + 46 + 67)),
                     Row(id="3", value=str(987 + 12)),
                 }
+            else:
+                for q in self.spark.streams.active:
+                    q.stop()
 
         self._test_transform_with_state_init_state_in_pandas(
             StatefulProcessorWithInitialStateTimers(), check_results, "processingTime"
