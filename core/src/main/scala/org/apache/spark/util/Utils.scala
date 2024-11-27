@@ -2316,7 +2316,7 @@ private[spark] object Utils
   /**
    * configure a new log4j level
    */
-  def setLogLevel(l: Level): Unit = {
+  def setLogLevel(l: Level): Unit = synchronized {
     val (ctx, loggerConfig) = getLogContext
     loggerConfig.setLevel(l)
     ctx.updateLoggers()
