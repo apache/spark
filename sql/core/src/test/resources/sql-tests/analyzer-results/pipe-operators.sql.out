@@ -842,6 +842,17 @@ Project [x#x, pipeexpression(scalar-subquery#x [x#x], false, SET) AS y#x]
 
 -- !query
 table t
+|> extend 1 as `x.y.z`
+|> set `x.y.z` = x + length(y)
+-- !query analysis
+Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS x.y.z#x]
++- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS x.y.z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
 |> extend 1 as z
 |> set z = first_value(x) over (partition by y)
 -- !query analysis

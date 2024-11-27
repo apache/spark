@@ -5998,9 +5998,9 @@ class AstBuilder extends DataTypeAstBuilder
       case (ident, target) =>
         // Check uniqueness of the assignment keys.
         val checkKey = if (SQLConf.get.caseSensitiveAnalysis) {
-          ident.toLowerCase(Locale.ROOT)
-        } else {
           ident
+        } else {
+          ident.toLowerCase(Locale.ROOT)
         }
         if (visitedSetIdentifiers(checkKey)) {
           operationNotAllowed(

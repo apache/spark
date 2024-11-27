@@ -290,6 +290,11 @@ select col from st
 table t
 |> set y = (select a from other where x = a limit 1);
 
+-- Setting with a backquoted column name with a dot inside.
+table t
+|> extend 1 as `x.y.z`
+|> set `x.y.z` = x + length(y);
+
 -- Window functions are allowed in the pipe operator SET list.
 table t
 |> extend 1 as z

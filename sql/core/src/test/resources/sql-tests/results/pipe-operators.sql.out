@@ -779,6 +779,17 @@ struct<x:int,y:int>
 
 -- !query
 table t
+|> extend 1 as `x.y.z`
+|> set `x.y.z` = x + length(y)
+-- !query schema
+struct<x:int,y:string,x.y.z:int>
+-- !query output
+0	abc	3
+1	def	4
+
+
+-- !query
+table t
 |> extend 1 as z
 |> set z = first_value(x) over (partition by y)
 -- !query schema
