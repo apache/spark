@@ -683,6 +683,9 @@ object DataSource extends Logging {
               }
           }
         case head :: Nil =>
+          // We do not check whether the provider is a Python data source
+          // (isUserDefinedDataSource) to avoid the lookup cost. Java data sources
+          // always take precedence over Python user-defined data sources.
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource

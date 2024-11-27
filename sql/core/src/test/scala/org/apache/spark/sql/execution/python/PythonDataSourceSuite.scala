@@ -94,12 +94,6 @@ abstract class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSessi
 class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
   import IntegratedUDFTestUtils._
 
-  test("SPARK-45917: automatic registration of Python Data Source") {
-    assume(shouldTestPandasUDFs)
-    val df = spark.read.format(staticSourceName).load()
-    checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
-  }
-
   test("SPARK-50426: should not trigger static Python data source lookup") {
     assume(shouldTestPandasUDFs)
     val testAppender = new LogAppender("Python data source lookup")
@@ -119,6 +113,12 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(testAppender.loggingEvents
       .exists(msg => msg.getMessage.getFormattedMessage.contains(
         "Loading static Python Data Sources.")))
+  }
+
+  test("SPARK-45917: automatic registration of Python Data Source") {
+    assume(shouldTestPandasUDFs)
+    val df = spark.read.format(staticSourceName).load()
+    checkAnswer(df, Seq(Row(0, 0), Row(0, 1), Row(1, 0), Row(1, 1), Row(2, 0), Row(2, 1)))
   }
 
   test("simple data source") {
