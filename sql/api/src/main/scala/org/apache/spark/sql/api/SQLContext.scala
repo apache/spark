@@ -27,7 +27,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
+import org.apache.spark.sql.{Encoder, Encoders, ExperimentalMethods, Row}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager

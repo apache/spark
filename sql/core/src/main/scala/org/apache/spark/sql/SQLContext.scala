@@ -172,9 +172,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   override def sparkContext: SparkContext = super.sparkContext
 
   /** @inheritdoc */
-  override def newSession(): SQLContext = {
-    new SQLContext(sparkSession.newSession())
-  }
+  override def newSession(): SQLContext = sparkSession.newSession().sqlContext
 
   /** @inheritdoc */
   override def emptyDataFrame: Dataset[Row] = super.emptyDataFrame
@@ -405,6 +403,9 @@ object SQLContext extends api.SQLContextCompanion {
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
   }
+
+  /** @inheritdoc */
+  override def setActive(sqlContext: SQLContext): Unit = super.setActive(sqlContext)
 
   /**
    * Converts an iterator of Java Beans to InternalRow using the provided bean info & schema. This
