@@ -57,15 +57,15 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
    * Returns whether any of the given `expressions` needs to have its
    * default string type resolved.
    */
-  def doesNeedResolve(expressions: Seq[Expression]): Boolean = {
-    expressions.exists(doesNeedResolve)
+  def needsResolution(expressions: Seq[Expression]): Boolean = {
+    expressions.exists(needsResolution)
   }
 
   /**
    * Returns whether the given `expression` needs to have its
    * default string type resolved.
    */
-  def doesNeedResolve(expression: Expression): Boolean = {
+  def needsResolution(expression: Expression): Boolean = {
     expression.exists(e => transformExpression.isDefinedAt(e, StringType))
   }
 
@@ -169,10 +169,10 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
   }
 
   private def getTemporaryStringType(forType: StringType): StringType = {
-    if (forType.collationId == 0) {
-      TemporaryStringType(1)
+    if (forType == StringType) {
+      TemporaryStringType(StringType("UTF8_LCASE").collationId)
     } else {
-      TemporaryStringType(0)
+      TemporaryStringType(StringType.collationId)
     }
   }
 

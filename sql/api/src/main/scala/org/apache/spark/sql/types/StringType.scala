@@ -81,7 +81,8 @@ class StringType private[sql] (val collationId: Int) extends AtomicType with Ser
     if (isUTF8BinaryCollation) "StringType"
     else s"StringType($collationName)"
 
-  def collationName: String = CollationFactory.fetchCollation(collationId).collationName
+  private[sql] def collationName: String =
+    CollationFactory.fetchCollation(collationId).collationName
 
   // Due to backwards compatibility and compatibility with other readers
   // all string types are serialized in json as regular strings and
