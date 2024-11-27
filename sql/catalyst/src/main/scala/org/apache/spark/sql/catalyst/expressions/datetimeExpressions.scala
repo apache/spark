@@ -110,9 +110,11 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   """,
   group = "datetime_funcs",
   since = "3.1.0")
-case class CurrentTimeZone() extends LeafExpression with Unevaluable {
+case class CurrentTimeZone()
+  extends LeafExpression
+  with DefaultStringProducingExpression
+  with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = StringType
   override def prettyName: String = "current_timezone"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
@@ -921,7 +923,6 @@ case class WeekOfYear(child: Expression) extends GetDateField {
 case class MonthName(child: Expression) extends GetDateField with DefaultStringProducingExpression {
   override val func = DateTimeUtils.getMonthName
   override val funcName = "getMonthName"
-  override def dataType: DataType = StringType
   override protected def withNewChildInternal(newChild: Expression): MonthName =
     copy(child = newChild)
 }

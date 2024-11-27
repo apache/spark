@@ -89,7 +89,10 @@ case class UrlEncode(child: Expression)
   group = "url_funcs")
 // scalastyle:on line.size.limit
 case class UrlDecode(child: Expression, failOnError: Boolean = true)
-  extends RuntimeReplaceable with UnaryLike[Expression] with ImplicitCastInputTypes {
+  extends RuntimeReplaceable
+  with UnaryLike[Expression]
+  with DefaultStringProducingExpression
+  with ImplicitCastInputTypes {
 
   def this(child: Expression) = this(child, true)
 

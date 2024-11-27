@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 
@@ -153,27 +152,12 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
       Cast(expression, newDataType)
   }
 
-  private def needsCast(expression: Expression): Boolean = {
+  private def needsCast(expression: Expression): Boolean = expression match {
     // TODO: is there a better way to figure out how not to add casts infinitely?
-    if (expression.getTagValue(CAST_ADDED_TAG).isDefined) {
-      return false
-    } else if (!expression.resolved || !hasDefaultStringType(expression.dataType)) {
-      return false
-    } else if (expression.isInstanceOf[Unevaluable] && !isCurrentLikeExpression(expression)) {
-      return false
-    }
-
-    // either has no children of string type
-    // or is a DefaultStringProducingExpression
-    !expression.children.exists(e => hasAnyStringType(e.dataType)) ||
-      expression.isInstanceOf[DefaultStringProducingExpression]
+    case _ if expression.getTagValue(CAST_ADDED_TAG).isDefined => false
+    case _: DefaultStringProducingExpression => true
+    case _ => false
   }
-
-  private def isCurrentLikeExpression(expression: Expression): Boolean =
-    expression.containsPattern(CURRENT_LIKE)
-
-  private def hasAnyStringType(dataType: DataType): Boolean =
-    dataType.existsRecursively(_.isInstanceOf[StringType])
 
   private def hasDefaultStringType(dataType: DataType): Boolean =
     dataType.existsRecursively(isDefaultStringType)

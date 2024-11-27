@@ -2232,9 +2232,10 @@ case class StringRepeat(str: Expression, times: Expression)
   since = "1.5.0",
   group = "string_funcs")
 case class StringSpace(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression
+  with DefaultStringProducingExpression
+  with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
-  override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
   override def nullSafeEval(s: Any): Any = {
@@ -2720,8 +2721,6 @@ case class SoundEx(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
-  override def dataType: DataType = StringType
-
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
@@ -2798,10 +2797,9 @@ case class Ascii(child: Expression)
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class Chr(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
 
-  override def dataType: DataType = StringType
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
   protected override def nullSafeEval(lon: Any): Any = {

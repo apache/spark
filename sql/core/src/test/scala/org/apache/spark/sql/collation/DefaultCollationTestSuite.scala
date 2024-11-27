@@ -32,7 +32,8 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   val defaultStringProducingExpressions: Seq[String] = Seq(
     "current_timezone()", "current_database()", "md5('Spark' collate unicode)",
     "soundex('Spark' collate unicode)", "url_encode('https://spark.apache.org' collate unicode)",
-    "uuid()", "chr(65)", "collation('UNICODE')", "version()"
+    "url_decode('https%3A%2F%2Fspark.apache.org')", "uuid()", "chr(65)", "collation('UNICODE')",
+    "version()", "space(5)", "randstr(5, 123)"
   )
 
   def withSessionCollationAndTable(collation: String, testTables: String*)(f: => Unit): Unit = {

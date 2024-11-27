@@ -768,14 +768,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
 
     try {
       CurrentOrigin.withOrigin(origin) {
-        try {
-          val res = defaultCtor.newInstance(allArgs.toArray: _*).asInstanceOf[BaseType]
-          res.copyTagsFrom(this)
-          res
-        } catch {
-          case _: Exception =>
-            throw QueryExecutionErrors.constructorNotFoundError(nodeName)
-        }
+        val res = defaultCtor.newInstance(allArgs.toArray: _*).asInstanceOf[BaseType]
+        res.copyTagsFrom(this)
+        res
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
