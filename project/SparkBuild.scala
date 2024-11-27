@@ -264,8 +264,6 @@ object SparkBuild extends PomBuild {
   val noLintOnCompile = sys.env.contains("NOLINT_ON_COMPILE") &&
       !sys.env.get("NOLINT_ON_COMPILE").contains("false")
 
-  println("SKIP_LOCAL_M2: " + sys.env.contains("SKIP_LOCAL_M2"))
-
   lazy val sharedSettings = sparkGenjavadocSettings ++
                             compilerWarningSettings ++
       (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
