@@ -22,14 +22,13 @@ import java.util.regex.Pattern
 import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
-
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
@@ -204,5 +203,12 @@ private[sql] object DataSourceV2Utils extends Logging {
         }
       case _ =>
     }
+  }
+
+  def commitMetrics(
+      sparkContext: SparkContext, tableCatalog: StagingTableCatalog): Map[String, SQLMetric] = {
+    tableCatalog.supportedCustomMetrics().map {
+      metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
+    }.toMap
   }
 }

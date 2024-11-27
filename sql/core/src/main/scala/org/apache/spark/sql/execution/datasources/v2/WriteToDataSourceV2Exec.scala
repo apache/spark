@@ -110,7 +110,8 @@ case class AtomicCreateTableAsSelectExec(
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
-  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
+  override val metrics: Map[String, SQLMetric] =
+    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -199,7 +200,8 @@ case class AtomicReplaceTableAsSelectExec(
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
-  override val metrics: Map[String, SQLMetric] = commitMetrics(catalog)
+  override val metrics: Map[String, SQLMetric] =
+    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
 
   override protected def run(): Seq[InternalRow] = {
     val columns = getV2Columns(query.schema, catalog.useNullableQuerySchema)
@@ -615,12 +617,6 @@ case class DeltaWithMetadataWritingSparkTask(
 
 private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   override def output: Seq[Attribute] = Nil
-
-  protected def commitMetrics(tableCatalog: StagingTableCatalog): Map[String, SQLMetric] = {
-    tableCatalog.supportedCustomMetrics().map {
-      metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
-    }.toMap
-  }
 
   protected def getV2Columns(schema: StructType, forceNullable: Boolean): Array[Column] = {
     val rawSchema = CharVarcharUtils.getRawSchema(removeInternalMetadata(schema), conf)
