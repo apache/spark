@@ -10,81 +10,241 @@ struct<>
 -- !query
 select cast(a as byte) from t
 -- !query schema
-struct<a:tinyint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TINYINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "cast(a as byte)"
+  } ]
+}
 
 
 -- !query
 select cast(a as short) from t
 -- !query schema
-struct<a:smallint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"SMALLINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "cast(a as short)"
+  } ]
+}
 
 
 -- !query
 select cast(a as int) from t
 -- !query schema
-struct<a:int>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "cast(a as int)"
+  } ]
+}
 
 
 -- !query
 select cast(a as long) from t
 -- !query schema
-struct<a:bigint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "cast(a as long)"
+  } ]
+}
 
 
 -- !query
 select cast(a as float) from t
 -- !query schema
-struct<a:float>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"FLOAT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "cast(a as float)"
+  } ]
+}
 
 
 -- !query
 select cast(a as double) from t
 -- !query schema
-struct<a:double>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DOUBLE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(a as double)"
+  } ]
+}
 
 
 -- !query
 select cast(a as decimal) from t
 -- !query schema
-struct<a:decimal(10,0)>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DECIMAL(10,0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "cast(a as decimal)"
+  } ]
+}
 
 
 -- !query
 select cast(a as boolean) from t
 -- !query schema
-struct<a:boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BOOLEAN\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "cast(a as boolean)"
+  } ]
+}
 
 
 -- !query
 select cast(a as timestamp) from t
 -- !query schema
-struct<a:timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 27,
+    "fragment" : "cast(a as timestamp)"
+  } ]
+}
 
 
 -- !query
 select cast(a as date) from t
 -- !query schema
-struct<a:date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 22,
+    "fragment" : "cast(a as date)"
+  } ]
+}
 
 
 -- !query
@@ -170,9 +330,23 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select to_timestamp(a) from t
 -- !query schema
-struct<to_timestamp(a):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "fragment" : ""
+  } ]
+}
 
 
 -- !query
@@ -195,9 +369,17 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select to_unix_timestamp(a) from t
 -- !query schema
-struct<to_unix_timestamp(a, yyyy-MM-dd HH:mm:ss):bigint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text 'aa' could not be parsed at index 0"
+  }
+}
 
 
 -- !query
@@ -220,9 +402,17 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select unix_timestamp(a) from t
 -- !query schema
-struct<unix_timestamp(a, yyyy-MM-dd HH:mm:ss):bigint>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text 'aa' could not be parsed at index 0"
+  }
+}
 
 
 -- !query
@@ -245,41 +435,112 @@ org.apache.spark.SparkUpgradeException
 -- !query
 select from_unixtime(a) from t
 -- !query schema
-struct<from_unixtime(a, yyyy-MM-dd HH:mm:ss):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 23,
+    "fragment" : "from_unixtime(a)"
+  } ]
+}
 
 
 -- !query
 select from_unixtime('2018-01-01', a) from t
 -- !query schema
-struct<from_unixtime(2018-01-01, a):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'2018-01-01'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"BIGINT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "from_unixtime('2018-01-01', a)"
+  } ]
+}
 
 
 -- !query
 select next_day(a, 'MO') from t
 -- !query schema
-struct<next_day(a, MO):date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "next_day(a, 'MO')"
+  } ]
+}
 
 
 -- !query
 select next_day('2018-01-01', a) from t
 -- !query schema
-struct<next_day(2018-01-01, a):date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkIllegalArgumentException
+{
+  "errorClass" : "ILLEGAL_DAY_OF_WEEK",
+  "sqlState" : "22009",
+  "messageParameters" : {
+    "string" : "aa"
+  }
+}
 
 
 -- !query
 select trunc(a, 'MM') from t
 -- !query schema
-struct<trunc(a, MM):date>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"DATE\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "trunc(a, 'MM')"
+  } ]
+}
 
 
 -- !query
@@ -301,9 +562,25 @@ NULL
 -- !query
 select sha2(a, a) from t
 -- !query schema
-struct<sha2(a, a):string>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "expression" : "'aa'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "sha2(a, a)"
+  } ]
+}
 
 
 -- !query

@@ -343,6 +343,17 @@ class TransformWithStateInPandasStateServer(
           case _ =>
             throw new IllegalArgumentException("Invalid timer state method call")
         }
+      case StatefulProcessorCall.MethodCase.DELETEIFEXISTS =>
+        val stateName = message.getDeleteIfExists.getStateName
+        statefulProcessorHandle.deleteIfExists(stateName)
+        if (valueStates.contains(stateName)) {
+          valueStates.remove(stateName)
+        } else if (listStates.contains(stateName)) {
+          listStates.remove(stateName)
+        } else if (mapStates.contains(stateName)) {
+          mapStates.remove(stateName)
+        }
+        sendResponse(0)
       case _ =>
         throw new IllegalArgumentException("Invalid method call")
     }

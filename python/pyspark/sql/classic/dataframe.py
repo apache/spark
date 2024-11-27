@@ -42,6 +42,7 @@ from pyspark import _NoValue
 from pyspark.resource import ResourceProfile
 from pyspark._globals import _NoValueType
 from pyspark.errors import (
+    AnalysisException,
     PySparkTypeError,
     PySparkValueError,
     PySparkIndexError,
@@ -214,6 +215,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 self._schema = cast(
                     StructType, _parse_datatype_json_string(self._jdf.schema().json())
                 )
+            except AnalysisException as e:
+                raise e
             except Exception as e:
                 raise PySparkValueError(
                     errorClass="CANNOT_PARSE_DATATYPE",
@@ -1782,6 +1785,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             return DataFrame(self._jdf.transpose(_to_java_column(indexColumn)), self.sparkSession)
         else:
             return DataFrame(self._jdf.transpose(), self.sparkSession)
+
+    def scalar(self) -> Column:
+        return Column(self._jdf.scalar())
+
+    def exists(self) -> Column:
+        return Column(self._jdf.exists())
 
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:

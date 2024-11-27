@@ -19,9 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.catalyst.analysis.{LazyOuterReference, UnresolvedOuterReference}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -372,6 +374,13 @@ object SubExprUtils extends PredicateHelper {
     val nonEquivalentGroupByExprs = groupByExprs -- correlatedEquivalentExprs
     nonEquivalentGroupByExprs
   }
+
+  def removeLazyOuterReferences(logicalPlan: LogicalPlan): LogicalPlan = {
+    logicalPlan.transformAllExpressionsWithPruning(
+      _.containsPattern(TreePattern.LAZY_OUTER_REFERENCE)) {
+      case or: LazyOuterReference => UnresolvedOuterReference(or.nameParts)
+    }
+  }
 }
 
 /**
@@ -398,7 +407,8 @@ case class ScalarSubquery(
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None,
     mayHaveCountBug: Option[Boolean] = None,
-    needSingleJoin: Option[Boolean] = None)
+    needSingleJoin: Option[Boolean] = None,
+    hasExplicitOuterRefs: Boolean = false)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     if (!plan.schema.fields.nonEmpty) {
@@ -567,7 +577,8 @@ case class Exists(
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
-    hint: Option[HintInfo] = None)
+    hint: Option[HintInfo] = None,
+    hasExplicitOuterRefs: Boolean = false)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint)
   with Predicate
   with Unevaluable {
