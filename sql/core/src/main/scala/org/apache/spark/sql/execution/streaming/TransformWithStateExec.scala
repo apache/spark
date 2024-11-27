@@ -228,13 +228,12 @@ case class TransformWithStateExec(
     }
   }
 
-  private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
+  private def handleInputRows(
+      keyRow: UnsafeRow,
+      valueRowIter: Iterator[InternalRow],
+      getKeyObj: InternalRow => Any,
+      getValueObj: InternalRow => Any):
     Iterator[InternalRow] = {
-    val getKeyObj =
-      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-
-    val getValueObj =
-      ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
 
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
@@ -282,11 +281,14 @@ case class TransformWithStateExec(
     ImplicitGroupingKeyTracker.removeImplicitKey()
   }
 
-  private def processNewData(dataIter: Iterator[InternalRow]): Iterator[InternalRow] = {
+  private def processNewData(
+      dataIter: Iterator[InternalRow],
+      getKeyObj: InternalRow => Any,
+      getValueObj: InternalRow => Any): Iterator[InternalRow] = {
     val groupedIter = GroupedIterator(dataIter, groupingAttributes, child.output)
     groupedIter.flatMap { case (keyRow, valueRowIter) =>
       val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
-      handleInputRows(keyUnsafeRow, valueRowIter)
+      handleInputRows(keyUnsafeRow, valueRowIter, getKeyObj, getValueObj)
     }
   }
 
@@ -339,7 +341,9 @@ case class TransformWithStateExec(
   private def processDataWithPartition(
       iter: Iterator[InternalRow],
       store: StateStore,
-      processorHandle: StatefulProcessorHandleImpl):
+      processorHandle: StatefulProcessorHandleImpl,
+      getKeyObj: InternalRow => Any,
+      getValueObj: InternalRow => Any):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
@@ -368,7 +372,7 @@ case class TransformWithStateExec(
 
     val newDataProcessorIter =
       CompletionIterator[InternalRow, Iterator[InternalRow]](
-      processNewData(filteredIter), {
+      processNewData(filteredIter, getKeyObj, getValueObj), {
         // Note: Due to the iterator lazy execution, this metric also captures the time taken
         // by the upstream (consumer) operators in addition to the processing in this operator.
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
@@ -533,6 +537,16 @@ case class TransformWithStateExec(
     }
   }
 
+  private def getDeserializers(): (InternalRow => Any, InternalRow => Any) = {
+    val getKeyObj =
+      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+
+    val getValueObj =
+      ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+
+    (getKeyObj, getValueObj)
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
@@ -550,6 +564,21 @@ case class TransformWithStateExec(
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
+
+          // We need to just initialize key and value deserializer once per partition.
+          // The deserialzers need to be created in the lambda function so that
+          // they are created on executor size. Since the deserializer function
+          // is not serializable
+          // TODO we can further optimize this to be done once per query.
+          // Currently, the deserializers are created once per partition per batch.
+          // We can improve this by creating the deserializers once per query run.
+          // To do this, we need adjust certain APIs in CodeGenerator to allow
+          // us to generate the code and compile it separately.  We can
+          // generate the java code on the driver side and compile it on the executor side.
+          // Note that we only need to compile it once on the executor side since there is a cache
+          // that allows us to reuse the compiled code.
+          val (getKeyObj, getValueObj) = getDeserializers()
+
           if (isStreaming) {
             val stateStoreId = StateStoreId(stateInfo.get.checkpointLocation,
               stateInfo.get.operatorId, partitionId)
@@ -566,10 +595,12 @@ case class TransformWithStateExec(
               hadoopConf = hadoopConfBroadcast.value.value
             )
 
-            processDataWithInitialState(store, childDataIterator, initStateIterator)
+            processDataWithInitialState(
+              store, childDataIterator, initStateIterator, getKeyObj, getValueObj)
           } else {
             initNewStateStoreAndProcessData(partitionId, hadoopConfBroadcast) { store =>
-              processDataWithInitialState(store, childDataIterator, initStateIterator)
+              processDataWithInitialState(
+                store, childDataIterator, initStateIterator, getKeyObj, getValueObj)
             }
           }
       }
@@ -585,7 +616,20 @@ case class TransformWithStateExec(
           useColumnFamilies = true
         ) {
           case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
-            processData(store, singleIterator)
+            // We need to just initialize key and value deserializer once per partition.
+            // The deserialzers need to be created in the lambda function so that
+            // they are created on executor size. Since the deserializer function
+            // is not serializable
+            // TODO we can further optimize this to be done once per query.
+            // Currently, the deserializers are created once per partition per batch.
+            // We can improve this by creating the deserializers once per query run.
+            // To do this, we need adjust certain APIs in CodeGenerator to allow
+            // us to generate the code and compile it separately.  We can
+            // generate the java code on the driver side and compile it on the executor side.
+            // Note that we only need to compile it once on the executor side since there is a cache
+            // that allows us to reuse the compiled code.
+            val (getKeyObj, getValueObj) = getDeserializers()
+            processData(store, singleIterator, getKeyObj, getValueObj)
         }
       } else {
         // If the query is running in batch mode, we need to create a new StateStore and instantiate
@@ -595,7 +639,8 @@ case class TransformWithStateExec(
         child.execute().mapPartitionsWithIndex[InternalRow](
           (i: Int, iter: Iterator[InternalRow]) => {
             initNewStateStoreAndProcessData(i, hadoopConfBroadcast) { store =>
-              processData(store, iter)
+              val (getKeyObj, getValueObj) = getDeserializers()
+              processData(store, iter, getKeyObj, getValueObj)
             }
           }
         )
@@ -649,7 +694,11 @@ case class TransformWithStateExec(
    * @param singleIterator The iterator of rows to process
    * @return An iterator of rows that are the result of processing the input rows
    */
-  private def processData(store: StateStore, singleIterator: Iterator[InternalRow]):
+  private def processData(
+      store: StateStore,
+      singleIterator: Iterator[InternalRow],
+      getKeyObj: InternalRow => Any,
+      getValueObj: InternalRow => Any):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(
       store, getStateInfo.queryRunId, keyEncoder, timeMode,
@@ -658,13 +707,15 @@ case class TransformWithStateExec(
     statefulProcessor.setHandle(processorHandle)
     statefulProcessor.init(outputMode, timeMode)
     processorHandle.setHandleState(StatefulProcessorHandleState.INITIALIZED)
-    processDataWithPartition(singleIterator, store, processorHandle)
+    processDataWithPartition(singleIterator, store, processorHandle, getKeyObj, getValueObj)
   }
 
   private def processDataWithInitialState(
       store: StateStore,
       childDataIterator: Iterator[InternalRow],
-      initStateIterator: Iterator[InternalRow]):
+      initStateIterator: Iterator[InternalRow],
+      getKeyObj: InternalRow => Any,
+      getValueObj: InternalRow => Any):
     CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
       keyEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
@@ -689,7 +740,7 @@ case class TransformWithStateExec(
     }
     initialStateProcTimeMs += NANOSECONDS.toMillis(System.nanoTime - initialStateStartTimeNs)
 
-    processDataWithPartition(childDataIterator, store, processorHandle)
+    processDataWithPartition(childDataIterator, store, processorHandle, getKeyObj, getValueObj)
   }
 
   private def validateTimeMode(): Unit = {
