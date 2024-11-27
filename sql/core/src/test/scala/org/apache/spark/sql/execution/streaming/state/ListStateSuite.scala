@@ -190,8 +190,8 @@ class ListStateSuite extends StateVariableSuiteBase {
       var ttlValues = testState.getTTLValues()
       assert(ttlValues.nonEmpty)
       assert(ttlValues.forall(_._2 === ttlExpirationMs))
-      var ttlStateValueIterator = testState.getValuesInTTLState()
-      assert(ttlStateValueIterator.hasNext)
+      var ttlStateValue = testState.getValueInTTLState()
+      assert(ttlStateValue.isDefined)
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
       val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -212,10 +212,9 @@ class ListStateSuite extends StateVariableSuiteBase {
       ttlValues = nextBatchTestState.getTTLValues()
       assert(ttlValues.nonEmpty)
       assert(ttlValues.forall(_._2 === ttlExpirationMs))
-      ttlStateValueIterator = nextBatchTestState.getValuesInTTLState()
-      assert(ttlStateValueIterator.hasNext)
-      assert(ttlStateValueIterator.next() === ttlExpirationMs)
-      assert(ttlStateValueIterator.isEmpty)
+      ttlStateValue = nextBatchTestState.getValueInTTLState()
+      assert(ttlStateValue.isDefined)
+      assert(ttlStateValue.get === ttlExpirationMs)
 
       // getWithoutTTL should still return the expired value
       assert(nextBatchTestState.getWithoutEnforcingTTL().toSeq === Seq("v1", "v2", "v3"))
@@ -276,8 +275,8 @@ class ListStateSuite extends StateVariableSuiteBase {
       val ttlValues = testState.getTTLValues()
       assert(ttlValues.nonEmpty)
       assert(ttlValues.forall(_._2 === ttlExpirationMs))
-      val ttlStateValueIterator = testState.getValuesInTTLState()
-      assert(ttlStateValueIterator.hasNext)
+      val ttlStateValue = testState.getValueInTTLState()
+      assert(ttlStateValue.isDefined)
     }
   }
 }
