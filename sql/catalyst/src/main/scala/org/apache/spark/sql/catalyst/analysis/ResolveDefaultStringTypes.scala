@@ -40,10 +40,10 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
 
   def apply(plan: LogicalPlan): LogicalPlan = {
 
-    val newPlan = plan match {
-      case _ if isDDLCommand(plan) => transformDDL(plan)
-      case _ if isDefaultSessionCollationUsed => plan
-      case _ => transformPlan(plan, stringTypeForDMLCommand)
+    val newPlan = if (isDDLCommand(plan)) {
+      transformDDL(plan)
+    } else {
+      transformPlan(plan, stringTypeForDMLCommand)
     }
 
     if (!replaceWithTempType || newPlan.fastEquals(plan)) {
