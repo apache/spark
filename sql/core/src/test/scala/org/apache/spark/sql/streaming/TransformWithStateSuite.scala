@@ -429,11 +429,12 @@ class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
  * Class that adds tests for transformWithState stateful streaming operator
  */
 class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithChangelogCheckpointingEnabled with AlsoTestWithEncodingTypes {
 
   import testImplicits._
 
-  test("transformWithState - streaming with rocksdb and invalid processor should fail") {
+  test("transformWithState - streaming with rocksdb and" +
+    " invalid processor should fail") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -688,7 +689,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - streaming with rocksdb and event time based timer") {
+  test("transformWithState - streaming with rocksdb and event " +
+  "time based timer") {
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS()
@@ -778,7 +780,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  test("Use statefulProcessor without transformWithState - handle should be absent") {
+  test("Use statefulProcessor without transformWithState -" +
+    " handle should be absent") {
     val processor = new RunningCountStatefulProcessor()
     val ex = intercept[Exception] {
       processor.getHandle
@@ -1034,7 +1037,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify StateSchemaV3 writes correct SQL schema of key/value") {
+  test("transformWithState - verify StateSchemaV3 writes " +
+    "correct SQL schema of key/value") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1605,7 +1609,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify that schema file is kept after metadata is purged") {
+  test("transformWithState - verify that schema file " +
+    "is kept after metadata is purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->

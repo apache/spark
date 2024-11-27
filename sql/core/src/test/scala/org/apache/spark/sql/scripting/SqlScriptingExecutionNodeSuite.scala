@@ -39,6 +39,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     extends SingleStatementExec(
       parsedPlan = Project(Seq(Alias(Literal(condVal), description)()), OneRowRelation()),
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      Map.empty,
       isInternal = false)
 
   case class DummyLogicalPlan() extends LeafNode {
@@ -50,6 +51,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
     extends SingleStatementExec(
       parsedPlan = DummyLogicalPlan(),
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
+      Map.empty,
       isInternal = false)
 
   class LoopBooleanConditionEvaluator(condition: TestLoopCondition) {

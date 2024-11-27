@@ -91,6 +91,8 @@ tabulate_requirement_message = None if have_tabulate else "No module named 'tabu
 have_graphviz = have_package("graphviz")
 graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
 
+have_flameprof = have_package("flameprof")
+flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
 
 pandas_requirement_message = None
 try:
@@ -192,14 +194,16 @@ def eventually(
 
 class QuietTest:
     def __init__(self, sc):
-        self.log4j = sc._jvm.org.apache.log4j
+        self.sc = sc
 
     def __enter__(self):
-        self.old_level = self.log4j.LogManager.getRootLogger().getLevel()
-        self.log4j.LogManager.getRootLogger().setLevel(self.log4j.Level.FATAL)
+        self.old_level = (
+            self.sc._jvm.org.apache.log4j.LogManager.getRootLogger().getLevel().toString()
+        )
+        self.sc.setLogLevel("FATAL")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
+        self.sc.setLogLevel(self.old_level)
 
 
 class PySparkTestCase(unittest.TestCase):

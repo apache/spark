@@ -21,13 +21,18 @@ from pyspark.logger import PySparkLogger
 import os
 from typing import Optional
 
-__all__ = [
-    "getLogLevel",
-]
+__all__ = ["configureLogging", "getLogLevel"]
 
 
-def _configure_logging() -> logging.Logger:
-    """Configure logging for the Spark Connect clients."""
+def configureLogging(level: Optional[str] = None) -> logging.Logger:
+    """
+    Configure log level for Spark Connect components.
+    When not specified as a parameter, log level will be configured based on
+    the SPARK_CONNECT_LOG_LEVEL environment variable.
+    When both are absent, logging is disabled.
+
+    .. versionadded:: 4.0.0
+    """
     logger = PySparkLogger.getLogger(__name__)
     handler = logging.StreamHandler()
     handler.setFormatter(
@@ -35,8 +40,9 @@ def _configure_logging() -> logging.Logger:
     )
     logger.addHandler(handler)
 
-    # Check the environment variables for log levels:
-    if "SPARK_CONNECT_LOG_LEVEL" in os.environ:
+    if level is not None:
+        logger.setLevel(level.upper())
+    elif "SPARK_CONNECT_LOG_LEVEL" in os.environ:
         logger.setLevel(os.environ["SPARK_CONNECT_LOG_LEVEL"].upper())
     else:
         logger.disabled = True
@@ -44,7 +50,7 @@ def _configure_logging() -> logging.Logger:
 
 
 # Instantiate the logger based on the environment configuration.
-logger = _configure_logging()
+logger = configureLogging()
 
 
 def getLogLevel() -> Optional[int]:
