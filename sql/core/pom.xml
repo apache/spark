@@ -40,6 +40,11 @@
       <artifactId>rocksdbjni</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>com.univocity</groupId>
       <artifactId>univocity-parsers</artifactId>
       <type>jar</type>
@@ -278,6 +283,7 @@
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>
+              <include>com.google.guava:guava</include>
             </includes>
           </artifactSet>
           <relocations>

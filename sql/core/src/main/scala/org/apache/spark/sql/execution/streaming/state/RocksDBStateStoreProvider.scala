@@ -620,7 +620,7 @@ object RocksDBStateStoreProvider {
       .expireAfterAccess(1, TimeUnit.HOURS)  // Optional: Add expiration if needed
       .build[String, AvroEncoder]()
 
-    new NonFateSharingCache(guavaCache)
+    NonFateSharingCache(guavaCache)
   }
 
   def getAvroEnc(
