@@ -234,10 +234,9 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi :: Creates a `DataFrame` from an `RDD` containing
-   * [[org.apache.spark.sql.Row Row]]s using the given schema.
-   * It is important to make sure that the structure of every
-   * [[org.apache.spark.sql.Row Row]] of the provided RDD matches the provided schema.
-   * Otherwise, there will be runtime exception. Example:
+   * [[org.apache.spark.sql.Row Row]]s using the given schema. It is important to make sure that
+   * the structure of every [[org.apache.spark.sql.Row Row]] of the provided RDD matches the
+   * provided schema. Otherwise, there will be runtime exception. Example:
    * {{{
    *  import org.apache.spark.sql._
    *  import org.apache.spark.sql.types._
@@ -337,9 +336,9 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi :: Creates a `DataFrame` from a `JavaRDD` containing
-   * [[org.apache.spark.sql.Row Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[org.apache.spark.sql.Row Row]] of
-   * the provided RDD matches the provided schema. Otherwise, there will be runtime exception.
+   * [[org.apache.spark.sql.Row Row]]s using the given schema. It is important to make sure that
+   * the structure of every [[org.apache.spark.sql.Row Row]] of the provided RDD matches the
+   * provided schema. Otherwise, there will be runtime exception.
    *
    * @group dataframes
    * @since 1.3.0
@@ -351,9 +350,9 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi :: Creates a `DataFrame` from a `JavaList` containing
-   * [[org.apache.spark.sql.Row Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[org.apache.spark.sql.Row Row]] of
-   * the provided List matches the provided schema. Otherwise, there will be runtime exception.
+   * [[org.apache.spark.sql.Row Row]]s using the given schema. It is important to make sure that
+   * the structure of every [[org.apache.spark.sql.Row Row]] of the provided List matches the
+   * provided schema. Otherwise, there will be runtime exception.
    *
    * @group dataframes
    * @since 1.6.0

@@ -308,6 +308,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   }
 }
 
+/** A case class to mimic the output schema of Spark Classic's `SQLContext.tables()` API. */
 protected sealed case class ListTableRow(
     database: String,
     tableName: String,
