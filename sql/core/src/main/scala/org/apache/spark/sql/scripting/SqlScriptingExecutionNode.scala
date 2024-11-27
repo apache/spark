@@ -22,7 +22,7 @@ import java.util
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
@@ -81,7 +81,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
-      val df = Dataset.ofRows(session, statement.parsedPlan)
+      val df = statement.buildDataFrame(session)
       df.schema.fields match {
         case Array(field) if field.dataType == BooleanType =>
           df.limit(2).collect() match {
@@ -109,6 +109,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Logical plan of the parsed statement.
  * @param origin
  *   Origin descriptor for the statement.
+ * @param args
+ *   A map of parameter names to SQL literal expressions.
  * @param isInternal
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
@@ -117,6 +119,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
+    val args: Map[String, Expression],
     override val isInternal: Boolean)
   extends LeafStatementExec with WithOrigin {
 
@@ -127,13 +130,14 @@ class SingleStatementExec(
   var isExecuted = false
 
   /**
-   * Builds a DataFrame from the parsedPlan of this SingleStatementExec.
-   * @param session The SparkSession used.
-   * @return
-   *   The DataFrame.
+   * Plan with named parameters.
    */
-  def buildDataFrame(session: SparkSession): DataFrame = {
-      Dataset.ofRows(session, parsedPlan)
+  private lazy val preparedPlan: LogicalPlan = {
+    if (args.nonEmpty) {
+      NameParameterizedQuery(parsedPlan, args)
+    } else {
+      parsedPlan
+    }
   }
 
   /**
@@ -144,6 +148,16 @@ class SingleStatementExec(
   def getText: String = {
     assert(origin.sqlText.isDefined && origin.startIndex.isDefined && origin.stopIndex.isDefined)
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
+  }
+
+  /**
+   * Builds a DataFrame from the parsedPlan of this SingleStatementExec
+   * @param session The SparkSession on which the parsedPlan is built.
+   * @return
+   *   The DataFrame.
+   */
+  def buildDataFrame(session: SparkSession): DataFrame = {
+    Dataset.ofRows(session, preparedPlan)
   }
 
   override def reset(): Unit = isExecuted = false
@@ -839,7 +853,7 @@ class ForStatementExec(
       defaultExpression,
       replace = true
     )
-    new SingleStatementExec(declareVariable, Origin(), isInternal = true)
+    new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true)
   }
 
   private def createSetVarExec(varName: String, variable: Expression): SingleStatementExec = {
@@ -849,12 +863,12 @@ class ForStatementExec(
     )
     val setIdentifierToCurrentRow =
       SetVariable(Seq(UnresolvedAttribute(varName)), projectNamedStruct)
-    new SingleStatementExec(setIdentifierToCurrentRow, Origin(), isInternal = true)
+    new SingleStatementExec(setIdentifierToCurrentRow, Origin(), Map.empty, isInternal = true)
   }
 
   private def createDropVarExec(varName: String): SingleStatementExec = {
     val dropVar = DropVariable(UnresolvedIdentifier(Seq(varName)), ifExists = true)
-    new SingleStatementExec(dropVar, Origin(), isInternal = true)
+    new SingleStatementExec(dropVar, Origin(), Map.empty, isInternal = true)
   }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator

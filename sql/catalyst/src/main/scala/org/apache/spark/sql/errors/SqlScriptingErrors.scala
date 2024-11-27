@@ -103,6 +103,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
 
+  def positionalParametersAreNotSupportedWithSqlScripting(): Throwable = {
+    new SqlScriptingException(
+      origin = null,
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
   def labelDoesNotExist(
       origin: Origin,
       labelName: String,

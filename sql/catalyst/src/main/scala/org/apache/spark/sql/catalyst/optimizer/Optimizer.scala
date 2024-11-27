@@ -1031,6 +1031,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, _: LeafNode) => p
 
+    // Can't prune the columns on UpdateEventTimeWatermarkColumn
+    case p @ Project(_, _: UpdateEventTimeWatermarkColumn) => p
+
     case NestedColumnAliasing(rewrittenPlan) => rewrittenPlan
 
     // for all other logical plans that inherits the output from it's children
