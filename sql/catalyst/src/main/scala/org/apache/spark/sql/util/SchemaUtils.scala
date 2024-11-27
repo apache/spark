@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, NamedExpression}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NoConstraint, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -317,9 +317,7 @@ private[spark] object SchemaUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCollatedStringWithString(field.dataType))
       })
-    case CharType(l) => CharType(l)
-    case VarcharType(l) => VarcharType(l)
-    case _: StringType => StringType
+    case st: StringType if st.constraint == NoConstraint => StringType
     case _ => dt
   }
 }
