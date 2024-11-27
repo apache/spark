@@ -20,6 +20,7 @@ from enum import Enum
 # This file places the utilities for transformWithStateInPandas; we have a separate file to avoid
 # putting internal classes to the stateful_processor.py file which contains public APIs.
 
+
 class TransformWithStateInPandasFuncMode(Enum):
     PROCESS_DATA = 1
     PROCESS_TIMER = 2

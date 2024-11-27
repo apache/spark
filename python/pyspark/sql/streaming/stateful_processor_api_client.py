@@ -64,8 +64,8 @@ class StatefulProcessorApiClient:
         self.list_timer_iterator_cursors: Dict[str, Tuple["PandasDataFrameLike", int]] = {}
         # statefulProcessorApiClient is initialized per batch per partition,
         # so we will have new timestamps for a new batch
-        self._batch_timestamp = self._get_batch_timestamp()
-        self._watermark_timestamp = self._get_watermark_timestamp()
+        self._batch_timestamp = -1
+        self._watermark_timestamp = -1
 
     def set_handle_state(self, state: StatefulProcessorHandleState) -> None:
         import pyspark.sql.streaming.proto.StateMessage_pb2 as stateMessage
@@ -270,7 +270,14 @@ class StatefulProcessorApiClient:
                 # TODO(SPARK-49233): Classify user facing errors.
                 raise PySparkRuntimeError(f"Error getting expiry timers: " f"{response_message[1]}")
 
-    def get_timestamps(self) -> Tuple[int, int]:
+    def get_timestamps(self, time_mode: str) -> Tuple[int, int]:
+        if time_mode.lower() == "none":
+            return -1, -1
+        else:
+            if self._batch_timestamp == -1:
+                self._batch_timestamp = self._get_batch_timestamp()
+            if self._watermark_timestamp == -1:
+                self._watermark_timestamp = self._get_watermark_timestamp()
         return self._batch_timestamp, self._watermark_timestamp
 
     def get_map_state(

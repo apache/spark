@@ -503,17 +503,6 @@ class PandasGroupedOpsMixin:
         if isinstance(outputStructType, str):
             outputStructType = cast(StructType, _parse_datatype_string(outputStructType))
 
-        def get_timestamps(
-            statefulProcessorApiClient: StatefulProcessorApiClient,
-        ) -> Tuple[int, int]:
-            if timeMode != "none":
-                batch_timestamp = statefulProcessorApiClient.get_batch_timestamp()
-                watermark_timestamp = statefulProcessorApiClient.get_watermark_timestamp()
-            else:
-                batch_timestamp = -1
-                watermark_timestamp = -1
-            return batch_timestamp, watermark_timestamp
-
         def handle_data_rows(
             statefulProcessorApiClient: StatefulProcessorApiClient,
             key: Any,
@@ -523,7 +512,9 @@ class PandasGroupedOpsMixin:
         ]:
             statefulProcessorApiClient.set_implicit_key(key)
 
-            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps()
+            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
+                timeMode
+            )
 
             # process with data rows
             if inputRows is not None:
@@ -539,7 +530,9 @@ class PandasGroupedOpsMixin:
         ) -> Iterator["PandasDataFrameLike"]:
             result_iter_list = []
 
-            batch_timestamp, watermark_timestamp = get_timestamps(statefulProcessorApiClient)
+            batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
+                timeMode
+            )
 
             if timeMode.lower() == "processingtime":
                 expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
@@ -583,11 +576,15 @@ class PandasGroupedOpsMixin:
                 )
 
             if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
-                statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.DATA_PROCESSED)
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.DATA_PROCESSED
+                )
                 result = handle_expired_timers(statefulProcessorApiClient)
                 return result
             elif mode == TransformWithStateInPandasFuncMode.COMPLETE:
-                statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.TIMER_PROCESSED)
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.TIMER_PROCESSED
+                )
                 statefulProcessorApiClient.remove_implicit_key()
                 statefulProcessor.close()
                 statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.CLOSED)
@@ -627,7 +624,9 @@ class PandasGroupedOpsMixin:
                 )
 
             if mode == TransformWithStateInPandasFuncMode.PROCESS_TIMER:
-                statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.DATA_PROCESSED)
+                statefulProcessorApiClient.set_handle_state(
+                    StatefulProcessorHandleState.DATA_PROCESSED
+                )
                 result = handle_expired_timers(statefulProcessorApiClient)
                 return result
             elif mode == TransformWithStateInPandasFuncMode.COMPLETE:
@@ -637,7 +636,9 @@ class PandasGroupedOpsMixin:
                 return iter([])
             else:
                 # mode == TransformWithStateInPandasFuncMode.PROCESS_DATA
-                batch_timestamp, watermark_timestamp = get_timestamps(statefulProcessorApiClient)
+                batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps(
+                    timeMode
+                )
 
             # only process initial state if first batch and initial state is not None
             if initialStates is not None:

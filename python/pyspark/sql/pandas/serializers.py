@@ -1141,6 +1141,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
 
         return ArrowStreamSerializer.dump_stream(self, batches_to_write, stream)
 
+
 class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
     """
     Serializer used by Python worker to evaluate UDF for
@@ -1205,101 +1206,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
 
     def dump_stream(self, iterator, stream):
         """
-        Read through chained return results from a single partition of handleInputRows.
-        For a single partition, after finish handling all input rows, we need to iterate
-        through all expired timers and handle them. We chain the results of handleInputRows
-        with handleExpiredTimer into a single iterator and dump the stream as arrow batches.
+        Read through an iterator of (iterator of pandas DataFrame), serialize them to Arrow
+        RecordBatches, and write batches to stream.
         """
-
-        from itertools import tee, chain
-        from pyspark.sql.streaming.stateful_processor_api_client import (
-            StatefulProcessorHandleState,
-        )
-        from pyspark.sql.streaming.stateful_processor import (
-            ExpiredTimerInfo,
-            TimerValues,
-        )
-
-        # Clone the original iterator to get additional args
-        cloned_iterator, result_iterator = tee(iterator)
-        # since we return Tuple[iterator["PandasDataframeLike"], StatefulProcessorApiClient,
-        # StatefulProcessor, str of timeMode] from `transformWithStateUDF` and
-        # `transformWithStateWithInitStateUDF`, the iterator of result grouped for all keys on a
-        # partition is of type:
-        # Iterator[List[Tuple[
-        #   Tuple[
-        #       iterator["PandasDataframeLike"], StatefulProcessorApiClient,
-        #       StatefulProcessor, str of timeMode
-        #    ], outputStructType]]
-        #  ]
-        # We want to convert the result iterator to a list of pandas dataframe,
-        # and get the remaining args to further perform timer handling operations
-        result = [(pd, t) for x in cloned_iterator for y, t in x for pd in y[0]]
-        args = [(y[1], y[2], t, y[3]) for x in result_iterator for y, t in x]
-
-        # if num of keys is smaller than num of partitions, some partitions will have empty
-        # input rows; we do nothing for such partitions
-        if len(args) == 0:
-            return
-
-        # all keys on the same partition share the same args
-        statefulProcessorApiClient = args[0][0]
-        statefulProcessor = args[0][1]
-        outputType = args[0][2]
-        timeMode = args[0][3]
-
-        def timer_iter_wrapper(func, *args, **kwargs):
-            """
-            Wrap the timer iterator returned from handleExpiredTimer with implicit key handling.
-            For a given key, need to properly set implicit key before calling handleExpiredTimer,
-            and remove the implicit key after consuming the iterator.
-            """
-
-            def wrapper():
-                timer_cur_key = kwargs.get("key", args[0] if len(args) > 0 else None)
-                # set implicit key for the timer row before calling UDF
-                statefulProcessorApiClient.set_implicit_key(timer_cur_key)
-                # Call handleExpiredTimer UDF
-                iter = func(*args, **kwargs)
-                try:
-                    for e in iter:
-                        yield e
-                finally:
-                    statefulProcessorApiClient.remove_implicit_key()
-
-            return wrapper()
-
-        batch_timestamp, watermark_timestamp = statefulProcessorApiClient.get_timestamps()
-
-        result_iter_list = []
-        if timeMode.lower() == "processingtime":
-            expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
-                batch_timestamp
-            )
-        elif timeMode.lower() == "eventtime":
-            expiry_list_iter = statefulProcessorApiClient.get_expiry_timers_iterator(
-                watermark_timestamp
-            )
-        else:
-            expiry_list_iter = iter([[]])
-
-        # process with expiry timers, only timer related rows will be emitted
-        for expiry_list in expiry_list_iter:
-            for key_obj, expiry_timestamp in expiry_list:
-                result_iter_list.append(
-                    timer_iter_wrapper(
-                        statefulProcessor.handleExpiredTimer,
-                        key=key_obj,
-                        timer_values=TimerValues(batch_timestamp, watermark_timestamp),
-                        expired_timer_info=ExpiredTimerInfo(expiry_timestamp),
-                    )
-                )
-
-        timer_result_list = ((df, outputType) for df in chain(*result_iter_list))
-        final_result = chain(result, timer_result_list)
-
-        super().dump_stream(final_result, stream)
-        statefulProcessorApiClient.set_handle_state(StatefulProcessorHandleState.TIMER_PROCESSED)
+        result = [(b, t) for x in iterator for y, t in x for b in y]
+        super().dump_stream(result, stream)
 
 
 class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSerializer):
@@ -1375,8 +1286,8 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+            yield TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g
 
-        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+            yield TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None
 
-        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
+            yield TransformWithStateInPandasFuncMode.COMPLETE, None, None
