@@ -291,6 +291,21 @@ def try_partitioning_remote_functions(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def _try_remote_hash_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.sql.connect.functions import _hash_funcs
+
+            return getattr(_hash_funcs, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
+
+
 def try_remote_avro_functions(f: FuncT) -> FuncT:
     """Mark API supported from Spark Connect."""
 

@@ -59,6 +59,18 @@ from pyspark.sql.connect.expressions import (
     UnresolvedNamedLambdaVariable,
     CallFunction,
 )
+
+# import the hash functions
+from pyspark.sql.connect.functions._hash_funcs import (  # noqa: F401
+    crc32,
+    hash,
+    md5,
+    sha,
+    sha1,
+    sha2,
+    xxhash64,
+)
+
 from pyspark.sql.connect.udf import _create_py_udf
 from pyspark.sql.connect.udtf import AnalyzeArgument, AnalyzeResult  # noqa: F401
 from pyspark.sql.connect.udtf import _create_py_udtf
@@ -3968,56 +3980,6 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
 raise_error.__doc__ = pysparkfuncs.raise_error.__doc__
 
 
-def crc32(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("crc32", col)
-
-
-crc32.__doc__ = pysparkfuncs.crc32.__doc__
-
-
-def hash(*cols: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("hash", *cols)
-
-
-hash.__doc__ = pysparkfuncs.hash.__doc__
-
-
-def xxhash64(*cols: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("xxhash64", *cols)
-
-
-xxhash64.__doc__ = pysparkfuncs.xxhash64.__doc__
-
-
-def md5(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("md5", col)
-
-
-md5.__doc__ = pysparkfuncs.md5.__doc__
-
-
-def sha1(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("sha1", col)
-
-
-sha1.__doc__ = pysparkfuncs.sha1.__doc__
-
-
-def sha2(col: "ColumnOrName", numBits: int) -> Column:
-    if numBits not in [0, 224, 256, 384, 512]:
-        raise PySparkValueError(
-            errorClass="VALUE_NOT_ALLOWED",
-            messageParameters={
-                "arg_name": "numBits",
-                "allowed_values": "[0, 224, 256, 384, 512]",
-            },
-        )
-    return _invoke_function("sha2", _to_col(col), lit(numBits))
-
-
-sha2.__doc__ = pysparkfuncs.sha2.__doc__
-
-
 def hll_sketch_agg(
     col: "ColumnOrName",
     lgConfigK: Optional[Union[int, Column]] = None,
@@ -4175,13 +4137,6 @@ def try_aes_decrypt(
 
 
 try_aes_decrypt.__doc__ = pysparkfuncs.try_aes_decrypt.__doc__
-
-
-def sha(col: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("sha", col)
-
-
-sha.__doc__ = pysparkfuncs.sha.__doc__
 
 
 def input_file_block_length() -> Column:
