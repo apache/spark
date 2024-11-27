@@ -1030,7 +1030,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
     val metaStoreParts = partsWithLocation
       .map(p => p.copy(spec = toMetaStorePartitionSpec(p.spec)))
-    client.createPartitions(db, table, metaStoreParts, ignoreIfExists)
+    client.createPartitions(tableMeta, metaStoreParts, ignoreIfExists)
   }
 
   override def dropPartitions(
@@ -1108,7 +1108,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         val actualPartitionPath = new Path(currentFullPath, actualPartitionString)
         try {
           fs.mkdirs(expectedPartitionPath)
-          if(!fs.rename(actualPartitionPath, expectedPartitionPath)) {
+          if (!fs.rename(actualPartitionPath, expectedPartitionPath)) {
             throw new IOException(s"Renaming partition path from $actualPartitionPath to " +
               s"$expectedPartitionPath returned false")
           }

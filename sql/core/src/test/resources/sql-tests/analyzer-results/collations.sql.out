@@ -884,7 +884,7 @@ Project [concat_ws(,, cast(utf8_lcase#x as string), collate(word, utf8_binary)) 
 -- !query
 select elt(2, s, utf8_binary) from t5
 -- !query analysis
-Project [elt(2, s#x, utf8_binary#x, false) AS elt(2, s, utf8_binary)#x]
+Project [elt(2, s#x, utf8_binary#x, true) AS elt(2, s, utf8_binary)#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -918,7 +918,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select elt(1, utf8_binary collate utf8_binary, utf8_lcase collate utf8_binary) from t5
 -- !query analysis
-Project [elt(1, collate(utf8_binary#x, utf8_binary), collate(utf8_lcase#x, utf8_binary), false) AS elt(1, collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary))#x]
+Project [elt(1, collate(utf8_binary#x, utf8_binary), collate(utf8_lcase#x, utf8_binary), true) AS elt(1, collate(utf8_binary, utf8_binary), collate(utf8_lcase, utf8_binary))#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -926,7 +926,7 @@ Project [elt(1, collate(utf8_binary#x, utf8_binary), collate(utf8_lcase#x, utf8_
 -- !query
 select elt(1, utf8_binary collate utf8_binary, utf8_lcase) from t5
 -- !query analysis
-Project [elt(1, collate(utf8_binary#x, utf8_binary), cast(utf8_lcase#x as string), false) AS elt(1, collate(utf8_binary, utf8_binary), utf8_lcase)#x]
+Project [elt(1, collate(utf8_binary#x, utf8_binary), cast(utf8_lcase#x as string), true) AS elt(1, collate(utf8_binary, utf8_binary), utf8_lcase)#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -934,7 +934,7 @@ Project [elt(1, collate(utf8_binary#x, utf8_binary), cast(utf8_lcase#x as string
 -- !query
 select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t5
 -- !query analysis
-Project [elt(1, utf8_binary#x, word, false) AS elt(1, utf8_binary, word)#x, elt(1, utf8_lcase#x, cast(word as string collate UTF8_LCASE), false) AS elt(1, utf8_lcase, word)#x]
+Project [elt(1, utf8_binary#x, word, true) AS elt(1, utf8_binary, word)#x, elt(1, utf8_lcase#x, cast(word as string collate UTF8_LCASE), true) AS elt(1, utf8_lcase, word)#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
@@ -942,7 +942,7 @@ Project [elt(1, utf8_binary#x, word, false) AS elt(1, utf8_binary, word)#x, elt(
 -- !query
 select elt(1, utf8_binary, 'word' collate utf8_lcase), elt(1, utf8_lcase, 'word' collate utf8_binary) from t5
 -- !query analysis
-Project [elt(1, cast(utf8_binary#x as string collate UTF8_LCASE), collate(word, utf8_lcase), false) AS elt(1, utf8_binary, collate(word, utf8_lcase))#x, elt(1, cast(utf8_lcase#x as string), collate(word, utf8_binary), false) AS elt(1, utf8_lcase, collate(word, utf8_binary))#x]
+Project [elt(1, cast(utf8_binary#x as string collate UTF8_LCASE), collate(word, utf8_lcase), true) AS elt(1, utf8_binary, collate(word, utf8_lcase))#x, elt(1, cast(utf8_lcase#x as string), collate(word, utf8_binary), true) AS elt(1, utf8_lcase, collate(word, utf8_binary))#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 

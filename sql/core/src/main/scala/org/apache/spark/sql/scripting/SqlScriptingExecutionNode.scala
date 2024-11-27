@@ -19,7 +19,9 @@ package org.apache.spark.sql.scripting
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.NameParameterizedQuery
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -77,7 +79,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 
       // DataFrame evaluates to True if it is single row, single column
       //  of boolean type with value True.
-      val df = Dataset.ofRows(session, statement.parsedPlan)
+      val df = statement.buildDataFrame(session)
       df.schema.fields match {
         case Array(field) if field.dataType == BooleanType =>
           df.limit(2).collect() match {
@@ -105,6 +107,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Logical plan of the parsed statement.
  * @param origin
  *   Origin descriptor for the statement.
+ * @param args
+ *   A map of parameter names to SQL literal expressions.
  * @param isInternal
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
@@ -113,6 +117,7 @@ trait NonLeafStatementExec extends CompoundStatementExec {
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
+    val args: Map[String, Expression],
     override val isInternal: Boolean)
   extends LeafStatementExec with WithOrigin {
 
@@ -121,6 +126,17 @@ class SingleStatementExec(
    * Example: Statements in conditions of If/Else, While, etc.
    */
   var isExecuted = false
+
+  /**
+   * Plan with named parameters.
+   */
+  private lazy val preparedPlan: LogicalPlan = {
+    if (args.nonEmpty) {
+      NameParameterizedQuery(parsedPlan, args)
+    } else {
+      parsedPlan
+    }
+  }
 
   /**
    * Get the SQL query text corresponding to this statement.
@@ -132,23 +148,30 @@ class SingleStatementExec(
     origin.sqlText.get.substring(origin.startIndex.get, origin.stopIndex.get + 1)
   }
 
+  /**
+   * Builds a DataFrame from the parsedPlan of this SingleStatementExec
+   * @param session The SparkSession on which the parsedPlan is built.
+   * @return
+   *   The DataFrame.
+   */
+  def buildDataFrame(session: SparkSession): DataFrame = {
+    Dataset.ofRows(session, preparedPlan)
+  }
+
   override def reset(): Unit = isExecuted = false
 }
 
 /**
- * Abstract class for all statements that contain nested statements.
- * Implements recursive iterator logic over all child execution nodes.
- * @param collection
- *   Collection of child execution nodes.
+ * Executable node for CompoundBody.
+ * @param statements
+ *   Executable nodes for nested statements within the CompoundBody.
  * @param label
- *   Label set by user or None otherwise.
+ *   Label set by user to CompoundBody or None otherwise.
  */
-abstract class CompoundNestedStatementIteratorExec(
-    collection: Seq[CompoundStatementExec],
-    label: Option[String] = None)
+class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[String] = None)
   extends NonLeafStatementExec {
 
-  private var localIterator = collection.iterator
+  private var localIterator = statements.iterator
   private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
 
   /** Used to stop the iteration in cases when LEAVE statement is encountered. */
@@ -207,8 +230,8 @@ abstract class CompoundNestedStatementIteratorExec(
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
   override def reset(): Unit = {
-    collection.foreach(_.reset())
-    localIterator = collection.iterator
+    statements.foreach(_.reset())
+    localIterator = statements.iterator
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
     stopIteration = false
   }
@@ -243,16 +266,6 @@ abstract class CompoundNestedStatementIteratorExec(
     }
   }
 }
-
-/**
- * Executable node for CompoundBody.
- * @param statements
- *   Executable nodes for nested statements within the CompoundBody.
- * @param label
- *   Label set by user to CompoundBody or None otherwise.
- */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[String] = None)
-  extends CompoundNestedStatementIteratorExec(statements, label)
 
 /**
  * Executable node for IfElseStatement.

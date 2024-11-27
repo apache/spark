@@ -662,7 +662,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             // of limit in that case. This branch is for the case where there's no limit operator
             // above offset.
             val (child, ordering) = input match {
-              case Sort(order, _, child) => (child, order)
+              case Sort(order, _, child, _) => (child, order)
               case _ => (input, Seq())
             }
             val (newChild, joinCond, outerReferenceMap) =
@@ -705,8 +705,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
             //   SELECT T2.a, row_number() OVER (PARTITION BY T2.b ORDER BY T2.c) AS rn FROM T2)
             // WHERE rn > 2 AND rn <= 2+3
             val (child, ordering, offsetExpr) = input match {
-              case Sort(order, _, child) => (child, order, Literal(0))
-              case Offset(offsetExpr, offsetChild@(Sort(order, _, child))) =>
+              case Sort(order, _, child, _) => (child, order, Literal(0))
+              case Offset(offsetExpr, offsetChild@(Sort(order, _, child, _))) =>
                 (child, order, offsetExpr)
               case Offset(offsetExpr, child) =>
                 (child, Seq(), offsetExpr)
@@ -754,7 +754,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               (project, joinCond, outerReferenceMap)
             }
 
-          case w @ Window(projectList, partitionSpec, orderSpec, child) =>
+          case w @ Window(projectList, partitionSpec, orderSpec, child, hint) =>
             val outerReferences = collectOuterReferences(w.expressions)
             assert(outerReferences.isEmpty, s"Correlated column is not allowed in window " +
               s"function: $w")
@@ -770,7 +770,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
 
             val newWindow = Window(newProjectList ++ referencesToAdd,
               partitionSpec = newPartitionSpec ++ referencesToAdd,
-              orderSpec = newOrderSpec, newChild)
+              orderSpec = newOrderSpec, newChild, hint)
             (newWindow, joinCond, outerReferenceMap)
 
           case a @ Aggregate(groupingExpressions, aggregateExpressions, child, _) =>

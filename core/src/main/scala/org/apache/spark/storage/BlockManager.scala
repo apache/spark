@@ -1516,7 +1516,7 @@ private[spark] class BlockManager(
       return true
     }
 
-    if(master.isRDDBlockVisible(blockId)) {
+    if (master.isRDDBlockVisible(blockId)) {
       // Cache the visibility status if block exists.
       blockInfoManager.tryMarkBlockAsVisible(blockId)
       true
@@ -1882,7 +1882,7 @@ private[spark] class BlockManager(
       blockId,
       numPeersToReplicateTo)
 
-    while(numFailures <= maxReplicationFailureCount &&
+    while (numFailures <= maxReplicationFailureCount &&
       peersForReplication.nonEmpty &&
       peersReplicatedTo.size < numPeersToReplicateTo) {
       val peer = peersForReplication.head

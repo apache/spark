@@ -108,5 +108,7 @@
           url: sql-ref-syntax.html#data-retrieval-statements
         - text: Auxiliary Statements
           url: sql-ref-syntax.html#auxiliary-statements
+        - text: Pipe Syntax
+          url: sql-pipe-syntax.html
 - text: Error Conditions
   url: sql-error-conditions.html

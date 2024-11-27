@@ -72,14 +72,11 @@ This will build Spark distribution along with Python pip and R packages. For mor
 
 ## Specifying the Hadoop Version and Enabling YARN
 
-You can specify the exact version of Hadoop to compile against through the `hadoop.version` property.
-
-You can enable the `yarn` profile and optionally set the `yarn.version` property if it is different
-from `hadoop.version`.
+You can enable the `yarn` profile and specify the exact version of Hadoop to compile against through the `hadoop.version` property.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=3.4.0 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.4.1 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
