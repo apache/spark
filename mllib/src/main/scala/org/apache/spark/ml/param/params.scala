@@ -49,7 +49,7 @@ class Param[T: ClassTag](
     val parent: String, val name: String, val doc: String, val isValid: T => Boolean)
   extends Serializable {
 
-  // spark connect ML needs T type information which has been erased when compiling,
+  // Spark Connect ML needs T type information which has been erased when compiling,
   // Use classTag to preserve the T type.
   val paramValueClassTag = implicitly[ClassTag[T]]
 

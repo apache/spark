@@ -234,7 +234,19 @@ class ClassificationTestsMixin:
         self.check_multiclass_logistic_regression_summary(True)
 
     def test_logistic_regression(self):
-        lr = LogisticRegression(maxIter=1)
+        # test sparse/dense vector and matrix
+        lower_intercepts = Vectors.dense([1, 2, 3, 4])
+        upper_intercepts = Vectors.sparse(4, [(1, 1.0), (3, 5.5)])
+        lower_coefficients = Matrices.dense(3, 2, [0, 1, 4, 5, 9, 10])
+        upper_coefficients = Matrices.sparse(1, 1, [0, 1], [0], [2.0])
+
+        lr = LogisticRegression(
+            maxIter=1,
+            lowerBoundsOnIntercepts=lower_intercepts,
+            upperBoundsOnIntercepts=upper_intercepts,
+            lowerBoundsOnCoefficients=lower_coefficients,
+            upperBoundsOnCoefficients=upper_coefficients,
+        )
         path = tempfile.mkdtemp()
         lr_path = path + "/logreg"
         lr.save(lr_path)
@@ -250,6 +262,22 @@ class ClassificationTestsMixin:
             lr2._defaultParamMap[lr2.maxIter],
             "Loaded LogisticRegression instance default params did not match "
             + "original defaults",
+        )
+        self.assertEqual(
+            lr.getLowerBoundsOnIntercepts(),
+            lr2.getLowerBoundsOnIntercepts(),
+        )
+        self.assertEqual(
+            lr.getUpperBoundsOnIntercepts(),
+            lr2.getUpperBoundsOnIntercepts(),
+        )
+        self.assertEqual(
+            lr.getLowerBoundsOnCoefficients(),
+            lr2.getLowerBoundsOnCoefficients(),
+        )
+        self.assertEqual(
+            lr.getUpperBoundsOnCoefficients(),
+            lr2.getUpperBoundsOnCoefficients(),
         )
         try:
             rmtree(path)

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.ml
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
+import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, SparseMatrix, SparseVector}
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
@@ -26,33 +26,51 @@ import org.apache.spark.sql.connect.service.SessionHolder
 
 object Serializer {
 
+  /**
+   * Serialize the ML parameters, currently only support Vector/Matrix and literals
+   * @param data
+   *   the paramter values
+   * @return
+   *   proto.Param
+   */
   def serializeParam(data: Any): proto.Param = {
     data match {
-      case v: Vector =>
-        // TODO: Support sparse
-        val values = v.toArray
+      case v: DenseVector =>
         val denseBuilder = proto.Vector.Dense.newBuilder()
-        for (i <- 0 until values.length) {
-          denseBuilder.addValue(values(i))
-        }
+        v.values.foreach(denseBuilder.addValue)
         proto.Param
           .newBuilder()
           .setVector(proto.Vector.newBuilder().setDense(denseBuilder))
           .build()
-      case v: Matrix =>
-        // TODO: Support sparse
-        // TODO: optimize transposed case
+      case v: SparseVector =>
+        val sparseBuilder = proto.Vector.Sparse.newBuilder().setSize(v.size)
+        v.indices.foreach(sparseBuilder.addIndex)
+        v.values.foreach(sparseBuilder.addValue)
+        proto.Param
+          .newBuilder()
+          .setVector(proto.Vector.newBuilder().setSparse(sparseBuilder))
+          .build()
+      case v: DenseMatrix =>
         val denseBuilder = proto.Matrix.Dense.newBuilder()
-        val values = v.toArray
-        for (i <- 0 until values.length) {
-          denseBuilder.addValue(values(i))
-        }
+        v.values.foreach(denseBuilder.addValue)
         denseBuilder.setNumCols(v.numCols)
         denseBuilder.setNumRows(v.numRows)
-        denseBuilder.setIsTransposed(false)
+        denseBuilder.setIsTransposed(v.isTransposed)
         proto.Param
           .newBuilder()
           .setMatrix(proto.Matrix.newBuilder().setDense(denseBuilder))
+          .build()
+      case v: SparseMatrix =>
+        val sparseBuilder = proto.Matrix.Sparse
+          .newBuilder()
+          .setNumCols(v.numCols)
+          .setNumRows(v.numRows)
+        v.values.foreach(sparseBuilder.addValue)
+        v.colPtrs.foreach(sparseBuilder.addColptr)
+        v.rowIndices.foreach(sparseBuilder.addRowIndex)
+        proto.Param
+          .newBuilder()
+          .setMatrix(proto.Matrix.newBuilder().setSparse(sparseBuilder))
           .build()
       case _: Byte | _: Short | _: Int | _: Long | _: Float | _: Double | _: Boolean | _: String |
           _: Array[_] =>
@@ -103,16 +121,23 @@ object Serializer {
           }
           (matrix, matrixType)
         } else {
-          throw new UnsupportedOperationException("unsupported parameter type")
+          throw new UnsupportedOperationException("Unsupported parameter type")
         }
       } else if (arg.hasInput) {
         (MLUtils.parseRelationProto(arg.getInput, sessionHolder), classOf[Dataset[_]])
       } else {
-        throw new UnsupportedOperationException("deserializeMethodArguments")
+        throw new UnsupportedOperationException("DeserializeMethodArguments")
       }
     }
   }
 
+  /**
+   * Serialize an instance of "Params" which could be estimator/model/evaluator ...
+   * @param instance
+   *   of Params
+   * @return
+   *   proto.MlParams
+   */
   def serializeParams(instance: Params): proto.MlParams = {
     val builder = proto.MlParams.newBuilder()
     instance.params.foreach { param =>

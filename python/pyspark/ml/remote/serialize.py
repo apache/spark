@@ -84,20 +84,31 @@ def deserialize_param(param: pb2.Param) -> Any:
         return LiteralExpression._to_value(param.literal)
     if param.HasField("vector"):
         vector = param.vector
-        # TODO support sparse vector
         if vector.HasField("dense"):
             return Vectors.dense(vector.dense.value)
-        raise ValueError("TODO, support sparse vector")
+        elif vector.HasField("sparse"):
+            return Vectors.sparse(vector.sparse.size, vector.sparse.index, vector.sparse.value)
+        else:
+            raise ValueError("Unsupported vector type")
     if param.HasField("matrix"):
         matrix = param.matrix
-        # TODO support sparse matrix
-        if matrix.HasField("dense") and not matrix.dense.is_transposed:
-            return Matrices.dense(
+        if matrix.HasField("dense"):
+            return DenseMatrix(
                 matrix.dense.num_rows,
                 matrix.dense.num_cols,
                 matrix.dense.value,
+                matrix.dense.is_transposed,
             )
-        raise ValueError("TODO, support sparse matrix")
+        elif matrix.HasField("sparse"):
+            return Matrices.sparse(
+                matrix.sparse.num_rows,
+                matrix.sparse.num_cols,
+                matrix.sparse.colptr,
+                matrix.sparse.row_index,
+                matrix.sparse.value,
+            )
+        else:
+            raise ValueError("Unsupported matrix type")
 
     raise ValueError("Unsupported param type")
 
