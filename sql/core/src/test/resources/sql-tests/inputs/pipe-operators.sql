@@ -281,6 +281,11 @@ table t
 |> set z = x + length(y)
 |> set z = z + 1;
 
+-- SET assignments with duplicate keys. This is supported, and we can update the column as we go.
+table t
+|> extend 1 as z
+|> set z = x + length(y), z = z + 1;
+
 -- Setting with a struct field.
 select col from st
 |> extend 1 as z
@@ -310,11 +315,6 @@ table t
 -- SET with an alias.
 table t
 |> set x = 1 as z;
-
--- SET assignments with duplicate keys.
-table t
-|> extend 1 as z
-|> set z = x + length(y), z = z + 1;
 
 -- Setting nested fields in structs is not supported.
 select col from st

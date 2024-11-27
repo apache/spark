@@ -900,23 +900,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
       checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y")
       checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y, X + 2 Z")
-      // SET operations. Here we exercise this feature with case-sensitive analysis enabled and
-      // disabled.
-      val setAssignmentSameKeyDifferentCase = "TABLE t |> EXTEND 1 AS z, 2 AS Z |> SET z = 1, Z = 2"
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        checkPipeSelect(setAssignmentSameKeyDifferentCase)
-      }
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-        checkError(
-          exception = parseException(setAssignmentSameKeyDifferentCase),
-          condition = "_LEGACY_ERROR_TEMP_0035",
-          parameters = Map(
-            "message" -> "SQL pipe syntax |> SET operator with duplicate assignment key Z"),
-          context = ExpectedContext(
-            fragment = setAssignmentSameKeyDifferentCase,
-            start = 0,
-            stop = setAssignmentSameKeyDifferentCase.length - 1))
-      }
+      checkPipeSelect("TABLE t |> EXTEND 1 AS z, 2 AS Z |> SET z = 1, Z = 2")
       // Basic WHERE operators.
       def checkPipeWhere(query: String): Unit = check(query, Seq(FILTER))
       checkPipeWhere("TABLE t |> WHERE X = 1")

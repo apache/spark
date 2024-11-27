@@ -814,6 +814,18 @@ Project [x#x, y#x, pipeexpression((z#x + 1), false, SET) AS z#x]
 
 
 -- !query
+table t
+|> extend 1 as z
+|> set z = x + length(y), z = z + 1
+-- !query analysis
+Project [x#x, y#x, pipeexpression((z#x + 1), false, SET) AS z#x]
++- Project [x#x, y#x, pipeexpression((x#x + length(y#x)), false, SET) AS z#x]
+   +- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS z#x]
+      +- SubqueryAlias spark_catalog.default.t
+         +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
 select col from st
 |> extend 1 as z
 |> set z = col.i1
@@ -899,27 +911,6 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "error" : "'as'",
     "hint" : ""
   }
-}
-
-
--- !query
-table t
-|> extend 1 as z
-|> set z = x + length(y), z = z + 1
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
-  "messageParameters" : {
-    "message" : "SQL pipe syntax |> SET operator with duplicate assignment key z"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 60,
-    "fragment" : "table t\n|> extend 1 as z\n|> set z = x + length(y), z = z + 1"
-  } ]
 }
 
 

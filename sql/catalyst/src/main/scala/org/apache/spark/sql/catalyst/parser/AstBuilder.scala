@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.parser
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer, Set}
 import scala.jdk.CollectionConverters._
 import scala.util.{Left, Right}
@@ -5990,23 +5989,11 @@ class AstBuilder extends DataTypeAstBuilder
     val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
       visitOperatorPipeSetAssignmentSeq(ctx.operatorPipeSetAssignmentSeq())
     var plan = left
-    val visitedSetIdentifiers = mutable.Set.empty[String]
     setIdentifiers.zip(setTargets).foreach {
       case (_, _: Alias) =>
         operationNotAllowed(
           "SQL pipe syntax |> SET operator with an alias assigned with [AS] aliasName", ctx)
       case (ident, target) =>
-        // Check uniqueness of the assignment keys.
-        val checkKey = if (SQLConf.get.caseSensitiveAnalysis) {
-          ident
-        } else {
-          ident.toLowerCase(Locale.ROOT)
-        }
-        if (visitedSetIdentifiers(checkKey)) {
-          operationNotAllowed(
-            s"SQL pipe syntax |> SET operator with duplicate assignment key $ident", ctx)
-        }
-        visitedSetIdentifiers += checkKey
         // Add an UnresolvedStarExceptOrReplace to exclude the SET expression name from the relation
         // and add the new SET expression to the projection list.
         // Use a PipeSelect expression to make sure it does not contain any aggregate functions.

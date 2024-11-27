@@ -758,6 +758,17 @@ struct<x:int,y:string,z:int>
 
 
 -- !query
+table t
+|> extend 1 as z
+|> set z = x + length(y), z = z + 1
+-- !query schema
+struct<x:int,y:string,z:int>
+-- !query output
+0	abc	4
+1	def	5
+
+
+-- !query
 select col from st
 |> extend 1 as z
 |> set z = col.i1
@@ -837,29 +848,6 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "error" : "'as'",
     "hint" : ""
   }
-}
-
-
--- !query
-table t
-|> extend 1 as z
-|> set z = x + length(y), z = z + 1
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
-  "messageParameters" : {
-    "message" : "SQL pipe syntax |> SET operator with duplicate assignment key z"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 60,
-    "fragment" : "table t\n|> extend 1 as z\n|> set z = x + length(y), z = z + 1"
-  } ]
 }
 
 
