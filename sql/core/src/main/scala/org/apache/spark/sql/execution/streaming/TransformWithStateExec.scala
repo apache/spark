@@ -86,14 +86,8 @@ case class TransformWithStateExec(
   // We need to just initialize key and value deserializer once per partition.
   // The deserializers need to be lazily created on the executor since they
   // are not serializable.
-  // TODO we can further optimize this to be done once per query.
-  // Currently, the deserializers are created once per partition per batch.
-  // We can improve this by creating the deserializers once per query run.
-  // To do this, we need adjust certain APIs in CodeGenerator to allow
-  // us to generate the code and compile it separately.  We can
-  // generate the java code on the driver side and compile it on the executor side.
-  // Note that we only need to compile it once on the executor side since there is a cache
-  // that allows us to reuse the compiled code.
+  // Ideas for for improvement can be found here:
+  // https://issues.apache.org/jira/browse/SPARK-50437
   private lazy val getKeyObj =
     ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
 
