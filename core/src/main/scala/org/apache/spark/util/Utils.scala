@@ -1354,8 +1354,10 @@ private[spark] object Utils
   val TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE =
     "Full stacktrace of original doTryWithCallerStacktrace caller"
 
-  class OriginalTryStackTraceException(val doTryWithCallerStacktraceDepth: Int)
-    extends Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
+  class OriginalTryStackTraceException()
+    extends Exception(TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE) {
+    var doTryWithCallerStacktraceDepth: Int = 0
+  }
 
   /**
    * Use Try with stacktrace substitution for the caller retrieving the error.
@@ -1383,9 +1385,19 @@ private[spark] object Utils
         val commonSuffixLen = origStackTrace.reverse.zip(currentStackTrace.reverse).takeWhile {
           case (exElem, currentElem) => exElem == currentElem
         }.length
-        val fullEx = new OriginalTryStackTraceException(origStackTrace.size - commonSuffixLen)
-        fullEx.setStackTrace(origStackTrace)
-        ex.addSuppressed(fullEx)
+        // Add the full stack trace of the original caller as the suppressed exception.
+        // It may already be there if it's a nested call to doTryWithCallerStacktrace.
+        val origEx = ex.getSuppressed.find { e =>
+          e.isInstanceOf[OriginalTryStackTraceException]
+        }.getOrElse {
+          val fullEx = new OriginalTryStackTraceException()
+          fullEx.setStackTrace(origStackTrace)
+          ex.addSuppressed(fullEx)
+          fullEx
+        }.asInstanceOf[OriginalTryStackTraceException]
+        // Update the depth of the stack of the current doTryWithCallerStacktrace, for stitching
+        // it with the stack of getTryWithCallerStacktrace.
+        origEx.doTryWithCallerStacktraceDepth = origStackTrace.size - commonSuffixLen
       case Success(_) => // nothing
     }
     t
