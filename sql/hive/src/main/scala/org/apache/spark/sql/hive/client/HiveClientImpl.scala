@@ -468,7 +468,7 @@ private[hive] class HiveClientImpl(
       (h.getCols.asScala.map(fromHiveColumn), h.getPartCols.asScala.map(fromHiveColumn))
     } catch {
       case ex: SparkException =>
-      throw QueryExecutionErrors.convertHiveTableToCatalogTableError(
+        throw QueryExecutionErrors.convertHiveTableToCatalogTableError(
           ex, h.getDbName, h.getTableName)
     }
     val schema = StructType((cols ++ partCols).toArray)
