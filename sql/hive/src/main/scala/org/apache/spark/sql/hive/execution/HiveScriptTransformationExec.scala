@@ -299,9 +299,7 @@ object HiveScriptIOSchema extends HiveInspectors {
       val instance = Utils.classForName[RecordReader](klass).getConstructor().
         newInstance()
       val props = new Properties()
-      // Can not use props.putAll(outputSerdeProps.toMap.asJava) in scala-2.12
-      // See https://github.com/scala/bug/issues/10418
-      ioschema.outputSerdeProps.toMap.foreach { case (k, v) => props.put(k, v) }
+      props.putAll(ioschema.outputSerdeProps.toMap)
       instance.initialize(inputStream, conf, props)
       instance
     }
