@@ -280,9 +280,9 @@ class Dataset[T] private[sql](
 
   // The resolved `ExpressionEncoder` which can be used to turn rows to objects of type T, after
   // collecting rows to the driver side.
-  private lazy val resolvedEnc = {
-    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
-  }
+  private lazy val resolvedEnc = exprEnc.resolveAndBind(
+    queryExecution.commandExecuted.output, sparkSession.sessionState.analyzer)
+
 
   private implicit def classTag: ClassTag[T] = encoder.clsTag
 
@@ -996,16 +996,12 @@ class Dataset[T] private[sql](
 
   /** @inheritdoc */
   def scalar(): Column = {
-    Column(ExpressionColumnNode(
-      ScalarSubqueryExpr(SubExprUtils.removeLazyOuterReferences(logicalPlan),
-        hasExplicitOuterRefs = true)))
+    Column(ExpressionColumnNode(ScalarSubqueryExpr(logicalPlan)))
   }
 
   /** @inheritdoc */
   def exists(): Column = {
-    Column(ExpressionColumnNode(
-      Exists(SubExprUtils.removeLazyOuterReferences(logicalPlan),
-        hasExplicitOuterRefs = true)))
+    Column(ExpressionColumnNode(Exists(logicalPlan)))
   }
 
   /** @inheritdoc */

@@ -88,9 +88,6 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             isDistinct = isDistinct,
             isInternal = isInternal)
 
-        case LazyOuterReference(nameParts, planId, _) =>
-          convertLazyOuterReference(nameParts, planId)
-
         case Alias(child, Seq(name), None, _) =>
           expressions.Alias(apply(child), name)(
             nonInheritableMetadataKeys = Seq(Dataset.DATASET_ID_KEY, Dataset.COL_POS_KEY))
@@ -193,6 +190,9 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             case _ => transformed
           }
 
+        case l: LazyExpression =>
+          analysis.LazyExpression(apply(l.child))
+
         case node =>
           throw SparkException.internalError("Unsupported ColumnNode: " + node)
       }
@@ -247,16 +247,6 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
       attribute.setTagValue(LogicalPlan.PLAN_ID_TAG, planId.get)
     }
     attribute
-  }
-
-  private def convertLazyOuterReference(
-      nameParts: Seq[String],
-      planId: Option[Long]): analysis.LazyOuterReference = {
-    val lazyOuterReference = analysis.LazyOuterReference(nameParts)
-    if (planId.isDefined) {
-      lazyOuterReference.setTagValue(LogicalPlan.PLAN_ID_TAG, planId.get)
-    }
-    lazyOuterReference
   }
 }
 
