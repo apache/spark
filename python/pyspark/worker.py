@@ -34,6 +34,7 @@ from pyspark.accumulators import (
     _deserialize_accumulator,
 )
 from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.resource import ResourceInformation
 from pyspark.util import PythonEvalType, local_connect_and_auth
@@ -493,36 +494,36 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
-    def wrapped(stateful_processor_api_client, key, value_series_gen):
+    def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
         import pandas as pd
 
         values = (pd.concat(x, axis=1) for x in value_series_gen)
-        result_iter = f(stateful_processor_api_client, key, values)
+        result_iter = f(stateful_processor_api_client, mode, key, values)
 
         # TODO(SPARK-49100): add verification that elements in result_iter are
         # indeed of type pd.DataFrame and confirm to assigned cols
 
         return result_iter
 
-    return lambda p, k, v: [(wrapped(p, k, v), to_arrow_type(return_type))]
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), to_arrow_type(return_type))]
 
 
 def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runner_conf):
-    def wrapped(stateful_processor_api_client, key, value_series_gen):
+    def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
         import pandas as pd
 
         state_values_gen, init_states_gen = itertools.tee(value_series_gen, 2)
         state_values = (df for x, _ in state_values_gen if not (df := pd.concat(x, axis=1)).empty)
         init_states = (df for _, x in init_states_gen if not (df := pd.concat(x, axis=1)).empty)
 
-        result_iter = f(stateful_processor_api_client, key, state_values, init_states)
+        result_iter = f(stateful_processor_api_client, mode, key, state_values, init_states)
 
         # TODO(SPARK-49100): add verification that elements in result_iter are
         # indeed of type pd.DataFrame and confirm to assigned cols
 
         return result_iter
 
-    return lambda p, k, v: [(wrapped(p, k, v), to_arrow_type(return_type))]
+    return lambda p, m, k, v: [(wrapped(p, m, k, v), to_arrow_type(return_type))]
 
 
 def wrap_grouped_map_pandas_udf_with_state(f, return_type):
@@ -1697,18 +1698,22 @@ def read_udfs(pickleSer, infile, eval_type):
         ser.key_offsets = parsed_offsets[0][0]
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
-        # Create function like this:
-        #   mapper a: f([a[0]], [a[0], a[1]])
         def mapper(a):
-            key = a[0]
+            mode = a[0]
 
-            def values_gen():
-                for x in a[1]:
-                    retVal = [x[1][o] for o in parsed_offsets[0][1]]
-                    yield retVal
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+                key = a[1]
 
-            # This must be generator comprehension - do not materialize.
-            return f(stateful_processor_api_client, key, values_gen())
+                def values_gen():
+                    for x in a[2]:
+                        retVal = [x[1][o] for o in parsed_offsets[0][1]]
+                        yield retVal
+
+                # This must be generator comprehension - do not materialize.
+                return f(stateful_processor_api_client, mode, key, values_gen())
+            else:
+                # mode == PROCESS_TIMER or mode == COMPLETE
+                return f(stateful_processor_api_client, mode, None, iter([]))
 
     elif eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF:
         # We assume there is only one UDF here because grouped map doesn't
@@ -1731,16 +1736,22 @@ def read_udfs(pickleSer, infile, eval_type):
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
 
         def mapper(a):
-            key = a[0]
+            mode = a[0]
 
-            def values_gen():
-                for x in a[1]:
-                    retVal = [x[1][o] for o in parsed_offsets[0][1]]
-                    initVal = [x[2][o] for o in parsed_offsets[1][1]]
-                    yield retVal, initVal
+            if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+                key = a[1]
 
-            # This must be generator comprehension - do not materialize.
-            return f(stateful_processor_api_client, key, values_gen())
+                def values_gen():
+                    for x in a[2]:
+                        retVal = [x[1][o] for o in parsed_offsets[0][1]]
+                        initVal = [x[2][o] for o in parsed_offsets[1][1]]
+                        yield retVal, initVal
+
+                # This must be generator comprehension - do not materialize.
+                return f(stateful_processor_api_client, mode, key, values_gen())
+            else:
+                # mode == PROCESS_TIMER or mode == COMPLETE
+                return f(stateful_processor_api_client, mode, None, iter([]))
 
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF:
         import pyarrow as pa
@@ -1958,17 +1969,6 @@ def main(infile, outfile):
             try:
                 serializer.dump_stream(out_iter, outfile)
             finally:
-                # Sending a signal to TransformWithState UDF to perform proper cleanup steps.
-                if (
-                    eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
-                    or eval_type == PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
-                ):
-                    # Sending key as None to indicate that process() has finished.
-                    end_iter = func(split_index, iter([(None, None)]))
-                    # Need to materialize the iterator to trigger the cleanup steps, nothing needs
-                    # to be done here.
-                    for _ in end_iter:
-                        pass
                 if hasattr(out_iter, "close"):
                     out_iter.close()
 

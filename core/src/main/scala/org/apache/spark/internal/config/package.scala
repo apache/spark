@@ -1987,12 +1987,25 @@ package object config {
     .intConf
     .createWithDefault(6066)
 
+  private[spark] val MASTER_REST_SERVER_MAX_THREADS = ConfigBuilder("spark.master.rest.maxThreads")
+    .doc("Maximum number of threads to use in the Spark Master REST API Server.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(200)
+
   private[spark] val MASTER_REST_SERVER_FILTERS = ConfigBuilder("spark.master.rest.filters")
     .doc("Comma separated list of filter class names to apply to the Spark Master REST API.")
     .version("4.0.0")
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val MASTER_REST_SERVER_VIRTUAL_THREADS =
+    ConfigBuilder("spark.master.rest.virtualThread.enabled")
+      .doc("If true, Spark master tries to use Java 21 virtual thread for REST API.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")

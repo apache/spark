@@ -20,14 +20,7 @@ import unittest
 
 from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-have_sklearn = True
-sklearn_requirement_message = None
-try:
-    from sklearn.datasets import load_breast_cancer  # noqa: F401
-except ImportError:
-    have_sklearn = False
-    sklearn_requirement_message = "No sklearn found"
+from pyspark.testing.utils import have_sklearn, sklearn_requirement_message
 
 if should_test_connect:
     from pyspark.ml.tests.connect.test_legacy_mode_feature import FeatureTestsMixin
