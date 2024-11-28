@@ -38,7 +38,7 @@ import org.apache.spark.sql.types._
   examples = """
     Examples:
       > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_LCASE);
-      UTF8_LCASE
+      SYSTEM.BUILTIN.UTF8_LCASE
   """,
   since = "4.0.0",
   group = "string_funcs")

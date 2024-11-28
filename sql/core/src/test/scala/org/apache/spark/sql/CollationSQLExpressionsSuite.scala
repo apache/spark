@@ -2016,8 +2016,8 @@ class CollationSQLExpressionsSuite
       val queryExtractor = s"select collation(map($mapKey, $mapVal)[$mapKey])"
       val queryElementAt = s"select collation(element_at(map($mapKey, $mapVal), $mapKey))"
 
-      checkAnswer(sql(queryExtractor), Row(collation))
-      checkAnswer(sql(queryElementAt), Row(collation))
+      checkAnswer(sql(queryExtractor), Row(fullyQualifiedPrefix + collation))
+      checkAnswer(sql(queryElementAt), Row(fullyQualifiedPrefix + collation))
 
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> defaultCollation) {
         val res = fullyQualifiedPrefix + (if (collateVal) "UTF8_LCASE" else defaultCollation)

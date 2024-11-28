@@ -16758,7 +16758,7 @@ def collation(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([('name',)], ['dt'])
     >>> df.select(collation('dt').alias('collation')).show(truncate=False)
     +--------------------------+
-    |                 collation|
+    |collation                 |
     +--------------------------+
     |SYSTEM.BUILTIN.UTF8_BINARY|
     +--------------------------+
