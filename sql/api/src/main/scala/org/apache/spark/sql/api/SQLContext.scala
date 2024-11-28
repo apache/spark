@@ -28,6 +28,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
+import org.apache.spark.sql.api.SQLImplicits
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -166,6 +167,20 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def udf: UDFRegistration
+
+  /**
+   * (Scala-specific) Implicit methods available in Scala for converting common Scala objects into
+   * `DataFrame`s.
+   *
+   * {{{
+   *   val sqlContext = new SQLContext(sc)
+   *   import sqlContext.implicits._
+   * }}}
+   *
+   * @group basic
+   * @since 1.3.0
+   */
+  val implicits: SQLImplicits
 
   /**
    * Returns true if the table is currently cached in-memory.

@@ -22,10 +22,11 @@ import scala.reflect.runtime.universe.TypeTag
 
 import _root_.java.util.{List => JavaList, Map => JavaMap, Properties}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.Table
+import org.apache.spark.sql.connect.ConnectClientUnsupportedErrors
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
@@ -53,6 +54,14 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   /** @inheritdoc */
   def udf: UDFRegistration = sparkSession.udf
 
+  // scalastyle:off
+  // Disable style checker so "implicits" object can start with lowercase i
+
+  /** @inheritdoc */
+  object implicits extends SQLImplicits(this.sparkSession)
+
+  // scalastyle:on
+
   /** @inheritdoc */
   def read: DataFrameReader = sparkSession.read
 
@@ -63,7 +72,7 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   def tables(): Dataset[Row] = {
     sparkSession.catalog
       .listTables()
-      .map(ListTableRow.fromTable)(Encoders.product[ListTableRow])
+      .map(t => ListTableRow(t.database, t.name, t.isTemporary))(Encoders.product[ListTableRow])
       .toDF()
   }
 
@@ -71,9 +80,12 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   def tables(databaseName: String): Dataset[Row] = {
     sparkSession.catalog
       .listTables(databaseName)
-      .map(ListTableRow.fromTable)(Encoders.product[ListTableRow])
+      .map(t => ListTableRow(t.database, t.name, t.isTemporary))(Encoders.product[ListTableRow])
       .toDF()
   }
+
+  /** A case class to mimic the output schema of Spark Classic's `SQLContext.tables()` API. */
+  private case class ListTableRow(database: String, tableName: String, isTemporary: Boolean)
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
@@ -89,9 +101,12 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   }
 
   /** @inheritdoc */
-  override def emptyDataFrame: Dataset[Row] = {
-    super.emptyDataFrame
+  override def sparkContext: SparkContext = {
+    throw ConnectClientUnsupportedErrors.sparkContext()
   }
+
+  /** @inheritdoc */
+  override def emptyDataFrame: Dataset[Row] = super.emptyDataFrame
 
   /** @inheritdoc */
   override def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): Dataset[Row] =
@@ -307,15 +322,28 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
     super.jdbc(url, table, theParts)
   }
 }
+object SQLContext extends api.SQLContextCompanion {
 
-/** A case class to mimic the output schema of Spark Classic's `SQLContext.tables()` API. */
-protected sealed case class ListTableRow(
-    database: String,
-    tableName: String,
-    isTemporary: Boolean)
+  override private[sql] type SQLContextImpl = SQLContext
+  override private[sql] type SparkContextImpl = SparkContext
 
-protected object ListTableRow {
-  def fromTable(table: Table): ListTableRow = {
-    ListTableRow(table.database, table.name, table.isTemporary)
+  /**
+   * Get the singleton SQLContext if it exists or create a new one.
+   *
+   * This function can be used to create a singleton SQLContext object that can be shared across
+   * the JVM.
+   *
+   * If there is an active SQLContext for current thread, it will be returned instead of the
+   * global one.
+   *
+   * @param sparkContext The SparkContext. This parameter is not used in Spark Connect.
+   *
+   * @since 4.0.0
+   */
+  def getOrCreate(sparkContext: SparkContext): SQLContext = {
+    SparkSession.builder().getOrCreate().sqlContext
   }
+
+  /** @inheritdoc */
+  override def setActive(sqlContext: SQLContext): Unit = super.setActive(sqlContext)
 }

@@ -106,23 +106,12 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
 
-  /**
-   * (Scala-specific) Implicit methods available in Scala for converting common Scala objects into
-   * `DataFrame`s.
-   *
-   * {{{
-   *   val sqlContext = new SQLContext(sc)
-   *   import sqlContext.implicits._
-   * }}}
-   *
-   * @group basic
-   * @since 1.3.0
-   */
+  /** @inheritdoc */
   object implicits extends SQLImplicits {
-
     /** @inheritdoc */
     override protected def session: SparkSession = sparkSession
   }
+
   // scalastyle:on
 
   /**
