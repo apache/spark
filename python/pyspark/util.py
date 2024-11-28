@@ -542,7 +542,6 @@ class InheritableThread(threading.Thread):
                 def copy_local_properties(*a: Any, **k: Any) -> Any:
                     # self._props is set before starting the thread to match the behavior with JVM.
                     assert hasattr(self, "_props")
-                    assert self._session is not None
                     if hasattr(self, "_tags"):
                         for tag in self._tags:  # type: ignore[has-type]
                             self._session.addTag(tag)
