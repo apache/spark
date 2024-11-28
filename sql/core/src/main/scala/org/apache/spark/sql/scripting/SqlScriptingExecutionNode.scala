@@ -118,7 +118,8 @@ class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
     val args: Map[String, Expression],
-    override val isInternal: Boolean)
+    override val isInternal: Boolean,
+    context: SqlScriptingExecutionContext)
   extends LeafStatementExec with WithOrigin {
 
   /**
@@ -168,11 +169,30 @@ class SingleStatementExec(
  * @param label
  *   Label set by user to CompoundBody or None otherwise.
  */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[String] = None)
+class CompoundBodyExec(
+    statements: Seq[CompoundStatementExec],
+    label: Option[String] = None,
+    context: SqlScriptingExecutionContext)
   extends NonLeafStatementExec {
 
   private var localIterator = statements.iterator
   private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  private var scopeEntered = false
+  private var scopeExited = false
+
+  private def enterScope(): Unit = {
+    if (label.isDefined && !scopeEntered) {
+      scopeEntered = true
+      context.enterScope(label.get)
+    }
+  }
+
+  private def exitScope(): Unit = {
+    if (label.isDefined && !scopeExited) {
+      scopeExited = true
+      context.exitScope(label.get)
+    }
+  }
 
   /** Used to stop the iteration in cases when LEAVE statement is encountered. */
   private var stopIteration = false
@@ -187,7 +207,11 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[Str
           case _ => throw SparkException.internalError(
             "Unknown statement type encountered during SQL script interpretation.")
         }
-        !stopIteration && (localIterator.hasNext || childHasNext)
+        val result = !stopIteration && (localIterator.hasNext || childHasNext)
+        if (!result) {
+          exitScope()
+        }
+        result
       }
 
       @scala.annotation.tailrec
@@ -207,6 +231,11 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[Str
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement
           case Some(body: NonLeafStatementExec) =>
+            body match {
+              case compound: CompoundBodyExec =>
+                compound.enterScope()
+              case _ => // pass
+            }
             if (body.getTreeIterator.hasNext) {
               body.getTreeIterator.next() match {
                 case leaveStatement: LeaveStatementExec =>

@@ -75,7 +75,7 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("multi statement - count") {
+                                             test("multi statement - count") {
     withTable("t") {
       val sqlScript =
         """

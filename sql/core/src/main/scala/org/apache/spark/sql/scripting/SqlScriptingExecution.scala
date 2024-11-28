@@ -35,9 +35,19 @@ class SqlScriptingExecution(
     session: SparkSession,
     args: Map[String, Expression]) extends Iterator[DataFrame] {
 
-  // Build the execution plan for the script.
-  private val executionPlan: Iterator[CompoundStatementExec] =
-    SqlScriptingInterpreter(session).buildExecutionPlan(sqlScript, args)
+  private val interpreter = SqlScriptingInterpreter(session)
+
+  // Frames to keep what is being executed.
+  private val context: SqlScriptingExecutionContext = {
+    val ctx = new SqlScriptingExecutionContext()
+    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    val frame = new SqlScriptingExecutionFrame(executionPlan)
+    frame.enterScope(sqlScript.label.get)
+    ctx.frames
+      .addOne(new SqlScriptingExecutionFrame(
+        interpreter.buildExecutionPlan(sqlScript, args, ctx)))
+    ctx
+  }
 
   private var current = getNextResult
 
@@ -50,12 +60,19 @@ class SqlScriptingExecution(
     nextDataFrame
   }
 
+  /** Helper method to iterate get next statements from the first available frame. */
+  private def getNextStatement: Option[CompoundStatementExec] = {
+    while (context.frames.nonEmpty && !context.frames.last.hasNext) {
+      context.frames.remove(context.frames.size - 1)
+    }
+    if (context.frames.nonEmpty && context.frames.last.hasNext) {
+      return Some(context.frames.last.next())
+    }
+    None
+  }
+
   /** Helper method to iterate through statements until next result statement is encountered. */
   private def getNextResult: Option[DataFrame] = {
-
-    def getNextStatement: Option[CompoundStatementExec] =
-      if (executionPlan.hasNext) Some(executionPlan.next()) else None
-
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
