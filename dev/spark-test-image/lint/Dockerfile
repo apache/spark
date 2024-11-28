@@ -33,6 +33,12 @@ RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown',
 # See more in SPARK-39735
 ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
 
+# Install Python 3.9
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get update && apt-get install -y python3.9 python3.9-distutils \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+
 RUN python3.9 -m pip install \
     'black==23.9.1' \
     'flake8==3.9.0' \
