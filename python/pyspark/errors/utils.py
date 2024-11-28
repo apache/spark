@@ -57,7 +57,7 @@ def is_debugging_enabled() -> bool:
         if spark is not None:
             _enable_debugging_cache = (
                 spark.conf.get(
-                    "spark.sql.dataFrameQueryContext.enabled", "true"  # type: ignore[union-attr]
+                    "spark.sql.dataFrameDebugging.enabled", "true"  # type: ignore[union-attr]
                 ).lower()
                 == "true"
             )
