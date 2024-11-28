@@ -39,7 +39,7 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     val newPlan = if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
-      transformPlan(plan, stringTypeForDMLCommand)
+      transformPlan(plan, sessionDefaultStringType)
     }
 
     if (!replaceWithTempType || newPlan.fastEquals(plan)) {
@@ -59,9 +59,7 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
    * default string type resolved.
    */
   def needsResolution(plan: LogicalPlan): Boolean = {
-    if (isDDLCommand(plan)) {
-      return true
-    } else if (isDefaultSessionCollationUsed) {
+    if (!isDDLCommand(plan) && isDefaultSessionCollationUsed) {
       return false
     }
 
@@ -93,13 +91,9 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
   private def stringTypeForDDLCommand(table: LogicalPlan): StringType =
     StringType("UTF8_BINARY")
 
-  /** Returns the default string type that should be used in DML commands. */
-  private def stringTypeForDMLCommand: StringType =
-    if (isDefaultSessionCollationUsed) {
-      StringType("UTF8_BINARY")
-    } else {
-      SQLConf.get.defaultStringType
-    }
+  /** Returns the session default string type */
+  private def sessionDefaultStringType: StringType =
+    StringType(SQLConf.get.defaultStringType.collationId)
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
     case _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
@@ -176,18 +170,10 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     dataType.transformRecursively {
       case currentType: StringType if isDefaultStringType(currentType) =>
         if (replaceWithTempType && currentType == newType) {
-          getTemporaryStringType(currentType)
+          TemporaryStringType()
         } else {
           newType
         }
-    }
-  }
-
-  private def getTemporaryStringType(forType: StringType): StringType = {
-    if (forType == StringType) {
-      TemporaryStringType(StringType("UTF8_LCASE").collationId)
-    } else {
-      TemporaryStringType(StringType.collationId)
     }
   }
 
@@ -210,7 +196,6 @@ case object ResolveDefaultStringTypes
 case object ResolveDefaultStringTypesWithoutTempType
   extends ResolveDefaultStringTypes(replaceWithTempType = false) {}
 
-case class TemporaryStringType(override val collationId: Int)
-  extends StringType(collationId) {
+case class TemporaryStringType() extends StringType(1) {
   override def toString: String = s"TemporaryStringType($collationId)"
 }
