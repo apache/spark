@@ -16,7 +16,7 @@
 #
 import itertools
 import sys
-from typing import Any, Iterator, List, Optional, Union, Tuple, TYPE_CHECKING, cast
+from typing import Any, Iterator, List, Optional, Union, TYPE_CHECKING, cast
 import warnings
 
 from pyspark.errors import PySparkTypeError

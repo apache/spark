@@ -1286,8 +1286,8 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
 
-        yield TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
 
-        yield TransformWithStateInPandasFuncMode.COMPLETE, None, None
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)

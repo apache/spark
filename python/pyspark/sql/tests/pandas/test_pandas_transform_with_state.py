@@ -559,19 +559,25 @@ class TransformWithStateInPandasTestsMixin:
     def test_transform_with_state_in_pandas_event_time(self):
         def check_results(batch_df, batch_id):
             if batch_id == 0:
-                # check timer registered in the same batch is expired
+                # watermark for late event = 0
+                # watermark for eviction = 0
+                # timer is registered with expiration time = 0, hence expired at the same batch
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="20"),
                     Row(id="a-expired", timestamp="0"),
                 }
             elif batch_id == 1:
-                # value state is cleared in batch 0, so timestamp=4 is returned here
+                # watermark for late event = 0
+                # watermark for eviction = 10 (20 - 10)
+                # timer is registered with expiration time = 10, hence expired at the same batch
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="4"),
                     Row(id="a-expired", timestamp="10000"),
                 }
             elif batch_id == 2:
-                # event time is still 20-10=10, so we will see expired row with timestamp=10s
+                # watermark for late event = 10
+                # watermark for eviction = 10 (unchanged as 4 < 10)
+                # timer is registered with expiration time = 10, hence expired at the same batch
                 assert set(batch_df.sort("id").collect()) == {
                     Row(id="a", timestamp="15"),
                     Row(id="a-expired", timestamp="10000"),
