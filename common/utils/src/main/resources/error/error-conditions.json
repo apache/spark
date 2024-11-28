@@ -4748,12 +4748,6 @@
     ],
     "sqlState" : "42KD9"
   },
-  "UNANALYZABLE_EXPRESSION" : {
-    "message" : [
-      "The plan contains an unanalyzable expression <expr> that holds the analysis."
-    ],
-    "sqlState" : "03000"
-  },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [
       "Found the unbound parameter: <name>. Please, fix `args` and provide a mapping of the parameter to either a SQL literal or collection constructor functions such as `map()`, `array()`, `struct()`."
@@ -5379,6 +5373,11 @@
       "SQL_SCRIPTING" : {
         "message" : [
           "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
+        ]
+      },
+      "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
+        "message" : [
+          "Positional parameters are not supported with SQL Scripting."
         ]
       },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {

@@ -174,7 +174,8 @@ case class SchemaOfCsv(
     "evaluate",
     dataType,
     Seq(child),
-    Seq(child.dataType))
+    Seq(child.dataType),
+    returnNullable = false)
 }
 
 /**

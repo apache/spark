@@ -20,9 +20,48 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateStoreColFamilySchema}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 
 object StateStoreColumnFamilySchemaUtils {
+
+  /**
+   * Avro uses zig-zag encoding for some fixed-length types, like Longs and Ints. For range scans
+   * we want to use big-endian encoding, so we need to convert the source schema to replace these
+   * types with BinaryType.
+   *
+   * @param schema The schema to convert
+   * @param ordinals If non-empty, only convert fields at these ordinals.
+   *                 If empty, convert all fields.
+   */
+  def convertForRangeScan(schema: StructType, ordinals: Seq[Int] = Seq.empty): StructType = {
+    val ordinalSet = ordinals.toSet
+
+    StructType(schema.fields.zipWithIndex.flatMap { case (field, idx) =>
+      if ((ordinals.isEmpty || ordinalSet.contains(idx)) && isFixedSize(field.dataType)) {
+        // For each numeric field, create two fields:
+        // 1. Byte marker for null, positive, or negative values
+        // 2. The original numeric value in big-endian format
+        // Byte type is converted to Int in Avro, which doesn't work for us as Avro
+        // uses zig-zag encoding as opposed to big-endian for Ints
+        Seq(
+          StructField(s"${field.name}_marker", BinaryType, nullable = false),
+          field.copy(name = s"${field.name}_value", BinaryType)
+        )
+      } else {
+        Seq(field)
+      }
+    })
+  }
+
+  private def isFixedSize(dataType: DataType): Boolean = dataType match {
+    case _: ByteType | _: BooleanType | _: ShortType | _: IntegerType | _: LongType |
+         _: FloatType | _: DoubleType => true
+    case _ => false
+  }
+
+  def getTtlColFamilyName(stateName: String): String = {
+    "$ttl_" + stateName
+  }
 
   def getValueStateSchema[T](
       stateName: String,

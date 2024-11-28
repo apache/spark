@@ -53,14 +53,11 @@ from pyspark.sql.types import (
 )
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
 from pyspark.loose_version import LooseVersion
-from pyspark.sql.utils import has_numpy
-
-if has_numpy:
-    import numpy as np
 
 if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
+    import numpy as np
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
     from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
