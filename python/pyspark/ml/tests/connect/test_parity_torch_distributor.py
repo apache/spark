@@ -19,16 +19,9 @@ import os
 import shutil
 import unittest
 
-torch_requirement_message = None
-have_torch = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
-    torch_requirement_message = "torch is required"
-
 from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
+from pyspark.testing.utils import have_torch, torch_requirement_message
 
 if not is_remote_only():
     from pyspark.ml.torch.tests.test_distributor import (

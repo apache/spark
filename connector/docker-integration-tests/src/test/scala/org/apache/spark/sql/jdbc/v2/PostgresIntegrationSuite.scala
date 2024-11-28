@@ -19,7 +19,7 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkSQLException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
@@ -28,9 +28,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:17.0-alpine)
+ * To run this test suite for a specific version (e.g., postgres:17.2-alpine)
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.0-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.2-alpine
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresIntegrationSuite"
  * }}}
  */
@@ -38,7 +38,7 @@ import org.apache.spark.tags.DockerTest
 class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override val catalogName: String = "postgresql"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.0-alpine")
+    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.2-alpine")
     override val env = Map(
       "POSTGRES_PASSWORD" -> "rootpass"
     )
@@ -65,9 +65,126 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
          |)
                    """.stripMargin
     ).executeUpdate()
-    connection.prepareStatement(
-      "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
+
+    connection.prepareStatement("CREATE TABLE array_test_table (int_array int[]," +
+      "float_array FLOAT8[], timestamp_array TIMESTAMP[], string_array TEXT[]," +
+      "datetime_array TIMESTAMPTZ[], array_of_int_arrays INT[][])").executeUpdate()
+
+    val query =
+      """
+        INSERT INTO array_test_table
+        (int_array, float_array, timestamp_array, string_array,
+        datetime_array, array_of_int_arrays)
+        VALUES
+        (
+            ARRAY[1, 2, 3],                       -- Array of integers
+            ARRAY[1.1, 2.2, 3.3],                 -- Array of floats
+            ARRAY['2023-01-01 12:00'::timestamp, '2023-06-01 08:30'::timestamp],
+            ARRAY['hello', 'world'],              -- Array of strings
+            ARRAY['2023-10-04 12:00:00+00'::timestamptz,
+            '2023-12-01 14:15:00+00'::timestamptz],
+            ARRAY[ARRAY[1, 2]]    -- Array of arrays of integers
+        ),
+        (
+            ARRAY[10, 20, 30],                    -- Another set of data
+            ARRAY[10.5, 20.5, 30.5],
+            ARRAY['2022-01-01 09:15'::timestamp, '2022-03-15 07:45'::timestamp],
+            ARRAY['postgres', 'arrays'],
+            ARRAY['2022-11-22 09:00:00+00'::timestamptz,
+            '2022-12-31 23:59:59+00'::timestamptz],
+            ARRAY[ARRAY[10, 20]]
+        );
+      """
+    connection.prepareStatement(query).executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE array_int (col int[])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE array_bigint(col bigint[])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE array_smallint (col smallint[])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE array_boolean (col boolean[])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE array_float (col real[])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE array_double (col float8[])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE array_timestamp (col timestamp[])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE array_timestamptz (col timestamptz[])")
       .executeUpdate()
+
+    connection.prepareStatement("INSERT INTO array_int VALUES (array[10]), (array[array[10]])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO array_bigint VALUES (array[10]), " +
+      "(array[array[10]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_smallint VALUES (array[10]), " +
+      "(array[array[10]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_boolean VALUES (array[true]), " +
+      "(array[array[true]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_float VALUES (array[10.5]), " +
+      "(array[array[10.5]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_double VALUES (array[10.1]), " +
+      "(array[array[10.1]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_timestamp VALUES " +
+      "(array['2022-01-01 09:15'::timestamp]), " +
+      "(array[array['2022-01-01 09:15'::timestamp]])").executeUpdate()
+    connection.prepareStatement("INSERT INTO array_timestamptz VALUES " +
+      "(array['2022-01-01 09:15'::timestamptz]), " +
+      "(array[array['2022-01-01 09:15'::timestamptz]])").executeUpdate()
+    connection.prepareStatement(
+    "CREATE TABLE datetime (name VARCHAR(32), date1 DATE, time1 TIMESTAMP)")
+    .executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE array_of_int (col int[])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO array_of_int " +
+      "VALUES (array[1])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE ctas_array_of_int " +
+      "AS SELECT * FROM array_of_int").executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE array_of_array_of_int (col int[][])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO array_of_array_of_int " +
+      "VALUES (array[array[1],array[2]])").executeUpdate()
+    connection.prepareStatement("CREATE TABLE ctas_array_of_array_of_int " +
+      "AS SELECT * FROM array_of_array_of_int").executeUpdate()
+
+    connection.prepareStatement("CREATE TABLE unsupported_array_of_array_of_int (col int[][])")
+      .executeUpdate()
+    connection.prepareStatement("INSERT INTO unsupported_array_of_array_of_int " +
+      "VALUES (array[array[1],array[2]]), (array[3])").executeUpdate()
+  }
+
+  test("Test multi-dimensional column types") {
+    // This test is used to verify that the multi-dimensional
+    // column types are supported by the JDBC V2 data source.
+    // We do not verify any result output
+    //
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "array_test_table")
+      .load()
+    df.collect()
+
+    val array_tables = Array(
+      ("array_int", "\"ARRAY<INT>\""),
+      ("array_bigint", "\"ARRAY<BIGINT>\""),
+      ("array_smallint", "\"ARRAY<SMALLINT>\""),
+      ("array_boolean", "\"ARRAY<BOOLEAN>\""),
+      ("array_float", "\"ARRAY<FLOAT>\""),
+      ("array_double", "\"ARRAY<DOUBLE>\""),
+      ("array_timestamp", "\"ARRAY<TIMESTAMP>\""),
+      ("array_timestamptz", "\"ARRAY<TIMESTAMP>\"")
+    )
+
+    array_tables.foreach { case (dbtable, arrayType) =>
+      checkError(
+        exception = intercept[SparkSQLException] {
+          val df = spark.read.format("jdbc")
+            .option("url", jdbcUrl)
+            .option("dbtable", dbtable)
+            .load()
+          df.collect()
+        },
+        condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+        parameters = Map("pos" -> "0", "type" -> arrayType),
+        sqlState = Some("0A000")
+      )
+    }
   }
 
   override def dataPreparation(connection: Connection): Unit = {
@@ -206,5 +323,35 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(rows10.length === 2)
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
+  }
+
+  test("Test reading 2d array from table created via CTAS command - positive test") {
+    val dfNoCTASTable = sql(s"SELECT * FROM $catalogName.array_of_int")
+    val dfWithCTASTable = sql(s"SELECT * FROM $catalogName.ctas_array_of_int")
+
+    checkAnswer(dfWithCTASTable, dfNoCTASTable.collect())
+  }
+
+  test("Test reading 2d array from table created via CTAS command - negative test") {
+    val dfNoCTASTable = sql(s"SELECT * FROM $catalogName.array_of_int")
+
+    checkError(
+      exception = intercept[org.apache.spark.SparkSQLException] {
+        // This should fail as only 1D CTAS tables are supported
+        sql(s"SELECT * FROM $catalogName.ctas_array_of_array_of_int").collect()
+      },
+      condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+      parameters = Map("pos" -> "0", "type" -> "\"ARRAY<INT>\"")
+    )
+  }
+
+  test("Test reading multiple dimension array from table created via CTAS command") {
+    checkError(
+      exception = intercept[org.apache.spark.SparkSQLException] {
+        sql(s"SELECT * FROM $catalogName.unsupported_array_of_array_of_int").collect()
+      },
+      condition = "COLUMN_ARRAY_ELEMENT_TYPE_MISMATCH",
+      parameters = Map("pos" -> "0", "type" -> "\"ARRAY<ARRAY<INT>>\"")
+    )
   }
 }

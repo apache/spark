@@ -237,8 +237,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "EXPLAIN logical SELECT 1"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0039",
-      parameters = Map.empty,
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "EXPLAIN logical SELECT 1"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -247,8 +247,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = "EXPLAIN formatted SELECT 1"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0039",
-      parameters = Map.empty,
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "EXPLAIN formatted SELECT 1"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
@@ -295,8 +295,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
     checkError(
       exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0038",
-      parameters = Map("duplicateNames" -> "'cte1'"),
+      condition = "DUPLICATED_CTE_NAMES",
+      parameters = Map("duplicateNames" -> "`cte1`"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,
@@ -372,8 +372,9 @@ class PlanParserSuite extends AnalysisTest {
     val limitWindowClauses = Seq(
       ("", (p: LogicalPlan) => p),
       (" limit 10", (p: LogicalPlan) => p.limit(10)),
-      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p)),
-      (" window w1 as () limit 10", (p: LogicalPlan) => WithWindowDefinition(ws, p).limit(10))
+      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p, forPipeSQL = false)),
+      (" window w1 as () limit 10", (p: LogicalPlan) =>
+        WithWindowDefinition(ws, p, forPipeSQL = false).limit(10))
     )
 
     val orderSortDistrClusterClauses = Seq(
@@ -524,7 +525,7 @@ class PlanParserSuite extends AnalysisTest {
          |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
          |       w2 as w1,
          |       w3 as w1""".stripMargin,
-      WithWindowDefinition(ws1, plan))
+      WithWindowDefinition(ws1, plan, forPipeSQL = false))
   }
 
   test("lateral view") {

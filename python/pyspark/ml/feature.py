@@ -104,6 +104,8 @@ __all__ = [
     "StopWordsRemover",
     "StringIndexer",
     "StringIndexerModel",
+    "TargetEncoder",
+    "TargetEncoderModel",
     "Tokenizer",
     "UnivariateFeatureSelector",
     "UnivariateFeatureSelectorModel",
@@ -5198,6 +5200,305 @@ class StopWordsRemover(
         """
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
         return list(stopWordsObj.loadDefaultStopWords(language))
+
+
+class _TargetEncoderParams(
+    HasLabelCol, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, HasHandleInvalid
+):
+    """
+    Params for :py:class:`TargetEncoder` and :py:class:`TargetEncoderModel`.
+
+    .. versionadded:: 4.0.0
+    """
+
+    handleInvalid: Param[str] = Param(
+        Params._dummy(),
+        "handleInvalid",
+        "How to handle invalid data during transform(). "
+        + "Options are 'keep' (invalid data presented as an extra "
+        + "categorical feature) or error (throw an error).",
+        typeConverter=TypeConverters.toString,
+    )
+
+    targetType: Param[str] = Param(
+        Params._dummy(),
+        "targetType",
+        "whether the label is 'binary' or 'continuous'",
+        typeConverter=TypeConverters.toString,
+    )
+
+    smoothing: Param[float] = Param(
+        Params._dummy(),
+        "smoothing",
+        "value to smooth in-category averages with overall averages.",
+        typeConverter=TypeConverters.toFloat,
+    )
+
+    def __init__(self, *args: Any):
+        super(_TargetEncoderParams, self).__init__(*args)
+        self._setDefault(handleInvalid="error", targetType="binary", smoothing=0.0)
+
+    @since("4.0.0")
+    def getTargetType(self) -> str:
+        """
+        Gets the value of targetType or its default value.
+        """
+        return self.getOrDefault(self.targetType)
+
+    @since("4.0.0")
+    def getSmoothing(self) -> float:
+        """
+        Gets the value of smoothing or its default value.
+        """
+        return self.getOrDefault(self.smoothing)
+
+
+@inherit_doc
+class TargetEncoder(
+    JavaEstimator["TargetEncoderModel"],
+    _TargetEncoderParams,
+    JavaMLReadable["TargetEncoder"],
+    JavaMLWritable,
+):
+    """
+    Target Encoding maps a column of categorical indices into a numerical feature derived
+    from the target.
+
+    When :py:attr:`handleInvalid` is configured to 'keep', previously unseen values of
+    a feature are mapped to the dataset overall statistics.
+
+    When :py:attr:'targetType' is configured to 'binary', categories are encoded as the
+    conditional probability of the target given that category (bin counting).
+    When :py:attr:'targetType' is configured to 'continuous', categories are encoded as
+    the average of the target given that category (mean encoding)
+
+    Parameter :py:attr:'smoothing' controls how in-category stats and overall stats are
+    weighted to build the encodings
+
+    @note When encoding multi-column by using `inputCols` and `outputCols` params,
+    input/output cols come in pairs, specified by the order in the arrays, and each pair
+    is treated independently.
+
+    .. versionadded:: 4.0.0
+    """
+
+    _input_kwargs: Dict[str, Any]
+
+    @overload
+    def __init__(
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        labelCol: str = ...,
+        handleInvalid: str = ...,
+        targetType: str = ...,
+        smoothing: float = ...,
+    ):
+        ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        labelCol: str = ...,
+        handleInvalid: str = ...,
+        targetType: str = ...,
+        smoothing: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+    ):
+        ...
+
+    @keyword_only
+    def __init__(
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        labelCol: str = "label",
+        handleInvalid: str = "error",
+        targetType: str = "binary",
+        smoothing: float = 0.0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+    ):
+        """
+        __init__(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
+                 targetType="binary", smoothing=0.0, inputCol=None, outputCol=None)
+        """
+        super(TargetEncoder, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.TargetEncoder", self.uid)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @overload
+    def setParams(
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        labelCol: str = ...,
+        handleInvalid: str = ...,
+        targetType: str = ...,
+        smoothing: float = ...,
+    ) -> "TargetEncoder":
+        ...
+
+    @overload
+    def setParams(
+        self,
+        *,
+        labelCol: str = ...,
+        handleInvalid: str = ...,
+        targetType: str = ...,
+        smoothing: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+    ) -> "TargetEncoder":
+        ...
+
+    @keyword_only
+    @since("4.0.0")
+    def setParams(
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        labelCol: str = "label",
+        handleInvalid: str = "error",
+        targetType: str = "binary",
+        smoothing: float = 0.0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+    ) -> "TargetEncoder":
+        """
+        setParams(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", \
+                  dropLast=True, inputCol=None, outputCol=None)
+        Sets params for this TargetEncoder.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("4.0.0")
+    def setLabelCol(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("4.0.0")
+    def setInputCols(self, value: List[str]) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("4.0.0")
+    def setOutputCols(self, value: List[str]) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("4.0.0")
+    def setInputCol(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("4.0.0")
+    def setOutputCol(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("4.0.0")
+    def setHandleInvalid(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("4.0.0")
+    def setTargetType(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`targetType`.
+        """
+        return self._set(targetType=value)
+
+    @since("4.0.0")
+    def setSmoothing(self, value: float) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`smoothing`.
+        """
+        return self._set(smoothing=value)
+
+    def _create_model(self, java_model: "JavaObject") -> "TargetEncoderModel":
+        return TargetEncoderModel(java_model)
+
+
+class TargetEncoderModel(
+    JavaModel, _TargetEncoderParams, JavaMLReadable["TargetEncoderModel"], JavaMLWritable
+):
+    """
+    Model fitted by :py:class:`TargetEncoder`.
+
+    .. versionadded:: 4.0.0
+    """
+
+    @since("4.0.0")
+    def setInputCols(self, value: List[str]) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("4.0.0")
+    def setOutputCols(self, value: List[str]) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("4.0.0")
+    def setInputCol(self, value: str) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("4.0.0")
+    def setOutputCol(self, value: str) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("4.0.0")
+    def setHandleInvalid(self, value: str) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("4.0.0")
+    def setSmoothing(self, value: float) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`smoothing`.
+        """
+        return self._set(smoothing=value)
+
+    @property
+    @since("4.0.0")
+    def stats(self) -> List[Dict[float, Tuple[float, float]]]:
+        """
+        Fitted statistics for each feature to being encoded.
+        The list contains a dictionary for each input column.
+        """
+        return self._call_java("stats")
 
 
 @inherit_doc

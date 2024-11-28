@@ -48,7 +48,7 @@ compoundOrSingleStatement
     ;
 
 singleCompoundStatement
-    : beginEndCompoundBlock SEMICOLON? EOF
+    : BEGIN compoundBody END SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
@@ -765,7 +765,7 @@ temporalClause
 aggregationClause
     : GROUP BY groupingExpressionsWithGroupingAnalytics+=groupByClause
         (COMMA groupingExpressionsWithGroupingAnalytics+=groupByClause)*
-    | GROUP BY groupingExpressions+=expression (COMMA groupingExpressions+=expression)* (
+    | GROUP BY groupingExpressions+=namedExpression (COMMA groupingExpressions+=namedExpression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS LEFT_PAREN groupingSet (COMMA groupingSet)* RIGHT_PAREN)?
@@ -1502,8 +1502,12 @@ version
     ;
 
 operatorPipeRightSide
-    : selectClause
-    | whereClause
+    : selectClause windowClause?
+    | EXTEND extendList=namedExpressionSeq
+    // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
+    // the grammar simply for purposes of catching this invalid syntax and throwing a specific
+    // dedicated error message.
+    | whereClause windowClause?
     // The following two cases match the PIVOT or UNPIVOT clause, respectively.
     // For each one, we add the other clause as an option in order to return high-quality error
     // messages in the event that both are present (this is not allowed).
@@ -1512,6 +1516,8 @@ operatorPipeRightSide
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryTerm
+    | queryOrganization
+    | AGGREGATE namedExpressionSeq? aggregationClause?
     ;
 
 // When `SQL_standard_keyword_behavior=true`, there are 2 kinds of keywords in Spark SQL.
@@ -1528,6 +1534,7 @@ ansiNonReserved
 //--ANSI-NON-RESERVED-START
     : ADD
     | AFTER
+    | AGGREGATE
     | ALTER
     | ALWAYS
     | ANALYZE
@@ -1611,6 +1618,7 @@ ansiNonReserved
     | EXISTS
     | EXPLAIN
     | EXPORT
+    | EXTEND
     | EXTENDED
     | EXTERNAL
     | EXTRACT
@@ -1850,6 +1858,7 @@ nonReserved
 //--DEFAULT-NON-RESERVED-START
     : ADD
     | AFTER
+    | AGGREGATE
     | ALL
     | ALTER
     | ALWAYS
@@ -1956,6 +1965,7 @@ nonReserved
     | EXISTS
     | EXPLAIN
     | EXPORT
+    | EXTEND
     | EXTENDED
     | EXTERNAL
     | EXTRACT

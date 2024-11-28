@@ -158,7 +158,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case InsertIntoStatement(l @ LogicalRelation(_: InsertableRelation, _, _, _),
+    case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
         parts, _, query, overwrite, false, _) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
@@ -171,7 +171,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
     case i @ InsertIntoStatement(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _, _)
+        l @ LogicalRelationWithTable(t: HadoopFsRelation, table), parts, _, query, overwrite, _, _)
         if query.resolved =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
@@ -298,15 +298,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         table.partitionColumnNames.map(name => name -> None).toMap,
         Seq.empty, append.query, false, append.isByName)
 
-    case UnresolvedCatalogRelation(tableMeta, options, false)
-        if DDLUtils.isDatasourceTable(tableMeta) =>
-      readDataSourceTable(tableMeta, options)
-
-    case UnresolvedCatalogRelation(tableMeta, _, false) =>
-      DDLUtils.readHiveTable(tableMeta)
-
-    case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
-      getStreamingRelation(tableMeta, extraOptions)
+    case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
+      resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
@@ -320,6 +313,21 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         v1Relation
       }
   }
+
+  def resolveUnresolvedCatalogRelation(
+      unresolvedCatalogRelation: UnresolvedCatalogRelation): LogicalPlan = {
+    unresolvedCatalogRelation match {
+      case UnresolvedCatalogRelation(tableMeta, options, false)
+          if DDLUtils.isDatasourceTable(tableMeta) =>
+        readDataSourceTable(tableMeta, options)
+
+      case UnresolvedCatalogRelation(tableMeta, _, false) =>
+        DDLUtils.readHiveTable(tableMeta)
+
+      case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
+        getStreamingRelation(tableMeta, extraOptions)
+    }
+  }
 }
 
 
@@ -330,7 +338,7 @@ object DataSourceStrategy
   extends Strategy with Logging with CastSupport with PredicateHelper with SQLConfHelper {
 
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelationWithTable(t: CatalystScan, _)) =>
       pruneFilterProjectRaw(
         l,
         projects,
@@ -339,21 +347,21 @@ object DataSourceStrategy
           toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
     case PhysicalOperation(projects, filters,
-                           l @ LogicalRelation(t: PrunedFilteredScan, _, _, _)) =>
+                           l @ LogicalRelationWithTable(t: PrunedFilteredScan, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelationWithTable(t: PrunedScan, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
-    case l @ LogicalRelation(baseRelation: TableScan, _, _, _) =>
+    case l @ LogicalRelationWithTable(baseRelation: TableScan, _) =>
       RowDataSourceScanExec(
         l.output,
         l.output.toStructType,
@@ -362,6 +370,7 @@ object DataSourceStrategy
         PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
+        l.stream,
         None) :: Nil
 
     case _ => Nil
@@ -436,6 +445,7 @@ object DataSourceStrategy
         PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
+        relation.stream,
         relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
@@ -459,6 +469,7 @@ object DataSourceStrategy
         PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
+        relation.stream,
         relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))

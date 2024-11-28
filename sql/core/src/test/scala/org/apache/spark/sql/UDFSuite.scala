@@ -1205,7 +1205,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         dt
       )
       checkError(
-        intercept[AnalysisException](spark.range(1).select(f())),
+        intercept[AnalysisException](spark.range(1).select(f()).encoder),
         condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
         sqlState = "0A000",
         parameters = Map("dataType" -> s"\"${dt.sql}\"")

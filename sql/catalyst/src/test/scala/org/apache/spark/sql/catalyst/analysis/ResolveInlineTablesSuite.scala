@@ -105,7 +105,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     assert(resolved.isInstanceOf[ResolvedInlineTable])
 
     EvalInlineTables(ComputeCurrentTime(resolved)) match {
-      case LocalRelation(output, data, _) =>
+      case LocalRelation(output, data, _, _) =>
         assert(output.map(_.dataType) == Seq(TimestampType))
         assert(data.size == 2)
         // Make sure that both CURRENT_TIMESTAMP expressions are evaluated to the same value.
@@ -117,7 +117,8 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     val table = UnresolvedInlineTable(Seq("c1"),
       Seq(Seq(Cast(lit("1991-12-06 00:00:00.0"), TimestampType))))
     val withTimeZone = ResolveTimeZone.apply(table)
-    val LocalRelation(output, data, _) = EvalInlineTables(ResolveInlineTables.apply(withTimeZone))
+    val LocalRelation(output, data, _, _) =
+      EvalInlineTables(ResolveInlineTables.apply(withTimeZone))
     val correct = Cast(lit("1991-12-06 00:00:00.0"), TimestampType)
       .withTimeZone(conf.sessionLocalTimeZone).eval().asInstanceOf[Long]
     assert(output.map(_.dataType) == Seq(TimestampType))

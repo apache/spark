@@ -33,14 +33,13 @@ class TestListStateProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("testListState", Encoders.STRING)
+    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       rows: Iterator[InputRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
 
     var output = List[(String, String)]()
 
@@ -90,15 +89,15 @@ class ToggleSaveAndEmitProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("testListState", Encoders.STRING)
-    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean)
+    _listState = getHandle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
+    _valueState = getHandle.getValueState("testValueState", Encoders.scalaBoolean,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       rows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
+      timerValues: TimerValues): Iterator[String] = {
     val valueStateOption = _valueState.getOption()
 
     if (valueStateOption.isEmpty || !valueStateOption.get) {
@@ -301,6 +300,8 @@ class TransformWithListStateSuite extends StreamTest
         CheckNewAnswer(("k5", "v5"), ("k5", "v6")),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numListStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 2)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 2)
         }
       )
     }

@@ -427,7 +427,7 @@ examples = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming))"],
+    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -500,6 +500,7 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
         "pyspark.sql.observation",
+        "pyspark.sql.tvf",
         # unittests
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_arrow_cogrouped_map",
@@ -525,6 +526,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.pandas.test_pandas_grouped_map",
         "pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state",
         "pyspark.sql.tests.pandas.test_pandas_map",
+        "pyspark.sql.tests.pandas.test_pandas_transform_with_state",
         "pyspark.sql.tests.test_arrow_map",
         "pyspark.sql.tests.pandas.test_pandas_udf",
         "pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg",
@@ -543,10 +545,12 @@ pyspark_sql = Module(
         "pyspark.sql.tests.streaming.test_streaming_foreach",
         "pyspark.sql.tests.streaming.test_streaming_foreach_batch",
         "pyspark.sql.tests.streaming.test_streaming_listener",
+        "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
         "pyspark.sql.tests.test_udf_profiler",
         "pyspark.sql.tests.test_udtf",
+        "pyspark.sql.tests.test_tvf",
         "pyspark.sql.tests.test_utils",
         "pyspark.sql.tests.test_resources",
         "pyspark.sql.tests.plot.test_frame_plot",
@@ -1012,6 +1016,7 @@ pyspark_connect = Module(
         "pyspark.sql.connect.protobuf.functions",
         "pyspark.sql.connect.streaming.readwriter",
         "pyspark.sql.connect.streaming.query",
+        "pyspark.sql.connect.tvf",
         # sql unittests
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
@@ -1040,6 +1045,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_observation",
         "pyspark.sql.tests.connect.test_parity_repartition",
         "pyspark.sql.tests.connect.test_parity_stat",
+        "pyspark.sql.tests.connect.test_parity_subquery",
         "pyspark.sql.tests.connect.test_parity_types",
         "pyspark.sql.tests.connect.test_parity_column",
         "pyspark.sql.tests.connect.test_parity_readwriter",
@@ -1047,6 +1053,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_udf_profiler",
         "pyspark.sql.tests.connect.test_parity_memory_profiler",
         "pyspark.sql.tests.connect.test_parity_udtf",
+        "pyspark.sql.tests.connect.test_parity_tvf",
         "pyspark.sql.tests.connect.test_parity_pandas_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_map",
         "pyspark.sql.tests.connect.test_parity_arrow_map",
