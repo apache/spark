@@ -1612,7 +1612,7 @@ class CollationSQLExpressionsSuite
         Row(0, "null", "\"Spark\"").toString() + Row(1, "null", "\"SQL\"").toString(),
         Seq[StructField](
           StructField("pos", IntegerType, nullable = false),
-          StructField("key", StringType("UTF8_LCASE")),
+          StructField("key", StringType("UTF8_BINARY")),
           StructField("value", VariantType, nullable = false)
         )
       ),
@@ -1620,7 +1620,7 @@ class CollationSQLExpressionsSuite
         Row(0, "a", "true").toString() + Row(1, "b", "3.14").toString(),
         Seq[StructField](
           StructField("pos", IntegerType, nullable = false),
-          StructField("key", StringType("UNICODE")),
+          StructField("key", StringType("UTF8_BINARY")),
           StructField("value", VariantType, nullable = false)
         )
       ),
@@ -1628,7 +1628,7 @@ class CollationSQLExpressionsSuite
         Row(0, "A", "9.99").toString() + Row(1, "B", "false").toString(),
         Seq[StructField](
           StructField("pos", IntegerType, nullable = false),
-          StructField("key", StringType("UNICODE_CI")),
+          StructField("key", StringType("UTF8_BINARY")),
           StructField("value", VariantType, nullable = false)
         )
       )
@@ -1663,7 +1663,7 @@ class CollationSQLExpressionsSuite
       SchemaOfVariantTestCase("[{\"a\":true,\"b\":0}]", "UNICODE",
         "ARRAY<OBJECT<a: BOOLEAN, b: BIGINT>>"),
       SchemaOfVariantTestCase("[{\"A\":\"x\",\"B\":-1.00}]", "UNICODE_CI",
-        "ARRAY<OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(1,0)>>")
+        "ARRAY<OBJECT<A: STRING, B: DECIMAL(1,0)>>")
     )
 
     // Supported collations
@@ -1694,7 +1694,7 @@ class CollationSQLExpressionsSuite
       SchemaOfVariantAggTestCase("('{\"a\": 1}'), ('{\"b\": true}'), ('{\"c\": 1.23}')",
         "UNICODE", "OBJECT<a: BIGINT, b: BOOLEAN, c: DECIMAL(3,2)>"),
       SchemaOfVariantAggTestCase("('{\"A\": \"x\"}'), ('{\"B\": 9.99}'), ('{\"C\": 0}')",
-        "UNICODE_CI", "OBJECT<A: STRING COLLATE UNICODE_CI, B: DECIMAL(3,2), C: BIGINT>")
+        "UNICODE_CI", "OBJECT<A: STRING, B: DECIMAL(3,2), C: BIGINT>")
     )
 
     // Supported collations
@@ -1707,7 +1707,7 @@ class CollationSQLExpressionsSuite
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> t.collationName) {
         val testQuery = sql(query)
         checkAnswer(testQuery, Row(t.result))
-        assert(testQuery.schema.fields.head.dataType.sameType(StringType(t.collationName)))
+        assert(testQuery.schema.fields.head.dataType.sameType(StringType("UTF8_BINARY")))
       }
     })
   }
