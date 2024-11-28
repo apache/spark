@@ -24,9 +24,14 @@ set -e
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
+echo "mima 0 ..."
 SPARK_PROFILES=${1:-"-Pkubernetes -Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"}
+
 TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
+echo "mima 1 ..."
+
 OLD_DEPS_CLASSPATH="$(build/sbt -DcopyDependencies=false $SPARK_PROFILES "export oldDeps/fullClasspath" | grep jar | tail -n1)"
+echo "mima 2 ..."
 
 rm -f .generated-mima*
 
@@ -41,9 +46,11 @@ $JAVA_CMD \
   -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.util.jar=ALL-UNNAMED \
   -cp "$TOOLS_CLASSPATH:$OLD_DEPS_CLASSPATH" \
   org.apache.spark.tools.GenerateMIMAIgnore
+echo "mima 3 ..."
 
 echo -e "q\n" | build/sbt -mem 5632 -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
 ret_val=$?
+echo "mima 4 ..."
 
 if [ $ret_val != 0 ]; then
   echo "NOTE: Exceptions to binary compatibility can be added in project/MimaExcludes.scala"
