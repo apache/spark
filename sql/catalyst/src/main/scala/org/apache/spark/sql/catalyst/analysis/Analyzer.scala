@@ -2150,7 +2150,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           if args.forall(_.resolved) =>
         val inputType = extractInputType(args)
         val bound = unbound.bind(inputType)
-        validateParameterModes(bound)
         val rearrangedArgs = NamedParametersSupport.defaultRearrange(bound, args)
         Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
     }
@@ -2170,12 +2169,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         .putBoolean(ProcedureParameter.BY_NAME_METADATA_KEY, value = true)
         .build()
     }
-
-   private def validateParameterModes(procedure: BoundProcedure): Unit = {
-     procedure.parameters.find(_.mode != ProcedureParameter.Mode.IN).foreach { param =>
-       throw SparkException.internalError(s"Unsupported parameter mode: ${param.mode}")
-     }
-   }
   }
 
   /**

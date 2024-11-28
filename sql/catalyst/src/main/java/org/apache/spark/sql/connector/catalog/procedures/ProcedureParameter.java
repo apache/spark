@@ -92,7 +92,7 @@ public interface ProcedureParameter {
     private String defaultValueExpression;
     private String comment;
 
-    private Builder(Mode mode, String name, DataType dataType) {
+    public Builder(Mode mode, String name, DataType dataType) {
       this.mode = mode;
       this.name = name;
       this.dataType = dataType;
