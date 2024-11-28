@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterViewAs, ColumnDefinition, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, V1CreateTablePlan, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
@@ -33,24 +32,27 @@ import org.apache.spark.sql.types.{DataType, StringType}
  * [[TemporaryStringType]] object in cases where the old type and new are equal and thus would
  * not change the plan after transformation.
  */
-class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[LogicalPlan] {
+object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
 
-    val newPlan = if (isDDLCommand(plan)) {
+    val newPlan = apply0(plan)
+    if (plan.ne(newPlan)) {
+      // Due to how tree transformations work and StringType object being equal to
+      // StringType("UTF8_BINARY"), we need to run the rule twice
+      // to ensure the correct results for occurrences of default string type.
+      val finalPlan = apply0(newPlan)
+      RuleExecutor.forceAdditionalIteration(finalPlan)
+      finalPlan
+    } else {
+      newPlan
+    }
+  }
+
+  private def apply0(plan: LogicalPlan): LogicalPlan = {
+    if (isDDLCommand(plan)) {
       transformDDL(plan)
     } else {
       transformPlan(plan, sessionDefaultStringType)
-    }
-
-    if (!replaceWithTempType || newPlan.fastEquals(plan)) {
-      newPlan
-    } else {
-      // Due to how tree transformations work and StringType object being equal to
-      // StringType("UTF8_BINARY"), we need to run `ResolveDefaultStringType` twice
-      // to ensure the correct results for occurrences of default string type.
-      val finalPlan = ResolveDefaultStringTypesWithoutTempType.apply(newPlan)
-      RuleExecutor.forceAdditionalIteration(finalPlan)
-      finalPlan
     }
   }
 
@@ -79,10 +81,10 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
    * default string type resolved.
    */
   def needsResolution(expression: Expression): Boolean = {
-    expression.exists(e => transformExpression.isDefinedAt(e, StringType))
+    expression.exists(e => transformExpression.isDefinedAt(e))
   }
 
-  private def isDefaultSessionCollationUsed: Boolean = SQLConf.get.defaultStringType == StringType
+  private def isDefaultSessionCollationUsed: Boolean = conf.defaultStringType == StringType
 
   /**
    * Returns the default string type that should be used in a given DDL command (for now always
@@ -93,7 +95,7 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
 
   /** Returns the session default string type */
   private def sessionDefaultStringType: StringType =
-    StringType(SQLConf.get.defaultStringType.collationId)
+    StringType(conf.defaultStringType.collationId)
 
   private def isDDLCommand(plan: LogicalPlan): Boolean = plan exists {
     case _: AddColumns | _: ReplaceColumns | _: AlterColumn => true
@@ -129,27 +131,25 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
    * new type instead of the default string type.
    */
   private def transformPlan(plan: LogicalPlan, newType: StringType): LogicalPlan = {
-    plan resolveOperators { operator =>
-      operator resolveExpressionsUp { expression =>
-        transformExpression.applyOrElse((expression, newType), fallbackToExpression)
-      }
+    plan resolveExpressionsUp { expression =>
+      transformExpression
+        .andThen(_.apply(newType))
+        .applyOrElse(expression, identity[Expression])
     }
   }
-
-  private def fallbackToExpression(tuple: (Expression, StringType)): Expression = tuple._1
 
   /**
    * Transforms the given expression, by changing all default string types to the given new type.
    */
-  private def transformExpression: PartialFunction[(Expression, StringType), Expression] = {
-    case (columnDef: ColumnDefinition, newType) if hasDefaultStringType(columnDef.dataType) =>
-      columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
+  private def transformExpression: PartialFunction[Expression, StringType => Expression] = {
+    case columnDef: ColumnDefinition if hasDefaultStringType(columnDef.dataType) =>
+      newType => columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
 
-    case (cast: Cast, newType) if hasDefaultStringType(cast.dataType) =>
-      cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
+    case cast: Cast if hasDefaultStringType(cast.dataType) =>
+      newType => cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
 
-    case (Literal(value, dt), newType) if hasDefaultStringType(dt) =>
-      Literal(value, replaceDefaultStringType(dt, newType))
+    case Literal(value, dt) if hasDefaultStringType(dt) =>
+      newType => Literal(value, replaceDefaultStringType(dt, newType))
   }
 
   private def hasDefaultStringType(dataType: DataType): Boolean =
@@ -157,11 +157,9 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
 
   private def isDefaultStringType(dataType: DataType): Boolean = {
     dataType match {
-      case _: TemporaryStringType =>
-        !replaceWithTempType
       case st: StringType =>
         // should only return true for StringType object and not StringType("UTF8_BINARY")
-        st.eq(StringType)
+        st.eq(StringType) || st.isInstanceOf[TemporaryStringType]
       case _ => false
     }
   }
@@ -169,7 +167,7 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
   private def replaceDefaultStringType(dataType: DataType, newType: StringType): DataType = {
     dataType.transformRecursively {
       case currentType: StringType if isDefaultStringType(currentType) =>
-        if (replaceWithTempType && currentType == newType) {
+        if (currentType == newType) {
           TemporaryStringType()
         } else {
           newType
@@ -189,12 +187,6 @@ class ResolveDefaultStringTypes(replaceWithTempType: Boolean) extends Rule[Logic
     }
   }
 }
-
-case object ResolveDefaultStringTypes
-  extends ResolveDefaultStringTypes(replaceWithTempType = true) {}
-
-case object ResolveDefaultStringTypesWithoutTempType
-  extends ResolveDefaultStringTypes(replaceWithTempType = false) {}
 
 case class TemporaryStringType() extends StringType(1) {
   override def toString: String = s"TemporaryStringType($collationId)"
