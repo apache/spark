@@ -1174,6 +1174,26 @@ public final class CollationFactory {
   }
 
   /**
+   * Returns the resolved fully qualified collation name.
+   */
+  public static String resolveFullyQualifiedName(String[] collationName) throws SparkException {
+    // If collation name has only one part, then we don't need to do any name resolution.
+    if (collationName.length == 1) return collationName[0];
+    else {
+      // Currently we only support builtin collation names with fixed catalog `SYSTEM` and
+      // schema `BUILTIN`.
+      if (collationName.length != 3 ||
+          !CollationFactory.CATALOG.equalsIgnoreCase(collationName[0]) ||
+          !CollationFactory.SCHEMA.equalsIgnoreCase(collationName[1])) {
+        // Throw exception with original (before case conversion) collation name.
+        throw CollationFactory.collationInvalidNameException(
+            collationName.length != 0 ? collationName[collationName.length - 1] : "");
+      }
+      return collationName[2];
+    }
+  }
+
+  /**
    * Method for constructing errors thrown on providing invalid collation name.
    */
   public static SparkException collationInvalidNameException(String collationName) {

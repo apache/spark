@@ -2132,5 +2132,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql("SELECT 'a' collate sYstEm.bUiltIn.utf8_lCAse = 'A'"),
       Seq(Row(true))
     )
+
+    // Make sure DDLs can use fully qualified names.
+    withTable("t") {
+      sql(s"CREATE TABLE t (c STRING COLLATE system.builtin.UTF8_LCASE)")
+    }
   }
 }

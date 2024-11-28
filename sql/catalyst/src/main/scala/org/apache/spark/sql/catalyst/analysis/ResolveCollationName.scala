@@ -31,24 +31,6 @@ object ResolveCollationName extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveExpressionsWithPruning(_.containsPattern(UNRESOLVED_COLLATION), ruleId) {
       case UnresolvedCollation(collationName) =>
-        ResolvedCollation(resolveFullyQualifiedName(collationName))
+        ResolvedCollation(CollationFactory.resolveFullyQualifiedName(collationName.toArray))
     }
-
-  private def resolveFullyQualifiedName(collationName: Seq[String]): String = {
-    // If collation name has only one part, then we don't need to do any name resolution
-    // and can directly resolve it to a `ResolvedCollation`.
-    if (collationName.length == 1) collationName(0)
-    else {
-      // Currently we only support builtin collation names with fixed catalog `SYSTEM` and
-      // schema `BUILTIN`.
-      if (collationName.length != 3 ||
-        !CollationFactory.CATALOG.equalsIgnoreCase(collationName.head) ||
-        !CollationFactory.SCHEMA.equalsIgnoreCase(collationName(1))) {
-        // Throw exception with original (before case conversion) collation name.
-        throw CollationFactory
-          .collationInvalidNameException(collationName.last)
-      }
-      collationName(2)
-    }
-  }
 }
