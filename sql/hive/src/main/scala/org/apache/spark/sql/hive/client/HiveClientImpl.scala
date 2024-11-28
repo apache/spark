@@ -56,7 +56,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, QuotingUtils, StringConcat}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
@@ -1090,11 +1090,31 @@ private[hive] object HiveClientImpl extends Logging {
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
     val typeString = if (SQLConf.get.charVarcharAsString) {
-      c.dataType.catalogString
+      catalogString(c.dataType)
     } else {
-      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(c.dataType.catalogString)
+      CharVarcharUtils.getRawTypeString(c.metadata).getOrElse(catalogString(c.dataType))
     }
     new FieldSchema(c.name, typeString, c.getComment().orNull)
+  }
+
+  def catalogString(dataType: DataType): String = dataType match {
+    case ArrayType(et, _) => s"array<${catalogString(et)}>"
+    case MapType(k, v, _) => s"map<${catalogString(k)},${catalogString(v)}>"
+    case StructType(fields) =>
+      val stringConcat = new StringConcat()
+      val len = fields.length
+      stringConcat.append("struct<")
+      var i = 0
+      while (i < len) {
+        val name = QuotingUtils.quoteIfNeeded(fields(i).name)
+        stringConcat.append(s"$name:${catalogString(fields(i).dataType)}")
+        i += 1
+        if (i < len) stringConcat.append(",")
+      }
+      stringConcat.append(">")
+      stringConcat.toString
+    case udt: UserDefinedType[_] => catalogString(udt.sqlType)
+    case _ => dataType.catalogString
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
