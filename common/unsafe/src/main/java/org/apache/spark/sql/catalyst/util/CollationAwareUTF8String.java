@@ -1530,29 +1530,20 @@ public class CollationAwareUTF8String {
 
   public static UTF8String[] splitSQL(final UTF8String input, final UTF8String delim,
       final int limit, final int collationId) {
-    CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-    if (collation.isUtf8BinaryType && !collation.supportsSpaceTrimming) {
-      return input.split(delim, limit);
-    }
-
     if (CollationFactory.fetchCollation(collationId).isUtf8BinaryType) {
-      // For UTF8_BINARY_rtrim collation different implementation.
-      return binarySplitSQL(input, delim, limit, collationId);
+      return input.split(delim, limit);
     } else if (CollationFactory.fetchCollation(collationId).isUtf8LcaseType) {
-      return lowercaseSplitSQL(input, delim, limit, collationId);
+      return lowercaseSplitSQL(input, delim, limit);
     } else {
       return icuSplitSQL(input, delim, limit, collationId);
     }
   }
 
-  public static UTF8String[] lowercaseSplitSQL(final UTF8String string, UTF8String delimiter,
-      final int limit, final int collationId) {
+  public static UTF8String[] lowercaseSplitSQL(final UTF8String string, final UTF8String delimiter,
+      final int limit) {
     if (delimiter.numBytes() == 0) return new UTF8String[] { string };
     if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
-    CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-    if (collation.supportsSpaceTrimming) {
-      delimiter = CollationFactory.applyTrimmingPolicy(delimiter, collationId);
-    }
+
     List<UTF8String> strings = new ArrayList<>();
     UTF8String lowercaseDelimiter = lowerCaseCodePoints(delimiter);
     int startIndex = 0, nextMatch = 0, nextMatchLength;
@@ -1581,14 +1572,10 @@ public class CollationAwareUTF8String {
     return strings.toArray(new UTF8String[0]);
   }
 
-  public static UTF8String[] icuSplitSQL(final UTF8String string, UTF8String delimiter,
+  public static UTF8String[] icuSplitSQL(final UTF8String string, final UTF8String delimiter,
       final int limit, final int collationId) {
     if (delimiter.numBytes() == 0) return new UTF8String[] { string };
     if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
-    CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-    if (collation.supportsSpaceTrimming) {
-      delimiter = CollationFactory.applyTrimmingPolicy(delimiter, collationId);
-    }
     List<UTF8String> strings = new ArrayList<>();
     String target = string.toValidString(), pattern = delimiter.toValidString();
     StringSearch stringSearch = CollationFactory.getStringSearch(target, pattern, collationId);
@@ -1612,15 +1599,6 @@ public class CollationAwareUTF8String {
       }
     }
     return strings.toArray(new UTF8String[0]);
-  }
-
-  public static UTF8String[] binarySplitSQL(final UTF8String string, UTF8String delimiter,
-      final int limit, final int collationId) {
-    CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
-    if (collation.supportsSpaceTrimming) {
-      delimiter = CollationFactory.applyTrimmingPolicy(delimiter, collationId);
-    }
-    return string.split(delimiter, limit);
   }
 
   // TODO: Add more collation-aware UTF8String operations here.
