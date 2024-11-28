@@ -36,16 +36,6 @@ class ClassificationTestsOnConnect(ClassificationTestsMixin, unittest.TestCase):
     def tearDown(self) -> None:
         self.spark.stop()
 
-    def test_binary_logistic_regression_summary(self):
-        self.check_binary_logistic_regression_summary(False)
-
-    def test_multiclass_logistic_regression_summary(self):
-        self.check_multiclass_logistic_regression_summary(False)
-
-    # @unittest.skip("Spark Connect ML does not support estimator read/write.")
-    # def test_logistic_regression(self):
-    #     super().test_logistic_regression()
-
 
 if __name__ == "__main__":
     from pyspark.ml.tests.connect.test_connect_spark_ml_classification import *  # noqa: F401

@@ -62,7 +62,7 @@ from pyspark.ml.param.shared import (
     HasSolver,
     HasParallelism,
 )
-from pyspark.ml.remote.util import try_remote_attribute_relation, try_remote_not_supporting
+from pyspark.ml.remote.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
@@ -1588,7 +1588,6 @@ class LogisticRegressionModel(
                 "No training summary available for this %s" % self.__class__.__name__
             )
 
-    @try_remote_not_supporting
     def evaluate(self, dataset: DataFrame) -> "LogisticRegressionSummary":
         """
         Evaluates the model on a test dataset.

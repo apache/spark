@@ -23,62 +23,54 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
 
 
-class _ModelTransformRelationPlan(LogicalPlan):
-    """_ModelTransformRelationPlan represents the model transform"""
+class TransformerRelation(LogicalPlan):
+    """A logical plan for transforming of a transformer which could be a cached model
+    or a non-model transformer like VectorAssembler."""
 
     def __init__(
-        self, child: Optional["LogicalPlan"], model_id: str, ml_params: pb2.MlParams
-    ) -> None:
-        super().__init__(child)
-        self._model_id = model_id
-        self._ml_params = ml_params
-
-    def plan(self, session: "SparkConnectClient") -> pb2.Relation:
-        assert self._child is not None
-        plan = self._create_proto_relation()
-        plan.ml_relation.transform.input.CopyFrom(self._child.plan(session))
-        plan.ml_relation.transform.obj_ref.CopyFrom(pb2.ObjectRef(id=self._model_id))
-        if self._ml_params is not None:
-            plan.ml_relation.transform.params.CopyFrom(self._ml_params)
-
-        return plan
-
-
-class _TransformerRelationPlan(LogicalPlan):
-    """_TransformerRelationPlan represents the transform for non-model transformers"""
-
-    def __init__(
-        self, child: Optional["LogicalPlan"], name: str, uid: str, ml_params: pb2.MlParams
+        self,
+        child: Optional["LogicalPlan"],
+        name: str,
+        ml_params: pb2.MlParams,
+        uid: str = "",
+        is_model: bool = True,
     ) -> None:
         super().__init__(child)
         self._name = name
-        self._uid = uid
         self._ml_params = ml_params
+        self._uid = uid
+        self._is_model = is_model
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.ml_relation.transform.input.CopyFrom(self._child.plan(session))
-        plan.ml_relation.transform.transformer.CopyFrom(
-            pb2.MlOperator(name=self._name, uid=self._uid, type=pb2.MlOperator.TRANSFORMER)
-        )
+
+        if self._is_model:
+            plan.ml_relation.transform.obj_ref.CopyFrom(pb2.ObjectRef(id=self._name))
+        else:
+            plan.ml_relation.transform.transformer.CopyFrom(
+                pb2.MlOperator(name=self._name, uid=self._uid, type=pb2.MlOperator.TRANSFORMER)
+            )
+
         if self._ml_params is not None:
             plan.ml_relation.transform.params.CopyFrom(self._ml_params)
+
         return plan
 
 
-class _ModelAttributeRelationPlan(LogicalPlan):
-    """_ModelAttributeRelationPlan used to represent an attribute of a "model",
-    which returns a Dataframe
+class AttributeRelation(LogicalPlan):
+    """A logical plan used in ML to represent an attribute of an instance, which
+    could be a model or a summary. This attribute returns a DataFrame.
     """
 
-    def __init__(self, model_id: str, method: str) -> None:
+    def __init__(self, ref_id: str, method: str) -> None:
         super().__init__(None)
-        self._model_id = model_id
+        self._ref_id = ref_id
         self._method = method
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         plan = self._create_proto_relation()
-        plan.ml_relation.fetch_attr.obj_ref.CopyFrom(pb2.ObjectRef(id=self._model_id))
+        plan.ml_relation.fetch_attr.obj_ref.CopyFrom(pb2.ObjectRef(id=self._ref_id))
         plan.ml_relation.fetch_attr.method = self._method
         return plan

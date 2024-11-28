@@ -343,10 +343,13 @@ class MlCommandResult(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["obj_ref", "name"] | None: ...
 
     PARAM_FIELD_NUMBER: builtins.int
+    SUMMARY_FIELD_NUMBER: builtins.int
     OPERATOR_INFO_FIELD_NUMBER: builtins.int
     @property
     def param(self) -> pyspark.sql.connect.proto.ml_common_pb2.Param:
         """The result of the attribute"""
+    summary: builtins.str
+    """Evaluate a Dataset in a model and return the cached ID of summary"""
     @property
     def operator_info(self) -> global___MlCommandResult.MlOperatorInfo:
         """Operator information"""
@@ -354,22 +357,37 @@ class MlCommandResult(google.protobuf.message.Message):
         self,
         *,
         param: pyspark.sql.connect.proto.ml_common_pb2.Param | None = ...,
+        summary: builtins.str = ...,
         operator_info: global___MlCommandResult.MlOperatorInfo | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "operator_info", b"operator_info", "param", b"param", "result_type", b"result_type"
+            "operator_info",
+            b"operator_info",
+            "param",
+            b"param",
+            "result_type",
+            b"result_type",
+            "summary",
+            b"summary",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "operator_info", b"operator_info", "param", b"param", "result_type", b"result_type"
+            "operator_info",
+            b"operator_info",
+            "param",
+            b"param",
+            "result_type",
+            b"result_type",
+            "summary",
+            b"summary",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["param", "operator_info"] | None: ...
+    ) -> typing_extensions.Literal["param", "summary", "operator_info"] | None: ...
 
 global___MlCommandResult = MlCommandResult

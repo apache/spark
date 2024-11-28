@@ -23,52 +23,83 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.MLWritable
+import org.apache.spark.ml.util.{MLWritable, Summary}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.ml.Serializer.deserializeMethodArguments
 import org.apache.spark.sql.connect.service.SessionHolder
 
-private class ModelAttributeHelper(
+/**
+ * Helper function to get the attribute from an object by reflection
+ * @param sessionHolder
+ * @param objIdentifier
+ * @param method
+ * @param argValues
+ * @param argClasses
+ */
+private class AttributeHelper(
     val sessionHolder: SessionHolder,
     val objIdentifier: String,
     val method: Option[String],
     val argValues: Array[Object] = Array.empty,
     val argClasses: Array[Class[_]] = Array.empty) {
 
-  val methodChain = method.map(n => s"$objIdentifier.$n").getOrElse(objIdentifier)
+  private val methodChain = method.map(n => s"$objIdentifier.$n").getOrElse(objIdentifier)
   private val methodChains = methodChain.split("\\.")
   private val modelId = methodChains.head
 
-  private lazy val model = sessionHolder.mlCache.get(modelId)
+  protected lazy val instance = sessionHolder.mlCache.get(modelId)
   private lazy val methods = methodChains.slice(1, methodChains.length)
 
   def getAttribute: Any = {
     assert(methods.length >= 1)
     if (argValues.length == 0) {
-      methods.foldLeft(model.asInstanceOf[Object]) { (obj, attribute) =>
+      methods.foldLeft(instance) { (obj, attribute) =>
         MLUtils.invokeMethodAllowed(obj, attribute)
       }
     } else {
       val lastMethod = methods.last
       if (methods.length == 1) {
-        MLUtils.invokeMethodAllowed(model.asInstanceOf[Object], lastMethod, argValues, argClasses)
+        MLUtils.invokeMethodAllowed(instance, lastMethod, argValues, argClasses)
       } else {
         val prevMethods = methods.slice(0, methods.length - 1)
-        val finalObj = prevMethods.foldLeft(model.asInstanceOf[Object]) { (obj, attribute) =>
+        val finalObj = prevMethods.foldLeft(instance) { (obj, attribute) =>
           MLUtils.invokeMethodAllowed(obj, attribute)
         }
         MLUtils.invokeMethodAllowed(finalObj, lastMethod, argValues, argClasses)
       }
     }
   }
+}
+
+private class ModelAttributeHelper(
+    sessionHolder: SessionHolder,
+    objIdentifier: String,
+    method: Option[String],
+    argValues: Array[Object] = Array.empty,
+    argClasses: Array[Class[_]] = Array.empty)
+    extends AttributeHelper(sessionHolder, objIdentifier, method, argValues, argClasses) {
 
   def transform(relation: proto.MlRelation.Transform): DataFrame = {
     // Create a copied model to avoid concurrently modify model params.
+    val model = instance.asInstanceOf[Model[_]]
     val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
     MLUtils.setInstanceParams(copiedModel, relation.getParams)
     val inputDF = MLUtils.parseRelationProto(relation.getInput, sessionHolder)
     copiedModel.transform(inputDF)
+  }
+}
+
+private object AttributeHelper {
+  def apply(
+      sessionHolder: SessionHolder,
+      modelId: String,
+      method: Option[String] = None,
+      args: Array[proto.FetchAttr.Args] = Array.empty): AttributeHelper = {
+    val tmp = deserializeMethodArguments(args, sessionHolder)
+    val argValues = tmp.map(_._1)
+    val argClasses = tmp.map(_._2)
+    new AttributeHelper(sessionHolder, modelId, method, argValues, argClasses)
   }
 }
 
@@ -113,16 +144,20 @@ object MLHandler extends Logging {
 
       case proto.MlCommand.CommandCase.FETCH_ATTR =>
         val args = mlCommand.getFetchAttr.getArgsList.asScala.toArray
-        val helper = ModelAttributeHelper(
+        val helper = AttributeHelper(
           sessionHolder,
           mlCommand.getFetchAttr.getObjRef.getId,
           Option(mlCommand.getFetchAttr.getMethod),
           args)
-        val param = Serializer.serializeParam(helper.getAttribute)
-        proto.MlCommandResult
-          .newBuilder()
-          .setParam(param)
-          .build()
+        val attrResult = helper.getAttribute
+        attrResult match {
+          case s: Summary =>
+            val id = mlCache.register(s)
+            proto.MlCommandResult.newBuilder().setSummary(id).build()
+          case _ =>
+            val param = Serializer.serializeParam(attrResult)
+            proto.MlCommandResult.newBuilder().setParam(param).build()
+        }
 
       case proto.MlCommand.CommandCase.DELETE =>
         val modelId = mlCommand.getDelete.getObjRef.getId
@@ -144,7 +179,7 @@ object MLHandler extends Logging {
         mlCommand.getWrite.getTypeCase match {
           case proto.MlCommand.Writer.TypeCase.OBJ_REF => // save a model
             val modelId = mlCommand.getWrite.getObjRef.getId
-            val model = mlCache.get(modelId)
+            val model = mlCache.get(modelId).asInstanceOf[Model[_]]
             val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
             MLUtils.setInstanceParams(copiedModel, mlCommand.getWrite.getParams)
 
@@ -234,7 +269,7 @@ object MLHandler extends Logging {
 
       // Get the model attribute
       case proto.MlRelation.MlTypeCase.FETCH_ATTR =>
-        val helper = ModelAttributeHelper(
+        val helper = AttributeHelper(
           sessionHolder,
           relation.getFetchAttr.getObjRef.getId,
           Option(relation.getFetchAttr.getMethod))

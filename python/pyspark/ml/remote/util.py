@@ -52,12 +52,12 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
     def wrapped(self: "JavaWrapper", *args: Any, **kwargs: Any) -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             # The attribute returns a dataframe, we need to wrap it
-            # in the _ModelAttributeRelationPlan
-            from pyspark.ml.remote.proto import _ModelAttributeRelationPlan
+            # in the AttributeRelation
+            from pyspark.ml.remote.proto import AttributeRelation
             from pyspark.sql.connect.session import SparkSession
 
             assert isinstance(self._java_obj, str)
-            plan = _ModelAttributeRelationPlan(self._java_obj, f.__name__)
+            plan = AttributeRelation(self._java_obj, f.__name__)
             session = SparkSession.getActiveSession()
             assert session is not None
             return RemoteDataFrame(plan, session)
@@ -111,19 +111,28 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
             # Model is also a Transformer, so we much match Model first
             if isinstance(self, Model):
                 params = serialize_ml_params(self, session.client)
-                from pyspark.ml.remote.proto import _ModelTransformRelationPlan
+                from pyspark.ml.remote.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
                 return RemoteDataFrame(
-                    _ModelTransformRelationPlan(dataset._plan, self._java_obj, params), session
+                    TransformerRelation(
+                        child=dataset._plan, name=self._java_obj, ml_params=params, is_model=True
+                    ),
+                    session,
                 )
             elif isinstance(self, Transformer):
                 params = serialize_ml_params(self, session.client)
-                from pyspark.ml.remote.proto import _TransformerRelationPlan
+                from pyspark.ml.remote.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
                 return RemoteDataFrame(
-                    _TransformerRelationPlan(dataset._plan, self._java_obj, self.uid, params),
+                    TransformerRelation(
+                        child=dataset._plan,
+                        name=self._java_obj,
+                        ml_params=params,
+                        uid=self.uid,
+                        is_model=False,
+                    ),
                     session,
                 )
             else:
@@ -156,7 +165,13 @@ def try_remote_call(f: FuncT) -> FuncT:
                 )
             )
             (_, properties, _) = session.client.execute_command(command)
-            return deserialize(properties)
+            ml_command_result = properties["ml_command_result"]
+            if ml_command_result.HasField("summary"):
+                summary = ml_command_result.summary
+                session.client.add_ml_cache(summary)
+                return summary
+            else:
+                return deserialize(properties)
         else:
             return f(self, name, *args)
 

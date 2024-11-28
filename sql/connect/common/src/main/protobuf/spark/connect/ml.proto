@@ -85,8 +85,10 @@ message MlCommandResult {
   oneof result_type {
     // The result of the attribute
     Param param = 1;
+    // Evaluate a Dataset in a model and return the cached ID of summary
+    string summary = 2;
     // Operator information
-    MlOperatorInfo operator_info = 2;
+    MlOperatorInfo operator_info = 3;
   }
 
   // Represents an operator info
@@ -100,4 +102,5 @@ message MlCommandResult {
     string uid = 3;
     MlParams params = 4;
   }
+
 }

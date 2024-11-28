@@ -20,29 +20,50 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.Model
 
-// TODO need to support persistence for model if memory is tight
-// TODO do we need to support cache estimator or evaluator?
-class MLCache(
-    private val cachedModel: ConcurrentHashMap[String, Model[_]] =
-      new ConcurrentHashMap[String, Model[_]]())
-    extends Logging {
+/**
+ * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
+ */
+class MLCache extends Logging {
+  private val cachedModel: ConcurrentHashMap[String, Object] =
+    new ConcurrentHashMap[String, Object]()
 
-  def register(model: Model[_]): String = {
+  /**
+   * Cache an object into a map of MLCache, and return its key
+   * @param obj
+   *   the object to be cached
+   * @return
+   *   the key
+   */
+  def register(obj: Object): String = {
     val objectId = UUID.randomUUID().toString.takeRight(12)
-    cachedModel.put(objectId, model)
+    cachedModel.put(objectId, obj)
     objectId
   }
 
-  def get(refId: String): Model[_] = {
+  /**
+   * Get the object by the key
+   * @param refId
+   *   the key used to look up the corresponding object
+   * @return
+   *   the cached object
+   */
+  def get(refId: String): Object = {
     cachedModel.get(refId)
   }
 
+  /**
+   * Remove the object from MLCache
+   * @param refId
+   *   the key used to look up the corresponding object
+   */
   def remove(refId: String): Unit = {
     cachedModel.remove(refId)
   }
 
+  /**
+   * Clear all the caches
+   */
   def clear(): Unit = {
     cachedModel.clear()
   }
