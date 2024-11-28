@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, InvokeProcedures, ReplaceCharWithVarchar, ResolveSessionCatalog, ResolveTranspose}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalogWithListener, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -38,6 +39,7 @@ import org.apache.spark.sql.execution.command.CommandCheck
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
 import org.apache.spark.sql.execution.streaming.ResolveWriteToStream
+import org.apache.spark.sql.hive.DataSourceWithHiveResolver
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.execution.PruneHiveTablePartitions
@@ -84,6 +86,14 @@ class HiveSessionStateBuilder(
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
   override protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+    override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceWithHiveResolver(session, catalog)
+    )
+
+    override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new FileResolver(session)
+    )
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
