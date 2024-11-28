@@ -707,7 +707,8 @@ class ForStatementExec(
     variableName: Option[String],
     body: CompoundBodyExec,
     val label: Option[String],
-    session: SparkSession) extends NonLeafStatementExec {
+    session: SparkSession,
+    context: SqlScriptingExecutionContext) extends NonLeafStatementExec {
 
   private object ForState extends Enumeration {
     val VariableAssignment, Body, VariableCleanup = Value
@@ -869,7 +870,9 @@ class ForStatementExec(
     else {
       // create compound body for dropping nodes after execution is complete
       dropVariablesExec = new CompoundBodyExec(
-        variablesMap.keys.toSeq.map(colName => createDropVarExec(colName))
+        variablesMap.keys.toSeq.map(colName => createDropVarExec(colName)),
+        None,
+        context
       )
       ForState.VariableCleanup
     }
@@ -882,7 +885,7 @@ class ForStatementExec(
       defaultExpression,
       replace = true
     )
-    new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true)
+    new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true, context)
   }
 
   private def createSetVarExec(varName: String, variable: Expression): SingleStatementExec = {
@@ -892,12 +895,17 @@ class ForStatementExec(
     )
     val setIdentifierToCurrentRow =
       SetVariable(Seq(UnresolvedAttribute(varName)), projectNamedStruct)
-    new SingleStatementExec(setIdentifierToCurrentRow, Origin(), Map.empty, isInternal = true)
+    new SingleStatementExec(
+      setIdentifierToCurrentRow,
+      Origin(),
+      Map.empty,
+      isInternal = true,
+      context)
   }
 
   private def createDropVarExec(varName: String): SingleStatementExec = {
     val dropVar = DropVariable(UnresolvedIdentifier(Seq(varName)), ifExists = true)
-    new SingleStatementExec(dropVar, Origin(), Map.empty, isInternal = true)
+    new SingleStatementExec(dropVar, Origin(), Map.empty, isInternal = true, context)
   }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
