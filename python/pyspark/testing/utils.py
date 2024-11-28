@@ -91,6 +91,8 @@ tabulate_requirement_message = None if have_tabulate else "No module named 'tabu
 have_graphviz = have_package("graphviz")
 graphviz_requirement_message = None if have_graphviz else "No module named 'graphviz'"
 
+have_flameprof = have_package("flameprof")
+flameprof_requirement_message = None if have_flameprof else "No module named 'flameprof'"
 
 pandas_requirement_message = None
 try:
