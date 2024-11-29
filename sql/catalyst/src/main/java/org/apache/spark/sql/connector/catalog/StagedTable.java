@@ -21,7 +21,9 @@ import java.util.Map;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
+import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.types.StructType;
 
 /**
@@ -52,4 +54,16 @@ public interface StagedTable extends Table {
    * table's writers.
    */
   void abortStagedChanges();
+
+  /**
+   * Retrieve driver metrics after a commit. This is analogous
+   * to {@link Write#reportDriverMetrics()}. Note that these metrics must be included in the
+   * supported custom metrics reported by `supportedCustomMetrics` of the
+   * {@link StagingTableCatalog} that returned the staged table.
+   *
+   * @return an Array of commit metric values. Throws if the table has not been committed yet.
+   */
+  default CustomTaskMetric[] reportDriverMetrics() throws RuntimeException {
+      return new CustomTaskMetric[0];
+  }
 }
