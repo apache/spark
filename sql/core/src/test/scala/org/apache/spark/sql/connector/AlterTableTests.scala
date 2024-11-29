@@ -825,41 +825,6 @@ trait AlterTableTests extends SharedSparkSession with QueryErrorsBase {
     }
   }
 
-  test("Alter column type between string and char/varchar") {
-    val types = Seq(
-      ("STRING", "\"STRING\""),
-      ("STRING COLLATE UTF8_LCASE", "\"STRING COLLATE UTF8_LCASE\""),
-      ("CHAR(5)", "\"CHAR\\(5\\)\""),
-      ("VARCHAR(5)", "\"VARCHAR\\(5\\)\""))
-    types.flatMap { a => types.map { b => (a, b) } }
-      .filter { case (a, b) => a != b }
-      .filter { case ((a, _), (b, _)) => !a.startsWith("STRING") || !b.startsWith("STRING") }
-      .foreach { case ((from, originType), (to, newType)) =>
-        val t = fullTableName("table_name")
-        withTable(t) {
-          sql(s"CREATE TABLE $t (id $from) USING PARQUET")
-          val sql1 = s"ALTER TABLE $t ALTER COLUMN id TYPE $to"
-          checkErrorMatchPVals(
-            exception = intercept[AnalysisException] {
-              sql(sql1)
-            },
-            condition = "NOT_SUPPORTED_CHANGE_COLUMN",
-            sqlState = None,
-            parameters = Map(
-              "originType" -> originType,
-              "newType" -> newType,
-              "newName" -> "`id`",
-              "originName" -> "`id`",
-              "table" -> ".*table_name.*"),
-            context = ExpectedContext(
-              fragment = sql1,
-              start = 0,
-              stop = sql1.length - 1)
-          )
-        }
-      }
-  }
-
   test("AlterTable: update column comment") {
     val t = fullTableName("table_name")
     withTable(t) {

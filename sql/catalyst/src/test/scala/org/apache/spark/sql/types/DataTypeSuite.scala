@@ -864,15 +864,15 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_LCASE"),
     expected = true)
   checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_BINARY"), StringType("UTF8_LCASE"), expected = true)
+    StringType("UTF8_LCASE"), StringType("UTF8_BINARY"), expected = true)
   checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_BINARY"), CharType(5), expected = false)
+    StringType("UTF8_LCASE"), CharType(5), expected = false)
   checkEqualsIgnoreCompatibleCollation(
-    CharType(5), StringType("UTF8_BINARY"), expected = false)
+    CharType(5), StringType("UTF8_LCASE"), expected = false)
   checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_BINARY"), VarcharType(5), expected = false)
+    StringType("UTF8_LCASE"), VarcharType(5), expected = false)
   checkEqualsIgnoreCompatibleCollation(
-    VarcharType(5), StringType("UTF8_BINARY"), expected = false)
+    VarcharType(5), StringType("UTF8_LCASE"), expected = false)
   // Complex types.
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
