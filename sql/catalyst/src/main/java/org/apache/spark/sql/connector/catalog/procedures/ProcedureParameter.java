@@ -24,6 +24,7 @@ import org.apache.spark.sql.internal.connector.ProcedureParameterImpl;
 import org.apache.spark.sql.types.DataType;
 
 import static org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.IN;
+import static org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.INOUT;
 import static org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.OUT;
 
 /**
