@@ -31,7 +31,7 @@ from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
 from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
-from pyspark.testing.utils import have_numpy
+from pyspark.testing.utils import have_numpy, assertDataFrameEqual
 
 
 class FunctionsTestsMixin:
