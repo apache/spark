@@ -1130,7 +1130,7 @@ private[hive] object HiveClientImpl extends Logging {
     //   array<struct<x:int,y.z:int>> -> array<struct<`x`:int,`y.z`:int>>
     //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
     val typeStr = if (SQLConf.get.getConf(QUOTE_HIVE_STRUCT_FIELD_NAME) &&
-        hc.getType.indexOf('`') < 0) {
+        hc.getType.indexOf('`') < 0) { // This a defensive code for possible changes in HMS
       hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
     } else {
       hc.getType
