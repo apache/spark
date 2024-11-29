@@ -84,7 +84,25 @@ SELECT try_sum(col / 0) FROM VALUES (5), (10), (15) AS tab(col)
 -- !query schema
 struct<try_sum((col / 0)):double>
 -- !query output
+<<<<<<< HEAD:sql/core/src/test/resources/sql-tests/results/ansi/try_aggregates.sql.out.java21
+org.apache.spark.SparkArithmeticException
+{
+  "condition" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 22,
+    "fragment" : "col / 0"
+  } ]
+}
+=======
 NULL
+>>>>>>> origin/master:sql/core/src/test/resources/sql-tests/results/nonansi/try_aggregates.sql.out.java21
 
 
 -- !query
@@ -92,7 +110,25 @@ SELECT try_sum(col / 0) FROM VALUES (5.0), (10.0), (15.0) AS tab(col)
 -- !query schema
 struct<try_sum((col / 0)):decimal(18,6)>
 -- !query output
+<<<<<<< HEAD:sql/core/src/test/resources/sql-tests/results/ansi/try_aggregates.sql.out.java21
+org.apache.spark.SparkArithmeticException
+{
+  "condition" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 22,
+    "fragment" : "col / 0"
+  } ]
+}
+=======
 NULL
+>>>>>>> origin/master:sql/core/src/test/resources/sql-tests/results/nonansi/try_aggregates.sql.out.java21
 
 
 -- !query
@@ -100,7 +136,25 @@ SELECT try_sum(col / 0) FROM VALUES (NULL), (10), (15) AS tab(col)
 -- !query schema
 struct<try_sum((col / 0)):double>
 -- !query output
+<<<<<<< HEAD:sql/core/src/test/resources/sql-tests/results/ansi/try_aggregates.sql.out.java21
+org.apache.spark.SparkArithmeticException
+{
+  "condition" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 22,
+    "fragment" : "col / 0"
+  } ]
+}
+=======
 NULL
+>>>>>>> origin/master:sql/core/src/test/resources/sql-tests/results/nonansi/try_aggregates.sql.out.java21
 
 
 -- !query
@@ -108,7 +162,27 @@ SELECT try_sum(col + 1L) FROM VALUES (9223372036854775807L), (1L) AS tab(col)
 -- !query schema
 struct<try_sum((col + 1)):bigint>
 -- !query output
+<<<<<<< HEAD:sql/core/src/test/resources/sql-tests/results/ansi/try_aggregates.sql.out.java21
+org.apache.spark.SparkArithmeticException
+{
+  "condition" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 23,
+    "fragment" : "col + 1L"
+  } ]
+}
+=======
 -9223372036854775806
+>>>>>>> origin/master:sql/core/src/test/resources/sql-tests/results/nonansi/try_aggregates.sql.out.java21
 
 
 -- !query
@@ -118,7 +192,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "condition" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
   "queryContext" : [ {
     "objectType" : "",
@@ -137,7 +211,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "condition" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
   "queryContext" : [ {
     "objectType" : "",
@@ -234,7 +308,25 @@ SELECT try_avg(col / 0) FROM VALUES (5), (10), (15) AS tab(col)
 -- !query schema
 struct<try_avg((col / 0)):double>
 -- !query output
+<<<<<<< HEAD:sql/core/src/test/resources/sql-tests/results/ansi/try_aggregates.sql.out.java21
+org.apache.spark.SparkArithmeticException
+{
+  "condition" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 22,
+    "fragment" : "col / 0"
+  } ]
+}
+=======
 NULL
+>>>>>>> origin/master:sql/core/src/test/resources/sql-tests/results/nonansi/try_aggregates.sql.out.java21
 
 
 -- !query
@@ -242,7 +334,25 @@ SELECT try_avg(col / 0) FROM VALUES (5.0), (10.0), (15.0) AS tab(col)
 -- !query schema
 struct<try_avg((col / 0)):decimal(12,10)>
 -- !query output
+<<<<<<< HEAD:sql/core/src/test/resources/sql-tests/results/ansi/try_aggregates.sql.out.java21
+org.apache.spark.SparkArithmeticException
+{
+  "condition" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 22,
+    "fragment" : "col / 0"
+  } ]
+}
+=======
 NULL
+>>>>>>> origin/master:sql/core/src/test/resources/sql-tests/results/nonansi/try_aggregates.sql.out.java21
 
 
 -- !query
@@ -250,7 +360,25 @@ SELECT try_avg(col / 0) FROM VALUES (NULL), (10), (15) AS tab(col)
 -- !query schema
 struct<try_avg((col / 0)):double>
 -- !query output
+<<<<<<< HEAD:sql/core/src/test/resources/sql-tests/results/ansi/try_aggregates.sql.out.java21
+org.apache.spark.SparkArithmeticException
+{
+  "condition" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 22,
+    "fragment" : "col / 0"
+  } ]
+}
+=======
 NULL
+>>>>>>> origin/master:sql/core/src/test/resources/sql-tests/results/nonansi/try_aggregates.sql.out.java21
 
 
 -- !query
@@ -258,7 +386,27 @@ SELECT try_avg(col + 1L) FROM VALUES (9223372036854775807L), (1L) AS tab(col)
 -- !query schema
 struct<try_avg((col + 1)):double>
 -- !query output
+<<<<<<< HEAD:sql/core/src/test/resources/sql-tests/results/ansi/try_aggregates.sql.out.java21
+org.apache.spark.SparkArithmeticException
+{
+  "condition" : "ARITHMETIC_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "message" : "long overflow"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 16,
+    "stopIndex" : 23,
+    "fragment" : "col + 1L"
+  } ]
+}
+=======
 -4.611686018427388E18
+>>>>>>> origin/master:sql/core/src/test/resources/sql-tests/results/nonansi/try_aggregates.sql.out.java21
 
 
 -- !query
@@ -268,7 +416,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "condition" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
   "queryContext" : [ {
     "objectType" : "",
@@ -287,7 +435,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "INTERVAL_DIVIDED_BY_ZERO",
+  "condition" : "INTERVAL_DIVIDED_BY_ZERO",
   "sqlState" : "22012",
   "queryContext" : [ {
     "objectType" : "",

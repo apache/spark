@@ -14,7 +14,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2019-01-01中文'",
@@ -37,7 +37,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'4294967297'",
@@ -60,7 +60,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_TYPED_LITERAL",
+  "condition" : "INVALID_TYPED_LITERAL",
   "sqlState" : "42604",
   "messageParameters" : {
     "value" : "'2021-01-01T12:30:4294967297.123456'",
@@ -123,7 +123,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INVALID_FRACTION_OF_SECOND",
+  "condition" : "INVALID_FRACTION_OF_SECOND",
   "sqlState" : "22023",
   "messageParameters" : {
     "secAndMicros" : "60.007"
@@ -154,7 +154,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "condition" : "DATETIME_FIELD_OUT_OF_BOUNDS",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -186,7 +186,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "condition" : "DATETIME_FIELD_OUT_OF_BOUNDS",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -202,7 +202,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "condition" : "DATETIME_FIELD_OUT_OF_BOUNDS",
   "sqlState" : "22023",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -392,7 +392,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -464,7 +464,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -488,7 +488,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -560,7 +560,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -576,7 +576,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -656,7 +656,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "condition" : "CANNOT_PARSE_TIMESTAMP",
   "sqlState" : "22007",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
@@ -768,7 +768,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -792,7 +792,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -816,7 +816,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"TIMESTAMP\"",
@@ -840,7 +840,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "left" : "\"VOID\"",
@@ -887,7 +887,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "condition" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
@@ -904,7 +904,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "condition" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
@@ -921,7 +921,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "condition" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
@@ -938,7 +938,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "condition" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
@@ -955,7 +955,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "condition" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
@@ -972,7 +972,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkUpgradeException
 {
-  "errorClass" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
+  "condition" : "INCONSISTENT_BEHAVIOR_CROSS_VERSION.DATETIME_PATTERN_RECOGNITION",
   "sqlState" : "42K0B",
   "messageParameters" : {
     "config" : "\"spark.sql.legacy.timeParserPolicy\"",
@@ -1021,7 +1021,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampadd`",
@@ -1045,7 +1045,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampadd`",
@@ -1101,7 +1101,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampdiff`",
@@ -1125,7 +1125,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timestampdiff`",
@@ -1181,7 +1181,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timediff`",
@@ -1205,7 +1205,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
+  "condition" : "INVALID_PARAMETER_VALUE.DATETIME_UNIT",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`timediff`",

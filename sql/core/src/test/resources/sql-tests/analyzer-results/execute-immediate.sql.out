@@ -468,7 +468,7 @@ EXECUTE IMMEDIATE 'SELECT \'invalid_cast_error_expected\'' INTO res_id
 -- !query analysis
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'invalid_cast_error_expected'",
@@ -490,7 +490,7 @@ EXECUTE IMMEDIATE 'INSERT INTO x VALUES (?)' INTO res_id USING 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
+  "condition" : "INVALID_STATEMENT_FOR_EXECUTE_INTO",
   "sqlState" : "07501",
   "messageParameters" : {
     "sqlString" : "INSERT INTO X VALUES (?)"
@@ -503,7 +503,7 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view WHERE ? = id' USING id
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
+  "condition" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
     "searchPath" : "`system`.`session`",
@@ -524,7 +524,7 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where ? = id and :first = name' USING 
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
+  "condition" : "INVALID_QUERY_MIXED_QUERY_PARAMETERS",
   "sqlState" : "42613"
 }
 
@@ -534,7 +534,7 @@ EXECUTE IMMEDIATE 'SELECT * FROM tbl_view where :first = name' USING 1, 'name2' 
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "condition" : "ALL_PARAMETERS_MUST_BE_NAMED",
   "sqlState" : "07001",
   "messageParameters" : {
     "exprs" : "\"1\""
@@ -547,7 +547,7 @@ EXECUTE IMMEDIATE 'SELCT Fa'
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'SELCT'",
@@ -568,7 +568,7 @@ EXECUTE IMMEDIATE 'SELCT Fa' INTO res_id
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'SELCT'",
@@ -589,7 +589,7 @@ EXECUTE IMMEDIATE b
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+  "condition" : "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "varType" : "\"INT\""
@@ -618,7 +618,7 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING CONCAT(a , 
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "condition" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "invalidExprSql" : "\"CONCAT(a, me1)\""
@@ -638,7 +638,7 @@ EXECUTE IMMEDIATE 'SELECT * from tbl_view where name = :first' USING (SELECT 42)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
+  "condition" : "UNSUPPORTED_EXPR_FOR_PARAMETER",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "invalidExprSql" : "\"scalarsubquery()\""
@@ -658,7 +658,7 @@ EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO a, b USING 1
 -- !query analysis
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'name1'",
@@ -680,7 +680,7 @@ EXECUTE IMMEDIATE 'SELECT id, name FROM tbl_view WHERE id = ?' INTO (a, b) USING
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'('",
@@ -694,7 +694,7 @@ EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id
 -- !query analysis
 org.apache.spark.SparkException
 {
-  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "condition" : "ROW_SUBQUERY_TOO_MANY_ROWS",
   "sqlState" : "21000"
 }
 
@@ -704,7 +704,7 @@ EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view' INTO res_id
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "2",
@@ -718,7 +718,7 @@ EXECUTE IMMEDIATE 'SELECT id FROM tbl_view' INTO res_id, b
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "condition" : "ASSIGNMENT_ARITY_MISMATCH",
   "sqlState" : "42802",
   "messageParameters" : {
     "numExpr" : "1",
@@ -732,7 +732,7 @@ EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :first' USING 10 as first,
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
+  "condition" : "EXEC_IMMEDIATE_DUPLICATE_ARGUMENT_ALIASES",
   "sqlState" : "42701",
   "messageParameters" : {
     "aliases" : "`first`"
@@ -772,7 +772,7 @@ EXECUTE IMMEDIATE 'SELECT id FROM tbl_view WHERE id = :p' USING p, 'p'
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "ALL_PARAMETERS_MUST_BE_NAMED",
+  "condition" : "ALL_PARAMETERS_MUST_BE_NAMED",
   "sqlState" : "07001",
   "messageParameters" : {
     "exprs" : "\"p\""
@@ -785,7 +785,7 @@ EXECUTE IMMEDIATE 'SELECT id, data.f1 FROM tbl_view WHERE id = 10' INTO res_id, 
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "condition" : "DUPLICATE_ASSIGNMENTS",
   "sqlState" : "42701",
   "messageParameters" : {
     "nameList" : "`res_id`"
@@ -798,7 +798,7 @@ EXECUTE IMMEDIATE 'EXECUTE IMMEDIATE \'SELECT id FROM tbl_view WHERE id = ? USIN
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NESTED_EXECUTE_IMMEDIATE",
+  "condition" : "NESTED_EXECUTE_IMMEDIATE",
   "sqlState" : "07501",
   "messageParameters" : {
     "sqlString" : "EXECUTE IMMEDIATE 'SELECT ID FROM TBL_VIEW WHERE ID = ? USING 10'"
@@ -820,7 +820,7 @@ EXECUTE IMMEDIATE sql_string
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
+  "condition" : "NULL_QUERY_STRING_EXECUTE_IMMEDIATE",
   "sqlState" : "22004",
   "messageParameters" : {
     "varName" : "`sql_string`"

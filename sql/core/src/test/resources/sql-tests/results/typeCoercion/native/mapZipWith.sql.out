@@ -128,7 +128,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
@@ -154,7 +154,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
@@ -180,7 +180,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`map_zip_with`",
@@ -206,7 +206,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "functionName" : "`map_zip_with`",

@@ -214,7 +214,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1.0'",
@@ -238,7 +238,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'2.0'",
@@ -262,7 +262,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'2.2'",
@@ -318,7 +318,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1.0'",
@@ -342,7 +342,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'2.0'",
@@ -406,7 +406,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1.0'",
@@ -430,7 +430,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'2.0'",
@@ -494,7 +494,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1.0'",
@@ -518,7 +518,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'2.0'",

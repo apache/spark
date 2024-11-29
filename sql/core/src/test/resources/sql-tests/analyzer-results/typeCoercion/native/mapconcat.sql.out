@@ -119,7 +119,7 @@ FROM various_maps
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<STRING, STRING>\" or \"MAP<DATE, DATE>\")",
@@ -143,7 +143,7 @@ FROM various_maps
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<TINYINT, TINYINT>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
@@ -167,7 +167,7 @@ FROM various_maps
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<BOOLEAN, BOOLEAN>\" or \"MAP<INT, INT>\")",
@@ -191,7 +191,7 @@ FROM various_maps
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<INT, INT>\" or \"MAP<STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>, STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>>\")",
@@ -215,7 +215,7 @@ FROM various_maps
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>, STRUCT<col1: STRING NOT NULL, col2: INT NOT NULL>>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",
@@ -239,7 +239,7 @@ FROM various_maps
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "condition" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
     "dataType" : "(\"MAP<INT, INT>\" or \"MAP<ARRAY<STRING>, ARRAY<STRING>>\")",

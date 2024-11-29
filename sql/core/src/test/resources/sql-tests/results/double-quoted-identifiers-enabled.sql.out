@@ -6,7 +6,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -28,7 +28,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 {
-  "errorClass" : "SCHEMA_NOT_FOUND",
+  "condition" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42704",
   "messageParameters" : {
     "schemaName" : "`spark_catalog`.`not_exist`"
@@ -43,7 +43,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -65,7 +65,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -87,7 +87,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -109,7 +109,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -131,7 +131,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`not_exist`",
@@ -154,7 +154,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`not_exist`.`not_exist`",
@@ -177,7 +177,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`hello`"
@@ -199,7 +199,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 {
-  "errorClass" : "SCHEMA_NOT_FOUND",
+  "condition" : "SCHEMA_NOT_FOUND",
   "sqlState" : "42704",
   "messageParameters" : {
     "schemaName" : "`spark_catalog`.`not_exist`"
@@ -214,7 +214,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -236,7 +236,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -258,7 +258,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -280,7 +280,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`not_exist`"
@@ -302,7 +302,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`not_exist`",
@@ -325,7 +325,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`not_exist`.`not_exist`",
@@ -348,7 +348,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "condition" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
   "sqlState" : "42703",
   "messageParameters" : {
     "objectName" : "`hello`"
@@ -370,7 +370,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"hello\"'",
@@ -386,7 +386,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 {
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "condition" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
     "relationName" : "`spark_catalog`.`default`.`v`"
@@ -401,7 +401,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'\"1\"'",

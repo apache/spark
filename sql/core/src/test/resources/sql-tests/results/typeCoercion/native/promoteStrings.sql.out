@@ -70,7 +70,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"STRING\"",
@@ -94,7 +94,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -118,7 +118,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -142,7 +142,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -166,7 +166,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"CAST(2017-12-11 09:30:00 AS DATE)\"",
@@ -248,7 +248,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"STRING\"",
@@ -272,7 +272,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -296,7 +296,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -320,7 +320,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -344,7 +344,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -424,7 +424,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"STRING\"",
@@ -448,7 +448,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -472,7 +472,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -496,7 +496,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -520,7 +520,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"DATE\"",
@@ -600,7 +600,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"STRING\"",
@@ -624,7 +624,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -648,7 +648,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -672,7 +672,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -696,7 +696,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"DATE\"",
@@ -776,7 +776,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"STRING\"",
@@ -800,7 +800,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -824,7 +824,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -848,7 +848,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -872,7 +872,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"DATE\"",
@@ -952,7 +952,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"STRING\"",
@@ -976,7 +976,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -1000,7 +1000,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -1024,7 +1024,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -1048,7 +1048,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"DATE\"",
@@ -1128,7 +1128,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -1152,7 +1152,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -1176,7 +1176,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -1200,7 +1200,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
@@ -1282,7 +1282,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -1306,7 +1306,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -1330,7 +1330,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -1354,7 +1354,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -1434,7 +1434,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -1458,7 +1458,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -1482,7 +1482,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -1506,7 +1506,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"DATE\"",
@@ -1586,7 +1586,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -1610,7 +1610,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -1634,7 +1634,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -1658,7 +1658,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"DATE\"",
@@ -1738,7 +1738,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -1762,7 +1762,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -1786,7 +1786,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -1810,7 +1810,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"DATE\"",
@@ -1890,7 +1890,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BINARY\"",
@@ -1914,7 +1914,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"BOOLEAN\"",
@@ -1938,7 +1938,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"TIMESTAMP\"",
@@ -1962,7 +1962,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "condition" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "actualDataType" : "\"DATE\"",
@@ -2066,7 +2066,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2090,7 +2090,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2186,7 +2186,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2210,7 +2210,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2314,7 +2314,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2338,7 +2338,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2434,7 +2434,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2458,7 +2458,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2562,7 +2562,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2586,7 +2586,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2690,7 +2690,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2714,7 +2714,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2818,7 +2818,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2842,7 +2842,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2946,7 +2946,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -2970,7 +2970,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3074,7 +3074,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3098,7 +3098,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3202,7 +3202,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3226,7 +3226,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3330,7 +3330,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3354,7 +3354,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3458,7 +3458,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3482,7 +3482,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3586,7 +3586,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3610,7 +3610,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3714,7 +3714,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",
@@ -3738,7 +3738,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'1'",

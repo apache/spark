@@ -75,7 +75,7 @@ FROM t1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "condition" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
   "sqlState" : "42823",
   "messageParameters" : {
     "number" : "2"
@@ -101,7 +101,7 @@ FROM t1
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
+  "condition" : "INVALID_SUBQUERY_EXPRESSION.SCALAR_SUBQUERY_RETURN_MORE_THAN_ONE_OUTPUT_COLUMN",
   "sqlState" : "42823",
   "messageParameters" : {
     "number" : "2"
@@ -125,7 +125,7 @@ t1a IN (SELECT t2a, t2b
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
+  "condition" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "sqlState" : "42K09",
   "messageParameters" : {
     "leftColumns" : "\"t1a\"",
@@ -153,7 +153,7 @@ WHERE
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
+  "condition" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "sqlState" : "42K09",
   "messageParameters" : {
     "leftColumns" : "\"t1a\", \"t1b\"",
@@ -182,7 +182,7 @@ WHERE
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
+  "condition" : "DATATYPE_MISMATCH.IN_SUBQUERY_DATA_TYPE_MISMATCH",
   "sqlState" : "42K09",
   "messageParameters" : {
     "leftType" : "\"DOUBLE\", \"STRING\", \"STRING\"",

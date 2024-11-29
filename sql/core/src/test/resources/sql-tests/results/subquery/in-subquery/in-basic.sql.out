@@ -39,7 +39,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
+  "condition" : "DATATYPE_MISMATCH.IN_SUBQUERY_LENGTH_MISMATCH",
   "sqlState" : "42K09",
   "messageParameters" : {
     "leftColumns" : "\"a1\", \"b1\"",

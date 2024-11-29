@@ -634,7 +634,7 @@ SELECT * FROM range(bigint('+4567890123456789'), bigint('+4567890123456799'), 0)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "FAILED_FUNCTION_CALL",
+  "condition" : "FAILED_FUNCTION_CALL",
   "sqlState" : "38000",
   "messageParameters" : {
     "funcName" : "`range`"

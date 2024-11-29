@@ -161,7 +161,7 @@ SELECT a, b, c, count(d) FROM grouping GROUP BY WITH ROLLUP
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'ROLLUP'",
@@ -175,7 +175,7 @@ SELECT a, b, c, count(d) FROM grouping GROUP BY WITH CUBE
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'CUBE'",
@@ -189,7 +189,7 @@ SELECT c1 FROM (values (1,2), (3,2)) t(c1, c2) GROUP BY GROUPING SETS (())
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "MISSING_AGGREGATION",
+  "condition" : "MISSING_AGGREGATION",
   "sqlState" : "42803",
   "messageParameters" : {
     "expression" : "\"c1\"",

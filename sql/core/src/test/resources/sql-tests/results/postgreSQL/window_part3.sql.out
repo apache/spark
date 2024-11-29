@@ -70,7 +70,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "condition" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
   "sqlState" : "42000",
   "messageParameters" : {
     "sqlExpr" : "\"CAST(11:00 BST AS TIMESTAMP)\""
@@ -256,7 +256,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
+  "condition" : "DATATYPE_MISMATCH.RANGE_FRAME_WITHOUT_ORDER",
   "sqlState" : "42K09",
   "messageParameters" : {
     "sqlExpr" : "\"(PARTITION BY f1 RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)\""
@@ -319,7 +319,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "condition" : "_LEGACY_ERROR_TEMP_1034",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -333,7 +333,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "condition" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "invalidExprSqls" : "\"row_number() OVER (ORDER BY salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
@@ -355,7 +355,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "condition" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
   "sqlState" : "42K0E",
   "messageParameters" : {
     "invalidExprSqls" : "\"RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
@@ -377,7 +377,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
@@ -393,7 +393,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "condition" : "_LEGACY_ERROR_TEMP_1034",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -407,7 +407,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1034",
+  "condition" : "_LEGACY_ERROR_TEMP_1034",
   "messageParameters" : {
     "clauseName" : "WHERE"
   }
@@ -421,7 +421,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'BY'",
@@ -437,7 +437,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_ROUTINE",
+  "condition" : "UNRESOLVED_ROUTINE",
   "sqlState" : "42883",
   "messageParameters" : {
     "routineName" : "`range`",
@@ -460,7 +460,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "condition" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0",
@@ -485,7 +485,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "condition" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0L",

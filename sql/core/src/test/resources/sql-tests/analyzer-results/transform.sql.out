@@ -495,7 +495,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "condition" : "_LEGACY_ERROR_TEMP_0064",
   "messageParameters" : {
     "msg" : "LINES TERMINATED BY only supports newline '\\n' right now: @"
   },
@@ -902,7 +902,7 @@ WHERE a <= 4
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
+  "condition" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
   "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
@@ -922,7 +922,7 @@ WHERE a <= 4
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
+  "condition" : "UNSUPPORTED_FEATURE.TRANSFORM_DISTINCT_ALL",
   "sqlState" : "0A000",
   "queryContext" : [ {
     "objectType" : "",
@@ -943,7 +943,7 @@ GROUP BY b
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'AS'",
@@ -961,7 +961,7 @@ GROUP BY b
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'b_1'",
@@ -979,7 +979,7 @@ GROUP BY b
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "condition" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'AS'",

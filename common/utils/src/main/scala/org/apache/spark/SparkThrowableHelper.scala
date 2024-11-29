@@ -85,20 +85,20 @@ private[spark] object SparkThrowableHelper {
         toJsonString { generator =>
           val g = generator.useDefaultPrettyPrinter()
           g.writeStartObject()
-          g.writeStringField("errorClass", "LEGACY")
+          g.writeStringField("condition", "LEGACY")
           g.writeObjectFieldStart("messageParameters")
           g.writeStringField("message", e.getMessage)
           g.writeEndObject()
           g.writeEndObject()
         }
       case MINIMAL | STANDARD =>
-        val errorClass = e.getCondition
+        val condition = e.getCondition
         toJsonString { generator =>
           val g = generator.useDefaultPrettyPrinter()
           g.writeStartObject()
-          g.writeStringField("errorClass", errorClass)
+          g.writeStringField("condition", condition)
           if (format == STANDARD) {
-            g.writeStringField("messageTemplate", errorReader.getMessageTemplate(errorClass))
+            g.writeStringField("messageTemplate", errorReader.getMessageTemplate(condition))
           }
           val sqlState = e.getSqlState
           if (sqlState != null) g.writeStringField("sqlState", sqlState)

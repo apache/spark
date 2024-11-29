@@ -94,7 +94,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'N A N'",
@@ -118,7 +118,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'NaN x'",
@@ -142,7 +142,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "' INFINITY    x'",
@@ -190,7 +190,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkNumberFormatException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
+  "condition" : "CAST_INVALID_INPUT",
   "sqlState" : "22018",
   "messageParameters" : {
     "expression" : "'nan'",
@@ -386,7 +386,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"FLOAT\"",
@@ -411,7 +411,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"FLOAT\"",
@@ -452,7 +452,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "CAST_OVERFLOW",
+  "condition" : "CAST_OVERFLOW",
   "sqlState" : "22003",
   "messageParameters" : {
     "sourceType" : "\"FLOAT\"",

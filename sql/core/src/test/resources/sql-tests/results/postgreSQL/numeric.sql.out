@@ -3582,7 +3582,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "condition" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
   "sqlState" : "22003",
   "messageParameters" : {
     "maxPrecision" : "38",
@@ -3832,7 +3832,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+  "condition" : "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
   "sqlState" : "21S01",
   "messageParameters" : {
     "dataColumns" : "`id`, `id`, `val`, `val`, `(val * val)`",
@@ -4697,7 +4697,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_FORMAT.MISMATCH_INPUT",
+  "condition" : "INVALID_FORMAT.MISMATCH_INPUT",
   "sqlState" : "42601",
   "messageParameters" : {
     "format" : "99G999G999",
@@ -4714,7 +4714,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
+  "condition" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
   "sqlState" : "42601",
   "messageParameters" : {
     "format" : "'99G999G999D999G999'"
@@ -4776,7 +4776,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
+  "condition" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
   "sqlState" : "42601",
   "messageParameters" : {
     "format" : "'999G'"
@@ -4798,7 +4798,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "INVALID_FORMAT.MISMATCH_INPUT",
+  "condition" : "INVALID_FORMAT.MISMATCH_INPUT",
   "sqlState" : "42601",
   "messageParameters" : {
     "format" : "999G999",

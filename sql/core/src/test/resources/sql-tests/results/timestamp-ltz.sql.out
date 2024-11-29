@@ -54,7 +54,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkDateTimeException
 {
-  "errorClass" : "INVALID_FRACTION_OF_SECOND",
+  "condition" : "INVALID_FRACTION_OF_SECOND",
   "sqlState" : "22023",
   "messageParameters" : {
     "secAndMicros" : "60.007"

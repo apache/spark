@@ -211,7 +211,7 @@ select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -236,7 +236,7 @@ select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -261,7 +261,7 @@ select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -286,7 +286,7 @@ select col1 collate utf8_lcase from values ('aaa'), ('AAA'), ('bbb'), ('BBB'), (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -311,7 +311,7 @@ select col1 collate utf8_lcase from values ('aaa'), ('bbb'), ('BBB'), ('zzz'), (
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INCOMPATIBLE_COLUMN_TYPE",
+  "condition" : "INCOMPATIBLE_COLUMN_TYPE",
   "sqlState" : "42825",
   "messageParameters" : {
     "columnOrdinalNumber" : "first",
@@ -535,7 +535,7 @@ select str_to_map(text, pairDelim, keyValueDelim) from t4
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -548,7 +548,7 @@ select str_to_map(text collate utf8_binary, pairDelim collate utf8_lcase, keyVal
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -569,7 +569,7 @@ select str_to_map(text collate unicode_ai, pairDelim collate unicode_ai, keyValu
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(text, unicode_ai)\"",
@@ -836,7 +836,7 @@ select concat_ws(' ', utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -849,7 +849,7 @@ select concat_ws(' ' collate utf8_binary, utf8_binary, 'SQL' collate utf8_lcase)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -894,7 +894,7 @@ select elt(2, utf8_binary, utf8_lcase, s) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -907,7 +907,7 @@ select elt(1, utf8_binary collate utf8_binary, utf8_lcase collate utf8_lcase) fr
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -952,7 +952,7 @@ select split_part(utf8_binary, utf8_lcase, 3) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -973,7 +973,7 @@ select split_part(utf8_binary collate utf8_binary, s collate utf8_lcase, 1) from
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1002,7 +1002,7 @@ select split_part(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai,
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -1050,7 +1050,7 @@ select contains(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1071,7 +1071,7 @@ select contains(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1100,7 +1100,7 @@ select contains(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) f
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -1148,7 +1148,7 @@ select substring_index(utf8_binary, utf8_lcase, 2) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1169,7 +1169,7 @@ select substring_index(utf8_binary collate utf8_binary, s collate utf8_lcase, 3)
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1198,7 +1198,7 @@ select substring_index(utf8_binary collate unicode_ai, utf8_lcase collate unicod
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -1246,7 +1246,7 @@ select instr(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1267,7 +1267,7 @@ select instr(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1296,7 +1296,7 @@ select instr(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -1336,7 +1336,7 @@ select find_in_set(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1357,7 +1357,7 @@ select find_in_set(utf8_binary collate utf8_binary, s collate utf8_lcase) from t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1410,7 +1410,7 @@ select startswith(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1431,7 +1431,7 @@ select startswith(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1460,7 +1460,7 @@ select startswith(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -1516,7 +1516,7 @@ select translate(utf8_binary, utf8_lcase, '12345') from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1529,7 +1529,7 @@ select translate(utf8_binary, 'aBc' collate utf8_lcase, '12345' collate utf8_bin
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
@@ -1550,7 +1550,7 @@ select translate(utf8_binary, 'SQL' collate unicode_ai, '12345' collate unicode_
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"utf8_binary\"",
@@ -1598,7 +1598,7 @@ select replace(utf8_binary, utf8_lcase, 'abc') from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1619,7 +1619,7 @@ select replace(utf8_binary collate utf8_binary, s collate utf8_lcase, 'abc') fro
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1648,7 +1648,7 @@ select replace(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 'a
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -1696,7 +1696,7 @@ select endswith(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1717,7 +1717,7 @@ select endswith(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -1746,7 +1746,7 @@ select endswith(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) f
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -1994,7 +1994,7 @@ select overlay(utf8_binary, utf8_lcase, 2) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2015,7 +2015,7 @@ select overlay(utf8_binary collate utf8_binary, s collate utf8_lcase, 3) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2156,7 +2156,7 @@ select levenshtein(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2177,7 +2177,7 @@ select levenshtein(utf8_binary collate utf8_binary, s collate utf8_lcase) from t
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2334,7 +2334,7 @@ select rpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2355,7 +2355,7 @@ select rpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2408,7 +2408,7 @@ select lpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2429,7 +2429,7 @@ select lpad(utf8_binary collate utf8_binary, 8, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2482,7 +2482,7 @@ select locate(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2503,7 +2503,7 @@ select locate(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2532,7 +2532,7 @@ select locate(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 3) 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -2580,7 +2580,7 @@ select TRIM(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
@@ -2601,7 +2601,7 @@ select TRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
@@ -2630,7 +2630,7 @@ select TRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from 
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_lcase, unicode_ai)\"",
@@ -2678,7 +2678,7 @@ select BTRIM(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2699,7 +2699,7 @@ select BTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
@@ -2728,7 +2728,7 @@ select BTRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
@@ -2776,7 +2776,7 @@ select LTRIM(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
@@ -2797,7 +2797,7 @@ select LTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
@@ -2826,7 +2826,7 @@ select LTRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_lcase, unicode_ai)\"",
@@ -2874,7 +2874,7 @@ select RTRIM(utf8_binary, utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "condition" : "COLLATION_MISMATCH.IMPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "implicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
@@ -2895,7 +2895,7 @@ select RTRIM(utf8_binary collate utf8_binary, s collate utf8_lcase) from t5
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "condition" : "COLLATION_MISMATCH.EXPLICIT",
   "sqlState" : "42P21",
   "messageParameters" : {
     "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
@@ -2924,7 +2924,7 @@ select RTRIM(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "condition" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"collate(utf8_lcase, unicode_ai)\"",
