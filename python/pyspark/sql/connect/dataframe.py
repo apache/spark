@@ -1784,6 +1784,13 @@ class DataFrame(ParentDataFrame):
             self._session,
         )
 
+    def forTableFunction(self) -> "TableArg":
+        # TODO(SPARK-50393): Support DataFrame conversion to table argument in Spark Connect
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "forTableFunction()"},
+        )
+
     def scalar(self) -> Column:
         # TODO(SPARK-50134): Implement this method
         raise PySparkNotImplementedError(
