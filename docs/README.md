@@ -133,7 +133,7 @@ As a Spark developer, you can generate all documents locally as follows:
 Note: Before running it, you need to have `docker` installed.
 
 ```sh
-$ sh dev/spark-test-image-util/docs/build-docs
+$ dev/spark-test-image-util/docs/build-docs
 ```
 
 It will generate all documents on the `container` and `host`.
