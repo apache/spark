@@ -76,7 +76,7 @@ object CollateExpressionBuilder extends ExpressionBuilder {
  * Only type metadata will be updated.
  */
 case class Collate(child: Expression, collation: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends BinaryExpression with ExpectsInputTypes {
   override def left: Expression = child
   override def right: Expression = collation
   override def dataType: DataType = collation.dataType
@@ -84,6 +84,12 @@ case class Collate(child: Expression, collation: Expression)
     Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyDataType)
 
   override def eval(row: InternalRow): Any = child.eval(row)
+
+  /** Just a simple passthrough for code generation. */
+  override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    throw SparkException.internalError("Collate.doGenCode should not be called.")
+  }
 
   override def sql: String = s"$prettyName(${child.sql}, $collation)"
 
