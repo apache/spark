@@ -29,9 +29,11 @@ from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeExce
 from pyspark.sql import Row, Window, functions as F, types
 from pyspark.sql.avro.functions import from_avro, to_avro
 from pyspark.sql.column import Column
-from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull
+from pyspark.sql.functions.builtin import nullifzero, randstr, uniform, zeroifnull, lit
+from pyspark.sql.types import StructType, StringType, StructField
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import have_numpy
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 class FunctionsTestsMixin:
@@ -97,26 +99,50 @@ class FunctionsTestsMixin:
         ]
         data = self.spark.createDataFrame(d)
 
-        result = data.select(F.explode(data.intlist).alias("a")).select("a").collect()
-        self.assertEqual(result[0][0], 1)
-        self.assertEqual(result[1][0], 2)
-        self.assertEqual(result[2][0], 3)
+        result = data.select(F.explode(data.intlist).alias("a")).select("a")
+        assertDataFrameEqual(
+            result,
+            [
+                Row(a=1),
+                Row(a=2),
+                Row(a=3),
+            ],
+        )
 
-        result = data.select(F.explode(data.mapfield).alias("a", "b")).select("a", "b").collect()
-        self.assertEqual(result[0][0], "a")
-        self.assertEqual(result[0][1], "b")
+        result = data.select(F.explode(data.mapfield).alias("a", "b")).select("a", "b")
+        assertDataFrameEqual(result, [Row(a="a", b="b")])
 
-        result = [tuple(x) for x in data.select(F.posexplode_outer("intlist")).collect()]
-        self.assertEqual(result, [(0, 1), (1, 2), (2, 3), (None, None), (None, None)])
+        result = data.select(F.posexplode_outer("intlist"))
+        assertDataFrameEqual(
+            result,
+            [
+                Row(pos=0, col=1),
+                Row(pos=1, col=2),
+                Row(pos=2, col=3),
+                Row(pos=None, col=None),
+                Row(pos=None, col=None),
+            ],
+        )
 
-        result = [tuple(x) for x in data.select(F.posexplode_outer("mapfield")).collect()]
-        self.assertEqual(result, [(0, "a", "b"), (None, None, None), (None, None, None)])
+        result = data.select(F.posexplode_outer("mapfield"))
+        assertDataFrameEqual(
+            result,
+            [
+                Row(pos=0, key="a", value="b"),
+                Row(pos=None, key=None, value=None),
+                Row(pos=None, key=None, value=None),
+            ],
+        )
 
-        result = [x[0] for x in data.select(F.explode_outer("intlist")).collect()]
-        self.assertEqual(result, [1, 2, 3, None, None])
+        result = data.select(F.explode_outer("intlist"))
+        assertDataFrameEqual(
+            result, [Row(col=1), Row(col=2), Row(col=3), Row(col=None), Row(col=None)]
+        )
 
-        result = [tuple(x) for x in data.select(F.explode_outer("mapfield")).collect()]
-        self.assertEqual(result, [("a", "b"), (None, None), (None, None)])
+        result = data.select(F.explode_outer("mapfield"))
+        assertDataFrameEqual(
+            result, [Row(key="a", value="b"), Row(key=None, value=None), Row(key=None, value=None)]
+        )
 
     def test_inline(self):
         d = [
@@ -126,18 +152,29 @@ class FunctionsTestsMixin:
         ]
         data = self.spark.createDataFrame(d)
 
-        result = [tuple(x) for x in data.select(F.inline(data.structlist)).collect()]
-        self.assertEqual(result, [(1, 2), (3, 4), (None, 5), (None, None)])
+        result = data.select(F.inline(data.structlist))
+        assertDataFrameEqual(
+            result, [Row(b=1, c=2), Row(b=3, c=4), Row(b=None, c=5), Row(b=None, c=None)]
+        )
 
-        result = [tuple(x) for x in data.select(F.inline_outer(data.structlist)).collect()]
-        self.assertEqual(result, [(1, 2), (3, 4), (None, 5), (None, None), (None, None)])
+        result = data.select(F.inline_outer(data.structlist))
+        assertDataFrameEqual(
+            result,
+            [
+                Row(b=1, c=2),
+                Row(b=3, c=4),
+                Row(b=None, c=5),
+                Row(b=None, c=None),
+                Row(b=None, c=None),
+            ],
+        )
 
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
         df.count()
         df.collect()
-        df.schema
+        self.assertEqual(StructType([StructField("foo", StringType(), True)]), df.schema)
 
         # cache and checkpoint
         self.assertFalse(df.is_cached)
@@ -220,12 +257,15 @@ class FunctionsTestsMixin:
 
     def test_crosstab(self):
         df = self.spark.createDataFrame([Row(a=i % 3, b=i % 2) for i in range(1, 7)])
-        ct = df.stat.crosstab("a", "b").collect()
-        ct = sorted(ct, key=lambda x: x[0])
-        for i, row in enumerate(ct):
-            self.assertEqual(row[0], str(i))
-            self.assertTrue(row[1], 1)
-            self.assertTrue(row[2], 1)
+        ct = df.stat.crosstab("a", "b")
+        assertDataFrameEqual(
+            ct,
+            [
+                Row(a_b="0", **{"0": 1, "1": 1}),
+                Row(a_b="1", **{"0": 1, "1": 1}),
+                Row(a_b="2", **{"0": 1, "1": 1}),
+            ],
+        )
 
     def test_math_functions(self):
         df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
@@ -325,42 +365,44 @@ class FunctionsTestsMixin:
 
         # If the specified seed is 0, we should use it.
         # https://issues.apache.org/jira/browse/SPARK-9691
-        rnd1 = df.select("key", F.rand(0)).collect()
-        rnd2 = df.select("key", F.rand(0)).collect()
-        self.assertEqual(sorted(rnd1), sorted(rnd2))
+        rnd1 = df.select("key", F.rand(0))
+        rnd2 = df.select("key", F.rand(0))
+        assertDataFrameEqual(rnd1, rnd2)
 
-        rndn1 = df.select("key", F.randn(0)).collect()
-        rndn2 = df.select("key", F.randn(0)).collect()
-        self.assertEqual(sorted(rndn1), sorted(rndn2))
+        rndn1 = df.select("key", F.randn(0))
+        rndn2 = df.select("key", F.randn(0))
+        assertDataFrameEqual(rndn1, rndn2)
 
     def test_try_parse_url(self):
         df = self.spark.createDataFrame(
             [("https://spark.apache.org/path?query=1", "QUERY", "query")],
             ["url", "part", "key"],
         )
-        actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
-        self.assertEqual(actual, [Row("1")])
+        actual = df.select(F.try_parse_url(df.url, df.part, df.key))
+        assertDataFrameEqual(actual, [Row("1")])
         df = self.spark.createDataFrame(
             [("inva lid://spark.apache.org/path?query=1", "QUERY", "query")],
             ["url", "part", "key"],
         )
-        actual = df.select(F.try_parse_url(df.url, df.part, df.key)).collect()
-        self.assertEqual(actual, [Row(None)])
+        actual = df.select(F.try_parse_url(df.url, df.part, df.key))
+        assertDataFrameEqual(actual, [Row(None)])
 
     def test_try_make_timestamp(self):
         data = [(2024, 5, 22, 10, 30, 0)]
         df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
         actual = df.select(
-            F.try_make_timestamp(df.year, df.month, df.day, df.hour, df.minute, df.second)
-        ).collect()
-        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30))])
+            F.try_make_timestamp(df.year, df.month, df.day, df.hour, df.minute, df.second).alias(
+                "timestmap"
+            )
+        )
+        assertDataFrameEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30))])
 
         data = [(2024, 13, 22, 10, 30, 0)]
         df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
         actual = df.select(
             F.try_make_timestamp(df.year, df.month, df.day, df.hour, df.minute, df.second)
-        ).collect()
-        self.assertEqual(actual, [Row(None)])
+        )
+        assertDataFrameEqual(actual, [Row(None)])
 
     def test_try_make_timestamp_ltz(self):
         # use local timezone here to avoid flakiness
@@ -372,8 +414,8 @@ class FunctionsTestsMixin:
             F.try_make_timestamp_ltz(
                 df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone
             )
-        ).collect()
-        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 0))])
+        )
+        assertDataFrameEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 0))])
 
         # use local timezone here to avoid flakiness
         data = [(2024, 13, 22, 10, 30, 0, datetime.datetime.now().astimezone().tzinfo.__str__())]
@@ -384,23 +426,23 @@ class FunctionsTestsMixin:
             F.try_make_timestamp_ltz(
                 df.year, df.month, df.day, df.hour, df.minute, df.second, df.timezone
             )
-        ).collect()
-        self.assertEqual(actual, [Row(None)])
+        )
+        assertDataFrameEqual(actual, [Row(None)])
 
     def test_try_make_timestamp_ntz(self):
         data = [(2024, 5, 22, 10, 30, 0)]
         df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
         actual = df.select(
             F.try_make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
-        ).collect()
-        self.assertEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30))])
+        )
+        assertDataFrameEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30))])
 
         data = [(2024, 13, 22, 10, 30, 0)]
         df = self.spark.createDataFrame(data, ["year", "month", "day", "hour", "minute", "second"])
         actual = df.select(
             F.try_make_timestamp_ntz(df.year, df.month, df.day, df.hour, df.minute, df.second)
-        ).collect()
-        self.assertEqual(actual, [Row(None)])
+        )
+        assertDataFrameEqual(actual, [Row(None)])
 
     def test_string_functions(self):
         string_functions = [
@@ -449,63 +491,65 @@ class FunctionsTestsMixin:
 
     def test_collation(self):
         df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
-        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
-        self.assertEqual([Row("UNICODE")], actual)
+        actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct()
+        assertDataFrameEqual(actual, [Row("UNICODE")])
 
     def test_try_make_interval(self):
         df = self.spark.createDataFrame([(2147483647,)], ["num"])
-        actual = df.select(F.isnull(F.try_make_interval("num"))).collect()
-        self.assertEqual([Row(True)], actual)
+        actual = df.select(F.isnull(F.try_make_interval("num")))
+        assertDataFrameEqual(actual, [Row(True)])
 
     def test_octet_length_function(self):
         # SPARK-36751: add octet length api for python
         df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
-        actual = df.select(F.octet_length("cat")).collect()
-        self.assertEqual([Row(3), Row(4)], actual)
+        actual = df.select(F.octet_length("cat"))
+        assertDataFrameEqual(actual, [Row(3), Row(4)])
 
     def test_bit_length_function(self):
         # SPARK-36751: add bit length api for python
         df = self.spark.createDataFrame([("cat",), ("\U0001F408",)], ["cat"])
-        actual = df.select(F.bit_length("cat")).collect()
-        self.assertEqual([Row(24), Row(32)], actual)
+        actual = df.select(F.bit_length("cat"))
+        assertDataFrameEqual(actual, [Row(24), Row(32)])
 
     def test_array_contains_function(self):
         df = self.spark.createDataFrame([(["1", "2", "3"],), ([],)], ["data"])
-        actual = df.select(F.array_contains(df.data, "1").alias("b")).collect()
-        self.assertEqual([Row(b=True), Row(b=False)], actual)
+        actual = df.select(F.array_contains(df.data, "1").alias("b"))
+        assertDataFrameEqual(actual, [Row(b=True), Row(b=False)])
 
     def test_levenshtein_function(self):
         df = self.spark.createDataFrame([("kitten", "sitting")], ["l", "r"])
-        actual_without_threshold = df.select(F.levenshtein(df.l, df.r).alias("b")).collect()
-        self.assertEqual([Row(b=3)], actual_without_threshold)
-        actual_with_threshold = df.select(F.levenshtein(df.l, df.r, 2).alias("b")).collect()
-        self.assertEqual([Row(b=-1)], actual_with_threshold)
+        actual_without_threshold = df.select(F.levenshtein(df.l, df.r).alias("b"))
+        assertDataFrameEqual(actual_without_threshold, [Row(b=3)])
+        actual_with_threshold = df.select(F.levenshtein(df.l, df.r, 2).alias("b"))
+        assertDataFrameEqual(actual_with_threshold, [Row(b=-1)])
 
     def test_between_function(self):
         df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
         )
-        self.assertEqual(
-            [Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)], df.filter(df.a.between(df.b, df.c)).collect()
+        result = df.filter(df.a.between(df.b, df.c))
+        assertDataFrameEqual(
+            result,
+            [Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)],
         )
 
     def test_dayofweek(self):
         dt = datetime.datetime(2017, 11, 6)
         df = self.spark.createDataFrame([Row(date=dt)])
-        row = df.select(F.dayofweek(df.date)).first()
-        self.assertEqual(row[0], 2)
+        result = df.select(F.dayofweek(df.date))
+        assertDataFrameEqual(result, [Row(2)])
 
     def test_monthname(self):
         dt = datetime.datetime(2017, 11, 6)
         df = self.spark.createDataFrame([Row(date=dt)])
-        row = df.select(F.monthname(df.date)).first()
-        self.assertEqual(row[0], "Nov")
+        result = df.select(F.monthname(df.date))
+        assertDataFrameEqual(result, [Row("Nov")])
 
     def test_dayname(self):
         dt = datetime.datetime(2017, 11, 6)
         df = self.spark.createDataFrame([Row(date=dt)])
-        row = df.select(F.dayname(df.date)).first()
-        self.assertEqual(row[0], "Mon")
+        result = df.select(F.dayname(df.date))
+        assertDataFrameEqual(result, [Row("Mon")])
 
     # Test added for SPARK-37738; change Python API to accept both col & int as input
     def test_date_add_function(self):
@@ -563,17 +607,18 @@ class FunctionsTestsMixin:
 
     def test_make_date(self):
         # SPARK-36554: expose make_date expression
+        expected_date = datetime.date(2020, 6, 26)
         df = self.spark.createDataFrame([(2020, 6, 26)], ["Y", "M", "D"])
-        row_from_col = df.select(F.make_date(df.Y, df.M, df.D)).first()
-        self.assertEqual(row_from_col[0], datetime.date(2020, 6, 26))
-        row_from_name = df.select(F.make_date("Y", "M", "D")).first()
-        self.assertEqual(row_from_name[0], datetime.date(2020, 6, 26))
+        row_from_col = df.select(F.make_date(df.Y, df.M, df.D))
+        assertDataFrameEqual(row_from_col, [Row(expected_date)])
+        row_from_name = df.select(F.make_date("Y", "M", "D"))
+        assertDataFrameEqual(row_from_name, [Row(expected_date)])
 
     def test_expr(self):
         row = Row(a="length string", b=75)
         df = self.spark.createDataFrame([row])
-        result = df.select(F.expr("length(a)")).collect()[0].asDict()
-        self.assertEqual(13, result["length(a)"])
+        result = df.select(F.expr("length(a)"))
+        assertDataFrameEqual(result, [Row(13)])
 
     # add test for SPARK-10577 (test broadcast join hint)
     def test_functions_broadcast(self):
@@ -602,7 +647,7 @@ class FunctionsTestsMixin:
             F.last(df2.id, False).alias("c"),
             F.last(df2.id, True).alias("d"),
         )
-        self.assertEqual([Row(a=None, b=1, c=None, d=98)], df3.collect())
+        assertDataFrameEqual(df3, [Row(a=None, b=1, c=None, d=98)])
 
     def test_approxQuantile(self):
         df = self.spark.createDataFrame([Row(a=i, b=i + 10) for i in range(10)])
@@ -660,20 +705,20 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame(
             [("Tom", 80), (None, 60), ("Alice", 50)], ["name", "height"]
         )
-        self.assertEqual(
-            df.select(df.name).orderBy(F.asc_nulls_first("name")).collect(),
+        assertDataFrameEqual(
+            df.select(df.name).orderBy(F.asc_nulls_first("name")),
             [Row(name=None), Row(name="Alice"), Row(name="Tom")],
         )
-        self.assertEqual(
-            df.select(df.name).orderBy(F.asc_nulls_last("name")).collect(),
+        assertDataFrameEqual(
+            df.select(df.name).orderBy(F.asc_nulls_last("name")),
             [Row(name="Alice"), Row(name="Tom"), Row(name=None)],
         )
-        self.assertEqual(
-            df.select(df.name).orderBy(F.desc_nulls_first("name")).collect(),
+        assertDataFrameEqual(
+            df.select(df.name).orderBy(F.desc_nulls_first("name")),
             [Row(name=None), Row(name="Tom"), Row(name="Alice")],
         )
-        self.assertEqual(
-            df.select(df.name).orderBy(F.desc_nulls_last("name")).collect(),
+        assertDataFrameEqual(
+            df.select(df.name).orderBy(F.desc_nulls_last("name")),
             [Row(name="Tom"), Row(name="Alice"), Row(name=None)],
         )
 
@@ -682,15 +727,13 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame(rdd, "data STRING")
         df.select(F.input_file_name().alias("file")).collect()
 
-        non_file_df = self.spark.range(100).select(F.input_file_name())
+        result = self.spark.range(100).select(F.input_file_name())
 
-        results = non_file_df.collect()
-        self.assertTrue(len(results) == 100)
+        self.assertTrue(result.count() == 100)
 
         # [SPARK-24605]: if everything was properly reset after the last job, this should return
         # empty string rather than the file read in the last job.
-        for result in results:
-            self.assertEqual(result[0], "")
+        assertDataFrameEqual(result, [Row("")] * 100)
 
     def test_slice(self):
         df = self.spark.createDataFrame(
@@ -710,20 +753,16 @@ class FunctionsTestsMixin:
         )
 
         expected = [Row(sliced=[2, 3]), Row(sliced=[5])]
-        self.assertEqual(df.select(F.slice(df.x, 2, 2).alias("sliced")).collect(), expected)
-        self.assertEqual(
-            df.select(F.slice(df.x, F.lit(2), F.lit(2)).alias("sliced")).collect(), expected
-        )
-        self.assertEqual(
-            df.select(F.slice("x", "index", "len").alias("sliced")).collect(), expected
-        )
+        assertDataFrameEqual(df.select(F.slice(df.x, 2, 2).alias("sliced")), expected)
+        assertDataFrameEqual(df.select(F.slice(df.x, F.lit(2), F.lit(2)).alias("sliced")), expected)
+        assertDataFrameEqual(df.select(F.slice("x", "index", "len").alias("sliced")), expected)
 
-        self.assertEqual(
-            df.select(F.slice(df.x, F.size(df.x) - 1, F.lit(1)).alias("sliced")).collect(),
+        assertDataFrameEqual(
+            df.select(F.slice(df.x, F.size(df.x) - 1, F.lit(1)).alias("sliced")),
             [Row(sliced=[2]), Row(sliced=[4])],
         )
-        self.assertEqual(
-            df.select(F.slice(df.x, F.lit(1), F.size(df.x) - 1).alias("sliced")).collect(),
+        assertDataFrameEqual(
+            df.select(F.slice(df.x, F.lit(1), F.size(df.x) - 1).alias("sliced")),
             [Row(sliced=[1, 2]), Row(sliced=[4])],
         )
 
@@ -732,11 +771,9 @@ class FunctionsTestsMixin:
         df = df.withColumn("repeat_n", F.lit(3))
 
         expected = [Row(val=[0, 0, 0])]
-        self.assertEqual(df.select(F.array_repeat("id", 3).alias("val")).collect(), expected)
-        self.assertEqual(df.select(F.array_repeat("id", F.lit(3)).alias("val")).collect(), expected)
-        self.assertEqual(
-            df.select(F.array_repeat("id", "repeat_n").alias("val")).collect(), expected
-        )
+        assertDataFrameEqual(df.select(F.array_repeat("id", 3).alias("val")), expected)
+        assertDataFrameEqual(df.select(F.array_repeat("id", F.lit(3)).alias("val")), expected)
+        assertDataFrameEqual(df.select(F.array_repeat("id", "repeat_n").alias("val")), expected)
 
     def test_input_file_name_udf(self):
         df = self.spark.read.text("python/test_support/hello/hello.txt")
@@ -748,11 +785,11 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([(1, 4, 3)], ["a", "b", "c"])
 
         expected = [Row(least=1)]
-        self.assertEqual(df.select(F.least(df.a, df.b, df.c).alias("least")).collect(), expected)
-        self.assertEqual(
-            df.select(F.least(F.lit(3), F.lit(5), F.lit(1)).alias("least")).collect(), expected
+        assertDataFrameEqual(df.select(F.least(df.a, df.b, df.c).alias("least")), expected)
+        assertDataFrameEqual(
+            df.select(F.least(F.lit(3), F.lit(5), F.lit(1)).alias("least")), expected
         )
-        self.assertEqual(df.select(F.least("a", "b", "c").alias("least")).collect(), expected)
+        assertDataFrameEqual(df.select(F.least("a", "b", "c").alias("least")), expected)
 
         with self.assertRaises(PySparkValueError) as pe:
             df.select(F.least(df.a).alias("least")).collect()
@@ -769,13 +806,13 @@ class FunctionsTestsMixin:
                 [
                     re.findall("(overlay\\(.*\\))", str(x))
                     for x in [
-                        F.overlay(F.col("foo"), F.col("bar"), 1),
-                        F.overlay("x", "y", 3),
-                        F.overlay(F.col("x"), F.col("y"), 1, 3),
-                        F.overlay("x", "y", 2, 5),
-                        F.overlay("x", "y", F.lit(11)),
-                        F.overlay("x", "y", F.lit(2), F.lit(5)),
-                    ]
+                    F.overlay(F.col("foo"), F.col("bar"), 1),
+                    F.overlay("x", "y", 3),
+                    F.overlay(F.col("x"), F.col("y"), 1, 3),
+                    F.overlay("x", "y", 2, 5),
+                    F.overlay("x", "y", F.lit(11)),
+                    F.overlay("x", "y", F.lit(2), F.lit(5)),
+                ]
                 ]
             )
         )
@@ -794,11 +831,9 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame([("SPARK_SQL", "CORE", 7, 0)], ("x", "y", "pos", "len"))
 
         exp = [Row(ol="SPARK_CORESQL")]
-        self.assertEqual(df.select(F.overlay(df.x, df.y, 7, 0).alias("ol")).collect(), exp)
-        self.assertEqual(
-            df.select(F.overlay(df.x, df.y, F.lit(7), F.lit(0)).alias("ol")).collect(), exp
-        )
-        self.assertEqual(df.select(F.overlay("x", "y", "pos", "len").alias("ol")).collect(), exp)
+        assertDataFrameEqual(df.select(F.overlay(df.x, df.y, 7, 0).alias("ol")), exp)
+        assertDataFrameEqual(df.select(F.overlay(df.x, df.y, F.lit(7), F.lit(0)).alias("ol")), exp)
+        assertDataFrameEqual(df.select(F.overlay("x", "y", "pos", "len").alias("ol")), exp)
 
         with self.assertRaises(PySparkTypeError) as pe:
             df.select(F.overlay(df.x, df.y, 7.5, 0).alias("ol")).collect()
@@ -824,13 +859,13 @@ class FunctionsTestsMixin:
                 [
                     re.findall("(percentile\\(.*\\))", str(x))
                     for x in [
-                        F.percentile(F.col("foo"), F.lit(0.5)),
-                        F.percentile(F.col("bar"), 0.25, 2),
-                        F.percentile(F.col("bar"), [0.25, 0.5, 0.75]),
-                        F.percentile(F.col("foo"), (0.05, 0.95), 100),
-                        F.percentile("foo", 0.5),
-                        F.percentile("bar", [0.1, 0.9], F.lit(10)),
-                    ]
+                    F.percentile(F.col("foo"), F.lit(0.5)),
+                    F.percentile(F.col("bar"), 0.25, 2),
+                    F.percentile(F.col("bar"), [0.25, 0.5, 0.75]),
+                    F.percentile(F.col("foo"), (0.05, 0.95), 100),
+                    F.percentile("foo", 0.5),
+                    F.percentile("bar", [0.1, 0.9], F.lit(10)),
+                ]
                 ]
             )
         )
@@ -852,8 +887,8 @@ class FunctionsTestsMixin:
                 [
                     re.findall("(median\\(.*\\))", str(x))
                     for x in [
-                        F.median(F.col("foo")),
-                    ]
+                    F.median(F.col("foo")),
+                ]
                 ]
             )
         )
@@ -870,13 +905,13 @@ class FunctionsTestsMixin:
                 [
                     re.findall("(percentile_approx\\(.*\\))", str(x))
                     for x in [
-                        F.percentile_approx(F.col("foo"), F.lit(0.5)),
-                        F.percentile_approx(F.col("bar"), 0.25, 42),
-                        F.percentile_approx(F.col("bar"), [0.25, 0.5, 0.75]),
-                        F.percentile_approx(F.col("foo"), (0.05, 0.95), 100),
-                        F.percentile_approx("foo", 0.5),
-                        F.percentile_approx("bar", [0.1, 0.9], F.lit(10)),
-                    ]
+                    F.percentile_approx(F.col("foo"), F.lit(0.5)),
+                    F.percentile_approx(F.col("bar"), 0.25, 42),
+                    F.percentile_approx(F.col("bar"), [0.25, 0.5, 0.75]),
+                    F.percentile_approx(F.col("foo"), (0.05, 0.95), 100),
+                    F.percentile_approx("foo", 0.5),
+                    F.percentile_approx("bar", [0.1, 0.9], F.lit(10)),
+                ]
                 ]
             )
         )
@@ -913,20 +948,19 @@ class FunctionsTestsMixin:
             F.nth_value("value", 2).over(w),
             F.nth_value("value", 2, False).over(w),
             F.nth_value("value", 2, True).over(w),
-        ).collect()
+        )
 
         expected = [
-            ("a", 0, None, None, None),
-            ("a", 1, "x", "x", None),
-            ("a", 2, "x", "x", "y"),
-            ("a", 3, "x", "x", "y"),
-            ("a", 4, "x", "x", "y"),
-            ("b", 1, None, None, None),
-            ("b", 2, None, None, None),
+            Row("a", 0, None, None, None),
+            Row("a", 1, "x", "x", None),
+            Row("a", 2, "x", "x", "y"),
+            Row("a", 3, "x", "x", "y"),
+            Row("a", 4, "x", "x", "y"),
+            Row("b", 1, None, None, None),
+            Row("b", 2, None, None, None),
         ]
 
-        for r, ex in zip(sorted(rs), sorted(expected)):
-            self.assertEqual(tuple(r), ex[: len(r)])
+        assertDataFrameEqual(rs, expected)
 
     def test_higher_order_function_failures(self):
         # Should fail with varargs
@@ -992,7 +1026,7 @@ class FunctionsTestsMixin:
                     ),
                 )
             )
-        ).first()[0]
+        )
 
         expected = [
             (1, "a"),
@@ -1006,7 +1040,7 @@ class FunctionsTestsMixin:
             (3, "c"),
         ]
 
-        self.assertEqual(actual, expected)
+        assertDataFrameEqual(actual, [Row(expected)])
 
     def test_window_functions(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
@@ -1023,15 +1057,13 @@ class FunctionsTestsMixin:
             F.dense_rank().over(w),
             F.ntile(2).over(w),
         )
-        rs = sorted(sel.collect())
         expected = [
-            ("1", 1, 1, 1, 1, 1, 1, 1, 1),
-            ("2", 1, 1, 1, 3, 1, 1, 1, 1),
-            ("2", 1, 2, 1, 3, 2, 1, 1, 1),
-            ("2", 2, 2, 2, 3, 3, 3, 2, 2),
+            Row("1", 1, 1, 1, 1, 1, 1, 1, 1),
+            Row("2", 1, 1, 1, 3, 1, 1, 1, 1),
+            Row("2", 1, 2, 1, 3, 2, 1, 1, 1),
+            Row("2", 2, 2, 2, 3, 3, 3, 2, 2),
         ]
-        for r, ex in zip(rs, expected):
-            self.assertEqual(tuple(r), ex[: len(r)])
+        assertDataFrameEqual(sel, expected)
 
     def test_window_functions_without_partitionBy(self):
         df = self.spark.createDataFrame([(1, "1"), (2, "2"), (1, "2"), (1, "2")], ["key", "value"])
@@ -1048,15 +1080,13 @@ class FunctionsTestsMixin:
             F.dense_rank().over(w),
             F.ntile(2).over(w),
         )
-        rs = sorted(sel.collect())
         expected = [
-            ("1", 1, 1, 1, 4, 1, 1, 1, 1),
-            ("2", 1, 1, 1, 4, 2, 2, 2, 1),
-            ("2", 1, 2, 1, 4, 3, 2, 2, 2),
-            ("2", 2, 2, 2, 4, 4, 4, 3, 2),
+            Row("1", 1, 1, 1, 4, 1, 1, 1, 1),
+            Row("2", 1, 1, 1, 4, 2, 2, 2, 1),
+            Row("2", 1, 2, 1, 4, 3, 2, 2, 2),
+            Row("2", 2, 2, 2, 4, 4, 4, 3, 2),
         ]
-        for r, ex in zip(rs, expected):
-            self.assertEqual(tuple(r), ex[: len(r)])
+        assertDataFrameEqual(sel, expected)
 
     def test_window_functions_cumulative_sum(self):
         df = self.spark.createDataFrame([("one", 1), ("two", 2)], ["key", "value"])
@@ -1065,29 +1095,23 @@ class FunctionsTestsMixin:
         sel = df.select(
             df.key, F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding, 0))
         )
-        rs = sorted(sel.collect())
-        expected = [("one", 1), ("two", 3)]
-        for r, ex in zip(rs, expected):
-            self.assertEqual(tuple(r), ex[: len(r)])
+        expected = [Row("one", 1), Row("two", 3)]
+        assertDataFrameEqual(sel, expected, checkRowOrder=True)
 
         # Test boundary values less than JVM's Long.MinValue and make sure we don't overflow
         sel = df.select(
             df.key, F.sum(df.value).over(Window.rowsBetween(Window.unboundedPreceding - 1, 0))
         )
-        rs = sorted(sel.collect())
-        expected = [("one", 1), ("two", 3)]
-        for r, ex in zip(rs, expected):
-            self.assertEqual(tuple(r), ex[: len(r)])
+        expected = [Row("one", 1), Row("two", 3)]
+        assertDataFrameEqual(sel, expected, checkRowOrder=True)
 
         # Test boundary values greater than JVM's Long.MaxValue and make sure we don't overflow
         frame_end = Window.unboundedFollowing + 1
         sel = df.select(
             df.key, F.sum(df.value).over(Window.rowsBetween(Window.currentRow, frame_end))
         )
-        rs = sorted(sel.collect())
-        expected = [("one", 3), ("two", 2)]
-        for r, ex in zip(rs, expected):
-            self.assertEqual(tuple(r), ex[: len(r)])
+        expected = [Row("one", 3), Row("two", 2)]
+        assertDataFrameEqual(sel, expected, checkRowOrder=True)
 
     def test_window_functions_moving_average(self):
         data = [
@@ -1105,17 +1129,15 @@ class FunctionsTestsMixin:
 
         w = Window.orderBy(F.col("date").cast("timestamp").cast("long")).rangeBetween(-to_sec(3), 0)
         res = df.withColumn("3_day_avg_temp", F.avg("temperature").over(w))
-        rs = sorted(res.collect())
         expected = [
-            (datetime.datetime(2023, 1, 1, 0, 0), 20, 20.0),
-            (datetime.datetime(2023, 1, 2, 0, 0), 22, 21.0),
-            (datetime.datetime(2023, 1, 3, 0, 0), 21, 21.0),
-            (datetime.datetime(2023, 1, 4, 0, 0), 23, 21.5),
-            (datetime.datetime(2023, 1, 5, 0, 0), 24, 22.5),
-            (datetime.datetime(2023, 1, 6, 0, 0), 26, 23.5),
+            Row(datetime.datetime(2023, 1, 1, 0, 0), 20, 20.0),
+            Row(datetime.datetime(2023, 1, 2, 0, 0), 22, 21.0),
+            Row(datetime.datetime(2023, 1, 3, 0, 0), 21, 21.0),
+            Row(datetime.datetime(2023, 1, 4, 0, 0), 23, 21.5),
+            Row(datetime.datetime(2023, 1, 5, 0, 0), 24, 22.5),
+            Row(datetime.datetime(2023, 1, 6, 0, 0), 26, 23.5),
         ]
-        for r, ex in zip(rs, expected):
-            self.assertEqual(tuple(r), ex[: len(r)])
+        assertDataFrameEqual(res, expected, checkRowOrder=True)
 
     def test_window_time(self):
         df = self.spark.createDataFrame(
@@ -1127,9 +1149,9 @@ class FunctionsTestsMixin:
             w.window.end.cast("string").alias("end"),
             F.window_time(w.window).cast("string").alias("window_time"),
             "sum",
-        ).collect()
-        self.assertEqual(
-            r[0], Row(end="2016-03-11 09:00:10", window_time="2016-03-11 09:00:09.999999", sum=1)
+        )
+        assertDataFrameEqual(
+            r, [Row(end="2016-03-11 09:00:10", window_time="2016-03-11 09:00:09.999999", sum=1)]
         )
 
     def test_collect_functions(self):
@@ -1158,8 +1180,8 @@ class FunctionsTestsMixin:
     def check_assert_true(self, tpe):
         df = self.spark.range(3)
 
-        self.assertEqual(
-            df.select(F.assert_true(df.id < 3)).toDF("val").collect(),
+        assertDataFrameEqual(
+            df.select(F.assert_true(df.id < 3)).toDF("val"),
             [Row(val=None), Row(val=None), Row(val=None)],
         )
 
@@ -1223,15 +1245,15 @@ class FunctionsTestsMixin:
 
     def test_lit_day_time_interval(self):
         td = datetime.timedelta(days=1, hours=12, milliseconds=123)
-        actual = self.spark.range(1).select(F.lit(td)).first()[0]
-        self.assertEqual(actual, td)
+        actual = self.spark.range(1).select(F.lit(td))
+        assertDataFrameEqual(actual, [Row(td)])
 
     def test_lit_list(self):
         # SPARK-40271: added list type supporting
         test_list = [1, 2, 3]
-        expected = [1, 2, 3]
-        actual = self.spark.range(1).select(F.lit(test_list)).first()[0]
-        self.assertEqual(actual, expected)
+        expected = [Row([1, 2, 3])]
+        actual = self.spark.range(1).select(F.lit(test_list))
+        assertDataFrameEqual(actual, expected)
 
         test_list = [[1, 2, 3], [3, 4]]
         expected = [[1, 2, 3], [3, 4]]
@@ -1296,17 +1318,17 @@ class FunctionsTestsMixin:
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([],)], ["data"])
         for dtype in [np.int8, np.int16, np.int32, np.int64]:
-            res = df.select(F.array_contains(df.data, dtype(1)).alias("b")).collect()
-            self.assertEqual([Row(b=True), Row(b=False)], res)
-            res = df.select(F.array_position(df.data, dtype(1)).alias("c")).collect()
-            self.assertEqual([Row(c=1), Row(c=0)], res)
+            res = df.select(F.array_contains(df.data, dtype(1)).alias("b"))
+            assertDataFrameEqual(res, [Row(b=True), Row(b=False)])
+            res = df.select(F.array_position(df.data, dtype(1)).alias("c"))
+            assertDataFrameEqual(res, [Row(c=1), Row(c=0)])
 
         df = self.spark.createDataFrame([([1.0, 2.0, 3.0],), ([],)], ["data"])
         for dtype in [np.float32, np.float64]:
-            res = df.select(F.array_contains(df.data, dtype(1)).alias("b")).collect()
-            self.assertEqual([Row(b=True), Row(b=False)], res)
-            res = df.select(F.array_position(df.data, dtype(1)).alias("c")).collect()
-            self.assertEqual([Row(c=1), Row(c=0)], res)
+            res = df.select(F.array_contains(df.data, dtype(1)).alias("b"))
+            assertDataFrameEqual(res, [Row(b=True), Row(b=False)])
+            res = df.select(F.array_position(df.data, dtype(1)).alias("c"))
+            assertDataFrameEqual(res, [Row(c=1), Row(c=0)])
 
     @unittest.skipIf(not have_numpy, "NumPy not installed")
     def test_ndarray_input(self):
@@ -1388,13 +1410,11 @@ class FunctionsTestsMixin:
             *[(F.atan2, 0.13664), (F.hypot, 8.07527), (F.pow, 2.14359), (F.pmod, 1.1)]
         )
         df = self.spark.range(1).select(*(func(1.1, 8) for func in funcs))
-        for a, e in zip(df.first(), expected):
-            self.assertAlmostEqual(a, e, 5)
+        assertDataFrameEqual(df, [Row(*expected)], atol=5)
 
     def test_map_functions(self):
         # SPARK-38496: Check basic functionality of all "map" type related functions
         expected = {"a": 1, "b": 2}
-        expected2 = {"c": 3, "d": 4}
         df = self.spark.createDataFrame(
             [(list(expected.keys()), list(expected.values()))], ["k", "v"]
         )
@@ -1417,41 +1437,45 @@ class FunctionsTestsMixin:
                 F.map_from_entries(F.arrays_zip("keys", "values")).alias("from_items"),
                 "*",
             )
-            .first()
         )
-        self.assertEqual(expected, actual["dict"])
-        self.assertTrue(actual["one"])
-        self.assertFalse(actual["not_exists"])
-        self.assertEqual(list(expected.keys()), actual["keys"])
-        self.assertEqual(list(expected.values()), actual["values"])
-        self.assertEqual(expected, dict(actual["items"]))
-        self.assertEqual({**expected, **expected2}, dict(actual["merged"]))
-        self.assertEqual(expected, actual["from_items"])
+        expected = Row(
+            merged={"a": 1, "b": 2, "c": 3, "d": 4},
+            from_items={"a": 1, "b": 2},
+            one=True,
+            not_exists=False,
+            keys=["a", "b"],
+            values=[1, 2],
+            items=[Row(key="a", value=1), Row(key="b", value=2)],
+            dict2={"d": 4, "c": 3},
+            dict={"a": 1, "b": 2},
+            k=["a", "b"],
+            v=[1, 2],
+        )
+        assertDataFrameEqual(actual, [expected], showOnlyDiff=True)
 
     def test_parse_json(self):
         df = self.spark.createDataFrame([{"json": """{ "a" : 1 }"""}])
         actual = df.select(
             F.to_json(F.parse_json(df.json)).alias("var"),
             F.to_json(F.parse_json(F.lit("""{"b": [{"c": "str2"}]}"""))).alias("var_lit"),
-        ).first()
-
-        self.assertEqual("""{"a":1}""", actual["var"])
-        self.assertEqual("""{"b":[{"c":"str2"}]}""", actual["var_lit"])
+        )
+        assertDataFrameEqual(actual, [Row(var='{"a":1}', var_lit='{"b":[{"c":"str2"}]}')])
 
     def test_variant_expressions(self):
         df = self.spark.createDataFrame([Row(json="""{ "a" : 1 }"""), Row(json="""{ "b" : 2 }""")])
         v = F.parse_json(df.json)
 
-        def check(resultDf, expected):
-            self.assertEqual([r[0] for r in resultDf.collect()], expected)
+        assertDataFrameEqual(df.select(F.is_variant_null(v)), [Row(False), Row(False)])
+        assertDataFrameEqual(
+            df.select(F.schema_of_variant(v)), [Row("OBJECT<a: BIGINT>"), Row("OBJECT<b: BIGINT>")]
+        )
+        assertDataFrameEqual(
+            df.select(F.schema_of_variant_agg(v)), [Row("OBJECT<a: BIGINT, b: BIGINT>")]
+        )
 
-        check(df.select(F.is_variant_null(v)), [False, False])
-        check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
-        check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
-
-        check(df.select(F.variant_get(v, "$.a", "int")), [1, None])
-        check(df.select(F.variant_get(v, "$.b", "int")), [None, 2])
-        check(df.select(F.variant_get(v, "$.a", "double")), [1.0, None])
+        assertDataFrameEqual(df.select(F.variant_get(v, "$.a", "int")), [Row(1), Row(None)])
+        assertDataFrameEqual(df.select(F.variant_get(v, "$.b", "int")), [Row(None), Row(2)])
+        assertDataFrameEqual(df.select(F.variant_get(v, "$.a", "double")), [Row(1.0), Row(None)])
 
         with self.assertRaises(SparkRuntimeException) as ex:
             df.select(F.variant_get(v, "$.a", "binary")).collect()
@@ -1462,10 +1486,14 @@ class FunctionsTestsMixin:
             messageParameters={"value": "1", "dataType": '"BINARY"'},
         )
 
-        check(df.select(F.try_variant_get(v, "$.a", "int")), [1, None])
-        check(df.select(F.try_variant_get(v, "$.b", "int")), [None, 2])
-        check(df.select(F.try_variant_get(v, "$.a", "double")), [1.0, None])
-        check(df.select(F.try_variant_get(v, "$.a", "binary")), [None, None])
+        assertDataFrameEqual(df.select(F.try_variant_get(v, "$.a", "int")), [Row(1), Row(None)])
+        assertDataFrameEqual(df.select(F.try_variant_get(v, "$.b", "int")), [Row(None), Row(2)])
+        assertDataFrameEqual(
+            df.select(F.try_variant_get(v, "$.a", "double")), [Row(1.0), Row(None)]
+        )
+        assertDataFrameEqual(
+            df.select(F.try_variant_get(v, "$.a", "binary")), [Row(None), Row(None)]
+        )
 
     def test_schema_of_json(self):
         with self.assertRaises(PySparkTypeError) as pe:
