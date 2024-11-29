@@ -2150,12 +2150,48 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
-    val table = if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+    val table = if (canEagerlyEvaluateInlineTable(ctx, unresolvedTable)) {
       EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
     } else {
       unresolvedTable
     }
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
+  }
+
+  /**
+   * Determines if the inline table can be eagerly evaluated.
+   */
+  private def canEagerlyEvaluateInlineTable(
+      ctx: InlineTableContext,
+      table: UnresolvedInlineTable): Boolean = {
+    if (!conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+      return false
+    } else if (!ResolveDefaultStringTypes.needsResolution(table.expressions)) {
+      // if there are no strings to be resolved we can always evaluate eagerly
+      return true
+    }
+
+    val isSessionCollationSet = conf.defaultStringType != StringType
+
+    // if either of these are true we need to resolve
+    // the string types first
+    !isSessionCollationSet && !contextInsideCreate(ctx)
+  }
+
+  private def contextInsideCreate(ctx: ParserRuleContext): Boolean = {
+    var currentContext: RuleContext = ctx
+
+    while (currentContext != null) {
+      if (currentContext.isInstanceOf[CreateTableContext] ||
+          currentContext.isInstanceOf[ReplaceTableContext] ||
+          currentContext.isInstanceOf[CreateViewContext]) {
+        return true
+      }
+
+      currentContext = currentContext.parent
+    }
+
+    false
   }
 
   /**
@@ -3369,7 +3405,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal.create(createString(ctx), conf.defaultStringType)
+    Literal.create(createString(ctx), StringType)
   }
 
   /**

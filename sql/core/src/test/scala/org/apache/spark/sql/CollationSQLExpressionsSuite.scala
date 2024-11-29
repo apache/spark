@@ -377,6 +377,10 @@ class CollationSQLExpressionsSuite
         )),
       CsvToStructsTestCase("\"Spark\"", "UNICODE", "'a STRING'", "",
         Row("Spark"), Seq(
+          StructField("a", StringType, nullable = true)
+        )),
+      CsvToStructsTestCase("\"Spark\"", "UTF8_BINARY", "'a STRING COLLATE UNICODE'", "",
+        Row("Spark"), Seq(
           StructField("a", StringType("UNICODE"), nullable = true)
         )),
       CsvToStructsTestCase("26/08/2015", "UTF8_BINARY", "'time Timestamp'",
@@ -1292,6 +1296,10 @@ class CollationSQLExpressionsSuite
         )),
       XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE", "'s STRING'", "",
         Row("Spark"), Seq(
+          StructField("s", StringType, nullable = true)
+        )),
+      XmlToStructsTestCase("<p><s>Spark</s></p>", "UTF8_BINARY", "'s STRING COLLATE UNICODE'", "",
+        Row("Spark"), Seq(
           StructField("s", StringType("UNICODE"), nullable = true)
         )),
       XmlToStructsTestCase("<p><time>26/08/2015</time></p>", "UNICODE_CI", "'time Timestamp'",
@@ -1515,8 +1523,13 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       VariantGetTestCase("{\"a\": 1}", "$.a", "int", "UTF8_BINARY", 1, IntegerType),
       VariantGetTestCase("{\"a\": 1}", "$.b", "int", "UTF8_LCASE", null, IntegerType),
-      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE", "2", StringType("UNICODE")),
+      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE", "2",
+        StringType),
+      VariantGetTestCase("[1, \"2\"]", "$[1]", "string collate unicode", "UTF8_BINARY", "2",
+        StringType("UNICODE")),
       VariantGetTestCase("[1, \"2\"]", "$[2]", "string", "UNICODE_CI", null,
+        StringType),
+      VariantGetTestCase("[1, \"2\"]", "$[2]", "string collate unicode_CI", "UTF8_BINARY", null,
         StringType("UNICODE_CI"))
     )
 
