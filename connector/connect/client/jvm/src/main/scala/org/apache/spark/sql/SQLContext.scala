@@ -336,7 +336,8 @@ object SQLContext extends api.SQLContextCompanion {
    * If there is an active SQLContext for current thread, it will be returned instead of the
    * global one.
    *
-   * @param sparkContext The SparkContext. This parameter is not used in Spark Connect.
+   * @param sparkContext
+   *   The SparkContext. This parameter is not used in Spark Connect.
    *
    * @since 4.0.0
    */

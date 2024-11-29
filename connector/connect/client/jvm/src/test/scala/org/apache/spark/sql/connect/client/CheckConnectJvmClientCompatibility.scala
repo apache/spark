@@ -329,8 +329,7 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession#Builder.interceptor"),
 
       // Private case class in SQLContext
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.SQLContext$ListTableRow"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$ListTableRow"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.SQLContext$ListTableRow$"),
 
