@@ -60,10 +60,9 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
 
   def apply(s: Sort): LogicalPlan = {
     val resolvedByLCA = resolveByLateralColumnAlias(s)
-    val resolvedBasic = resolvedByLCA.map(resolveExpressionByPlanOutput(_, s.child))
     val resolvedWithAgg = s.child match {
-      case Filter(_, agg: Aggregate) => resolvedBasic.map(resolveColWithAgg(_, agg))
-      case _ => resolvedBasic.map(resolveColWithAgg(_, s.child))
+      case Filter(_, agg: Aggregate) => resolvedByLCA.map(resolveColWithAgg(_, agg))
+      case _ => resolvedByLCA.map(resolveColWithAgg(_, s.child))
     }
     val (missingAttrResolved, newChild) = resolveExprsAndAddMissingAttrs(resolvedWithAgg, s.child)
     val orderByAllResolved = resolveOrderByAll(
@@ -112,8 +111,8 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
           aliasMap.get(u.nameParts.head.toLowerCase(Locale.ROOT)).map {
             case Left(alias) if alias.resolved =>
               try {
-                val resolvedAttr = resolveExpressionByPlanOutput(
-                  u, LocalRelation(Seq(alias.toAttribute))).asInstanceOf[NamedExpression]
+                val resolvedAttr =
+                  resolveExpressionByPlanOutput(u, s.child).asInstanceOf[NamedExpression]
                 LateralColumnAliasReference(resolvedAttr, u.nameParts, alias.toAttribute)
               } catch {
                 case ae: AnalysisException =>
@@ -123,13 +122,13 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
             case Right(count) =>
               throw QueryCompilationErrors.ambiguousLateralColumnAliasError(u.name, count)
             case _ => u
-          }.getOrElse(u)
+          }.getOrElse(resolveExpressionByPlanOutput(u, s.child))
       }
     }
     if (aliasMap.nonEmpty) {
       s.order.map(resolve)
     } else {
-      s.order
+      s.order.map(resolveExpressionByPlanOutput(_, s.child))
     }
   }
 
