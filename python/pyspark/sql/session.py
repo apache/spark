@@ -2268,7 +2268,6 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptOperation"},
         )
 
-    @remote_only
     def addTag(self, tag: str) -> None:
         """
         Add a tag to be assigned to all the operations started by this thread in this session.
@@ -2293,7 +2292,6 @@ class SparkSession(SparkConversionMixin):
         """
         self._jsparkSession.addTag(tag)
 
-    @remote_only
     def removeTag(self, tag: str) -> None:
         """
         Remove a tag previously added to be assigned to all the operations started by this thread in
@@ -2311,7 +2309,6 @@ class SparkSession(SparkConversionMixin):
         """
         self._jsparkSession.removeTag(tag)
 
-    @remote_only
     def getTags(self) -> Set[str]:
         """
         Get the tags that are currently set to be assigned to all the operations started by this
@@ -2337,7 +2334,6 @@ class SparkSession(SparkConversionMixin):
 
         return python_set
 
-    @remote_only
     def clearTags(self) -> None:
         """
         Clear the current thread's operation tags.

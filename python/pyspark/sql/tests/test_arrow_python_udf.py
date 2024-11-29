@@ -238,6 +238,20 @@ class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
             super(PythonUDFArrowTests, cls).tearDownClass()
 
 
+class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        super(AsyncPythonUDFArrowTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
+        finally:
+            super(AsyncPythonUDFArrowTests, cls).tearDownClass()
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow_python_udf import *  # noqa: F401
 
