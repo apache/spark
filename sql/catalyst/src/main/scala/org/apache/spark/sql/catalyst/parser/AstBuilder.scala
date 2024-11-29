@@ -226,6 +226,8 @@ class AstBuilder extends DataTypeAstBuilder
                 visitSearchedCaseStatementImpl(searchedCaseContext, labelCtx)
               case simpleCaseContext: SimpleCaseStatementContext =>
                 visitSimpleCaseStatementImpl(simpleCaseContext, labelCtx)
+              case forStatementContext: ForStatementContext =>
+                visitForStatementImpl(forStatementContext, labelCtx)
               case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
             }
           } else {
@@ -347,28 +349,48 @@ class AstBuilder extends DataTypeAstBuilder
     RepeatStatement(condition, body, Some(labelText))
   }
 
+  private def visitForStatementImpl(
+      ctx: ForStatementContext,
+      labelCtx: SqlScriptingLabelContext): ForStatement = {
+    val labelText = labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+
+    val queryCtx = ctx.query()
+    val query = withOrigin(queryCtx) {
+      SingleStatement(visitQuery(queryCtx))
+    }
+    val varName = Option(ctx.multipartIdentifier()).map(_.getText)
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
+
+    ForStatement(query, varName, body, Some(labelText))
+  }
+
   private def leaveOrIterateContextHasLabel(
       ctx: RuleContext, label: String, isIterate: Boolean): Boolean = {
     ctx match {
       case c: BeginEndCompoundBlockContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label) =>
-        if (isIterate) {
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => if (isIterate) {
           throw SqlScriptingErrors.invalidIterateLabelUsageForCompound(CurrentOrigin.get, label)
         }
         true
       case c: WhileStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case c: RepeatStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case c: LoopStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
+      case c: ForStatementContext
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case _ => false
     }
   }
@@ -2128,12 +2150,48 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
-    val table = if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+    val table = if (canEagerlyEvaluateInlineTable(ctx, unresolvedTable)) {
       EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
     } else {
       unresolvedTable
     }
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
+  }
+
+  /**
+   * Determines if the inline table can be eagerly evaluated.
+   */
+  private def canEagerlyEvaluateInlineTable(
+      ctx: InlineTableContext,
+      table: UnresolvedInlineTable): Boolean = {
+    if (!conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+      return false
+    } else if (!ResolveDefaultStringTypes.needsResolution(table.expressions)) {
+      // if there are no strings to be resolved we can always evaluate eagerly
+      return true
+    }
+
+    val isSessionCollationSet = conf.defaultStringType != StringType
+
+    // if either of these are true we need to resolve
+    // the string types first
+    !isSessionCollationSet && !contextInsideCreate(ctx)
+  }
+
+  private def contextInsideCreate(ctx: ParserRuleContext): Boolean = {
+    var currentContext: RuleContext = ctx
+
+    while (currentContext != null) {
+      if (currentContext.isInstanceOf[CreateTableContext] ||
+          currentContext.isInstanceOf[ReplaceTableContext] ||
+          currentContext.isInstanceOf[CreateViewContext]) {
+        return true
+      }
+
+      currentContext = currentContext.parent
+    }
+
+    false
   }
 
   /**
@@ -3347,7 +3405,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal.create(createString(ctx), conf.defaultStringType)
+    Literal.create(createString(ctx), StringType)
   }
 
   /**

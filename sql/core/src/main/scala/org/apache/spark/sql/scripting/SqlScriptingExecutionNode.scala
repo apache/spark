@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.scripting
 
+import java.util
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.NameParameterizedQuery
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
 import org.apache.spark.sql.types.BooleanType
@@ -659,6 +661,225 @@ class LoopStatementExec(
   override def reset(): Unit = {
     interrupted = false
     iterated = false
+    body.reset()
+  }
+}
+
+/**
+ * Executable node for ForStatement.
+ * @param query Executable node for the query.
+ * @param variableName Name of variable used for accessing current row during iteration.
+ * @param body Executable node for the body.
+ * @param label Label set to ForStatement by user or None otherwise.
+ * @param session Spark session that SQL script is executed within.
+ */
+class ForStatementExec(
+    query: SingleStatementExec,
+    variableName: Option[String],
+    body: CompoundBodyExec,
+    val label: Option[String],
+    session: SparkSession) extends NonLeafStatementExec {
+
+  private object ForState extends Enumeration {
+    val VariableAssignment, Body, VariableCleanup = Value
+  }
+  private var state = ForState.VariableAssignment
+  private var areVariablesDeclared = false
+
+  // map of all variables created internally by the for statement
+  // (variableName -> variableExpression)
+  private var variablesMap: Map[String, Expression] = Map()
+
+  // compound body used for dropping variables while in ForState.VariableAssignment
+  private var dropVariablesExec: CompoundBodyExec = null
+
+  private var queryResult: util.Iterator[Row] = _
+  private var isResultCacheValid = false
+  private def cachedQueryResult(): util.Iterator[Row] = {
+    if (!isResultCacheValid) {
+      queryResult = query.buildDataFrame(session).toLocalIterator()
+      query.isExecuted = true
+      isResultCacheValid = true
+    }
+    queryResult
+  }
+
+  /**
+   * For can be interrupted by LeaveStatementExec
+   */
+  private var interrupted: Boolean = false
+
+  private lazy val treeIterator: Iterator[CompoundStatementExec] =
+    new Iterator[CompoundStatementExec] {
+
+      override def hasNext: Boolean = !interrupted && (state match {
+          case ForState.VariableAssignment => cachedQueryResult().hasNext
+          case ForState.Body => true
+          case ForState.VariableCleanup => dropVariablesExec.getTreeIterator.hasNext
+        })
+
+      override def next(): CompoundStatementExec = state match {
+
+        case ForState.VariableAssignment =>
+          variablesMap = createVariablesMapFromRow(cachedQueryResult().next())
+
+          if (!areVariablesDeclared) {
+            // create and execute declare var statements
+            variablesMap.keys.toSeq
+              .map(colName => createDeclareVarExec(colName, variablesMap(colName)))
+              .foreach(declareVarExec => declareVarExec.buildDataFrame(session).collect())
+            areVariablesDeclared = true
+          }
+
+          // create and execute set var statements
+          variablesMap.keys.toSeq
+            .map(colName => createSetVarExec(colName, variablesMap(colName)))
+            .foreach(setVarExec => setVarExec.buildDataFrame(session).collect())
+
+          state = ForState.Body
+          body.reset()
+          next()
+
+        case ForState.Body =>
+          val retStmt = body.getTreeIterator.next()
+
+          // Handle LEAVE or ITERATE statement if it has been encountered.
+          retStmt match {
+            case leaveStatementExec: LeaveStatementExec if !leaveStatementExec.hasBeenMatched =>
+              if (label.contains(leaveStatementExec.label)) {
+                leaveStatementExec.hasBeenMatched = true
+              }
+              interrupted = true
+              // If this for statement encounters LEAVE, it will either not be executed
+              // again, or it will be reset before being executed.
+              // In either case, variables will not
+              // be dropped normally, from ForState.VariableCleanup, so we drop them here.
+              dropVars()
+              return retStmt
+            case iterStatementExec: IterateStatementExec if !iterStatementExec.hasBeenMatched =>
+              if (label.contains(iterStatementExec.label)) {
+                iterStatementExec.hasBeenMatched = true
+              } else {
+                // if an outer loop is being iterated, this for statement will either not be
+                // executed again, or it will be reset before being executed.
+                // In either case, variables will not
+                // be dropped normally, from ForState.VariableCleanup, so we drop them here.
+                dropVars()
+              }
+              switchStateFromBody()
+              return retStmt
+            case _ =>
+          }
+
+          if (!body.getTreeIterator.hasNext) {
+            switchStateFromBody()
+          }
+          retStmt
+
+        case ForState.VariableCleanup =>
+          dropVariablesExec.getTreeIterator.next()
+      }
+    }
+
+  /**
+   * Recursively creates a Catalyst expression from Scala value.<br>
+   * See https://spark.apache.org/docs/latest/sql-ref-datatypes.html for Spark -> Scala mappings
+   */
+  private def createExpressionFromValue(value: Any): Expression = value match {
+    case m: Map[_, _] =>
+      // arguments of CreateMap are in the format: (key1, val1, key2, val2, ...)
+      val mapArgs = m.keys.toSeq.flatMap { key =>
+        Seq(createExpressionFromValue(key), createExpressionFromValue(m(key)))
+      }
+      CreateMap(mapArgs, useStringTypeWhenEmpty = false)
+
+    // structs and rows match this case
+    case s: Row =>
+    // arguments of CreateNamedStruct are in the format: (name1, val1, name2, val2, ...)
+    val namedStructArgs = s.schema.names.toSeq.flatMap { colName =>
+        val valueExpression = createExpressionFromValue(s.getAs(colName))
+        Seq(Literal(colName), valueExpression)
+      }
+      CreateNamedStruct(namedStructArgs)
+
+    // arrays match this case
+    case a: collection.Seq[_] =>
+      val arrayArgs = a.toSeq.map(createExpressionFromValue(_))
+      CreateArray(arrayArgs, useStringTypeWhenEmpty = false)
+
+    case _ => Literal(value)
+  }
+
+  private def createVariablesMapFromRow(row: Row): Map[String, Expression] = {
+    var variablesMap = row.schema.names.toSeq.map { colName =>
+      colName -> createExpressionFromValue(row.getAs(colName))
+    }.toMap
+
+    if (variableName.isDefined) {
+      val namedStructArgs = variablesMap.keys.toSeq.flatMap { colName =>
+        Seq(Literal(colName), variablesMap(colName))
+      }
+      val forVariable = CreateNamedStruct(namedStructArgs)
+      variablesMap = variablesMap + (variableName.get -> forVariable)
+    }
+    variablesMap
+  }
+
+  /**
+   * Create and immediately execute dropVariable exec nodes for all variables in variablesMap.
+   */
+  private def dropVars(): Unit = {
+    variablesMap.keys.toSeq
+      .map(colName => createDropVarExec(colName))
+      .foreach(dropVarExec => dropVarExec.buildDataFrame(session).collect())
+    areVariablesDeclared = false
+  }
+
+  private def switchStateFromBody(): Unit = {
+    state = if (cachedQueryResult().hasNext) ForState.VariableAssignment
+    else {
+      // create compound body for dropping nodes after execution is complete
+      dropVariablesExec = new CompoundBodyExec(
+        variablesMap.keys.toSeq.map(colName => createDropVarExec(colName))
+      )
+      ForState.VariableCleanup
+    }
+  }
+
+  private def createDeclareVarExec(varName: String, variable: Expression): SingleStatementExec = {
+    val defaultExpression = DefaultValueExpression(Literal(null, variable.dataType), "null")
+    val declareVariable = CreateVariable(
+      UnresolvedIdentifier(Seq(varName)),
+      defaultExpression,
+      replace = true
+    )
+    new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true)
+  }
+
+  private def createSetVarExec(varName: String, variable: Expression): SingleStatementExec = {
+    val projectNamedStruct = Project(
+      Seq(Alias(variable, varName)()),
+      OneRowRelation()
+    )
+    val setIdentifierToCurrentRow =
+      SetVariable(Seq(UnresolvedAttribute(varName)), projectNamedStruct)
+    new SingleStatementExec(setIdentifierToCurrentRow, Origin(), Map.empty, isInternal = true)
+  }
+
+  private def createDropVarExec(varName: String): SingleStatementExec = {
+    val dropVar = DropVariable(UnresolvedIdentifier(Seq(varName)), ifExists = true)
+    new SingleStatementExec(dropVar, Origin(), Map.empty, isInternal = true)
+  }
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override def reset(): Unit = {
+    state = ForState.VariableAssignment
+    isResultCacheValid = false
+    variablesMap = Map()
+    areVariablesDeclared = false
+    dropVariablesExec = null
+    interrupted = false
     body.reset()
   }
 }

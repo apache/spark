@@ -420,6 +420,10 @@ class CollationSQLExpressionsSuite
         )),
       CsvToStructsTestCase("\"Spark\"", "UNICODE", "'a STRING'", "",
         Row("Spark"), Seq(
+          StructField("a", StringType, nullable = true)
+        )),
+      CsvToStructsTestCase("\"Spark\"", "UTF8_BINARY", "'a STRING COLLATE UNICODE'", "",
+        Row("Spark"), Seq(
           StructField("a", StringType("UNICODE"), nullable = true)
         )),
       CsvToStructsTestCase("\"Spark\"", "UNICODE_RTRIM", "'a STRING'", "",
@@ -1467,6 +1471,10 @@ class CollationSQLExpressionsSuite
         )),
       XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE", "'s STRING'", "",
         Row("Spark"), Seq(
+          StructField("s", StringType, nullable = true)
+        )),
+      XmlToStructsTestCase("<p><s>Spark</s></p>", "UTF8_BINARY", "'s STRING COLLATE UNICODE'", "",
+        Row("Spark"), Seq(
           StructField("s", StringType("UNICODE"), nullable = true)
         )),
       XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE_RTRIM", "'s STRING'", "",
@@ -1721,12 +1729,14 @@ class CollationSQLExpressionsSuite
       VariantGetTestCase("{\"a\": 1}", "$.a", "int", "UTF8_BINARY", 1, IntegerType),
       VariantGetTestCase("{\"a\": 1}", "$.a", "int", "UTF8_BINARY_RTRIM", 1, IntegerType),
       VariantGetTestCase("{\"a\": 1}", "$.b", "int", "UTF8_LCASE", null, IntegerType),
-      VariantGetTestCase("{\"a\": 1}", "$.b", "int", "UTF8_LCASE_RTRIM", null, IntegerType),
-      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE", "2", StringType("UNICODE")),
-      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE_RTRIM", "2",
-        StringType("UNICODE_RTRIM")),
-      VariantGetTestCase("[1, \"2\"]", "$[2]", "string", "UNICODE_CI_RTRIM", null,
-        StringType("UNICODE_CI_RTRIM"))
+      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE", "2",
+        StringType),
+      VariantGetTestCase("[1, \"2\"]", "$[1]", "string collate unicode", "UTF8_BINARY", "2",
+        StringType("UNICODE")),
+      VariantGetTestCase("[1, \"2\"]", "$[2]", "string", "UNICODE_CI", null,
+        StringType),
+      VariantGetTestCase("[1, \"2\"]", "$[2]", "string collate unicode_CI", "UTF8_BINARY", null,
+        StringType("UNICODE_CI"))
     )
 
     // Supported collations (VariantGet)

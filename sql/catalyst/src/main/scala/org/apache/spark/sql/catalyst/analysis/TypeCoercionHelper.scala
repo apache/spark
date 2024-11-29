@@ -416,7 +416,7 @@ abstract class TypeCoercionHelper {
           if conf.concatBinaryAsString ||
           !children.map(_.dataType).forall(_ == BinaryType) =>
         val newChildren = c.children.map { e =>
-          implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
+          implicitCast(e, StringType).getOrElse(e)
         }
         c.copy(children = newChildren)
       case other => other
@@ -466,7 +466,7 @@ abstract class TypeCoercionHelper {
           if (conf.eltOutputAsString ||
             !children.tail.map(_.dataType).forall(_ == BinaryType)) {
             children.tail.map { e =>
-              implicitCast(e, SQLConf.get.defaultStringType).getOrElse(e)
+              implicitCast(e, StringType).getOrElse(e)
             }
           } else {
             children.tail
