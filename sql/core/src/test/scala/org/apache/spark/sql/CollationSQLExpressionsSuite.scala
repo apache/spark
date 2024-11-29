@@ -426,7 +426,7 @@ class CollationSQLExpressionsSuite
         Row("Spark"), Seq(
           StructField("a", StringType("UNICODE"), nullable = true)
         )),
-      CsvToStructsTestCase("\"Spark\"", "UNICODE_RTRIM", "'a STRING'", "",
+      CsvToStructsTestCase("\"Spark\"", "UNICODE_RTRIM", "'a STRING COLLATE UNICODE_RTRIM'", "",
         Row("Spark"), Seq(
           StructField("a", StringType("UNICODE_RTRIM"), nullable = true)
         )),
@@ -1477,7 +1477,8 @@ class CollationSQLExpressionsSuite
         Row("Spark"), Seq(
           StructField("s", StringType("UNICODE"), nullable = true)
         )),
-      XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE_RTRIM", "'s STRING'", "",
+      XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE_RTRIM",
+        "'s STRING COLLATE UNICODE_RTRIM'", "",
         Row("Spark"), Seq(
           StructField("s", StringType("UNICODE_RTRIM"), nullable = true)
         )),
