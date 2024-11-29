@@ -1026,6 +1026,29 @@ class Dataset[T] private[sql](
     )
   }
 
+  /**
+   * Converts the DataFrame into a `TableArg` object, which can be used as a table argument
+   * in a user-defined table function (UDTF).
+   *
+   * After obtaining a `TableArg` from a DataFrame using this method, you can specify
+   * partitioning and ordering for the table argument by calling methods such as `partitionBy`,
+   * `orderBy`, and `withSinglePartition` on the `TableArg` instance.
+   *   - partitionBy(*cols): Partitions the data based on the specified columns.
+   *     This method cannot be called after withSinglePartition() has been called.
+   *   - orderBy(*cols): Orders the data within partitions based on the specified columns.
+   *   - withSinglePartition(): Indicates that the data should be treated as a single partition.
+   *     This method cannot be called after partitionBy() has been called.
+   *
+   * @group untypedrel
+   * @since 4.0.0
+   */
+  def forTableFunction(): TableArg = {
+    new TableArg(
+      FunctionTableSubqueryArgumentExpression(plan = logicalPlan),
+      sparkSession
+    )
+  }
+
   /** @inheritdoc */
   def scalar(): Column = {
     Column(ExpressionColumnNode(ScalarSubqueryExpr(logicalPlan)))

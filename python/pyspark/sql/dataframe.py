@@ -42,6 +42,7 @@ from pyspark.sql.column import Column
 from pyspark.sql.readwriter import DataFrameWriter, DataFrameWriterV2
 from pyspark.sql.merge import MergeIntoWriter
 from pyspark.sql.streaming import DataStreamWriter
+from pyspark.sql.table_arg import TableArg
 from pyspark.sql.types import StructType, Row
 from pyspark.sql.utils import dispatch_df_method
 
@@ -6578,6 +6579,28 @@ class DataFrame:
         +----+---+---+
         """
         ...
+
+    def forTableFunction(self) -> TableArg:
+        """
+        Converts the DataFrame into a `TableArg` object, which can be used as a table argument
+        in a user-defined table function (UDTF).
+
+        After obtaining a TableArg from a DataFrame using this method, you can specify partitioning
+        and ordering for the table argument by calling methods such as `partitionBy`, `orderBy`, and
+        `withSinglePartition` on the `TableArg` instance.
+            - partitionBy(*cols): Partitions the data based on the specified columns. This method cannot
+            be called after withSinglePartition() has been called.
+                - orderBy(*cols): Orders the data within partitions based on the specified columns.
+                - withSinglePartition(): Indicates that the data should be treated as a single partition.
+                This method cannot be called after partitionBy() has been called.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`TableArg`
+            A `TableArg` object representing a table argument.
+        """
 
     def scalar(self) -> Column:
         """
