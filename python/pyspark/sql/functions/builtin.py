@@ -13699,13 +13699,13 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     Examples
     --------
     >>> from pyspark.sql import functions as sf
-    >>> df = spark.createDataFrame([(b"abcd",)], ["a"])
-    >>> df.select("*", sf.typeof("a"), sf.decode("a", "UTF-8")).show()
-    +-------------+---------+----------------+
-    |            a|typeof(a)|decode(a, UTF-8)|
-    +-------------+---------+----------------+
-    |[61 62 63 64]|   binary|            abcd|
-    +-------------+---------+----------------+
+    >>> df = spark.createDataFrame([(b"\x61\x62\x63\x64",)], ["a"])
+    >>> df.select("*", sf.decode("a", "UTF-8")).show()
+    +-------------+----------------+
+    |            a|decode(a, UTF-8)|
+    +-------------+----------------+
+    |[61 62 63 64]|            abcd|
+    +-------------+----------------+
     """
     from pyspark.sql.classic.column import _to_java_column
 
