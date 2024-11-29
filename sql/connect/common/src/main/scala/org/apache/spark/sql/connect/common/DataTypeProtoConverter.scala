@@ -187,6 +187,7 @@ object DataTypeProtoConverter {
           .setVarChar(proto.DataType.VarChar.newBuilder().setLength(length).build())
           .build()
 
+      // StringType must be matched after CharType and VarcharType
       case s: StringType =>
         proto.DataType
           .newBuilder()
