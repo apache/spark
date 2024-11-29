@@ -128,6 +128,7 @@ To control what API docs get built, you can set any combination of the following
 
 
 ## Build docs with docker image (Optional)
+
 As a Spark developer, you can generate all documents locally as follows:
 
 ```sh
@@ -135,6 +136,6 @@ sh dev/spark-test-image-util/docs/build-docs
 ```
 
 It will generate all documents on the `container` and `host`.
-Especially when there are conflicts between the libraries required by python development environment
-and the libraries required by generating python docs environment, this is a good choice.
+Especially when there are conflicts between the libraries required by Python development environment
+and the libraries required by generating Python docs environment, this is a good choice.
 Please refer to [SPARK-50295](https://issues.apache.org/jira/browse/SPARK-50295) for details.
