@@ -23,22 +23,17 @@ import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
- * Resolves default string types in DDL commands. For DML commands, the default string type is
+ * Resolves default string types in queries and commands. For queries, the default string type is
  * determined by the session's default string type. For DDL, the default string type is the
  * default type of the object (table -> schema -> catalog). However, this is not implemented yet.
  * So, we will just use UTF8_BINARY for now.
- *
- * `replaceWithTempType` is a flag that determines whether to replace the default string type with a
- * [[TemporaryStringType]] object in cases where the old type and new are equal and thus would
- * not change the plan after transformation.
  */
 object ResolveDefaultStringTypes extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
-
     val newPlan = apply0(plan)
     if (plan.ne(newPlan)) {
       // Due to how tree transformations work and StringType object being equal to
-      // StringType("UTF8_BINARY"), we need to run the rule twice
+      // StringType("UTF8_BINARY"), we need to transform the plan twice
       // to ensure the correct results for occurrences of default string type.
       val finalPlan = apply0(newPlan)
       RuleExecutor.forceAdditionalIteration(finalPlan)
