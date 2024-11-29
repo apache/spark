@@ -395,6 +395,10 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         AddData(inputData, InitInputRow("k2", "update", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getOption", -1.0)),
         CheckNewAnswer(("non-exist", "getOption", -1.0)),
+        Execute { q =>
+          assert(q.lastProgress
+            .stateOperators(0).customMetrics.get("initialStateProcessingTimeMs") > 0)
+        },
         AddData(inputData, InitInputRow("k1", "appendList", 37.0)),
         AddData(inputData, InitInputRow("k2", "appendList", 40.0)),
         AddData(inputData, InitInputRow("non-exist", "getList", -1.0)),
@@ -514,6 +518,10 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         AdvanceManualClock(1 * 1000),
         // registered timer for "a" and "b" is 6000, first batch is processed at ts = 1000
         CheckNewAnswer(("c", "1")),
+        Execute { q =>
+          assert(q.lastProgress
+            .stateOperators(0).customMetrics.get("initialStateProcessingTimeMs") > 0)
+        },
 
         AddData(inputData, "c"),
         AdvanceManualClock(6 * 1000), // ts = 7000, "a" expires

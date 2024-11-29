@@ -370,6 +370,8 @@ one may implement their own class extending `ClassFinder` for customized search 
 </div>
 </div>
 
+For more information on application development with Spark Connect as well as extending Spark Connect
+with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html). 
 # Client application authentication
 
 While Spark Connect does not have built-in authentication, it is designed to

@@ -38,7 +38,6 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark._globals import _NoValue, _NoValueType
 from pyspark.conf import SparkConf
 from pyspark.util import is_remote_only
 from pyspark.sql.conf import RuntimeConfig
@@ -91,12 +90,6 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.shell.progress import ProgressHandler
 
-try:
-    import memory_profiler  # noqa: F401
-
-    has_memory_profiler = True
-except Exception:
-    has_memory_profiler = False
 
 __all__ = ["SparkSession"]
 
@@ -1272,7 +1265,7 @@ class SparkSession(SparkConversionMixin):
         data: Iterable["RowLike"],
         schema: Union[StructType, str],
         *,
-        verifySchema: Union[_NoValueType, bool] = ...,
+        verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
@@ -1282,7 +1275,7 @@ class SparkSession(SparkConversionMixin):
         data: "RDD[RowLike]",
         schema: Union[StructType, str],
         *,
-        verifySchema: Union[_NoValueType, bool] = ...,
+        verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
@@ -1291,7 +1284,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "RDD[AtomicValue]",
         schema: Union[AtomicType, str],
-        verifySchema: Union[_NoValueType, bool] = ...,
+        verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
@@ -1300,7 +1293,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: Iterable["AtomicValue"],
         schema: Union[AtomicType, str],
-        verifySchema: Union[_NoValueType, bool] = ...,
+        verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
@@ -1319,7 +1312,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "PandasDataFrameLike",
         schema: Union[StructType, str],
-        verifySchema: Union[_NoValueType, bool] = ...,
+        verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
@@ -1328,7 +1321,7 @@ class SparkSession(SparkConversionMixin):
         self,
         data: "pa.Table",
         schema: Union[StructType, str],
-        verifySchema: Union[_NoValueType, bool] = ...,
+        verifySchema: bool = ...,
     ) -> DataFrame:
         ...
 
@@ -1337,7 +1330,7 @@ class SparkSession(SparkConversionMixin):
         data: Union["RDD[Any]", Iterable[Any], "PandasDataFrameLike", "ArrayLike", "pa.Table"],
         schema: Optional[Union[AtomicType, StructType, str]] = None,
         samplingRatio: Optional[float] = None,
-        verifySchema: Union[_NoValueType, bool] = _NoValue,
+        verifySchema: bool = True,
     ) -> DataFrame:
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list, a :class:`pandas.DataFrame`,
@@ -1381,14 +1374,11 @@ class SparkSession(SparkConversionMixin):
             if ``samplingRatio`` is ``None``. This option is effective only when the input is
             :class:`RDD`.
         verifySchema : bool, optional
-            verify data types of every row against schema.
-            If not provided, createDataFrame with
-            - pyarrow.Table, verifySchema=False
-            - pandas.DataFrame with Arrow optimization, verifySchema defaults to
-            `spark.sql.execution.pandas.convertToArrowArraySafely`
-            - pandas.DataFrame without Arrow optimization, verifySchema=True
-            - regular Python instances, verifySchema=True
-            Arrow optimization is enabled/disabled via `spark.sql.execution.arrow.pyspark.enabled`.
+            verify data types of every row against schema. Enabled by default.
+            When the input is :class:`pyarrow.Table` or when the input class is
+            :class:`pandas.DataFrame` and `spark.sql.execution.arrow.pyspark.enabled` is enabled,
+            this option is not effective. It follows Arrow type coercion. This option is not
+            supported with Spark Connect.
 
             .. versionadded:: 2.1.0
 
@@ -1588,13 +1578,8 @@ class SparkSession(SparkConversionMixin):
         data: Union["RDD[Any]", Iterable[Any]],
         schema: Optional[Union[DataType, List[str]]],
         samplingRatio: Optional[float],
-        verifySchema: Union[_NoValueType, bool],
+        verifySchema: bool,
     ) -> DataFrame:
-        if verifySchema is _NoValue:
-            # createDataFrame with regular Python instances
-            # or (without Arrow optimization) createDataFrame with Pandas DataFrame
-            verifySchema = True
-
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True
 
@@ -2298,15 +2283,15 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         tag : str
             The tag to be added. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.addTag"},
-        )
+        self._jsparkSession.addTag(tag)
 
     @remote_only
     def removeTag(self, tag: str) -> None:
@@ -2316,15 +2301,15 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         tag : list of str
             The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.removeTag"},
-        )
+        self._jsparkSession.removeTag(tag)
 
     @remote_only
     def getTags(self) -> Set[str]:
@@ -2334,15 +2319,23 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         set of str
             Set of tags of interrupted operations.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.getTags"},
-        )
+        java_set = self._jsparkSession.getTags()
+        python_set = set()
+
+        # Use iterator to manually iterate through Java Set
+        java_iterator = java_set.iterator()
+        while java_iterator.hasNext():
+            python_set.add(str(java_iterator.next()))
+
+        return python_set
 
     @remote_only
     def clearTags(self) -> None:
@@ -2350,11 +2343,11 @@ class SparkSession(SparkConversionMixin):
         Clear the current thread's operation tags.
 
         .. versionadded:: 3.5.0
+
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.clearTags"},
-        )
+        self._jsparkSession.clearTags()
 
 
 def _test() -> None:

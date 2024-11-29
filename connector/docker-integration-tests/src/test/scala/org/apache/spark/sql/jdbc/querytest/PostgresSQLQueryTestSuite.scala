@@ -30,31 +30,21 @@ import org.apache.spark.tags.DockerTest
  *    confidence, and you won't have to manually verify the golden files generated with your test.
  * 2. Add this line to your .sql file: --ONLY_IF spark
  *
- * Note: To run this test suite for a specific version (e.g., postgres:17.1-alpine):
+ * Note: To run this test suite for a specific version (e.g., postgres:17.2-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.1-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.2-alpine
  *     ./build/sbt -Pdocker-integration-tests
  *     "testOnly org.apache.spark.sql.jdbc.PostgreSQLQueryTestSuite"
  * }}}
  */
 @DockerTest
-class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
+class PostgresSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
 
   val DATABASE_NAME = CrossDbmsQueryTestSuite.POSTGRES
   // Scope to only subquery directory for now.
   protected val customInputFilePath: String = new File(inputFilePath, "subquery").getAbsolutePath
 
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.1-alpine")
-    override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 5432
-
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
-  }
+  override val db = new PostgresDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement(
