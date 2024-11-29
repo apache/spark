@@ -281,6 +281,15 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
         # Should not throw any error
         session.stop()
 
+    def test_api_mode(self):
+        session = (
+            PySparkSession.builder.config("spark.api.mode", "connect")
+            .master("sc://localhost")
+            .getOrCreate()
+        )
+        self.assertEqual(session.range(1).first()[0], 0)
+        self.assertIsInstance(session, RemoteSparkSession)
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectSessionWithOptionsTest(unittest.TestCase):
