@@ -297,7 +297,7 @@ object StaticSQLConf {
       .createWithDefault("")
 
   val DATA_FRAME_DEBUGGING_ENABLED =
-    buildStaticConf("spark.sql.dataFrameDebugging.enabled")
+    buildStaticConf("spark.python.sql.dataFrameDebugging.enabled")
     .internal()
     .doc(
       "Enable the DataFrame debugging. This feature is enabled by default, but has a " +
