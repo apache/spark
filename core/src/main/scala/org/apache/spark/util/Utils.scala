@@ -2982,7 +2982,9 @@ private[spark] object Utils
     if (props == null) {
       return props
     }
-    props.clone().asInstanceOf[Properties]
+    val resultProps = new Properties()
+    resultProps.putAll(props.clone().asInstanceOf[Properties])
+    resultProps
   }
 
   /**
