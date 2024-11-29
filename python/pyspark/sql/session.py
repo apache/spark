@@ -505,8 +505,9 @@ class SparkSession(SparkConversionMixin):
                             SparkContext._active_spark_context is None
                             and SparkSession._instantiatedSession is None
                         ):
-                            is_api_mode_connect = opts.get(
-                                "spark.api.mode", "classic").lower() == "connect"
+                            is_api_mode_connect = (
+                                opts.get("spark.api.mode", "classic").lower() == "connect"
+                            )
                             if is_api_mode_connect:
                                 url = opts.get("spark.master", os.environ.get("MASTER"))
                             else:
