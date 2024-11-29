@@ -995,6 +995,7 @@ SELECT
     lag(v, 1) IGNORE NULLS OVER w lag_1,
     lag(v, 2) IGNORE NULLS OVER w lag_2,
     lag(v, 3) IGNORE NULLS OVER w lag_3,
+    lag(v, +3) IGNORE NULLS OVER w lag_plus_3,
     nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
@@ -1007,9 +1008,9 @@ WINDOW w AS (ORDER BY id)
 ORDER BY id
 -- !query analysis
 Sort [id#x ASC NULLS FIRST], true
-+- Project [content#x, id#x, v#x, lead_0#x, lead_1#x, lead_2#x, lead_3#x, lag_0#x, lag_1#x, lag_2#x, lag_3#x, nth_value_1#x, nth_value_2#x, nth_value_3#x, first_value#x, any_value#x, last_value#x]
-   +- Project [content#x, id#x, v#x, lead_0#x, lead_1#x, lead_2#x, lead_3#x, lag_0#x, lag_1#x, lag_2#x, lag_3#x, nth_value_1#x, nth_value_2#x, nth_value_3#x, first_value#x, any_value#x, last_value#x, lead_0#x, lead_1#x, lead_2#x, lead_3#x, lag_0#x, lag_1#x, lag_2#x, ... 7 more fields]
-      +- Window [lead(v#x, 0, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 0, 0)) AS lead_0#x, lead(v#x, 1, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 1, 1)) AS lead_1#x, lead(v#x, 2, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 2, 2)) AS lead_2#x, lead(v#x, 3, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 3, 3)) AS lead_3#x, lag(v#x, 0, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 0, 0)) AS lag_0#x, lag(v#x, -1, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS lag_1#x, lag(v#x, -2, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, -2)) AS lag_2#x, lag(v#x, -3, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -3, -3)) AS lag_3#x, nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value#x], [id#x ASC NULLS FIRST]
++- Project [content#x, id#x, v#x, lead_0#x, lead_1#x, lead_2#x, lead_3#x, lag_0#x, lag_1#x, lag_2#x, lag_3#x, lag_plus_3#x, nth_value_1#x, nth_value_2#x, nth_value_3#x, first_value#x, any_value#x, last_value#x]
+   +- Project [content#x, id#x, v#x, lead_0#x, lead_1#x, lead_2#x, lead_3#x, lag_0#x, lag_1#x, lag_2#x, lag_3#x, lag_plus_3#x, nth_value_1#x, nth_value_2#x, nth_value_3#x, first_value#x, any_value#x, last_value#x, lead_0#x, lead_1#x, lead_2#x, lead_3#x, lag_0#x, lag_1#x, ... 9 more fields]
+      +- Window [lead(v#x, 0, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 0, 0)) AS lead_0#x, lead(v#x, 1, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 1, 1)) AS lead_1#x, lead(v#x, 2, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 2, 2)) AS lead_2#x, lead(v#x, 3, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 3, 3)) AS lead_3#x, lag(v#x, 0, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, 0, 0)) AS lag_0#x, lag(v#x, -1, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -1, -1)) AS lag_1#x, lag(v#x, -2, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -2, -2)) AS lag_2#x, lag(v#x, -3, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -3, -3)) AS lag_3#x, lag(v#x, -3, null) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, -3, -3)) AS lag_plus_3#x, nth_value(v#x, 1, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_1#x, nth_value(v#x, 2, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_2#x, nth_value(v#x, 3, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS nth_value_3#x, first(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS first_value#x, any_value(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS any_value#x, last(v#x, true) windowspecdefinition(id#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, unboundedpreceding$(), currentrow$())) AS last_value#x], [id#x ASC NULLS FIRST]
          +- Project [content#x, id#x, v#x]
             +- SubqueryAlias test_ignore_null
                +- View (`test_ignore_null`, [content#x, id#x, v#x])
@@ -1414,3 +1415,63 @@ Project [cate#x, val#x, r#x]
                            +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
                               +- SubqueryAlias testData
                                  +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '5' DAY PRECEDING) AS mean FROM testData
+-- !query analysis
+Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x, mean#x]
++- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x, mean#x, mean#x]
+   +- Window [mean(val_double#x) windowspecdefinition(val#x, val_date#x ASC NULLS FIRST, specifiedwindowframe(RangeFrame, -INTERVAL '5' DAY, currentrow$())) AS mean#x], [val#x], [val_date#x ASC NULLS FIRST]
+      +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+         +- SubqueryAlias testdata
+            +- View (`testData`, [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x])
+               +- Project [cast(val#x as int) AS val#x, cast(val_long#xL as bigint) AS val_long#xL, cast(val_double#x as double) AS val_double#x, cast(val_date#x as date) AS val_date#x, cast(val_timestamp#x as timestamp) AS val_timestamp#x, cast(cate#x as string) AS cate#x]
+                  +- Project [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+                     +- SubqueryAlias testData
+                        +- LocalRelation [val#x, val_long#xL, val_double#x, val_date#x, val_timestamp#x, cate#x]
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING) AS mean FROM testData
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "orderSpecType" : "\"DATE\"",
+    "sqlExpr" : "\"(PARTITION BY val ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN INTERVAL '1 02:03:04.001' DAY TO SECOND PRECEDING AND CURRENT ROW)\"",
+    "valueBoundaryType" : "\"INTERVAL DAY TO SECOND\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 121,
+    "fragment" : "(partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING)"
+  } ]
+}
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING) AS mean FROM testData
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "exprType" : "\"DATE\"",
+    "location" : "lower",
+    "sqlExpr" : "\"RANGE BETWEEN DATE '2024-01-01' FOLLOWING AND CURRENT ROW\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 102,
+    "fragment" : "(partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING)"
+  } ]
+}

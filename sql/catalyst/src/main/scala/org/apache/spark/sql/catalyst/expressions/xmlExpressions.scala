@@ -208,8 +208,8 @@ case class SchemaOfXml(
     dataType,
     "schemaOfXml",
     Seq(Literal(xmlInferSchema, xmlInferSchemaObjectType), child),
-    Seq(xmlInferSchemaObjectType, child.dataType)
-  )
+    Seq(xmlInferSchemaObjectType, child.dataType),
+    returnNullable = false)
 }
 
 /**

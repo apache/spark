@@ -120,6 +120,8 @@ class TransformWithStateInPandasStateServer(
   }
 
   /** Timer related class variables */
+  // An iterator to store all expired timer info. This is meant to be consumed only once per
+  // partition. This should be called after finishing handling all input rows.
   private var expiryTimestampIter: Option[Iterator[(Any, Long)]] =
     if (expiryTimerIterForTest != null) {
       Option(expiryTimerIterForTest)

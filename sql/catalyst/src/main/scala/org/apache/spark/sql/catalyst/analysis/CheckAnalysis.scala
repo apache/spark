@@ -24,7 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg, Median, PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -423,10 +423,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "funcName" -> toSQLExpr(wf),
                 "windowExpr" -> toSQLExpr(w)))
 
+          case agg @ AggregateExpression(listAgg: ListAgg, _, _, _, _)
+            if agg.isDistinct && listAgg.needSaveOrderValue =>
+            throw QueryCompilationErrors.functionAndOrderExpressionMismatchError(
+              listAgg.prettyName, listAgg.child, listAgg.orderExpressions)
+
           case w: WindowExpression =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             w.windowFunction match {
+              case agg @ AggregateExpression(fun: ListAgg, _, _, _, _)
+                // listagg(...) WITHIN GROUP (ORDER BY ...) OVER (ORDER BY ...) is unsupported
+                if fun.orderingFilled && (w.windowSpec.orderSpec.nonEmpty ||
+                  w.windowSpec.frameSpecification !=
+                  SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)) =>
+                agg.failAnalysis(
+                  errorClass = "INVALID_WINDOW_SPEC_FOR_AGGREGATION_FUNC",
+                  messageParameters = Map("aggFunc" -> toSQLExpr(agg.aggregateFunction)))
               case agg @ AggregateExpression(
                 _: PercentileCont | _: PercentileDisc | _: Median, _, _, _, _)
                 if w.windowSpec.orderSpec.nonEmpty || w.windowSpec.frameSpecification !=
@@ -456,11 +469,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             p.failAnalysis(
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
-
-          case l: LazyAnalysisExpression =>
-            l.failAnalysis(
-              errorClass = "UNANALYZABLE_EXPRESSION",
-              messageParameters = Map("expr" -> toSQLExpr(l)))
 
           case _ =>
         })
@@ -1067,20 +1075,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       case _ =>
     }
 
-    def checkUnresolvedOuterReference(p: LogicalPlan, expr: SubqueryExpression): Unit = {
-      expr.plan.foreachUp(_.expressions.foreach(_.foreachUp {
-        case o: UnresolvedOuterReference =>
-          val cols = p.inputSet.toSeq.map(attr => toSQLId(attr.name)).mkString(", ")
-          o.failAnalysis(
-            errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-            messageParameters = Map("objectName" -> toSQLId(o.name), "proposal" -> cols))
-        case _ =>
-      }))
-    }
-
-    // Check if there is unresolved outer attribute in the subquery plan.
-    checkUnresolvedOuterReference(plan, expr)
-
     // Validate the subquery plan.
     checkAnalysis0(expr.plan)
 
@@ -1088,7 +1082,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     checkOuterReference(plan, expr)
 
     expr match {
-      case ScalarSubquery(query, outerAttrs, _, _, _, _, _, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _, _, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           throw QueryCompilationErrors.subqueryReturnMoreThanOneColumn(query.output.size,
