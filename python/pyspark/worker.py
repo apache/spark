@@ -154,7 +154,7 @@ def wrap_scalar_pandas_udf(f, args_offsets, kwargs_offsets, return_type):
     )
 
 
-def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type):
+def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     import pandas as pd
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
@@ -172,9 +172,21 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type):
     elif type(return_type) == BinaryType:
         result_func = lambda r: bytes(r) if r is not None else r  # noqa: E731
 
-    @fail_on_stopiteration
-    def evaluate(*args: pd.Series) -> pd.Series:
-        return pd.Series([result_func(func(*row)) for row in zip(*args)])
+    if "spark.sql.execution.pythonUDF.arrow.concurrency.level" in runner_conf:
+        from concurrent.futures import ThreadPoolExecutor
+
+        c = int(runner_conf["spark.sql.execution.pythonUDF.arrow.concurrency.level"])
+
+        @fail_on_stopiteration
+        def evaluate(*args: pd.Series) -> pd.Series:
+            with ThreadPoolExecutor(max_workers=c) as pool:
+                return pd.Series(list(pool.map(lambda row: result_func(func(*row)), zip(*args))))
+
+    else:
+
+        @fail_on_stopiteration
+        def evaluate(*args: pd.Series) -> pd.Series:
+            return pd.Series([result_func(func(*row)) for row in zip(*args)])
 
     def verify_result_length(result, length):
         if len(result) != length:
@@ -855,7 +867,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
         return wrap_scalar_pandas_udf(func, args_offsets, kwargs_offsets, return_type)
     elif eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF:
-        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type)
+        return wrap_arrow_batch_udf(func, args_offsets, kwargs_offsets, return_type, runner_conf)
     elif eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
         return args_offsets, wrap_pandas_batch_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
