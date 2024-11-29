@@ -1413,7 +1413,7 @@ private[spark] object Utils
    * Full stack trace of the original doTryWithCallerStacktrace caller can be retrieved with
    * ```
    * ex.getSuppressed.find { e =>
-   *   e.isInstanceOff[Utils.OriginalTryStackTraceException]
+   *   e.isInstanceOf[Utils.OriginalTryStackTraceException]
    * }
    * ```
    *
