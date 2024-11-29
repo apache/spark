@@ -1476,6 +1476,11 @@
         "message" : [
           "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
         ]
+      },
+      "UNSUPPORTED_FILE_SYSTEM": {
+        "message" : [
+          "The file system <fileSystemClass> hasn't implemented <method>."
+        ]
       }
     },
     "sqlState" : "KD001"
