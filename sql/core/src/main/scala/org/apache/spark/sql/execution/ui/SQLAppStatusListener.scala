@@ -179,14 +179,14 @@ class SQLAppStatusListener(
     // work around a race in the DAGScheduler. The metrics info does not contain accumulator info
     // when reading event logs in the SHS, so we have to rely on the accumulator in that case.
     val accums = if (live && event.taskMetrics != null) {
-      event.taskMetrics.externalAccums.flatMap { a =>
+      event.taskMetrics.withExternalAccums(_.flatMap { a =>
         // This call may fail if the accumulator is gc'ed, so account for that.
         try {
-          Some(a.toInfo(Some(a.value), None))
+          Some(a.toInfoUpdate)
         } catch {
           case _: IllegalAccessError => None
         }
-      }
+      })
     } else {
       info.accumulables
     }

@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V1CreateTablePlan}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DDLUtils, LeafRunnableCommand}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
 case class CreateTable(
     tableDesc: CatalogTable,
     mode: SaveMode,
-    query: Option[LogicalPlan]) extends LogicalPlan {
+    query: Option[LogicalPlan]) extends LogicalPlan with V1CreateTablePlan {
   assert(tableDesc.provider.isDefined, "The table to be created must have a provider.")
 
   if (query.isEmpty) {
@@ -115,7 +115,7 @@ case class CreateTempViewUsing(
       }.logicalPlan
 
     if (global) {
-      val db = sparkSession.conf.get(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(tableIdent.table, Option(db))
       val viewDefinition = createTemporaryViewRelation(
         viewIdent,

@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.util.{Collections, Map => JMap}
-import java.util.concurrent.{Executors, RejectedExecutionException, TimeUnit}
+import java.util.concurrent.{Executors, RejectedExecutionException, ScheduledExecutorService, TimeUnit}
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -61,6 +61,7 @@ private[hive] class SparkExecuteStatementOperation(
       queryTimeout
     }
   }
+  private var timeoutExecutor: ScheduledExecutorService = _
 
   private val forceCancel = session.sessionState.conf.getConf(SQLConf.THRIFTSERVER_FORCE_CANCEL)
 
@@ -135,7 +136,7 @@ private[hive] class SparkExecuteStatementOperation(
     setHasResultSet(true) // avoid no resultset for async run
 
     if (timeout > 0) {
-      val timeoutExecutor = Executors.newSingleThreadScheduledExecutor()
+      timeoutExecutor = Executors.newSingleThreadScheduledExecutor()
       timeoutExecutor.schedule(new Runnable {
         override def run(): Unit = {
           try {
@@ -249,10 +250,11 @@ private[hive] class SparkExecuteStatementOperation(
       case e: Throwable =>
         // When cancel() or close() is called very quickly after the query is started,
         // then they may both call cleanup() before Spark Jobs are started. But before background
-        // task interrupted, it may have start some spark job, so we need to cancel again to
+        // task interrupted, it may have started some spark job, so we need to cancel again to
         // make sure job was cancelled when background thread was interrupted
         if (statementId != null) {
-          session.sparkContext.cancelJobGroup(statementId)
+          session.sparkContext.cancelJobGroup(statementId,
+            "The corresponding Thriftserver query has failed.")
         }
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {
@@ -317,6 +319,11 @@ private[hive] class SparkExecuteStatementOperation(
     // RDDs will be cleaned automatically upon garbage collection.
     if (statementId != null) {
       session.sparkContext.cancelJobGroup(statementId)
+    }
+    // Shutdown the timeout thread if any, while cleaning up this operation
+    if (timeoutExecutor != null &&
+      getStatus.getState != OperationState.TIMEDOUT && getStatus.getState.isTerminal) {
+      timeoutExecutor.shutdownNow()
     }
   }
 }

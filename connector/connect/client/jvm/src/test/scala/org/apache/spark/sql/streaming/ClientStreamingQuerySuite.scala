@@ -42,6 +42,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   private val testDataPath = Paths
     .get(
       IntegrationTestUtils.sparkHome,
+      "sql",
       "connect",
       "common",
       "src",
@@ -268,6 +269,42 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
+  test("clusterBy") {
+    withSQLConf(
+      "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
+    ) {
+      spark.sql("DROP TABLE IF EXISTS my_table").collect()
+
+      withTempPath { ckpt =>
+        val q1 = spark.readStream
+          .format("rate")
+          .load()
+          .writeStream
+          .clusterBy("value")
+          .option("checkpointLocation", ckpt.getCanonicalPath)
+          .toTable("my_table")
+
+        try {
+          q1.processAllAvailable()
+          eventually(timeout(30.seconds)) {
+            checkAnswer(
+              spark.sql("DESCRIBE my_table"),
+              Seq(
+                Row("timestamp", "timestamp", null),
+                Row("value", "bigint", null),
+                Row("# Clustering Information", "", ""),
+                Row("# col_name", "data_type", "comment"),
+                Row("value", "bigint", null)))
+            assert(spark.table("my_sink").count() > 0)
+          }
+        } finally {
+          q1.stop()
+          spark.sql("DROP TABLE my_table")
+        }
+      }
+    }
+  }
+
   test("throw exception in streaming") {
     try {
       val session = spark
@@ -294,11 +331,9 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         query.awaitTermination()
       }
 
-      assert(exception.getErrorClass != null)
+      assert(exception.getCondition != null)
       assert(exception.getMessageParameters().get("id") == query.id.toString)
       assert(exception.getMessageParameters().get("runId") == query.runId.toString)
-      assert(!exception.getMessageParameters().get("startOffset").isEmpty)
-      assert(!exception.getMessageParameters().get("endOffset").isEmpty)
       assert(exception.getCause.isInstanceOf[SparkException])
       assert(exception.getCause.getCause.isInstanceOf[SparkException])
       assert(
@@ -334,11 +369,9 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       spark.streams.awaitAnyTermination()
     }
 
-    assert(exception.getErrorClass != null)
+    assert(exception.getCondition != null)
     assert(exception.getMessageParameters().get("id") == query.id.toString)
     assert(exception.getMessageParameters().get("runId") == query.runId.toString)
-    assert(!exception.getMessageParameters().get("startOffset").isEmpty)
-    assert(!exception.getMessageParameters().get("endOffset").isEmpty)
     assert(exception.getCause.isInstanceOf[SparkException])
     assert(exception.getCause.getCause.isInstanceOf[SparkException])
     assert(

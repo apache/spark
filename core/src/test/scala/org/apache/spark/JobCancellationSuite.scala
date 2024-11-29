@@ -25,6 +25,7 @@ import scala.concurrent.{ExecutionContext, Future}
 // scalastyle:off executioncontextglobal
 import scala.concurrent.ExecutionContext.Implicits.global
 // scalastyle:on executioncontextglobal
+import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfter
@@ -33,7 +34,7 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Deploy._
-import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorRemoved, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{JobFailed, SparkListener, SparkListenerExecutorRemoved, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -207,7 +208,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
       checkError(
         exception = e,
-        errorClass = "SPARK_JOB_CANCELLED",
+        condition = "SPARK_JOB_CANCELLED",
         sqlState = "XXKDA",
         parameters = scala.collection.immutable.Map(
           "jobId" -> "0",
@@ -221,7 +222,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         sc.setJobGroup(jobGroupName, "")
         sc.parallelize(1 to 100).count()
       },
-      errorClass = "SPARK_JOB_CANCELLED",
+      condition = "SPARK_JOB_CANCELLED",
       sqlState = "XXKDA",
       parameters = scala.collection.immutable.Map(
         "jobId" -> "1",
@@ -257,7 +258,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
       checkError(
         exception = e,
-        errorClass = "SPARK_JOB_CANCELLED",
+        condition = "SPARK_JOB_CANCELLED",
         sqlState = "XXKDA",
         parameters = scala.collection.immutable.Map(
           "jobId" -> "0",
@@ -287,7 +288,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       sem.acquire(1)
       sc.cancelJobGroupAndFutureJobs(s"job-group-$idx")
       ThreadUtils.awaitReady(job, Duration.Inf).failed.foreach { case e: SparkException =>
-        assert(e.getErrorClass == "SPARK_JOB_CANCELLED")
+        assert(e.getCondition == "SPARK_JOB_CANCELLED")
       }
     }
     // submit a job with the 0 job group that was evicted from cancelledJobGroups set, it should run
@@ -611,6 +612,40 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     intercept[SparkException] { f1.get() }
     // but f2 should not be affected
     f2.get()
+  }
+
+  test("cancel FutureAction with custom reason") {
+
+    val cancellationPromise = Promise[Unit]()
+
+    // listener to capture job end events and their reasons
+    var failureReason: Option[String] = None
+
+    sc = new SparkContext("local[2]", "test")
+    sc.addSparkListener(new SparkListener {
+      override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+        jobEnd.jobResult match {
+          case jobFailed: JobFailed =>
+            failureReason = Some(jobFailed.exception.getMessage)
+          case _ => // do nothing
+        }
+      }
+    })
+
+    val rdd = sc.parallelize(1 to 100, 2).map(_ * 2)
+    val asyncAction = rdd.collectAsync()
+    val reason = "custom cancel reason"
+
+    Future {
+      asyncAction.cancel(Option(reason))
+      cancellationPromise.success(())
+    }
+
+    // wait for the cancellation to complete and check the reason
+    cancellationPromise.future.map { _ =>
+      Thread.sleep(1000)
+      assert(failureReason.contains(reason))
+    }
   }
 
   test("interruptible iterator of shuffle reader") {

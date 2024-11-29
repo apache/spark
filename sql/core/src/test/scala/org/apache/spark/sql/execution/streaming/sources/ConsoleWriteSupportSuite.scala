@@ -102,7 +102,6 @@ class ConsoleWriteSupportSuite extends StreamTest {
         ||    2|
         |+-----+
         |only showing top 2 rows
-        |
         |""".stripMargin)
   }
 

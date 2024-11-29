@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, 
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -63,9 +64,11 @@ case class UserDefinedPythonFunction(
     }
   }
 
+  def builderWithColumns(e: Seq[Column]): Expression = builder(e.map(expression))
+
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    fromUDFExpr(builder(exprs.map(_.expr)))
+    fromUDFExpr(builder(exprs.map(expression)))
   }
 
   /**
@@ -73,8 +76,8 @@ case class UserDefinedPythonFunction(
    */
   def fromUDFExpr(expr: Expression): Column = {
     expr match {
-      case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
-      case _ => Column(expr)
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case _ => expr
     }
   }
 }
@@ -157,7 +160,7 @@ case class UserDefinedPythonTableFunction(
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
   def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(_.expr), session.sessionState.sqlParser)
+    val udtf = builder(exprs.map(session.expression), session.sessionState.sqlParser)
     Dataset.ofRows(session, udtf)
   }
 }

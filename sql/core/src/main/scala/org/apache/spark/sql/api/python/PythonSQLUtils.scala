@@ -27,16 +27,16 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -68,7 +68,10 @@ private[sql] object PythonSQLUtils extends Logging {
 
   // This is needed when generating SQL documentation for built-in functions.
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
-    FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)).toArray
+    (FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)) ++
+      TableFunctionRegistry.functionSet.flatMap(
+        f => TableFunctionRegistry.builtin.lookupFunction(f))).
+      groupBy(_.getName).map(v => v._2.head).toArray
   }
 
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
@@ -140,40 +143,22 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column = Column(CastTimestampNTZToLong(c.expr))
+  def unresolvedNamedLambdaVariable(name: String): Column =
+    Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 
-  def ewm(e: Column, alpha: Double, ignoreNA: Boolean): Column =
-    Column(EWM(e.expr, alpha, ignoreNA))
-
-  def nullIndex(e: Column): Column = Column(NullIndex(e.expr))
-
-  def pandasProduct(e: Column, ignoreNA: Boolean): Column = {
-    Column(PandasProduct(e.expr, ignoreNA).toAggregateExpression(false))
+  @scala.annotation.varargs
+  def lambdaFunction(function: Column, variables: Column*): Column = {
+    val arguments = variables.map(_.node.asInstanceOf[internal.UnresolvedNamedLambdaVariable])
+    Column(internal.LambdaFunction(function.node, arguments))
   }
 
-  def pandasStddev(e: Column, ddof: Int): Column = {
-    Column(PandasStddev(e.expr, ddof).toAggregateExpression(false))
-  }
+  def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
 
-  def pandasVariance(e: Column, ddof: Int): Column = {
-    Column(PandasVariance(e.expr, ddof).toAggregateExpression(false))
-  }
+  @scala.annotation.varargs
+  def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
 
-  def pandasSkewness(e: Column): Column = {
-    Column(PandasSkewness(e.expr).toAggregateExpression(false))
-  }
-
-  def pandasKurtosis(e: Column): Column = {
-    Column(PandasKurtosis(e.expr).toAggregateExpression(false))
-  }
-
-  def pandasMode(e: Column, ignoreNA: Boolean): Column = {
-    Column(PandasMode(e.expr, ignoreNA).toAggregateExpression(false))
-  }
-
-  def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
-    Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
-  }
+  @scala.annotation.varargs
+  def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
 }
 
 /**

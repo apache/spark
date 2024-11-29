@@ -189,6 +189,11 @@ trait FileFormat {
   def supportFieldName(name: String): Boolean = true
 
   /**
+   * Returns whether this format allows duplicated column names in the input query during writing.
+   */
+  def allowDuplicatedColumnNames: Boolean = false
+
+  /**
    * All fields the file format's _metadata struct defines.
    *
    * Each metadata struct field is either "constant" or "generated" (respectively defined/matched by

@@ -403,7 +403,6 @@ sparkR.session <- function(
   sparkPackages = "",
   enableHiveSupport = TRUE,
   ...) {
-
   sparkConfigMap <- convertNamedListToEnv(sparkConfig)
   namedParams <- list(...)
   if (length(namedParams) > 0) {

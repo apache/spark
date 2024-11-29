@@ -353,6 +353,13 @@ Data source options of Avro can be set via:
     <td>read</td>
     <td>4.0.0</td>
   </tr>
+  <tr>
+    <td><code>recursiveFieldMaxDepth</code></td>
+    <td>-1</td>
+    <td>If this option is specified to negative or is set to 0, recursive fields are not permitted. Setting it to 1 drops all recursive fields, 2 allows recursive fields to be recursed once, and 3 allows it to be recursed twice and so on, up to 15. Values larger than 15 are not allowed in order to avoid inadvertently creating very large schemas. If an avro message has depth beyond this limit, the Spark struct returned is truncated after the recursion limit. An example of usage can be found in section <a href="#handling-circular-references-of-avro-fields">Handling circular references of Avro fields</a></td>
+    <td>read</td>
+    <td>4.0.0</td>
+  </tr>
 </table>
 
 ## Configuration
@@ -628,3 +635,41 @@ You can also specify the whole output Avro schema with the option `avroSchema`, 
     <td>decimal</td>
   </tr>
 </table>
+
+## Handling circular references of Avro fields
+In Avro, a circular reference occurs when the type of a field is defined in one of the parent records. This can cause issues when parsing the data, as it can result in infinite loops or other unexpected behavior.
+To read Avro data with schema that has circular reference, users can use the `recursiveFieldMaxDepth` option to specify the maximum number of levels of recursion to allow when parsing the schema. By default, Spark Avro data source will not permit recursive fields by setting `recursiveFieldMaxDepth` to -1. However, you can set this option to 1 to 15 if needed.
+
+Setting `recursiveFieldMaxDepth` to 1 drops all recursive fields, setting it to 2 allows it to be recursed once, and setting it to 3 allows it to be recursed twice. A `recursiveFieldMaxDepth` value greater than 15 is not allowed, as it can lead to performance issues and even stack overflows.
+
+SQL Schema for the below Avro message will vary based on the value of `recursiveFieldMaxDepth`.
+
+<div data-lang="avro" markdown="1">
+<div class="d-none">
+This div is only used to make markdown editor/viewer happy and does not display on web
+
+```avro
+</div>
+
+{% highlight avro %}
+{
+  "type": "record",
+  "name": "Node",
+  "fields": [
+    {"name": "Id", "type": "int"},
+    {"name": "Next", "type": ["null", "Node"]}
+  ]
+}
+
+// The Avro schema defined above, would be converted into a Spark SQL columns with the following
+// structure based on `recursiveFieldMaxDepth` value.
+
+1: struct<Id: int>
+2: struct<Id: int, Next: struct<Id: int>>
+3: struct<Id: int, Next: struct<Id: int, Next: struct<Id: int>>>
+
+{% endhighlight %}
+<div class="d-none">
+```
+</div>
+</div>

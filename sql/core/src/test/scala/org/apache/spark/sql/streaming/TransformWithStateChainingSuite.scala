@@ -45,8 +45,7 @@ class TestStatefulProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEventRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputRow] = {
+      timerValues: TimerValues): Iterator[OutputRow] = {
     if (inputRows.isEmpty) {
       Iterator.empty
     } else {
@@ -70,8 +69,7 @@ class InputCountStatefulProcessor[T]
   override def handleInputRows(
       key: String,
       inputRows: Iterator[T],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[Int] = {
+      timerValues: TimerValues): Iterator[Int] = {
     Iterator.single(inputRows.size)
   }
 }
@@ -86,8 +84,7 @@ class StatefulProcessorEmittingRowsOlderThanWatermark
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEventRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputRow] = {
+      timerValues: TimerValues): Iterator[OutputRow] = {
     Iterator.single(
       OutputRow(
         key,
@@ -185,13 +182,17 @@ class TransformWithStateChainingSuite extends StreamTest {
         .groupBy(window($"outputEventTime", "1 minute"))
         .count()
 
-      val ex = intercept[ExtendedAnalysisException] {
-        testStream(result, OutputMode.Append())(
-          StartStream()
-        )
-      }
-      assert(ex.getMessage.contains("there are streaming aggregations on" +
-        " streaming DataFrames/DataSets without watermark"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          testStream(result, OutputMode.Append())(
+            StartStream()
+          )
+        },
+        condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
+        sqlState = "42KDE",
+        parameters = Map(
+          "outputMode" -> "append",
+          "operation" -> "streaming aggregations without watermark"))
     }
   }
 

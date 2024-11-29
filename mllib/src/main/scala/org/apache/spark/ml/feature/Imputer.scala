@@ -90,7 +90,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasInp
     require(inputColNames.length == outputColNames.length, s"inputCols(${inputColNames.length})" +
       s" and outputCols(${outputColNames.length}) should have the same length")
     val outputFields = inputColNames.zip(outputColNames).map { case (inputCol, outputCol) =>
-      val inputField = schema(inputCol)
+      val inputField = SchemaUtils.getSchemaField(schema, inputCol)
       SchemaUtils.checkNumericType(schema, inputCol)
       StructField(outputCol, inputField.dataType, inputField.nullable)
     }
@@ -155,12 +155,14 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     val spark = dataset.sparkSession
 
     val (inputColumns, _) = getInOutCols()
-    val cols = inputColumns.map { inputCol =>
+
+    val transformedColNames = Array.tabulate(inputColumns.length)(index => s"c_$index")
+    val cols = inputColumns.zip(transformedColNames).map { case (inputCol, transformedColName) =>
       when(col(inputCol).equalTo($(missingValue)), null)
         .when(col(inputCol).isNaN, null)
         .otherwise(col(inputCol))
         .cast(DoubleType)
-        .as(inputCol)
+        .as(transformedColName)
     }
     val numCols = cols.length
 
@@ -176,7 +178,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         // Function approxQuantile will ignore null automatically.
         // For a column only containing null, approxQuantile will return an empty array.
         dataset.select(cols.toImmutableArraySeq: _*)
-          .stat.approxQuantile(inputColumns, Array(0.5), $(relativeError))
+          .stat.approxQuantile(transformedColNames, Array(0.5), $(relativeError))
           .map(_.headOption.getOrElse(Double.NaN))
 
       case Imputer.mode =>
@@ -271,7 +273,7 @@ class ImputerModel private[ml] (
 
     val newCols = inputColumns.map { inputCol =>
       val surrogate = surrogates(inputCol)
-      val inputType = dataset.schema(inputCol).dataType
+      val inputType = SchemaUtils.getSchemaFieldType(dataset.schema, inputCol)
       val ic = col(inputCol).cast(DoubleType)
       when(ic.isNull, surrogate)
         .when(ic === $(missingValue), surrogate)
@@ -308,7 +310,7 @@ object ImputerModel extends MLReadable[ImputerModel] {
   private[ImputerModel] class ImputerModelWriter(instance: ImputerModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val dataPath = new Path(path, "data").toString
       instance.surrogateDF.repartition(1).write.parquet(dataPath)
     }
@@ -319,9 +321,9 @@ object ImputerModel extends MLReadable[ImputerModel] {
     private val className = classOf[ImputerModel].getName
 
     override def load(path: String): ImputerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val surrogateDF = sqlContext.read.parquet(dataPath)
+      val surrogateDF = sparkSession.read.parquet(dataPath)
       val model = new ImputerModel(metadata.uid, surrogateDF)
       metadata.getAndSetParams(model)
       model

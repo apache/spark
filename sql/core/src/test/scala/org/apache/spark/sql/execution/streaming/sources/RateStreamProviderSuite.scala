@@ -208,7 +208,7 @@ class RateStreamProviderSuite extends StreamTest {
 
     checkError(
       exception = e,
-      errorClass = "INCORRECT_RAMP_UP_RATE",
+      condition = "INCORRECT_RAMP_UP_RATE",
       parameters = Map(
         "rowsPerSecond" -> Long.MaxValue.toString,
         "maxSeconds" -> "1",
@@ -229,7 +229,7 @@ class RateStreamProviderSuite extends StreamTest {
 
       checkError(
         exception = e,
-        errorClass = "INTERNAL_ERROR",
+        condition = "INTERNAL_ERROR",
         parameters = Map(
           ("message" ->
             ("Max offset with 100 rowsPerSecond is 92233720368547758, " +
@@ -352,7 +352,7 @@ class RateStreamProviderSuite extends StreamTest {
           .schema(spark.range(1).schema)
           .load()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2242",
+      condition = "_LEGACY_ERROR_TEMP_2242",
       parameters = Map("provider" -> "RateStreamProvider"))
   }
 

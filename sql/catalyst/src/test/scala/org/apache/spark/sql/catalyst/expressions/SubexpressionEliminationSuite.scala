@@ -494,6 +494,18 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     checkShortcut(Or(equal, Literal(true)), 1)
     checkShortcut(Not(And(equal, Literal(false))), 1)
   }
+
+  test("Equivalent ternary expressions have different children") {
+    val add1 = Add(Add(Literal(1), Literal(2)), Literal(3))
+    val add2 = Add(Add(Literal(3), Literal(1)), Literal(2))
+    val conditions1 = (GreaterThan(add1, Literal(3)), Literal(1)) ::
+      (GreaterThan(add2, Literal(0)), Literal(2)) :: Nil
+
+    val caseWhenExpr1 = CaseWhen(conditions1, Literal(0))
+    val equivalence1 = new EquivalentExpressions
+    equivalence1.addExprTree(caseWhenExpr1)
+    assert(equivalence1.getCommonSubexpressions.size == 1)
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)

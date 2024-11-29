@@ -781,5 +781,10 @@ public interface TableChange {
       ClusterBy that = (ClusterBy) o;
       return Arrays.equals(clusteringColumns, that.clusteringColumns());
     }
+
+    @Override
+    public int hashCode() {
+      return Arrays.hashCode(clusteringColumns);
+    }
   }
 }

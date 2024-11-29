@@ -54,7 +54,7 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedS
     val sql = "ALTER NAMESPACE my_db UNSET PROPERTIES('key_without_value', 'key_with_value'='x')"
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      condition = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values should not be specified for key(s): [key_with_value]"),
       context = ExpectedContext(
         fragment = sql,
@@ -68,7 +68,7 @@ class AlterNamespaceUnsetPropertiesParserSuite extends AnalysisTest with SharedS
         val sql = s"ALTER $nsToken a.b.c UNSET $propToken IF EXISTS ('a', 'b', 'c')"
         checkError(
           exception = parseException(sql),
-          errorClass = "PARSE_SYNTAX_ERROR",
+          condition = "PARSE_SYNTAX_ERROR",
           parameters = Map("error" -> "'IF'", "hint" -> ": missing '('")
         )
       }

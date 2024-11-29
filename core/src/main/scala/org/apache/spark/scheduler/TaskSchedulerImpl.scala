@@ -875,7 +875,7 @@ private[spark] class TaskSchedulerImpl(
          executorRunTime = acc.value.asInstanceOf[Long]
        }
      }
-     acc.toInfo(Some(acc.value), None)
+     acc.toInfoUpdate
    }
    val taskProcessRate = if (efficientTaskCalcualtionEnabled) {
      getTaskProcessRate(recordsRead, executorRunTime)

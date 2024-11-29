@@ -176,7 +176,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
     def test_listener_throw(self):
         """
-        Following Vanilla Spark's behavior, when the callback of user-defined listener throws,
+        Following classic Spark's behavior, when the callback of user-defined listener throws,
         other listeners should still proceed.
         """
 
@@ -270,6 +270,46 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             self.spark.streams.removeListener(test_listener)
             # Remove again to verify this won't throw any error
             self.spark.streams.removeListener(test_listener)
+
+    def test_server_listener_uninterruptible(self):
+        listener = TestListenerLocalV1()
+
+        try:
+            self.spark.streams.addListener(listener)
+            q = (
+                self.spark.readStream.format("rate")
+                .load()
+                .writeStream.format("noop")
+                .queryName("test_listener_uninterruptible")
+                .start()
+            )
+
+            self.assertEqual(len(listener.start), 1)
+            self.assertEqual(str(listener.start[0].id), q.id)
+
+            while q.lastProgress is None:
+                q.awaitTermination(0.5)
+
+            # Interrupt should stop the query but should not impact the listener,
+            # therefore there should be a QueryTerminatedEvent sent from the server.
+            self.spark.interruptAll()
+
+            # Need to wait a while before the query really stops
+            while q.isActive:
+                q.awaitTermination(0.5)
+
+            # Need to wait a while before QueryTerminatedEvent reaches client
+            while len(listener.terminated) == 0:
+                time.sleep(1)
+
+            self.assertEqual(len(listener.terminated), 1)
+            self.assertEqual(str(listener.terminated[0].id), q.id)
+
+        finally:
+            for listener in self.spark.streams._sqlb._listener_bus:
+                self.spark.streams.removeListener(listener)
+            for q in self.spark.streams.active:
+                q.stop()
 
 
 if __name__ == "__main__":

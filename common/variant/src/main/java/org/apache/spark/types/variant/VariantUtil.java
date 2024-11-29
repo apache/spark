@@ -171,6 +171,12 @@ public class VariantUtil {
         Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
   }
 
+  static SparkRuntimeException unknownPrimitiveTypeInVariant(int id) {
+    return new SparkRuntimeException("UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT",
+            new scala.collection.immutable.Map.Map1<>("id", Integer.toString(id)), null,
+            new QueryContext[]{}, "");
+  }
+
   // An exception indicating that an external caller tried to call the Variant constructor with
   // value or metadata exceeding the 16MiB size limit. We will never construct a Variant this large,
   // so it should only be possible to encounter this exception when reading a Variant produced by
@@ -235,6 +241,11 @@ public class VariantUtil {
     BINARY,
   }
 
+  public static int getTypeInfo(byte[] value, int pos) {
+    checkIndex(pos, value.length);
+    return (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
+  }
+
   // Get the value type of variant value `value[pos...]`. It is only legal to call `get*` if
   // `getType` returns this type (for example, it is only legal to call `getLong` if `getType`
   // returns `Type.Long`).
@@ -281,7 +292,7 @@ public class VariantUtil {
           case LONG_STR:
             return Type.STRING;
           default:
-            throw malformedVariant();
+            throw unknownPrimitiveTypeInVariant(typeInfo);
         }
     }
   }
@@ -332,7 +343,7 @@ public class VariantUtil {
           case LONG_STR:
             return 1 + U32_SIZE + readUnsigned(value, pos + 1, U32_SIZE);
           default:
-            throw malformedVariant();
+            throw unknownPrimitiveTypeInVariant(typeInfo);
         }
     }
   }
@@ -356,8 +367,9 @@ public class VariantUtil {
   // Get a long value from variant value `value[pos...]`.
   // It is only legal to call it if `getType` returns one of `Type.LONG/DATE/TIMESTAMP/
   // TIMESTAMP_NTZ`. If the type is `DATE`, the return value is guaranteed to fit into an int and
-  // represents the number of days from the Unix epoch. If the type is `TIMESTAMP/TIMESTAMP_NTZ`,
-  // the return value represents the number of microseconds from the Unix epoch.
+  // represents the number of days from the Unix epoch.
+  // If the type is `TIMESTAMP/TIMESTAMP_NTZ`, the return value represents the number of
+  // microseconds from the Unix epoch.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static long getLong(byte[] value, int pos) {
     checkIndex(pos, value.length);
@@ -401,7 +413,7 @@ public class VariantUtil {
 
   // Get a decimal value from variant value `value[pos...]`.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
-  public static BigDecimal getDecimal(byte[] value, int pos) {
+  public static BigDecimal getDecimalWithOriginalScale(byte[] value, int pos) {
     checkIndex(pos, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
     int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
@@ -433,7 +445,11 @@ public class VariantUtil {
       default:
         throw unexpectedType(Type.DECIMAL);
     }
-    return result.stripTrailingZeros();
+    return result;
+  }
+
+  public static BigDecimal getDecimal(byte[] value, int pos) {
+    return getDecimalWithOriginalScale(value, pos).stripTrailingZeros();
   }
 
   // Get a float value from variant value `value[pos...]`.

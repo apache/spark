@@ -361,8 +361,8 @@ class BarrierTaskContext(TaskContext):
         """
         if not isinstance(cls._taskContext, BarrierTaskContext):
             raise PySparkRuntimeError(
-                error_class="NOT_IN_BARRIER_STAGE",
-                message_parameters={},
+                errorClass="NOT_IN_BARRIER_STAGE",
+                messageParameters={},
             )
         return cls._taskContext
 
@@ -395,8 +395,8 @@ class BarrierTaskContext(TaskContext):
         """
         if self._port is None or self._secret is None:
             raise PySparkRuntimeError(
-                error_class="CALL_BEFORE_INITIALIZE",
-                message_parameters={
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
                     "func_name": "barrier",
                     "object": "BarrierTaskContext",
                 },
@@ -424,8 +424,8 @@ class BarrierTaskContext(TaskContext):
             raise TypeError("Argument `message` must be of type `str`")
         elif self._port is None or self._secret is None:
             raise PySparkRuntimeError(
-                error_class="CALL_BEFORE_INITIALIZE",
-                message_parameters={
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
                     "func_name": "allGather",
                     "object": "BarrierTaskContext",
                 },
@@ -455,8 +455,8 @@ class BarrierTaskContext(TaskContext):
         """
         if self._port is None or self._secret is None:
             raise PySparkRuntimeError(
-                error_class="CALL_BEFORE_INITIALIZE",
-                message_parameters={
+                errorClass="CALL_BEFORE_INITIALIZE",
+                messageParameters={
                     "func_name": "getTaskInfos",
                     "object": "BarrierTaskContext",
                 },

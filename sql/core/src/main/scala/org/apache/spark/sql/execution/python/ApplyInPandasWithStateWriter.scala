@@ -50,7 +50,8 @@ import org.apache.spark.unsafe.types.UTF8String
 class ApplyInPandasWithStateWriter(
     root: VectorSchemaRoot,
     writer: ArrowStreamWriter,
-    arrowMaxRecordsPerBatch: Int) {
+    arrowMaxRecordsPerBatch: Int)
+  extends BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch) {
 
   import ApplyInPandasWithStateWriter._
 
@@ -72,9 +73,9 @@ class ApplyInPandasWithStateWriter(
   // there are at least one data for a grouping key (we ensure this for the case of handling timed
   // out state as well) whereas there is only one state for a grouping key, we have to fill up the
   // empty rows in state side to ensure both have the same number of rows.
-  private val arrowWriterForData = createArrowWriter(
+  override protected val arrowWriterForData: ArrowWriter = createArrowWriter(
     root.getFieldVectors.asScala.toSeq.dropRight(1))
-  private val arrowWriterForState = createArrowWriter(
+  private val arrowWriterForState: ArrowWriter = createArrowWriter(
     root.getFieldVectors.asScala.toSeq.takeRight(1))
 
   // - Bin-packing
@@ -117,12 +118,10 @@ class ApplyInPandasWithStateWriter(
   private var currentGroupState: GroupStateImpl[Row] = _
 
   // variables for tracking the status of current batch
-  private var totalNumRowsForBatch = 0
   private var totalNumStatesForBatch = 0
 
   // variables for tracking the status of current chunk
   private var startOffsetForCurrentChunk = 0
-  private var numRowsForCurrentChunk = 0
 
 
   /**
@@ -134,26 +133,6 @@ class ApplyInPandasWithStateWriter(
   def startNewGroup(keyRow: UnsafeRow, groupState: GroupStateImpl[Row]): Unit = {
     currentGroupKeyRow = keyRow
     currentGroupState = groupState
-  }
-
-  /**
-   * Indicates writer to write a row in the current group.
-   *
-   * @param dataRow The row to write in the current group.
-   */
-  def writeRow(dataRow: InternalRow): Unit = {
-    // If it exceeds the condition of batch (number of records) and there is more data for the
-    // same group, finalize and construct a new batch.
-
-    if (totalNumRowsForBatch >= arrowMaxRecordsPerBatch) {
-      finalizeCurrentChunk(isLastChunkForGroup = false)
-      finalizeCurrentArrowBatch()
-    }
-
-    arrowWriterForData.write(dataRow)
-
-    numRowsForCurrentChunk += 1
-    totalNumRowsForBatch += 1
   }
 
   /**
@@ -209,7 +188,7 @@ class ApplyInPandasWithStateWriter(
     new GenericInternalRow(Array[Any](stateUnderlyingRow))
   }
 
-  private def finalizeCurrentChunk(isLastChunkForGroup: Boolean): Unit = {
+  override protected def finalizeCurrentChunk(isLastChunkForGroup: Boolean): Unit = {
     val stateInfoRow = buildStateInfoRow(currentGroupKeyRow, currentGroupState,
       startOffsetForCurrentChunk, numRowsForCurrentChunk, isLastChunkForGroup)
     arrowWriterForState.write(stateInfoRow)
@@ -221,7 +200,10 @@ class ApplyInPandasWithStateWriter(
     numRowsForCurrentChunk = 0
   }
 
-  private def finalizeCurrentArrowBatch(): Unit = {
+  /**
+   * Finalizes the current batch and writes it to the Arrow stream.
+   */
+  override def finalizeCurrentArrowBatch(): Unit = {
     val remainingEmptyStateRows = totalNumRowsForBatch - totalNumStatesForBatch
     (0 until remainingEmptyStateRows).foreach { _ =>
       arrowWriterForState.write(EMPTY_STATE_METADATA_ROW)

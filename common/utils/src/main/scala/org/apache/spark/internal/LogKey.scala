@@ -266,6 +266,7 @@ private[spark] object LogKeys {
   case object FEATURE_NAME extends LogKey
   case object FETCH_SIZE extends LogKey
   case object FIELD_NAME extends LogKey
+  case object FIELD_TYPE extends LogKey
   case object FILES extends LogKey
   case object FILE_ABSOLUTE_PATH extends LogKey
   case object FILE_END_OFFSET extends LogKey
@@ -396,6 +397,7 @@ private[spark] object LogKeys {
   case object MAX_NUM_PARTITIONS extends LogKey
   case object MAX_NUM_POSSIBLE_BINS extends LogKey
   case object MAX_NUM_ROWS_IN_MEMORY_BUFFER extends LogKey
+  case object MAX_SEEN_VERSION extends LogKey
   case object MAX_SERVICE_NAME_LENGTH extends LogKey
   case object MAX_SIZE extends LogKey
   case object MAX_SLOTS extends LogKey
@@ -420,9 +422,11 @@ private[spark] object LogKeys {
   case object MIN_NUM_FREQUENT_PATTERN extends LogKey
   case object MIN_POINT_PER_CLUSTER extends LogKey
   case object MIN_RATE extends LogKey
+  case object MIN_SEEN_VERSION extends LogKey
   case object MIN_SHARE extends LogKey
   case object MIN_SIZE extends LogKey
   case object MIN_TIME extends LogKey
+  case object MIN_VERSIONS_TO_DELETE extends LogKey
   case object MIN_VERSION_NUM extends LogKey
   case object MISSING_PARENT_STAGES extends LogKey
   case object MODEL_WEIGHTS extends LogKey
@@ -649,6 +653,7 @@ private[spark] object LogKeys {
   case object RECEIVER_IDS extends LogKey
   case object RECORDS extends LogKey
   case object RECOVERY_STATE extends LogKey
+  case object RECURSIVE_DEPTH extends LogKey
   case object REDACTED_STATEMENT extends LogKey
   case object REDUCE_ID extends LogKey
   case object REGEX extends LogKey
@@ -687,6 +692,7 @@ private[spark] object LogKeys {
   case object RPC_ENDPOINT_REF extends LogKey
   case object RPC_MESSAGE_CAPACITY extends LogKey
   case object RPC_SSL_ENABLED extends LogKey
+  case object RULE_EXECUTOR_NAME extends LogKey
   case object RULE_NAME extends LogKey
   case object RUN_ID extends LogKey
   case object SCALA_VERSION extends LogKey
@@ -746,6 +752,7 @@ private[spark] object LogKeys {
   case object START_INDEX extends LogKey
   case object START_TIME extends LogKey
   case object STATEMENT_ID extends LogKey
+  case object STATE_NAME extends LogKey
   case object STATE_STORE_ID extends LogKey
   case object STATE_STORE_PROVIDER extends LogKey
   case object STATE_STORE_VERSION extends LogKey
@@ -850,6 +857,7 @@ private[spark] object LogKeys {
   case object USER_NAME extends LogKey
   case object UUID extends LogKey
   case object VALUE extends LogKey
+  case object VERSIONS_TO_DELETE extends LogKey
   case object VERSION_NUM extends LogKey
   case object VIEW_ACLS extends LogKey
   case object VIEW_ACLS_GROUPS extends LogKey

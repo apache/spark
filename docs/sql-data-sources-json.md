@@ -273,5 +273,11 @@ Data source options of JSON can be set via:
     <td>Whether to ignore null fields when generating JSON objects.</td>
     <td>write</td>
   </tr>
+  <tr>
+    <td><code>useUnsafeRow</code></td>
+    <td>(value of <code>spark.sql.json.useUnsafeRow</code> configuration)</td>
+    <td>Whether to use UnsafeRow to represent struct result in the JSON parser.</td>
+    <td>read</td>
+  </tr>
 </table>
 Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html"> Generic File Source Options</a>.

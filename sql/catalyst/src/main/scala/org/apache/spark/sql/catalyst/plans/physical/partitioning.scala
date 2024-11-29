@@ -370,7 +370,7 @@ case class KeyGroupedPartitioning(
     expressions: Seq[Expression],
     numPartitions: Int,
     partitionValues: Seq[InternalRow] = Seq.empty,
-    originalPartitionValues: Seq[InternalRow] = Seq.empty) extends Partitioning {
+    originalPartitionValues: Seq[InternalRow] = Seq.empty) extends HashPartitioningLike {
 
   override def satisfies0(required: Distribution): Boolean = {
     super.satisfies0(required) || {
@@ -421,6 +421,9 @@ case class KeyGroupedPartitioning(
         .distinct
         .map(_.row)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(expressions = newChildren)
 }
 
 object KeyGroupedPartitioning {
@@ -766,8 +769,8 @@ case class CoalescedHashShuffleSpec(
  *
  * @param partitioning key grouped partitioning
  * @param distribution distribution
- * @param joinKeyPosition position of join keys among cluster keys.
- *                        This is set if joining on a subset of cluster keys is allowed.
+ * @param joinKeyPositions position of join keys among cluster keys.
+ *                         This is set if joining on a subset of cluster keys is allowed.
  */
 case class KeyGroupedShuffleSpec(
     partitioning: KeyGroupedPartitioning,

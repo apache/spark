@@ -422,6 +422,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       backendCreateFn: (RpcEnv, Arguments, SparkEnv, ResourceProfile) =>
         CoarseGrainedExecutorBackend): Unit = {
 
+    Utils.resetStructuredLogging()
     Utils.initDaemon(log)
 
     SparkHadoopUtil.get.runAsSparkUser { () =>
@@ -466,6 +467,10 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           driverConf.set(key, value)
         }
       }
+
+      // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+      Utils.resetStructuredLogging(driverConf)
+      Logging.uninitialize()
 
       cfg.hadoopDelegationCreds.foreach { tokens =>
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)

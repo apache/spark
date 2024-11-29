@@ -155,8 +155,8 @@ class LocalDataToArrowConversion:
                     else:
                         if len(value) != len(field_names):
                             raise PySparkValueError(
-                                error_class="AXIS_LENGTH_MISMATCH",
-                                message_parameters={
+                                errorClass="AXIS_LENGTH_MISMATCH",
+                                messageParameters={
                                     "expected_length": str(len(field_names)),
                                     "actual_length": str(len(value)),
                                 },
@@ -306,7 +306,7 @@ class LocalDataToArrowConversion:
                 ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
-                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
 
@@ -352,8 +352,8 @@ class LocalDataToArrowConversion:
             else:
                 if len(item) != len(column_names):
                     raise PySparkValueError(
-                        error_class="AXIS_LENGTH_MISMATCH",
-                        message_parameters={
+                        errorClass="AXIS_LENGTH_MISMATCH",
+                        messageParameters={
                             "expected_length": str(len(column_names)),
                             "actual_length": str(len(item)),
                         },
@@ -522,7 +522,7 @@ class ArrowTableToRowsConversion:
                 ):
                     return VariantVal(value["value"], value["metadata"])
                 else:
-                    raise PySparkValueError(error_class="MALFORMED_VARIANT")
+                    raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
 

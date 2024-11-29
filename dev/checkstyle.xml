@@ -206,6 +206,10 @@
             <property name="illegalPkgs" value="org.apache.log4j" />
             <property name="illegalPkgs" value="org.apache.commons.lang" />
         </module>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="new URL\("/>
+            <property name="message" value="Use URI.toURL or URL.of instead of URL constructors." />
+        </module>
         <!-- support structured logging -->
         <module name="RegexpSinglelineJava">
             <property name="format" value="org\.slf4j\.(Logger|LoggerFactory)" />

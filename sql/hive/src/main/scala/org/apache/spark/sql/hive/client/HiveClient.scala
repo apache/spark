@@ -164,8 +164,7 @@ private[hive] trait HiveClient {
    * Create one or many partitions in the given table.
    */
   def createPartitions(
-      db: String,
-      table: String,
+      table: CatalogTable,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit
 

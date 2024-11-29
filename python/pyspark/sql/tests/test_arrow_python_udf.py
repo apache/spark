@@ -186,8 +186,8 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
                 "feature": "Invalid return type with Arrow-optimized Python UDF: VarcharType(10)"
             },
         )
@@ -236,6 +236,20 @@ class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super(PythonUDFArrowTests, cls).tearDownClass()
+
+
+class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
+    @classmethod
+    def setUpClass(cls):
+        super(AsyncPythonUDFArrowTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
+        finally:
+            super(AsyncPythonUDFArrowTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":

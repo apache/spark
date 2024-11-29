@@ -17,14 +17,15 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import java.util.concurrent.atomic.AtomicReference
 import java.util.function.Supplier
 
 import scala.collection.mutable
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 import org.apache.spark._
 import org.apache.spark.internal.config
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
@@ -37,8 +38,8 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.MutablePair
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.util.{MutablePair, ThreadUtils}
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -46,16 +47,6 @@ import org.apache.spark.util.random.XORShiftRandom
  * Common trait for all shuffle exchange implementations to facilitate pattern matching.
  */
 trait ShuffleExchangeLike extends Exchange {
-
-  /**
-   * The asynchronous job that materializes the shuffle. It also does the preparations work,
-   * such as waiting for the subqueries.
-   */
-  @transient private lazy val shuffleFuture: Future[MapOutputStatistics] = executeQuery {
-    materializationStarted.set(true)
-    mapOutputStatisticsFuture
-  }
-
   /**
    * Returns the number of mappers of this shuffle.
    */
@@ -76,25 +67,71 @@ trait ShuffleExchangeLike extends Exchange {
    */
   def shuffleOrigin: ShuffleOrigin
 
-  /**
-   * Submits the shuffle job.
-   */
-  final def submitShuffleJob: Future[MapOutputStatistics] = shuffleFuture
+  @transient
+  private lazy val promise = Promise[MapOutputStatistics]()
 
-  protected def mapOutputStatisticsFuture: Future[MapOutputStatistics]
+  @transient
+  private lazy val completionFuture
+  : scala.concurrent.Future[MapOutputStatistics] = promise.future
 
-  /**
-   * Cancels the shuffle job.
-   */
-  final def cancelShuffleJob: Unit = {
-    if (isMaterializationStarted()) {
-      shuffleFuture match {
-        case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>
-          action.cancel()
-        case _ =>
+  @transient
+  private[sql] // Exposed for testing
+  val futureAction = new AtomicReference[Option[FutureAction[MapOutputStatistics]]](None)
+
+  @transient
+  private var isCancelled: Boolean = false
+
+  @transient
+  private lazy val triggerFuture: java.util.concurrent.Future[Any] = {
+    SQLExecution.withThreadLocalCaptured(session, ShuffleExchangeExec.executionContext) {
+      try {
+        // Trigger shuffle preparation which can involve expensive operations like waiting on
+        // subqueries and file listing.
+        executeQuery(null)
+        // Submit shuffle job if not cancelled.
+        this.synchronized {
+          if (isCancelled) {
+            promise.tryFailure(new SparkException("Shuffle cancelled."))
+          } else {
+            val shuffleJob = RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+              mapOutputStatisticsFuture
+            }
+            shuffleJob match {
+              case action: FutureAction[MapOutputStatistics] => futureAction.set(Some(action))
+              case _ =>
+            }
+            promise.completeWith(shuffleJob)
+          }
+        }
+        null
+      } catch {
+        case e: Throwable =>
+          promise.tryFailure(e)
+          throw e
       }
     }
   }
+
+  /**
+   * The asynchronous job that materializes the shuffle. It also does the preparations work,
+   * such as waiting for the subqueries.
+   */
+  final def submitShuffleJob(): Future[MapOutputStatistics] = {
+    triggerFuture
+    completionFuture
+  }
+
+  /**
+   * Cancels the shuffle job with an optional reason.
+   */
+  final def cancelShuffleJob(reason: Option[String]): Unit = this.synchronized {
+    if (!isCancelled) {
+      isCancelled = true
+      futureAction.get().foreach(_.cancel(reason))
+    }
+  }
+
+  protected def mapOutputStatisticsFuture: Future[MapOutputStatistics]
 
   /**
    * Returns the shuffle RDD with specified partition specs.
@@ -139,6 +176,11 @@ case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
 // Different from `REBALANCE_PARTITIONS_BY_NONE`, local shuffle read cannot be used for it as
 // the output needs to be partitioned by the given columns.
 case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule, but
+// was required by a stateful operator. The physical partitioning is static and Spark shouldn't
+// change it.
+case object REQUIRED_BY_STATEFUL_OPERATOR extends ShuffleOrigin
 
 /**
  * Performs a shuffle that will result in the desired partitioning.
@@ -212,17 +254,10 @@ case class ShuffleExchangeExec(
     dep
   }
 
-  /**
-   * Caches the created ShuffleRowRDD so we can reuse that.
-   */
-  private var cachedShuffleRDD: ShuffledRowRDD = null
-
   protected override def doExecute(): RDD[InternalRow] = {
-    // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
-    if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = new ShuffledRowRDD(shuffleDependency, readMetrics)
-    }
-    cachedShuffleRDD
+    // The ShuffleRowRDD will be cached in SparkPlan.executeRDD and reused if this plan is used by
+    // multiple plans.
+    new ShuffledRowRDD(shuffleDependency, readMetrics)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ShuffleExchangeExec =
@@ -230,6 +265,10 @@ case class ShuffleExchangeExec(
 }
 
 object ShuffleExchangeExec {
+
+  private[execution] val executionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("shuffle-exchange",
+      SQLConf.get.getConf(StaticSQLConf.SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD)))
 
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.

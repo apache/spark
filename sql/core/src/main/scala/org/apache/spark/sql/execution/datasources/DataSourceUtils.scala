@@ -53,6 +53,11 @@ object DataSourceUtils extends PredicateHelper {
   val PARTITION_OVERWRITE_MODE = "partitionOverwriteMode"
 
   /**
+   * The key to use for storing clusterBy columns as options.
+   */
+  val CLUSTERING_COLUMNS_KEY = "__clustering_columns"
+
+  /**
    * Utility methods for converting partitionBy columns to options and back.
    */
   private implicit val formats: Formats = Serialization.formats(NoTypeHints)

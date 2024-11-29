@@ -51,7 +51,7 @@ class StreamingListenerTestsMixin:
         self.assertTrue(isinstance(event, QueryProgressEvent))
         self.check_streaming_query_progress(event.progress, is_stateful)
 
-    def check_terminated_event(self, event, exception=None, error_class=None):
+    def check_terminated_event(self, event, exception=None, errorClass=None):
         """Check QueryTerminatedEvent"""
         self.assertTrue(isinstance(event, QueryTerminatedEvent))
         self.assertTrue(isinstance(event.id, uuid.UUID))
@@ -61,8 +61,8 @@ class StreamingListenerTestsMixin:
         else:
             self.assertEqual(event.exception, None)
 
-        if error_class:
-            self.assertTrue(error_class in event.errorClassOnException)
+        if errorClass:
+            self.assertTrue(errorClass in event.errorClassOnException)
         else:
             self.assertEqual(event.errorClassOnException, None)
 
@@ -227,9 +227,9 @@ class StreamingListenerTestsMixin:
                 "my_event", count(lit(1)).alias("rc"), count(col("error")).alias("erc")
             )
 
-            q = observed_ds.writeStream.format("console").start()
+            q = observed_ds.writeStream.format("noop").start()
 
-            while q.lastProgress is None or q.lastProgress["batchId"] == 0:
+            while q.lastProgress is None or q.lastProgress.batchId == 0:
                 q.awaitTermination(0.5)
 
             time.sleep(5)
@@ -240,6 +240,32 @@ class StreamingListenerTestsMixin:
         finally:
             q.stop()
             self.spark.streams.removeListener(error_listener)
+
+    def test_streaming_progress(self):
+        try:
+            # Test a fancier query with stateful operation and observed metrics
+            df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+            df_observe = df.observe("my_event", count(lit(1)).alias("rc"))
+            df_stateful = df_observe.groupBy().count()  # make query stateful
+            q = (
+                df_stateful.writeStream.format("noop")
+                .queryName("test")
+                .outputMode("update")
+                .trigger(processingTime="5 seconds")
+                .start()
+            )
+
+            while q.lastProgress is None or q.lastProgress.batchId == 0:
+                q.awaitTermination(0.5)
+
+            q.stop()
+
+            self.check_streaming_query_progress(q.lastProgress, True)
+            for p in q.recentProgress:
+                self.check_streaming_query_progress(p, True)
+
+        finally:
+            q.stop()
 
 
 class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
@@ -355,7 +381,12 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                     .start()
                 )
                 self.assertTrue(q.isActive)
-                time.sleep(10)
+                wait_count = 0
+                while progress_event is None or progress_event.progress.batchId == 0:
+                    q.awaitTermination(0.5)
+                    wait_count = wait_count + 1
+                    if wait_count > 100:
+                        self.fail("Not getting progress event after 50 seconds")
                 q.stop()
 
                 # Make sure all events are empty

@@ -22,6 +22,7 @@ import java.lang.management.ManagementFactory
 import scala.annotation.tailrec
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
@@ -59,6 +60,9 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   // This mutates the SparkConf, so all accesses to it must be made after this line
   propertiesFile = Utils.loadDefaultSparkProperties(conf, propertiesFile)
+  // Initialize logging system again after `spark.log.structuredLogging.enabled` takes effect
+  Utils.resetStructuredLogging(conf)
+  Logging.uninitialize()
 
   conf.get(WORKER_UI_PORT).foreach { webUiPort = _ }
 
@@ -66,11 +70,6 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
 
   @tailrec
   private def parse(args: List[String]): Unit = args match {
-    case ("--ip" | "-i") :: value :: tail =>
-      Utils.checkHost(value)
-      host = value
-      parse(tail)
-
     case ("--host" | "-h") :: value :: tail =>
       Utils.checkHost(value)
       host = value
@@ -133,7 +132,6 @@ private[worker] class WorkerArguments(args: Array[String], conf: SparkConf) {
       "  -c CORES, --cores CORES  Number of cores to use\n" +
       "  -m MEM, --memory MEM     Amount of memory to use (e.g. 1000M, 2G)\n" +
       "  -d DIR, --work-dir DIR   Directory to run apps in (default: SPARK_HOME/work)\n" +
-      "  -i HOST, --ip IP         Hostname to listen on (deprecated, please use --host or -h)\n" +
       "  -h HOST, --host HOST     Hostname to listen on\n" +
       "  -p PORT, --port PORT     Port to listen on (default: random)\n" +
       "  --webui-port PORT        Port for web UI (default: 8081)\n" +

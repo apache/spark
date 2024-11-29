@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.FormattedMode
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{abs, acos, asin, avg, ceil, coalesce, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sqrt, sum, udf, when}
+import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
@@ -228,6 +228,28 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       stmt.setString(1, "jen")
       stmt.setBytes(2, testBytes)
       stmt.executeUpdate()
+
+      conn.prepareStatement("CREATE TABLE \"test\".\"employee_bonus\" " +
+        "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('amy', 10000, 1000, 0.1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('alex', 12000, 1200, 0.1)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('cathy', 8000, 1200, 0.15)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('david', 10000, 1300, 0.13)").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee_bonus\" " +
+        "VALUES ('jen', 12000, 2400, 0.2)").executeUpdate()
+
+      conn.prepareStatement(
+        "CREATE TABLE \"test\".\"strings_with_nulls\" (str TEXT(32))").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('abc')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "('a a a')").executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"strings_with_nulls\" VALUES " +
+        "(null)").executeUpdate()
     }
     h2Dialect.registerFunction("my_avg", IntegralAverage)
     h2Dialect.registerFunction("my_strlen", StrLen(CharLength))
@@ -377,7 +399,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[AnalysisException] {
         df.collect()
       },
-      errorClass = "NULL_DATA_SOURCE_OPTION",
+      condition = "NULL_DATA_SOURCE_OPTION",
       parameters = Map(
         "option" -> "pushDownOffset")
     )
@@ -1258,29 +1280,25 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df15, Seq(Row(1, "cathy", 9000, 1200, false),
       Row(2, "alex", 12000, 1200, false), Row(6, "jen", 12000, 1200, true)))
 
-    val df16 = sql(
-      """
-        |SELECT * FROM h2.test.employee
-        |WHERE sin(bonus) < -0.08
-        |AND sinh(bonus) > 200
-        |AND cos(bonus) > 0.9
-        |AND cosh(bonus) > 200
-        |AND tan(bonus) < -0.08
-        |AND tanh(bonus) = 1
-        |AND cot(bonus) < -11
-        |AND asin(bonus / salary) > 0.13
-        |AND acos(bonus / salary) < 1.47
-        |AND atan(bonus) > 1.4
-        |AND atan2(bonus, bonus) > 0.7
-        |""".stripMargin)
+    val df16 = spark.table("h2.test.employee_bonus")
+      .filter(sin($"bonus") < -0.08)
+      .filter(sinh($"bonus") > 200)
+      .filter(cos($"bonus") > 0.9)
+      .filter(cosh($"bonus") > 200)
+      .filter(tan($"bonus") < -0.08)
+      .filter(tanh($"bonus") === 1)
+      .filter(cot($"bonus") < -11)
+      .filter(asin($"factor") > 0.13)
+      .filter(acos($"factor") < 1.47)
+      .filter(atan($"bonus") > 1.4)
+      .filter(atan2($"bonus", $"bonus") > 0.7)
     checkFiltersRemoved(df16)
     checkPushedInfo(df16, "PushedFilters: [" +
-      "BONUS IS NOT NULL, SALARY IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
+      "BONUS IS NOT NULL, FACTOR IS NOT NULL, SIN(BONUS) < -0.08, SINH(BONUS) > 200.0, " +
       "COS(BONUS) > 0.9, COSH(BONUS) > 200.0, TAN(BONUS) < -0.08, TANH(BONUS) = 1.0, " +
-      "COT(BONUS) < -11.0, ASIN(BONUS / CAST(SALARY AS double)) > 0.13, " +
-      "ACOS(BONUS / CAST(SALARY AS double)) < 1.47, " +
-      "ATAN(BONUS) > 1.4, (ATAN2(BONUS, BONUS)) > 0.7],")
-    checkAnswer(df16, Seq(Row(1, "cathy", 9000, 1200, false)))
+      "COT(BONUS) < -11.0, ASIN(FACTOR) > 0.13, ACOS(FACTOR) < 1.47, ATAN(BONUS) > 1.4, " +
+      "(ATAN2(BONUS, BONUS)) > 0.7],")
+    checkAnswer(df16, Seq(Row("cathy", 8000, 1200, 0.15)))
 
     // H2 does not support log2, asinh, acosh, atanh, cbrt
     val df17 = sql(
@@ -1615,15 +1633,15 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df4, Seq(Row(6, "jen", 12000, 1200, true)))
 
     val df5 = sql("SELECT name FROM h2.test.employee WHERE " +
-      "aes_encrypt(cast(null as string), name) is null")
+      "aes_encrypt(name, '1234567812345678') != 'spark'")
     checkFiltersRemoved(df5, false)
-    val expectedPlanFragment5 = "PushedFilters: [], "
+    val expectedPlanFragment5 = "PushedFilters: [NAME IS NOT NULL], "
     checkPushedInfo(df5, expectedPlanFragment5)
     checkAnswer(df5, Seq(Row("amy"), Row("cathy"), Row("alex"), Row("david"), Row("jen")))
 
     val df6 = sql("SELECT name FROM h2.test.employee WHERE " +
       "aes_decrypt(cast(null as binary), name) is null")
-    checkFiltersRemoved(df6, false)
+    checkFiltersRemoved(df6) // removed by null intolerant opt
     val expectedPlanFragment6 = "PushedFilters: [], "
     checkPushedInfo(df6, expectedPlanFragment6)
     checkAnswer(df6, Seq(Row("amy"), Row("cathy"), Row("alex"), Row("david"), Row("jen")))
@@ -1759,7 +1777,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
         Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
-        Row("test", "datetime", false), Row("test", "binary1", false)))
+        Row("test", "datetime", false), Row("test", "binary1", false),
+        Row("test", "employee_bonus", false),
+        Row("test", "strings_with_nulls", false)))
   }
 
   test("SQL API: create table as select") {
@@ -2668,7 +2688,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         val df = sql("SELECT SUM(2147483647 + DEPT) FROM h2.test.employee")
         checkAggregateRemoved(df, ansiMode)
         val expectedPlanFragment = if (ansiMode) {
-          "PushedAggregates: [SUM(2147483647 + DEPT)], " +
+          "PushedAggregates: [SUM(DEPT + 2147483647)], " +
             "PushedFilters: [], " +
             "PushedGroupByExpressions: []"
         } else {
@@ -2923,7 +2943,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.test.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`test`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -2935,7 +2955,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           checkAnswer(sql("SELECT h2.my_avg2(id) FROM h2.test.people"), Seq.empty)
         },
-        errorClass = "UNRESOLVED_ROUTINE",
+        condition = "UNRESOLVED_ROUTINE",
         parameters = Map(
           "routineName" -> "`h2`.`my_avg2`",
           "searchPath" -> "[`system`.`builtin`, `system`.`session`, `h2`.`default`]"),
@@ -3018,7 +3038,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[IndexAlreadyExistsException] {
         sql(s"CREATE INDEX people_index ON TABLE h2.test.people (id)")
       },
-      errorClass = "INDEX_ALREADY_EXISTS",
+      condition = "INDEX_ALREADY_EXISTS",
       parameters = Map(
         "indexName" -> "`people_index`",
         "tableName" -> "`test`.`people`"
@@ -3036,7 +3056,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
       exception = intercept[NoSuchIndexException] {
         sql(s"DROP INDEX people_index ON TABLE h2.test.people")
       },
-      errorClass = "INDEX_NOT_FOUND",
+      condition = "INDEX_NOT_FOUND",
       parameters = Map("indexName" -> "`people_index`", "tableName" -> "`test`.`people`")
     )
     assert(jdbcTable.indexExists("people_index") == false)
@@ -3053,7 +3073,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
         exception = intercept[AnalysisException] {
           sql("SELECT * FROM h2.test.people where h2.db_name.schema_name.function_name()")
         },
-        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
         parameters = Map("identifier" -> "`db_name`.`schema_name`.`function_name`")
       )
@@ -3067,5 +3087,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     val df = sql("SELECT max(id) FROM h2.test.people WHERE id > 1")
     val explained = getNormalizedExplain(df, FormattedMode)
     assert(explained.contains("External engine query:"))
+  }
+
+  test("Test not nullSafeEqual") {
+    val df = sql("SELECT str FROM h2.test.strings_with_nulls WHERE NOT str <=> 'abc'")
+    val rows = df.collect()
+
+    assert(rows.length == 2)
+    assert(rows.contains(Row(null)))
+    assert(rows.contains(Row("a a a")))
   }
 }

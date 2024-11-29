@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
+import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.util.ArrayImplicits._
@@ -62,7 +63,7 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    originalConfORCImplementation = spark.conf.get(ORC_IMPLEMENTATION)
+    originalConfORCImplementation = spark.sessionState.conf.getConf(ORC_IMPLEMENTATION)
     spark.conf.set(ORC_IMPLEMENTATION.key, orcImp)
   }
 
@@ -117,8 +118,8 @@ trait OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfter
       (implicit df: DataFrame): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
     val query = df
-      .select(output.map(e => Column(e)): _*)
-      .where(Column(predicate))
+      .select(output.map(e => column(e)): _*)
+      .where(predicate)
 
     query.queryExecution.optimizedPlan match {
       case PhysicalOperation(_, filters, DataSourceV2ScanRelation(_, o: OrcScan, _, _, _)) =>

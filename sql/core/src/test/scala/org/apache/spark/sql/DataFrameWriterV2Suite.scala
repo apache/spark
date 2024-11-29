@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, Ove
 import org.apache.spark.sql.connector.InMemoryV1Provider
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -146,7 +146,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         spark.table("source").withColumnRenamed("data", "d").writeTo("testcat.table_name").append()
       },
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
@@ -251,7 +251,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwrite(lit(true))
       },
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
@@ -356,7 +356,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").withColumnRenamed("data", "d")
           .writeTo("testcat.table_name").overwritePartitions()
       },
-      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       parameters = Map("tableName" -> "`testcat`.`table_name`", "colName" -> "`data`")
     )
 
@@ -524,6 +524,18 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         Seq(BucketTransform(LiteralValue(4, IntegerType), Seq(FieldReference("id")))))
   }
 
+  test("Create: cluster by") {
+    spark.table("source")
+      .writeTo("testcat.table_name")
+      .clusterBy("id")
+      .create()
+
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
+
+    assert(table.name === "testcat.table_name")
+    assert(table.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
+  }
+
   test("Create: fail if table already exists") {
     spark.sql(
       "CREATE TABLE testcat.table_name (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -631,6 +643,42 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .add("data", StringType)
         .add("even_or_odd", StringType))
     assert(replaced.partitioning === Seq(IdentityTransform(FieldReference("id"))))
+    assert(replaced.properties === defaultOwnership.asJava)
+  }
+
+  test("Replace: clustered table") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+    spark.sql("INSERT INTO TABLE testcat.table_name SELECT * FROM source")
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
+
+    // validate the initial table
+    assert(table.name === "testcat.table_name")
+    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+    assert(table.partitioning.isEmpty)
+    assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
+
+    spark.table("source2")
+        .withColumn("even_or_odd", when(($"id" % 2) === 0, "even").otherwise("odd"))
+        .writeTo("testcat.table_name").clusterBy("id").replace()
+
+    checkAnswer(
+      spark.table("testcat.table_name"),
+      Seq(Row(4L, "d", "even"), Row(5L, "e", "odd"), Row(6L, "f", "even")))
+
+    val replaced = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
+
+    // validate the replacement table
+    assert(replaced.name === "testcat.table_name")
+    assert(replaced.schema === new StructType()
+        .add("id", LongType)
+        .add("data", StringType)
+        .add("even_or_odd", StringType))
+    assert(replaced.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
     assert(replaced.properties === defaultOwnership.asJava)
   }
 
@@ -781,14 +829,14 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         ds.write
       },
-      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`write`"))
 
     checkError(
       exception = intercept[AnalysisException] {
         ds.writeTo("testcat.table_name")
       },
-      errorClass = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
+      condition = "CALL_ON_STREAMING_DATASET_UNSUPPORTED",
       parameters = Map("methodName" -> "`writeTo`"))
   }
 }

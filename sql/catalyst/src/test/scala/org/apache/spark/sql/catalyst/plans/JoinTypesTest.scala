@@ -68,7 +68,7 @@ class JoinTypesTest extends SparkFunSuite {
       exception = intercept[AnalysisException](
         JoinType(joinType)
       ),
-      errorClass = "UNSUPPORTED_JOIN_TYPE",
+      condition = "UNSUPPORTED_JOIN_TYPE",
       sqlState = "0A000",
       parameters = Map(
         "typ" -> joinType,

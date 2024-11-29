@@ -1,2 +1,0 @@
-Project [from_avro(bytes#0, {"type": "string", "name": "name"}) AS from_avro(bytes)#0]
-+- LocalRelation <empty>, [id#0L, bytes#0]

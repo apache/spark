@@ -163,7 +163,7 @@ class CogroupedApplyInPandasTestsMixin:
     def check_apply_in_pandas_not_returning_pandas_dataframe(self):
         self._test_merge_error(
             fn=lambda lft, rgt: lft.size + rgt.size,
-            error_class=PythonException,
+            errorClass=PythonException,
             error_message_regex="Return type of the user-defined function "
             "should be pandas.DataFrame, but is int",
         )
@@ -203,7 +203,7 @@ class CogroupedApplyInPandasTestsMixin:
 
         self._test_merge_error(
             fn=merge_pandas,
-            error_class=PythonException,
+            errorClass=PythonException,
             error_message_regex="Column names of the returned pandas.DataFrame "
             "do not match specified schema. Unexpected: add, more.\n",
         )
@@ -224,7 +224,7 @@ class CogroupedApplyInPandasTestsMixin:
 
         self._test_merge_error(
             fn=merge_pandas,
-            error_class=PythonException,
+            errorClass=PythonException,
             error_message_regex="Number of columns of the returned pandas.DataFrame "
             "doesn't match specified schema. Expected: 4 Actual: 6\n",
         )
@@ -264,7 +264,7 @@ class CogroupedApplyInPandasTestsMixin:
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": ["2.0"]}),
                         output_schema="id long, k double",
-                        error_class=PythonException,
+                        errorClass=PythonException,
                         error_message_regex=expected,
                     )
 
@@ -277,7 +277,7 @@ class CogroupedApplyInPandasTestsMixin:
                     self._test_merge_error(
                         fn=lambda lft, rgt: pd.DataFrame({"id": [1], "k": [2.0]}),
                         output_schema="id long, k string",
-                        error_class=PythonException,
+                        errorClass=PythonException,
                         error_message_regex=expected,
                     )
 
@@ -341,7 +341,7 @@ class CogroupedApplyInPandasTestsMixin:
             output_schema=(
                 StructType().add("id", LongType()).add("v", ArrayType(YearMonthIntervalType()))
             ),
-            error_class=NotImplementedError,
+            errorClass=NotImplementedError,
             error_message_regex="Invalid return type.*ArrayType.*YearMonthIntervalType",
         )
 
@@ -353,7 +353,7 @@ class CogroupedApplyInPandasTestsMixin:
         self.__test_merge_error(
             fn=lambda: 1,
             output_schema=StructType([StructField("d", DoubleType())]),
-            error_class=ValueError,
+            errorClass=ValueError,
             error_message_regex="Invalid function",
         )
 
@@ -558,7 +558,7 @@ class CogroupedApplyInPandasTestsMixin:
 
     def _test_merge_error(
         self,
-        error_class,
+        errorClass,
         error_message_regex,
         left=None,
         right=None,
@@ -577,7 +577,7 @@ class CogroupedApplyInPandasTestsMixin:
                 by=by,
                 fn=fn,
                 output_schema=output_schema,
-                error_class=error_class,
+                errorClass=errorClass,
                 error_message_regex=error_message_regex,
             )
         with self.subTest("with key"):
@@ -587,13 +587,13 @@ class CogroupedApplyInPandasTestsMixin:
                 by=by,
                 fn=fn_with_key,
                 output_schema=output_schema,
-                error_class=error_class,
+                errorClass=errorClass,
                 error_message_regex=error_message_regex,
             )
 
     def __test_merge_error(
         self,
-        error_class,
+        errorClass,
         error_message_regex,
         left=None,
         right=None,
@@ -602,7 +602,7 @@ class CogroupedApplyInPandasTestsMixin:
         output_schema="id long, k int, v int, v2 int",
     ):
         # Test fn as is, cf. _test_merge_error
-        with self.assertRaisesRegex(error_class, error_message_regex):
+        with self.assertRaisesRegex(errorClass, error_message_regex):
             self.__test_merge(left, right, by, fn, output_schema)
 
 

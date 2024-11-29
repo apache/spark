@@ -271,6 +271,18 @@ package object config {
       .toSequence
       .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
 
+  private[spark] val EVENT_LOG_INCLUDE_TASK_METRICS_ACCUMULATORS =
+    ConfigBuilder("spark.eventLog.includeTaskMetricsAccumulators")
+      .doc("Whether to include TaskMetrics' underlying accumulator values in the event log " +
+        "(as part of the Task/Stage/Job metrics' 'Accumulables' fields. The TaskMetrics " +
+        "values are already logged in the 'Task Metrics' fields (so the accumulator updates " +
+        "are redundant). This flag defaults to true for behavioral backwards compatibility " +
+        "for applications that might rely on the redundant logging. " +
+        "See SPARK-42204 for details.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
@@ -918,6 +930,18 @@ package object config {
       .booleanConf
       .createOptional
 
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED_APPLICATION =
+    ConfigBuilder("spark.excludeOnFailure.application.enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createOptional
+
+  private[spark] val EXCLUDE_ON_FAILURE_ENABLED_TASK_AND_STAGE =
+    ConfigBuilder("spark.excludeOnFailure.taskAndStage.enabled")
+      .version("4.0.0")
+      .booleanConf
+      .createOptional
+
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
       .version("3.1.0")
@@ -1109,13 +1133,6 @@ package object config {
     .version("2.1.0")
     .stringConf
     .createOptional
-
-  // To limit how many applications are shown in the History Server summary ui
-  private[spark] val HISTORY_UI_MAX_APPS =
-    ConfigBuilder("spark.history.ui.maxApplications")
-      .version("2.0.1")
-      .intConf
-      .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .version("2.1.0")
@@ -1369,7 +1386,6 @@ package object config {
 
   private[spark] val SHUFFLE_ACCURATE_BLOCK_SKEWED_FACTOR =
     ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
-      .internal()
       .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
         "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
@@ -1472,6 +1488,14 @@ package object config {
         s"The file buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
+
+  private[spark] val SHUFFLE_FILE_MERGE_BUFFER_SIZE =
+    ConfigBuilder("spark.shuffle.file.merge.buffer")
+      .doc("Size of the in-memory buffer for each shuffle file input stream, in KiB unless " +
+        "otherwise specified. These buffers use off-heap buffers and are related to the number " +
+        "of files in the shuffle file. Too large buffers should be avoided.")
+      .version("4.0.0")
+      .fallbackConf(SHUFFLE_FILE_BUFFER_SIZE)
 
   private[spark] val SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.unsafe.file.output.buffer")
@@ -1617,8 +1641,7 @@ package object config {
       .version("3.2.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
-      .checkValue(Set("ADLER32", "CRC32").contains, "Shuffle checksum algorithm " +
-        "should be either ADLER32 or CRC32.")
+      .checkValues(Set("ADLER32", "CRC32", "CRC32C"))
       .createWithDefault("ADLER32")
 
   private[spark] val SHUFFLE_COMPRESS =
@@ -1964,6 +1987,26 @@ package object config {
     .intConf
     .createWithDefault(6066)
 
+  private[spark] val MASTER_REST_SERVER_MAX_THREADS = ConfigBuilder("spark.master.rest.maxThreads")
+    .doc("Maximum number of threads to use in the Spark Master REST API Server.")
+    .version("4.0.0")
+    .intConf
+    .createWithDefault(200)
+
+  private[spark] val MASTER_REST_SERVER_FILTERS = ConfigBuilder("spark.master.rest.filters")
+    .doc("Comma separated list of filter class names to apply to the Spark Master REST API.")
+    .version("4.0.0")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
+  private[spark] val MASTER_REST_SERVER_VIRTUAL_THREADS =
+    ConfigBuilder("spark.master.rest.virtualThread.enabled")
+      .doc("If true, Spark master tries to use Java 21 virtual thread for REST API.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")
     .intConf
@@ -1981,6 +2024,14 @@ package object config {
     ConfigBuilder("spark.master.useAppNameAsAppId.enabled")
       .internal()
       .doc("(Experimental) If true, Spark master uses the user-provided appName for appId.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val MASTER_USE_DRIVER_ID_AS_APP_NAME =
+    ConfigBuilder("spark.master.useDriverIdAsAppName.enabled")
+      .internal()
+      .doc("(Experimental) If true, Spark master tries to set driver ID as appName.")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
@@ -2424,11 +2475,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EXECUTOR_KILL_ON_FATAL_ERROR_DEPTH =
+  private[spark] val KILL_ON_FATAL_ERROR_DEPTH =
     ConfigBuilder("spark.executor.killOnFatalError.depth")
       .doc("The max depth of the exception chain in a failed task Spark will search for a fatal " +
-        "error to check whether it should kill an executor. 0 means not checking any fatal " +
-        "error, 1 means checking only the exception but not the cause, and so on.")
+        "error to check whether it should kill the JVM process. 0 means not checking any fatal" +
+        " error, 1 means checking only the exception but not the cause, and so on.")
       .internal()
       .version("3.1.0")
       .intConf

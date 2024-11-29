@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
-import java.net.{URI, URL}
+import java.net.URI
 import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
@@ -371,7 +371,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def getServiceHostAndPort(minioUrlStr : String) : (String, Int) = {
-    val minioUrl = new URL(minioUrlStr)
+    val minioUrl = new URI(minioUrlStr).toURL
     (minioUrl.getHost, minioUrl.getPort)
   }
 

@@ -267,6 +267,7 @@ io.fabric8:kubernetes-model-scheduling
 io.fabric8:kubernetes-model-storageclass
 io.fabric8:zjsonpatch
 io.github.java-diff-utils:java-diff-utils
+io.jsonwebtoken:jjwt-api
 io.netty:netty-all
 io.netty:netty-buffer
 io.netty:netty-codec
@@ -401,7 +402,6 @@ org.xerial.snappy:snappy-java
 org.yaml:snakeyaml
 oro:oro
 stax:stax-api
-xerces:xercesImpl
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -419,6 +419,11 @@ for text of these licenses.
 Python Software Foundation License
 ----------------------------------
 python/pyspark/loose_version.py
+
+
+BSD 0-Clause
+------------
+org.tukaani:xz
 
 
 BSD 2-Clause
@@ -507,7 +512,6 @@ Eclipse Distribution License (EDL) 1.0
 com.sun.istack:istack-commons-runtime
 jakarta.xml.bind:jakarta.xml.bind-api
 org.glassfish.jaxb:jaxb-runtime
-org.glassfish.jaxb:txw2
 
 Eclipse Public License (EPL) 2.0
 --------------------------------
@@ -519,12 +523,6 @@ org.glassfish.hk2:hk2-api
 org.glassfish.hk2:hk2-locator
 org.glassfish.hk2:hk2-utils
 org.glassfish.hk2:osgi-resource-locator
-
-
-Public Domain
--------------
-org.tukaani:xz
-
 
 Creative Commons CC0 1.0 Universal Public Domain Dedication
 -----------------------------------------------------------

@@ -26,7 +26,7 @@ Keep this documentation focused on error states (e.g. `58002`) and conditions (e
 for when they encounter an error.
 
 To update this information, edit `error-conditions.json`. The table below will be automatically
-derived from that file via `docs/util/build-error-docs.py`.
+derived from that file via `docs/_plugins/build-error-docs.py`.
 
 Also note that this is a Jekyll comment and not an HTML comment so that this comment does not show
 up in the generated HTML to end users. :-)

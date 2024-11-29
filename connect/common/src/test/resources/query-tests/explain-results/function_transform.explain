@@ -1,2 +1,0 @@
-Project [transform(e#0, lambdafunction((lambda x#0 + 1), lambda x#0, false)) AS transform(e, lambdafunction((namedlambdavariable() + 1), namedlambdavariable()))#0]
-+- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

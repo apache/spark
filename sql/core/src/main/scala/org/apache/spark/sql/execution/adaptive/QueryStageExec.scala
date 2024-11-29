@@ -93,6 +93,13 @@ abstract class QueryStageExec extends LeafExecNode {
   private[adaptive] def resultOption: AtomicReference[Option[Any]] = _resultOption
   final def isMaterialized: Boolean = resultOption.get().isDefined
 
+  @transient
+  @volatile
+  protected var _error = new AtomicReference[Option[Throwable]](None)
+
+  def error: AtomicReference[Option[Throwable]] = _error
+  final def hasFailed: Boolean = _error.get().isDefined
+
   override def output: Seq[Attribute] = plan.output
   override def outputPartitioning: Partitioning = plan.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
@@ -154,14 +161,14 @@ abstract class QueryStageExec extends LeafExecNode {
 abstract class ExchangeQueryStageExec extends QueryStageExec {
 
   /**
-   * Cancel the stage materialization if in progress; otherwise do nothing.
+   * Cancel the stage materialization if in progress with a reason; otherwise do nothing.
    */
-  final def cancel(): Unit = {
+  final def cancel(reason: String): Unit = {
     logDebug(s"Cancel query stage: $name")
-    doCancel()
+    doCancel(reason)
   }
 
-  protected def doCancel(): Unit
+  protected def doCancel(reason: String): Unit
 
   /**
    * The canonicalized plan before applying query stage optimizer rules.
@@ -194,7 +201,7 @@ case class ShuffleQueryStageExec(
 
   def advisoryPartitionSize: Option[Long] = shuffle.advisoryPartitionSize
 
-  override protected def doMaterialize(): Future[Any] = shuffle.submitShuffleJob
+  override protected def doMaterialize(): Future[Any] = shuffle.submitShuffleJob()
 
   override def newReuseInstance(
       newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
@@ -203,10 +210,11 @@ case class ShuffleQueryStageExec(
       ReusedExchangeExec(newOutput, shuffle),
       _canonicalized)
     reuse._resultOption = this._resultOption
+    reuse._error = this._error
     reuse
   }
 
-  override protected def doCancel(): Unit = shuffle.cancelShuffleJob
+  override protected def doCancel(reason: String): Unit = shuffle.cancelShuffleJob(Option(reason))
 
   /**
    * Returns the Option[MapOutputStatistics]. If the shuffle map stage has no partition,
@@ -240,7 +248,7 @@ case class BroadcastQueryStageExec(
       throw SparkException.internalError(s"wrong plan for broadcast stage:\n ${plan.treeString}")
   }
 
-  override protected def doMaterialize(): Future[Any] = broadcast.submitBroadcastJob
+  override protected def doMaterialize(): Future[Any] = broadcast.submitBroadcastJob()
 
   override def newReuseInstance(
       newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
@@ -249,10 +257,12 @@ case class BroadcastQueryStageExec(
       ReusedExchangeExec(newOutput, broadcast),
       _canonicalized)
     reuse._resultOption = this._resultOption
+    reuse._error = this._error
     reuse
   }
 
-  override protected def doCancel(): Unit = broadcast.cancelBroadcastJob()
+  override protected def doCancel(reason: String): Unit =
+    broadcast.cancelBroadcastJob(Option(reason))
 
   override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
 }

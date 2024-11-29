@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import platform
 from decimal import Decimal
 import os
 import time
@@ -111,11 +110,7 @@ class DataFrameCreationTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower() or not have_pandas,
-        "Fails in PyPy Python 3.8, should enable.",
-    )
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd
@@ -137,8 +132,8 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -146,8 +141,8 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "data", "arg_type": "DataFrame"},
         )
 
     def test_partial_inference_failure(self):
@@ -156,8 +151,8 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_DETERMINE_TYPE",
-            message_parameters={},
+            errorClass="CANNOT_DETERMINE_TYPE",
+            messageParameters={},
         )
 
     @unittest.skipIf(
@@ -191,8 +186,8 @@ class DataFrameCreationTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                message_parameters={},
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
             )
 
             # Dict has different types of values should fail

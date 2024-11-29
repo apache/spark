@@ -16,7 +16,7 @@
 #
 from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.sql.connect.utils import check_dependencies
-from pyspark.sql.connect.client.logging import logger
+from pyspark.sql.connect.logging import logger
 
 check_dependencies(__name__)
 
@@ -114,8 +114,8 @@ class Artifact:
             return self.storage.size
         else:
             raise PySparkRuntimeError(
-                error_class="UNSUPPORTED_OPERATION",
-                message_parameters={"operation": f"{self.storage} storage"},
+                errorClass="UNSUPPORTED_OPERATION",
+                messageParameters={"operation": f"{self.storage} storage"},
             )
 
 
@@ -219,8 +219,8 @@ class ArtifactManager:
                     # This has a limitation - hash(#) in the file name would not work.
                     if "#" in local_path:
                         raise PySparkValueError(
-                            error_class="VALUE_ALLOWED",
-                            message_parameters={
+                            errorClass="VALUE_ALLOWED",
+                            messageParameters={
                                 "arg_name": "artifact path",
                                 "disallowed_value": "#",
                             },
@@ -234,13 +234,13 @@ class ArtifactManager:
                 artifact = new_jar_artifact(name, LocalFile(local_path))
             else:
                 raise PySparkRuntimeError(
-                    error_class="UNSUPPORTED_OPERATION",
-                    message_parameters={"operation": f"{local_path} file format"},
+                    errorClass="UNSUPPORTED_OPERATION",
+                    messageParameters={"operation": f"{local_path} file format"},
                 )
             return [artifact]
         raise PySparkRuntimeError(
-            error_class="UNSUPPORTED_OPERATION",
-            message_parameters={"operation": f"{parsed.scheme} scheme"},
+            errorClass="UNSUPPORTED_OPERATION",
+            messageParameters={"operation": f"{parsed.scheme} scheme"},
         )
 
     def _parse_forward_to_fs_artifacts(self, local_path: str, dest_path: str) -> List[Artifact]:

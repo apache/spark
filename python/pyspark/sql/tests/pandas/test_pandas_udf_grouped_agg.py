@@ -189,8 +189,8 @@ class GroupedAggPandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
                 "ArrayType(ArrayType(YearMonthIntervalType(0, 1), True), True)"
             },
@@ -204,8 +204,8 @@ class GroupedAggPandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
                 "StructType([StructField('mean', DoubleType(), True), "
                 "StructField('std', DoubleType(), True)])"
@@ -220,8 +220,8 @@ class GroupedAggPandasUDFTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
                 "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
                 "ArrayType(YearMonthIntervalType(0, 1), True)"
             },

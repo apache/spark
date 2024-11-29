@@ -780,7 +780,7 @@ private class InternalLinearRegressionModelWriter
     val instance = stage.asInstanceOf[LinearRegressionModel]
     val sc = sparkSession.sparkContext
     // Save metadata and Params
-    DefaultParamsWriter.saveMetadata(instance, path, sc)
+    DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
     // Save model data: intercept, coefficients, scale
     val data = Data(instance.intercept, instance.coefficients, instance.scale)
     val dataPath = new Path(path, "data").toString
@@ -824,7 +824,7 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
     private val className = classOf[LinearRegressionModel].getName
 
     override def load(path: String): LinearRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)

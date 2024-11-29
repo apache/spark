@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 import sys
-from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
+from typing import cast, Iterable, Sequence, Tuple, TYPE_CHECKING, Union
 
 from pyspark.sql.window import (
     Window as ParentWindow,
@@ -25,13 +25,15 @@ from pyspark.sql.utils import get_active_spark_context
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql._typing import ColumnOrName, ColumnOrName_
+    from pyspark.sql._typing import ColumnOrName
 
 
 __all__ = ["Window", "WindowSpec"]
 
 
-def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> "JavaObject":
+def _to_java_cols(
+    cols: Tuple[Union["ColumnOrName", Sequence["ColumnOrName"]], ...]
+) -> "JavaObject":
     from pyspark.sql.classic.column import _to_seq, _to_java_column
 
     if len(cols) == 1 and isinstance(cols[0], list):
@@ -42,7 +44,7 @@ def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]
 
 class Window(ParentWindow):
     @staticmethod
-    def partitionBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> ParentWindowSpec:
+    def partitionBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
         from py4j.java_gateway import JVMView
 
         sc = get_active_spark_context()
@@ -52,7 +54,7 @@ class Window(ParentWindow):
         return WindowSpec(jspec)
 
     @staticmethod
-    def orderBy(*cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> ParentWindowSpec:
+    def orderBy(*cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
         from py4j.java_gateway import JVMView
 
         sc = get_active_spark_context()
@@ -99,10 +101,12 @@ class WindowSpec(ParentWindowSpec):
     def __init__(self, jspec: "JavaObject") -> None:
         self._jspec = jspec
 
-    def partitionBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> ParentWindowSpec:
+    def partitionBy(
+        self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]
+    ) -> ParentWindowSpec:
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
-    def orderBy(self, *cols: Union["ColumnOrName", List["ColumnOrName_"]]) -> ParentWindowSpec:
+    def orderBy(self, *cols: Union["ColumnOrName", Sequence["ColumnOrName"]]) -> ParentWindowSpec:
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
     def rowsBetween(self, start: int, end: int) -> ParentWindowSpec:

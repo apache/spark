@@ -193,13 +193,16 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
     }
 
     val (inputColNames, outputColNames) = getInOutCols()
+
     val newCols = inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
        require(!schema.fieldNames.contains(outputColName),
         s"Output Column $outputColName already exists.")
-      val inputType = schema(inputColName).dataType
+      val inputType = SchemaUtils.getSchemaFieldType(schema, inputColName)
       require(DataTypeUtils.sameType(inputType, ArrayType(StringType)), "Input type must be " +
         s"${ArrayType(StringType).catalogString} but got ${inputType.catalogString}.")
-      StructField(outputColName, inputType, schema(inputColName).nullable)
+      StructField(
+        outputColName, inputType, SchemaUtils.getSchemaField(schema, inputColName).nullable
+      )
     }
     StructType(schema.fields ++ newCols)
   }

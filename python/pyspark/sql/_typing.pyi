@@ -38,7 +38,6 @@ import pyspark.sql.types
 from pyspark.sql.column import Column
 
 ColumnOrName = Union[Column, str]
-ColumnOrName_ = TypeVar("ColumnOrName_", bound=ColumnOrName)
 ColumnOrNameOrOrdinal = Union[Column, str, int]
 DecimalLiteral = decimal.Decimal
 DateTimeLiteral = Union[datetime.datetime, datetime.date]

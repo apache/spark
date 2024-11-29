@@ -64,6 +64,7 @@ class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession with BeforeAn
     val args = Array("--port", serverPort.toString)
     val task = new Runnable {
       override def run(): Unit = {
+        System.setProperty("spark.sql.abc", "abc")
         ConnectRepl.doMain(
           args = args,
           semaphore = Some(semaphore),
@@ -554,5 +555,14 @@ class ReplE2ESuite extends ConnectFunSuite with RemoteSparkSession with BeforeAn
         |""".stripMargin
     val output = runCommandsInShell(input)
     assertContains(": Long = 1045", output)
+  }
+
+  test("Simple configuration set in startup") {
+    val input =
+      """
+        |spark.conf.get("spark.sql.abc")
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("abc", output)
   }
 }

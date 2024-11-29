@@ -33,6 +33,7 @@ from typing import (
     Union,
     TYPE_CHECKING,
     overload,
+    cast,
 )
 import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from pyspark.sql import SparkSession
 
 T = TypeVar("T")
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 _current_origin = threading.local()
 
@@ -70,16 +72,16 @@ class ErrorClassesReader:
     def __init__(self) -> None:
         self.error_info_map = ERROR_CLASSES_MAP
 
-    def get_error_message(self, error_class: str, message_parameters: Dict[str, str]) -> str:
+    def get_error_message(self, errorClass: str, messageParameters: Dict[str, str]) -> str:
         """
         Returns the completed error message by applying message parameters to the message template.
         """
-        message_template = self.get_message_template(error_class)
+        message_template = self.get_message_template(errorClass)
         # Verify message parameters.
         message_parameters_from_template = re.findall("<([a-zA-Z0-9_-]+)>", message_template)
-        assert set(message_parameters_from_template) == set(message_parameters), (
-            f"Undefined error message parameter for error class: {error_class}. "
-            f"Parameters: {message_parameters}"
+        assert set(message_parameters_from_template) == set(messageParameters), (
+            f"Undefined error message parameter for error class: {errorClass}. "
+            f"Parameters: {messageParameters}"
         )
 
         def replace_match(match: Match[str]) -> str:
@@ -88,14 +90,14 @@ class ErrorClassesReader:
         # Convert <> to {} only when paired.
         message_template = re.sub(r"<([^<>]*)>", replace_match, message_template)
 
-        return message_template.format(**message_parameters)
+        return message_template.format(**messageParameters)
 
-    def get_message_template(self, error_class: str) -> str:
+    def get_message_template(self, errorClass: str) -> str:
         """
         Returns the message template for corresponding error class from error-conditions.json.
 
         For example,
-        when given `error_class` is "EXAMPLE_ERROR_CLASS",
+        when given `errorClass` is "EXAMPLE_ERROR_CLASS",
         and corresponding error class in error-conditions.json looks like the below:
 
         .. code-block:: python
@@ -109,7 +111,7 @@ class ErrorClassesReader:
         In this case, this function returns:
         "Problem <A> because of <B>."
 
-        For sub error class, when given `error_class` is "EXAMPLE_ERROR_CLASS.SUB_ERROR_CLASS",
+        For sub error class, when given `errorClass` is "EXAMPLE_ERROR_CLASS.SUB_ERROR_CLASS",
         and corresponding error class in error-conditions.json looks like the below:
 
         .. code-block:: python
@@ -130,7 +132,7 @@ class ErrorClassesReader:
         In this case, this function returns:
         "Problem <A> because <B>. Do <C> to fix the problem."
         """
-        error_classes = error_class.split(".")
+        error_classes = errorClass.split(".")
         len_error_classes = len(error_classes)
         assert len_error_classes in (1, 2)
 
@@ -225,7 +227,7 @@ def _capture_call_site(spark_session: "SparkSession", depth: int) -> str:
     return call_sites_str
 
 
-def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
+def _with_origin(func: FuncT) -> FuncT:
     """
     A decorator to capture and provide the call site information to the server side
     when PySpark API functions are invoked.
@@ -269,7 +271,7 @@ def _with_origin(func: Callable[..., Any]) -> Callable[..., Any]:
         else:
             return func(*args, **kwargs)
 
-    return wrapper
+    return cast(FuncT, wrapper)
 
 
 @overload

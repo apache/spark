@@ -34,6 +34,11 @@ def print_header(text)
 end
 
 def build_spark_if_necessary
+  # If spark has already been compiled on the host, skip here.
+  if ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'
+    return
+  end
+
   if $spark_package_is_built
     return
   end
@@ -116,6 +121,16 @@ def copy_and_update_java_docs(source, dest, scala_source)
   File.open(css_file, 'a') { |f| f.write("\n" + css.join()) }
 end
 
+def build_spark_scala_and_java_docs_if_necessary
+  # If spark's docs has already been compiled on the host, skip here.
+  if ENV['SPARK_DOCS_IS_BUILT_ON_HOST'] == '1'
+    return
+  end
+
+  command = "build/sbt -Pkinesis-asl unidoc"
+  puts "Running '#{command}'..."
+  system(command) || raise("Unidoc generation failed")
+end
 
 def build_scala_and_java_docs
   build_spark_if_necessary
@@ -123,9 +138,7 @@ def build_scala_and_java_docs
   print_header "Building Scala and Java API docs."
   cd(SPARK_PROJECT_ROOT)
 
-  command = "build/sbt -Pkinesis-asl unidoc"
-  puts "Running '#{command}'..."
-  system(command) || raise("Unidoc generation failed")
+  build_spark_scala_and_java_docs_if_necessary
 
   puts "Moving back into docs dir."
   cd("docs")
@@ -136,11 +149,11 @@ def build_scala_and_java_docs
   # Copy over the unified ScalaDoc for all projects to api/scala.
   # This directory will be copied over to _site when `jekyll` command is run.
   copy_and_update_scala_docs("../target/scala-2.13/unidoc", "api/scala")
-  copy_and_update_scala_docs("../connector/connect/client/jvm/target/scala-2.13/unidoc", "api/connect/scala")
+  # copy_and_update_scala_docs("../connector/connect/client/jvm/target/scala-2.13/unidoc", "api/connect/scala")
 
   # Copy over the unified JavaDoc for all projects to api/java.
   copy_and_update_java_docs("../target/javaunidoc", "api/java", "api/scala")
-  copy_and_update_java_docs("../connector/connect/client/jvm/target/javaunidoc", "api/connect/java", "api/connect/scala")
+  # copy_and_update_java_docs("../connector/connect/client/jvm/target/javaunidoc", "api/connect/java", "api/connect/scala")
 end
 
 def build_python_docs
@@ -157,6 +170,7 @@ def build_python_docs
   mkdir_p "api/python"
 
   puts "cp -r ../python/docs/build/html/. api/python"
+  rm_r("../python/docs/build/html/_sources")
   cp_r("../python/docs/build/html/.", "api/python")
 end
 
@@ -194,11 +208,18 @@ end
 
 def build_error_docs
   print_header "Building error docs."
-  system("python '#{SPARK_PROJECT_ROOT}/docs/util/build-error-docs.py'") \
+
+  if !system("which python3 >/dev/null 2>&1")
+    raise("Missing python3 in your path, stopping error doc generation")
+  end
+
+  system("python3 '#{SPARK_PROJECT_ROOT}/docs/_plugins/build-error-docs.py'") \
   || raise("Error doc generation failed")
 end
 
-build_error_docs
+if not (ENV['SKIP_ERRORDOC'] == '1')
+  build_error_docs
+end
 
 if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')

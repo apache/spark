@@ -125,7 +125,7 @@ class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSpar
         exception = intercept[SparkIllegalArgumentException] {
           checkCompressionCodec("aa", isPartitioned)
         },
-        errorClass = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+        condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
         parameters = Map(
           "codecName" -> "aa",
           "availableCodecs" -> ("brotli, uncompressed, lzo, snappy, " +

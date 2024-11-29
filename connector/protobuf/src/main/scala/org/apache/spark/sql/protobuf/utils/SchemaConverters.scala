@@ -176,16 +176,16 @@ object SchemaConverters extends Logging {
         }
       case MESSAGE =>
         // If the `recursive.fields.max.depth` value is not specified, it will default to -1,
-        // and recursive fields are not permitted. Setting it to 0 drops all recursive fields,
-        // 1 allows it to be recursed once, and 2 allows it to be recursed twice and so on.
-        // A value greater than 10 is not allowed, and if a protobuf record has more depth for
-        // recursive fields than the allowed value, it will be truncated and some fields may be
-        // discarded.
+        // and recursive fields are not permitted. Setting it to 1 drops all recursive fields,
+        // 2 allows it to be recursed once, and 3 allows it to be recursed twice and so on.
+        // A value less than or equal to 0 or greater than 10 is not allowed, and if a protobuf
+        // record has more depth for recursive fields than the allowed value, it will be truncated
+        // and some fields may be discarded.
         // SQL Schema for protob2uf `message Person { string name = 1; Person bff = 2;}`
         // will vary based on the value of "recursive.fields.max.depth".
         // 1: struct<name: string>
-        // 2: struct<name string, bff: struct<name: string>>
-        // 3: struct<name string, bff: struct<name string, bff: struct<name: string>>>
+        // 2: struct<name: string, bff: struct<name: string>>
+        // 3: struct<name: string, bff: struct<name: string, bff: struct<name: string>>>
         // and so on.
         // TODO(rangadi): A better way to terminate would be replace the remaining recursive struct
         //      with the byte array of corresponding protobuf. This way no information is lost.

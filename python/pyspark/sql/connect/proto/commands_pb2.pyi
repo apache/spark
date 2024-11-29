@@ -905,6 +905,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     TABLE_NAME_FIELD_NUMBER: builtins.int
     FOREACH_WRITER_FIELD_NUMBER: builtins.int
     FOREACH_BATCH_FIELD_NUMBER: builtins.int
+    CLUSTERING_COLUMN_NAMES_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -932,6 +933,11 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     def foreach_writer(self) -> global___StreamingForeachFunction: ...
     @property
     def foreach_batch(self) -> global___StreamingForeachFunction: ...
+    @property
+    def clustering_column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Columns used for clustering the table."""
     def __init__(
         self,
         *,
@@ -949,6 +955,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         table_name: builtins.str = ...,
         foreach_writer: global___StreamingForeachFunction | None = ...,
         foreach_batch: global___StreamingForeachFunction | None = ...,
+        clustering_column_names: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -982,6 +989,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "available_now",
             b"available_now",
+            "clustering_column_names",
+            b"clustering_column_names",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
             "foreach_batch",
@@ -2179,6 +2188,7 @@ class CheckpointCommand(google.protobuf.message.Message):
     RELATION_FIELD_NUMBER: builtins.int
     LOCAL_FIELD_NUMBER: builtins.int
     EAGER_FIELD_NUMBER: builtins.int
+    STORAGE_LEVEL_FIELD_NUMBER: builtins.int
     @property
     def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The logical plan to checkpoint."""
@@ -2188,22 +2198,46 @@ class CheckpointCommand(google.protobuf.message.Message):
     """
     eager: builtins.bool
     """(Required) Whether to checkpoint this dataframe immediately."""
+    @property
+    def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
+        """(Optional) For local checkpoint, the storage level to use."""
     def __init__(
         self,
         *,
         relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         local: builtins.bool = ...,
         eager: builtins.bool = ...,
+        storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["relation", b"relation"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_storage_level",
+            b"_storage_level",
+            "relation",
+            b"relation",
+            "storage_level",
+            b"storage_level",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "eager", b"eager", "local", b"local", "relation", b"relation"
+            "_storage_level",
+            b"_storage_level",
+            "eager",
+            b"eager",
+            "local",
+            b"local",
+            "relation",
+            b"relation",
+            "storage_level",
+            b"storage_level",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_storage_level", b"_storage_level"]
+    ) -> typing_extensions.Literal["storage_level"] | None: ...
 
 global___CheckpointCommand = CheckpointCommand
 

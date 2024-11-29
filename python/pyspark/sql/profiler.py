@@ -315,6 +315,12 @@ class Profile:
             A UDF ID to be shown. If not specified, all the results will be shown.
         type : str, optional
             The profiler type, which can be either "perf" or "memory".
+
+        Notes
+        -----
+        The results are gathered from all Python executions. For example, if there are
+        8 tasks, each processing 1,000 rows, the total output will display the results
+        for 8,000 rows.
         """
         if type == "memory":
             self.profiler_collector.show_memory_profiles(id)
@@ -324,8 +330,8 @@ class Profile:
                 self.profiler_collector.show_memory_profiles(id)
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "type",
                     "allowed_values": str(["perf", "memory"]),
                 },
@@ -354,8 +360,8 @@ class Profile:
                 self.profiler_collector.dump_memory_profiles(path, id)
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "type",
                     "allowed_values": str(["perf", "memory"]),
                 },
@@ -415,8 +421,8 @@ class Profile:
             result = self.profiler_collector._memory_profile_results.get(id)
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "type",
                     "allowed_values": str(["perf", "memory"]),
                 },
@@ -429,8 +435,8 @@ class Profile:
             render = renderer
         if render is None:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "(type, renderer)",
                     "allowed_values": str(list(_renderers.keys())),
                 },
@@ -461,8 +467,8 @@ class Profile:
                 self.profiler_collector.clear_memory_profiles(id)
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={
                     "arg_name": "type",
                     "allowed_values": str(["perf", "memory"]),
                 },
@@ -474,8 +480,8 @@ def _render_flameprof(stats: pstats.Stats) -> Any:
         from flameprof import render
     except ImportError:
         raise PySparkValueError(
-            error_class="PACKAGE_NOT_INSTALLED",
-            message_parameters={"package_name": "flameprof", "minimum_version": "0.4"},
+            errorClass="PACKAGE_NOT_INSTALLED",
+            messageParameters={"package_name": "flameprof", "minimum_version": "0.4"},
         )
 
     buf = StringIO()

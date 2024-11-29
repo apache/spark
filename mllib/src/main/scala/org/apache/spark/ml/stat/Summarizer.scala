@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputT
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -248,16 +249,13 @@ private[ml] class SummaryBuilderImpl(
   ) extends SummaryBuilder {
 
   override def summary(featuresCol: Column, weightCol: Column): Column = {
-
-    val agg = SummaryBuilderImpl.MetricsAggregate(
+    SummaryBuilderImpl.MetricsAggregate(
       requestedMetrics,
       requestedCompMetrics,
-      featuresCol.expr,
-      weightCol.expr,
+      featuresCol,
+      weightCol,
       mutableAggBufferOffset = 0,
       inputAggBufferOffset = 0)
-
-    new Column(agg.toAggregateExpression())
   }
 }
 

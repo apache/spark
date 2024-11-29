@@ -1,0 +1,46 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "aggregate": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "groupType": "GROUP_TYPE_PIVOT",
+    "groupingExpressions": [{
+      "unresolvedAttribute": {
+        "unparsedIdentifier": "id"
+      }
+    }],
+    "aggregateExpressions": [{
+      "unresolvedFunction": {
+        "functionName": "count",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "b"
+          }
+        }]
+      }
+    }],
+    "pivot": {
+      "col": {
+        "unresolvedAttribute": {
+          "unparsedIdentifier": "a",
+          "planId": "0"
+        }
+      },
+      "values": [{
+        "integer": 1
+      }, {
+        "integer": 2
+      }, {
+        "integer": 3
+      }]
+    }
+  }
+}

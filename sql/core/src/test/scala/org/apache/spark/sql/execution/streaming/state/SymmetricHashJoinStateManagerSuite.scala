@@ -318,10 +318,11 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       withSQLConf(SQLConf.STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS.key ->
         skipNullsForStreamStreamJoins.toString) {
         val storeConf = new StateStoreConf(spark.sessionState.conf)
-        val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0, 5)
+        val stateInfo = StatefulOperatorStateInfo(
+          file.getAbsolutePath, UUID.randomUUID, 0, 0, 5, None)
         val manager = new SymmetricHashJoinStateManager(
           LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
-          partitionId = 0, stateFormatVersion, metric)
+          partitionId = 0, None, None, stateFormatVersion, metric)
         try {
           f(manager)
         } finally {

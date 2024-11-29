@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, LeafNode, Lo
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -60,9 +61,19 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
-    planBuilder: Seq[String] => LogicalPlan)
-  extends UnresolvedLeafNode {
+    children: Seq[LogicalPlan],
+    planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
+  extends UnresolvedNode {
+
+  def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
+    this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_IDENTIFIER)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =
+    copy(identifierExpr, newChildren, planBuilder)
 }
 
 /**
@@ -124,10 +135,36 @@ case class UnresolvedRelation(
 
   override def name: String = tableName
 
+  def requireWritePrivileges(privileges: Seq[TableWritePrivilege]): UnresolvedRelation = {
+    if (privileges.nonEmpty) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.put(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES, privileges.mkString(","))
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
+  def clearWritePrivileges: UnresolvedRelation = {
+    if (options.containsKey(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.remove(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
 }
 
 object UnresolvedRelation {
+  // An internal option of `UnresolvedRelation` to specify the required write privileges when
+  // writing data to this relation.
+  val REQUIRED_WRITE_PRIVILEGES = "__required_write_privileges__"
+
   def apply(
       tableIdentifier: TableIdentifier,
       extraOptions: CaseInsensitiveStringMap,
@@ -342,7 +379,8 @@ case class UnresolvedFunction(
     isDistinct: Boolean,
     filter: Option[Expression] = None,
     ignoreNulls: Boolean = false,
-    orderingWithinGroup: Seq[SortOrder] = Seq.empty)
+    orderingWithinGroup: Seq[SortOrder] = Seq.empty,
+    isInternal: Boolean = false)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -424,13 +462,13 @@ abstract class Star extends LeafExpression with NamedExpression {
  * "SELECT record.* from (SELECT struct(a,b,c) as record ...)
  *
  * @param target an optional name that should be the target of the expansion.  If omitted all
- *              targets' columns are produced. This can either be a table name or struct name. This
- *              is a list of identifiers that is the path of the expansion.
+ *               targets' columns are produced. This can either be a table name or struct name. This
+ *               is a list of identifiers that is the path of the expansion.
  *
  * This class provides the shared behavior between the classes for SELECT * ([[UnresolvedStar]])
- * and SELECT * EXCEPT ([[UnresolvedStarExcept]]). [[UnresolvedStar]] is just a case class of this,
- * while [[UnresolvedStarExcept]] adds some additional logic to the expand method.
-  */
+ * and SELECT * EXCEPT ([[UnresolvedStarExceptOrReplace]]). [[UnresolvedStar]] is just a case class
+ * of this, while [[UnresolvedStarExceptOrReplace]] adds some additional logic to the expand method.
+ */
 abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with Unevaluable {
   /**
    * Returns true if the nameParts is a subset of the last elements of qualifier of the attribute.
@@ -462,25 +500,44 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
   override def expand(
       input: LogicalPlan,
       resolver: Resolver): Seq[NamedExpression] = {
+    expandStar(input.output, input.metadataOutput, input.resolve, input.inputSet.toSeq, resolver)
+  }
+
+  /**
+   * Method used to expand a star. It uses output and metadata output attributes of the child
+   * for the expansion and it supports both recursive and non-recursive data types.
+   *
+   * @param childOperatorOutput The output attributes of the child operator
+   * @param childOperatorMetadataOutput The metadata output attributes of the child operator
+   * @param resolve A function to resolve the given name parts to an attribute
+   * @param suggestedAttributes A list of attributes that are suggested for expansion
+   * @param resolver The resolver used to match the name parts
+   */
+  def expandStar(
+      childOperatorOutput: Seq[Attribute],
+      childOperatorMetadataOutput: Seq[Attribute],
+      resolve: (Seq[String], Resolver) => Option[NamedExpression],
+      suggestedAttributes: Seq[Attribute],
+      resolver: Resolver): Seq[NamedExpression] = {
     // If there is no table specified, use all non-hidden input attributes.
-    if (target.isEmpty) return input.output
+    if (target.isEmpty) return childOperatorOutput
 
     // If there is a table specified, use hidden input attributes as well
-    val hiddenOutput = input.metadataOutput.filter(_.qualifiedAccessOnly)
+    val hiddenOutput = childOperatorMetadataOutput.filter(_.qualifiedAccessOnly)
       // Remove the qualified-access-only restriction immediately. The expanded attributes will be
       // put in a logical plan node and becomes normal attributes. They can still keep the special
       // attribute metadata to indicate that they are from metadata columns, but they should not
       // keep any restrictions that may break column resolution for normal attributes.
       // See SPARK-42084 for more details.
       .map(_.markAsAllowAnyAccess())
-    val expandedAttributes = (hiddenOutput ++ input.output).filter(
+    val expandedAttributes = (hiddenOutput ++ childOperatorOutput).filter(
       matchedQualifier(_, target.get, resolver))
 
     if (expandedAttributes.nonEmpty) return expandedAttributes
 
     // Try to resolve it as a struct expansion. If there is a conflict and both are possible,
     // (i.e. [name].* is both a table and a struct), the struct path can always be qualified.
-    val attribute = input.resolve(target.get, resolver)
+    val attribute = resolve(target.get, resolver)
     if (attribute.isDefined) {
       // This target resolved to an attribute in child. It must be a struct. Expand it.
       attribute.get.dataType match {
@@ -494,7 +551,7 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
           throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
       }
     } else {
-      val from = input.inputSet.map(_.name).map(toSQLId).mkString(", ")
+      val from = suggestedAttributes.map(_.name).map(toSQLId).mkString(", ")
       val targetString = target.get.mkString(".")
       throw QueryCompilationErrors.cannotResolveStarExpandGivenInputColumnsError(
         targetString, from)
@@ -514,8 +571,15 @@ abstract class UnresolvedStarBase(target: Option[Seq[String]]) extends Star with
  *
  * @param excepts a list of names that should be excluded from the expansion.
  *
+ * @param replacements an optional list of expressions that should be used to replace the
+ *                     expressions removed by EXCEPT. If present, the length of this list must
+ *                     be the same as the length of the EXCEPT list. This supports replacing
+ *                     expressions instead of excluding them from the original SELECT list.
  */
-case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[String]])
+case class UnresolvedStarExceptOrReplace(
+    target: Option[Seq[String]],
+    excepts: Seq[Seq[String]],
+    replacements: Option[Seq[NamedExpression]])
   extends UnresolvedStarBase(target) {
 
   /**
@@ -595,7 +659,14 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
       // group the except pairs by the column they refer to. NOTE: no groupMap until scala 2.13
       val groupedExcepts: AttributeMap[Seq[Seq[String]]] =
         AttributeMap(excepts.groupBy(_._1.toAttribute).transform((_, v) => v.map(_._2)))
-
+      // If the 'replacements' list is populated to indicate we should replace excepted columns
+      // with new expressions, we must have the same number of replacements as excepts. Keep an
+      // index to track the current replacement.
+      replacements.foreach { r =>
+        assert(excepts.size == r.size,
+          "The number of replacements must be the same as the number of excepts")
+      }
+      var replacementIndex = 0
       // map input columns while searching for the except entry corresponding to the current column
       columns.map(col => col -> groupedExcepts.get(col.toAttribute)).collect {
         // pass through columns that don't match anything in groupedExcepts
@@ -622,11 +693,15 @@ case class UnresolvedStarExcept(target: Option[Seq[String]], excepts: Seq[Seq[St
             filterColumns(extractedFields.toImmutableArraySeq, newExcepts)), col.name)()
         // if there are multiple nestedExcepts but one is empty we must have overlapping except
         // columns. throw an error.
-        case (col, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
+        case (_, Some(nestedExcepts)) if nestedExcepts.size > 1 =>
           throw new AnalysisException(
             errorClass = "EXCEPT_OVERLAPPING_COLUMNS",
             messageParameters = Map(
               "columns" -> this.excepts.map(_.mkString(".")).mkString(", ")))
+        // found a match and the 'replacements' list is populated - replace the column
+        case (_, Some(_)) if replacements.nonEmpty =>
+          replacementIndex += 1
+          replacements.get(replacementIndex - 1)
       }
     }
 
@@ -935,4 +1010,25 @@ case object UnresolvedWithinGroup extends LeafExpression with Unevaluable {
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override lazy val resolved = false
+}
+
+case class UnresolvedTranspose(
+    indices: Seq[Expression],
+    child: LogicalPlan
+) extends UnresolvedUnaryNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_TRANSPOSE)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedTranspose =
+    copy(child = newChild)
+}
+
+// A marker node to indicate that the logical plan containing this expression should be lazily
+// analyzed in the DataFrame. This node will be removed at the beginning of analysis.
+case class LazyExpression(child: Expression) extends UnaryExpression with Unevaluable {
+  override lazy val resolved: Boolean = false
+  override def dataType: DataType = child.dataType
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(child = newChild)
+  }
+  final override val nodePatterns: Seq[TreePattern] = Seq(LAZY_EXPRESSION)
 }

@@ -264,6 +264,18 @@ DescribeTableCommand `spark_catalog`.`default`.`char_part`, true, [col_name#x, d
 
 
 -- !query
+alter table char_part change column c1 comment 'char comment'
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, c1, StructField(c1,CharType(5),true)
+
+
+-- !query
+alter table char_part change column v1 comment 'varchar comment'
+-- !query analysis
+AlterTableChangeColumnCommand `spark_catalog`.`default`.`char_part`, v1, StructField(v1,VarcharType(6),true)
+
+
+-- !query
 alter table char_part add partition (v2='ke', c2='nt') location 'loc1'
 -- !query analysis
 org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException

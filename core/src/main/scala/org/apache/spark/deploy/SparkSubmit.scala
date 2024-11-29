@@ -79,12 +79,12 @@ private[spark] class SparkSubmit extends Logging {
     } else {
       // For non-shell applications, enable structured logging if it's not explicitly disabled
       // via the configuration `spark.log.structuredLogging.enabled`.
-      if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
-        Logging.enableStructuredLogging()
-      } else {
-        Logging.disableStructuredLogging()
-      }
+      Utils.resetStructuredLogging(sparkConf)
     }
+
+    // We should initialize log again after `spark.log.structuredLogging.enabled` effected
+    Logging.uninitialize()
+
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
     val uninitLog = initializeLogIfNecessary(true, silent = true)
@@ -109,8 +109,13 @@ private[spark] class SparkSubmit extends Logging {
    */
   private def kill(args: SparkSubmitArguments, sparkConf: SparkConf): Unit = {
     if (RestSubmissionClient.supportsRestClient(args.master)) {
-      new RestSubmissionClient(args.master)
+      val response = new RestSubmissionClient(args.master)
         .killSubmission(args.submissionToKill)
+      if (response.success) {
+        logInfo(s"${args.submissionToKill} is killed successfully.")
+      } else {
+        logError(response.message)
+      }
     } else {
       sparkConf.set("spark.master", args.master)
       SparkSubmitUtils
@@ -748,6 +753,8 @@ private[spark] class SparkSubmit extends Logging {
           (clusterManager & opt.clusterManager) != 0) {
         if (opt.clOption != null) { childArgs += opt.clOption += opt.value }
         if (opt.confKey != null) {
+          // Used in SparkConnectClient because Spark Connect client does not have SparkConf.
+          if (opt.confKey == "spark.remote") System.setProperty("spark.remote", opt.value)
           if (opt.mergeFn.isDefined && sparkConf.contains(opt.confKey)) {
             sparkConf.set(opt.confKey, opt.mergeFn.get.apply(sparkConf.get(opt.confKey), opt.value))
           } else {
@@ -1075,6 +1082,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
+  private val CONNECT_SHELL = "connect-shell"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
   private val R_PACKAGE_ARCHIVE = "rpkg.zip"
 
@@ -1149,7 +1157,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Return whether the given primary resource represents a shell.
    */
   private[deploy] def isShell(res: String): Boolean = {
-    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL)
+    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL || res == CONNECT_SHELL)
   }
 
   /**

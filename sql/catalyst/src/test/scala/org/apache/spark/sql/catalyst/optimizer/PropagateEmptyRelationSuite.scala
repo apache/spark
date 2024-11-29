@@ -27,12 +27,13 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
 
-class PropagateEmptyRelationSuite extends PlanTest {
+class   PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("PropagateEmptyRelation", Once,
+      Batch("PropagateEmptyRelation", FixedPoint(1),
         CombineUnions,
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
@@ -45,7 +46,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   object OptimizeWithoutPropagateEmptyRelation extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("OptimizeWithoutPropagateEmptyRelation", Once,
+      Batch("OptimizeWithoutPropagateEmptyRelation", FixedPoint(1),
         CombineUnions,
         ReplaceDistinctWithAggregate,
         ReplaceExceptWithAntiJoin,
@@ -216,10 +217,24 @@ class PropagateEmptyRelationSuite extends PlanTest {
       .where($"a" =!= 200)
       .orderBy($"a".asc)
 
-    val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation(output, isStreaming = true)
+    withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true") {
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer = LocalRelation(output, isStreaming = true)
+      comparePlans(optimized, correctAnswer)
+    }
 
-    comparePlans(optimized, correctAnswer)
+    withSQLConf(
+        SQLConf.PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "false") {
+      val optimized = Optimize.execute(query.analyze)
+      val correctAnswer = relation
+        .where(false)
+        .where($"a" > 1)
+        .select($"a")
+        .where($"a" =!= 200)
+        .orderBy($"a".asc).analyze
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("SPARK-47305 correctly tag isStreaming when propagating empty relation " +

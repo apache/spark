@@ -22,13 +22,13 @@ from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql.types import Row
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.errors import PySparkTypeError
-from pyspark.errors.exceptions.connect import AnalysisException
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
 if should_test_connect:
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.column import Column
+    from pyspark.errors.exceptions.connect import AnalysisException
 
 
 class SparkConnectErrorTests(SparkConnectSQLTestCase):
@@ -136,24 +136,24 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
             df.union(df2).collect()
         self.check_error(
             exception=e1.exception,
-            error_class="SESSION_NOT_SAME",
-            message_parameters={},
+            errorClass="SESSION_NOT_SAME",
+            messageParameters={},
         )
 
         with self.assertRaises(SessionNotSameException) as e2:
             df.unionByName(df2).collect()
         self.check_error(
             exception=e2.exception,
-            error_class="SESSION_NOT_SAME",
-            message_parameters={},
+            errorClass="SESSION_NOT_SAME",
+            messageParameters={},
         )
 
         with self.assertRaises(SessionNotSameException) as e3:
             df.join(df2).collect()
         self.check_error(
             exception=e3.exception,
-            error_class="SESSION_NOT_SAME",
-            message_parameters={},
+            errorClass="SESSION_NOT_SAME",
+            messageParameters={},
         )
 
     def test_unsupported_functions(self):
@@ -174,8 +174,8 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
 
             self.check_error(
                 exception=pe.exception,
-                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
-                message_parameters={"attr_name": attr},
+                errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED",
+                messageParameters={"attr_name": attr},
             )
 
         # Unsupported jvm attributes for DataFrame.
@@ -187,8 +187,8 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
 
             self.check_error(
                 exception=pe.exception,
-                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
-                message_parameters={"attr_name": attr},
+                errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED",
+                messageParameters={"attr_name": attr},
             )
 
         # Unsupported jvm attributes for Column.
@@ -197,8 +197,8 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
-            message_parameters={"attr_name": "_jc"},
+            errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED",
+            messageParameters={"attr_name": "_jc"},
         )
 
         # Unsupported jvm attributes for DataFrameReader.
@@ -207,8 +207,8 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=pe.exception,
-            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
-            message_parameters={"attr_name": "_jreader"},
+            errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED",
+            messageParameters={"attr_name": "_jreader"},
         )
 
     def test_column_cannot_be_constructed_from_string(self):
@@ -221,8 +221,8 @@ class SparkConnectErrorTests(SparkConnectSQLTestCase):
 
         self.check_error(
             exception=e1.exception,
-            error_class="NOT_LIST_OF_COLUMN_OR_STR",
-            message_parameters={"arg_name": "columns"},
+            errorClass="NOT_LIST_OF_COLUMN_OR_STR",
+            messageParameters={"arg_name": "columns"},
         )
 
     def test_ym_interval_in_collect(self):

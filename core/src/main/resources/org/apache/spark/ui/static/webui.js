@@ -75,6 +75,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-systemProperties','aggregated-systemProperties');
   collapseTablePageLoad('collapse-aggregated-metricsProperties','aggregated-metricsProperties');
   collapseTablePageLoad('collapse-aggregated-classpathEntries','aggregated-classpathEntries');
+  collapseTablePageLoad('collapse-aggregated-environmentVariables','aggregated-environmentVariables');
   collapseTablePageLoad('collapse-aggregated-activeJobs','aggregated-activeJobs');
   collapseTablePageLoad('collapse-aggregated-completedJobs','aggregated-completedJobs');
   collapseTablePageLoad('collapse-aggregated-failedJobs','aggregated-failedJobs');

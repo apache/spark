@@ -24,6 +24,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.expressions.{Coalesce, Literal, UnsafeRow}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.datasources.parquet.SparkToParquetSchemaConverter
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
@@ -51,7 +52,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = e1,
-      errorClass = "CANNOT_UP_CAST_DATATYPE",
+      condition = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map("expression" -> "b", "sourceType" -> "\"BIGINT\"", "targetType" -> "\"INT\"",
         "details" -> (
         s"""
@@ -68,7 +69,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = e2,
-      errorClass = "CANNOT_UP_CAST_DATATYPE",
+      condition = "CANNOT_UP_CAST_DATATYPE",
       parameters = Map("expression" -> "b.`b`", "sourceType" -> "\"DECIMAL(38,18)\"",
         "targetType" -> "\"BIGINT\"",
         "details" -> (
@@ -94,7 +95,7 @@ class QueryCompilationErrorsSuite
       }
       checkError(
         exception = e,
-        errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
+        condition = "UNSUPPORTED_GROUPING_EXPRESSION",
         parameters = Map[String, String]())
     }
   }
@@ -112,7 +113,7 @@ class QueryCompilationErrorsSuite
       }
       checkError(
         exception = e,
-        errorClass = "UNSUPPORTED_GROUPING_EXPRESSION",
+        condition = "UNSUPPORTED_GROUPING_EXPRESSION",
         parameters = Map[String, String]())
     }
   }
@@ -123,7 +124,7 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           sql("select format_string('%0$s', 'Hello')")
         },
-        errorClass = "INVALID_PARAMETER_VALUE.ZERO_INDEX",
+        condition = "INVALID_PARAMETER_VALUE.ZERO_INDEX",
         parameters = Map(
           "parameter" -> "`strfmt`",
           "functionName" -> "`format_string`"),
@@ -156,7 +157,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "INVALID_PANDAS_UDF_PLACEMENT",
+      condition = "INVALID_PANDAS_UDF_PLACEMENT",
       parameters = Map("functionList" -> "`pandas_udf_1`, `pandas_udf_2`"))
   }
 
@@ -183,7 +184,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
+      condition = "UNSUPPORTED_FEATURE.PYTHON_UDF_IN_ON_CLAUSE",
       parameters = Map("joinType" -> "LEFT OUTER"),
       sqlState = Some("0A000"))
   }
@@ -205,7 +206,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE.PANDAS_UDAF_IN_PIVOT",
+      condition = "UNSUPPORTED_FEATURE.PANDAS_UDAF_IN_PIVOT",
       parameters = Map[String, String](),
       sqlState = "0A000")
   }
@@ -224,7 +225,7 @@ class QueryCompilationErrorsSuite
       )
       checkError(
         exception = e,
-        errorClass = "NO_HANDLER_FOR_UDAF",
+        condition = "NO_HANDLER_FOR_UDAF",
         parameters = Map("functionName" -> "org.apache.spark.sql.errors.MyCastToString"),
         context = ExpectedContext(
           fragment = "myCast(123)", start = 7, stop = 17))
@@ -234,7 +235,7 @@ class QueryCompilationErrorsSuite
   test("UNTYPED_SCALA_UDF: use untyped Scala UDF should fail by default") {
     checkError(
       exception = intercept[AnalysisException](udf((x: Int) => x, IntegerType)),
-      errorClass = "UNTYPED_SCALA_UDF",
+      condition = "UNTYPED_SCALA_UDF",
       parameters = Map[String, String]())
   }
 
@@ -248,7 +249,7 @@ class QueryCompilationErrorsSuite
     )
     checkError(
       exception = e,
-      errorClass = "NO_UDF_INTERFACE",
+      condition = "NO_UDF_INTERFACE",
       parameters = Map("className" -> className))
   }
 
@@ -262,7 +263,7 @@ class QueryCompilationErrorsSuite
     )
     checkError(
       exception = e,
-      errorClass = "MULTI_UDF_INTERFACE_ERROR",
+      condition = "MULTI_UDF_INTERFACE_ERROR",
       parameters = Map("className" -> className))
   }
 
@@ -276,7 +277,7 @@ class QueryCompilationErrorsSuite
     )
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_FEATURE.TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
+      condition = "UNSUPPORTED_FEATURE.TOO_MANY_TYPE_ARGUMENTS_FOR_UDF_CLASS",
       parameters = Map("num" -> "24"),
       sqlState = "0A000")
   }
@@ -287,7 +288,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = groupingColMismatchEx,
-      errorClass = "GROUPING_COLUMN_MISMATCH",
+      condition = "GROUPING_COLUMN_MISMATCH",
       parameters = Map("grouping" -> "earnings.*", "groupingColumns" -> "course.*,year.*"),
       sqlState = Some("42803"),
       matchPVals = true)
@@ -299,7 +300,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = groupingIdColMismatchEx,
-      errorClass = "GROUPING_ID_COLUMN_MISMATCH",
+      condition = "GROUPING_ID_COLUMN_MISMATCH",
       parameters = Map("groupingIdColumn" -> "earnings.*",
       "groupByColumns" -> "course.*,year.*"),
       sqlState = Some("42803"),
@@ -322,14 +323,14 @@ class QueryCompilationErrorsSuite
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
         checkError(
           exception = intercept[AnalysisException] { testGroupingIDs(33) },
-          errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
+          condition = "GROUPING_SIZE_LIMIT_EXCEEDED",
           parameters = Map("maxSize" -> "32"))
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
         checkError(
           exception = intercept[AnalysisException] { testGroupingIDs(65) },
-          errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
+          condition = "GROUPING_SIZE_LIMIT_EXCEEDED",
           parameters = Map("maxSize" -> "64"))
       }
     }
@@ -354,7 +355,7 @@ class QueryCompilationErrorsSuite
           exception = intercept[AnalysisException] {
             sql(s"DESC TABLE $tempViewName PARTITION (c='Us', d=1)")
           },
-          errorClass = "FORBIDDEN_OPERATION",
+          condition = "FORBIDDEN_OPERATION",
           parameters = Map("statement" -> "DESC PARTITION",
             "objectType" -> "TEMPORARY VIEW", "objectName" -> s"`$tempViewName`"))
       }
@@ -380,7 +381,7 @@ class QueryCompilationErrorsSuite
           exception = intercept[AnalysisException] {
             sql(s"DESC TABLE $viewName PARTITION (c='Us', d=1)")
           },
-          errorClass = "FORBIDDEN_OPERATION",
+          condition = "FORBIDDEN_OPERATION",
           parameters = Map("statement" -> "DESC PARTITION",
           "objectType" -> "VIEW", "objectName" -> s"`$viewName`"))
       }
@@ -394,7 +395,7 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           sql("select date_add('1982-08-15', 'x')").collect()
         },
-        errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+        condition = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
         parameters = Map("functionName" -> "date_add"),
         sqlState = "22023")
     }
@@ -408,7 +409,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         spark.read.schema(schema).json(spark.emptyDataset[String])
       },
-      errorClass = "INVALID_JSON_SCHEMA_MAP_TYPE",
+      condition = "INVALID_JSON_SCHEMA_MAP_TYPE",
       parameters = Map("jsonSchema" -> "\"STRUCT<map: MAP<INT, INT> NOT NULL>\"")
     )
   }
@@ -418,7 +419,7 @@ class QueryCompilationErrorsSuite
     val query = "select m[a] from (select map('a', 'b') as m, 'aa' as aa)"
     checkError(
       exception = intercept[AnalysisException] {sql(query)},
-      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      condition = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map("objectName" -> "`a`",
         "proposal" -> "`aa`, `m`"),
@@ -433,7 +434,7 @@ class QueryCompilationErrorsSuite
     val query = "select m[a] from (select map('a', 'b') as m, 'aa' as `a.a`)"
     checkError(
       exception = intercept[AnalysisException] {sql(query)},
-      errorClass = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
+      condition = "UNRESOLVED_MAP_KEY.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map(
         "objectName" -> "`a`",
@@ -468,7 +469,7 @@ class QueryCompilationErrorsSuite
             |order by struct.a, struct.b
             |""".stripMargin)
       },
-      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       sqlState = None,
       parameters = Map(
         "objectName" -> "`struct`.`a`",
@@ -489,7 +490,7 @@ class QueryCompilationErrorsSuite
       val query = "SELECT v.i from (SELECT i FROM v)"
       checkError(
         exception = intercept[AnalysisException](sql(query)),
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         sqlState = None,
         parameters = Map(
           "objectName" -> "`v`.`i`",
@@ -522,7 +523,7 @@ class QueryCompilationErrorsSuite
           exception = intercept[AnalysisException] {
             sql(query)
           },
-          errorClass = "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
+          condition = "AMBIGUOUS_ALIAS_IN_NESTED_CTE",
           parameters = Map(
             "name" -> "`t`",
             "config" -> toSQLConf(SQLConf.LEGACY_CTE_PRECEDENCE_POLICY.key),
@@ -542,7 +543,7 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "AMBIGUOUS_COLUMN_OR_FIELD",
+        condition = "AMBIGUOUS_COLUMN_OR_FIELD",
         parameters = Map("name" -> "`c`.`X`", "n" -> "2"),
         context = ExpectedContext(
           fragment = query, start = 0, stop = 52))
@@ -566,7 +567,7 @@ class QueryCompilationErrorsSuite
           struct(lit("java"), lit("Dummies")))).
           agg(sum($"earnings")).collect()
       },
-      errorClass = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+      condition = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
       parameters = Map("value" -> "struct(col1, dotnet, col2, Experts)",
         "valueType" -> "struct<col1:string,col2:string>",
         "pivotType" -> "int"))
@@ -581,7 +582,7 @@ class QueryCompilationErrorsSuite
       }
       checkError(
         exception = e,
-        errorClass = "INVALID_FIELD_NAME",
+        condition = "INVALID_FIELD_NAME",
         parameters = Map("fieldName" -> "`m`.`n`", "path" -> "`m`"),
         context = ExpectedContext(
           fragment = "m.n int", start = 27, stop = 33))
@@ -603,7 +604,7 @@ class QueryCompilationErrorsSuite
           pivot(df("year"), Seq($"earnings")).
           agg(sum($"earnings")).collect()
       },
-      errorClass = "NON_LITERAL_PIVOT_VALUES",
+      condition = "NON_LITERAL_PIVOT_VALUES",
       parameters = Map("expression" -> "\"earnings\""))
   }
 
@@ -613,7 +614,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
+      condition = "UNSUPPORTED_DESERIALIZER.DATA_TYPE_MISMATCH",
       parameters = Map("desiredType" -> "\"ARRAY\"", "dataType" -> "\"INT\""))
   }
 
@@ -626,7 +627,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = e1,
-      errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
+      condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
       parameters = Map(
         "schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
         "ordinal" -> "3"))
@@ -636,7 +637,7 @@ class QueryCompilationErrorsSuite
     }
     checkError(
       exception = e2,
-      errorClass = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
+      condition = "UNSUPPORTED_DESERIALIZER.FIELD_NUMBER_MISMATCH",
       parameters = Map("schema" -> "\"STRUCT<a: STRING, b: INT NOT NULL>\"",
         "ordinal" -> "1"))
   }
@@ -649,7 +650,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
+      condition = "UNSUPPORTED_GENERATOR.NESTED_IN_EXPRESSIONS",
       parameters = Map("expression" -> "\"(explode(array(1, 2, 3)) + 1)\""))
   }
 
@@ -660,7 +661,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
+      condition = "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
       parameters = Map("plan" -> "'Sort [explode(array(1, 2, 3)) ASC NULLS FIRST], true"))
   }
 
@@ -675,7 +676,7 @@ class QueryCompilationErrorsSuite
 
     checkError(
       exception = e,
-      errorClass = "UNSUPPORTED_GENERATOR.NOT_GENERATOR",
+      condition = "UNSUPPORTED_GENERATOR.NOT_GENERATOR",
       sqlState = None,
       parameters = Map(
         "functionName" -> "`array_contains`",
@@ -690,7 +691,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         Seq("""{"a":1}""").toDF("a").select(from_json($"a", IntegerType)).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
+      condition = "DATATYPE_MISMATCH.INVALID_JSON_SCHEMA",
       parameters = Map("schema" -> "\"INT\"", "sqlExpr" -> "\"from_json(a)\""),
       context =
         ExpectedContext(fragment = "from_json", callSitePattern = getCurrentClassCallSitePattern))
@@ -701,7 +702,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         sql("SELECT CAST(1)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> "`cast`",
         "expectedNum" -> "0",
@@ -717,7 +718,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[ParseException] {
         sql("CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column")
       },
-      errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       sqlState = "42601",
       parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`")
     )
@@ -738,7 +739,7 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName RENAME TO db_name.schema_name.new_table_name")
         },
-        errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
+        condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
         parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`")
       )
@@ -762,7 +763,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         df.select($"name.firstname")
       },
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`firstname`", "count" -> "2"),
       context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
@@ -776,7 +777,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         df.select($"firstname.test_field")
       },
-      errorClass = "INVALID_EXTRACT_BASE_FIELD_TYPE",
+      condition = "INVALID_EXTRACT_BASE_FIELD_TYPE",
       sqlState = "42000",
       parameters = Map("base" -> "\"firstname\"", "other" -> "\"STRING\""),
       context = ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern)
@@ -802,7 +803,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         df.select(struct($"name"(struct("test"))))
       },
-      errorClass = "INVALID_EXTRACT_FIELD_TYPE",
+      condition = "INVALID_EXTRACT_FIELD_TYPE",
       sqlState = "42000",
       parameters = Map("extraction" -> "\"struct(test)\""))
 
@@ -810,7 +811,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         df.select($"name"(array("test")))
       },
-      errorClass = "INVALID_EXTRACT_FIELD_TYPE",
+      condition = "INVALID_EXTRACT_FIELD_TYPE",
       sqlState = "42000",
       parameters = Map("extraction" -> "\"array(test)\""))
   }
@@ -831,7 +832,7 @@ class QueryCompilationErrorsSuite
         exception = intercept[AnalysisException] {
           sql(query)
         },
-        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "proposal" -> "`c1`, `v1`.`c2`, `v2`.`c2`",
           "objectName" -> "`b`"),
@@ -849,7 +850,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[SparkIllegalArgumentException] {
         coalesce.dataType
       },
-      errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUTS",
+      condition = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.NO_INPUTS",
       parameters = Map("expression" -> "\"coalesce()\""))
   }
 
@@ -861,10 +862,43 @@ class QueryCompilationErrorsSuite
       exception = intercept[SparkIllegalArgumentException] {
         coalesce.dataType
       },
-      errorClass = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
+      condition = "COMPLEX_EXPRESSION_UNSUPPORTED_INPUT.MISMATCHED_TYPES",
       parameters = Map(
         "expression" -> "\"coalesce(1, a, a)\"",
         "inputTypes" -> "[\"INT\", \"STRING\", \"STRING\"]"))
+  }
+
+  test("SPARK-49666: the trim collation feature is off without collate builder call") {
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "CREATE TABLE t(col STRING COLLATE EN_RTRIM_CI) USING parquet",
+        "CREATE TABLE t(col STRING COLLATE UTF8_LCASE_RTRIM) USING parquet",
+        "SELECT 'aaa' COLLATE UNICODE_LTRIM_CI"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
+        )
+      }
+    }
+  }
+
+  test("SPARK-49666: the trim collation feature is off with collate builder call") {
+    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
+      Seq(
+        "SELECT collate('aaa', 'UNICODE_RTRIM')",
+        "SELECT collate('aaa', 'UTF8_BINARY_RTRIM')",
+        "SELECT collate('aaa', 'EN_AI_RTRIM')"
+      ).foreach { sqlText =>
+        checkError(
+          exception = intercept[AnalysisException](sql(sqlText)),
+          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
+          parameters = Map.empty,
+          context =
+            ExpectedContext(fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1)
+        )
+      }
+    }
   }
 
   test("UNSUPPORTED_CALL: call the unsupported method update()") {
@@ -872,41 +906,10 @@ class QueryCompilationErrorsSuite
       exception = intercept[SparkUnsupportedOperationException] {
         new UnsafeRow(1).update(0, 1)
       },
-      errorClass = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
+      condition = "UNSUPPORTED_CALL.WITHOUT_SUGGESTION",
       parameters = Map(
         "methodName" -> "update",
         "className" -> "org.apache.spark.sql.catalyst.expressions.UnsafeRow"))
-  }
-
-  test("SPARK-47102: the collation feature is off without collate builder call") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
-      Seq(
-        "CREATE TABLE t(col STRING COLLATE UNICODE_CI) USING parquet",
-        "CREATE TABLE t(col STRING COLLATE UNKNOWN_COLLATION_STRING) USING parquet",
-        "SELECT 'aaa' COLLATE UNICODE_CI",
-        "select collation('aaa')"
-      ).foreach { sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          errorClass = "UNSUPPORTED_FEATURE.COLLATION")
-      }
-    }
-  }
-
-  test("SPARK-47102: the collation feature is off with collate builder call") {
-    withSQLConf(SQLConf.COLLATION_ENABLED.key -> "false") {
-      Seq(
-        "SELECT collate('aaa', 'UNICODE_CI')",
-        "SELECT collate('aaa', 'UNKNOWN_COLLATION_STRING')"
-      ).foreach { sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          errorClass = "UNSUPPORTED_FEATURE.COLLATION",
-          parameters = Map.empty,
-          context = ExpectedContext(
-            fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1))
-      }
-    }
   }
 
   test("INTERNAL_ERROR: Convert unsupported data type from Spark to Parquet") {
@@ -922,7 +925,7 @@ class QueryCompilationErrorsSuite
       exception = intercept[AnalysisException] {
         converter.convertField(StructField("test", dummyDataType))
       },
-      errorClass = "INTERNAL_ERROR",
+      condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot convert Spark data type \"DUMMY\" to any Parquet type.")
     )
   }
@@ -950,11 +953,86 @@ class QueryCompilationErrorsSuite
           exception = intercept[AnalysisException] {
             sql(test.query)
           },
-          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
           parameters = Map("objectName" -> "`dummy`", "proposal" -> "`a`, `b`"),
           context = ExpectedContext(fragment = "dummy", start = test.pos, stop = test.pos + 4)
         )
       })
+    }
+  }
+
+  test("Catch and log errors when failing to write to external data source") {
+    val password = "MyPassWord"
+    val token = "MyToken"
+    val value = "value"
+    val options = Map("password" -> password, "token" -> token, "key" -> value)
+    val query = spark.range(10).logicalPlan
+    val cmd = SaveIntoDataSourceCommand(query, null, options, SaveMode.Overwrite)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        cmd.run(spark)
+      },
+      condition = "DATA_SOURCE_EXTERNAL_ERROR",
+      sqlState = "KD010",
+      parameters = Map.empty
+    )
+  }
+
+  test("SPARK-49895: trailing comma in select statement") {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 INT, c2 INT) USING PARQUET")
+
+      val queries = Seq(
+        "SELECT *? FROM t1",
+        "SELECT c1? FROM t1",
+        "SELECT c1? FROM t1 WHERE c1 = 1",
+        "SELECT c1? FROM t1 GROUP BY c1",
+        "SELECT *, RANK() OVER (ORDER BY c1)? FROM t1",
+        "SELECT c1? FROM t1 ORDER BY c1",
+        "WITH cte AS (SELECT c1? FROM t1) SELECT * FROM cte",
+        "WITH cte AS (SELECT c1 FROM t1) SELECT *? FROM cte",
+        "SELECT * FROM (SELECT c1? FROM t1)")
+
+      queries.foreach { query =>
+        val queryWithoutTrailingComma = query.replaceAll("\\?", "")
+        val queryWithTrailingComma = query.replaceAll("\\?", ",")
+
+        sql(queryWithoutTrailingComma)
+        print(queryWithTrailingComma)
+        val exception = intercept[AnalysisException] {
+          sql(queryWithTrailingComma)
+        }
+        assert(exception.getCondition === "TRAILING_COMMA_IN_SELECT")
+      }
+
+      val unresolvedColumnErrors = Seq(
+        "SELECT c3 FROM t1",
+        "SELECT from FROM t1",
+        "SELECT from FROM (SELECT 'a' as c1)",
+        "SELECT from AS col FROM t1",
+        "SELECT from AS from FROM t1",
+        "SELECT from from FROM t1")
+      unresolvedColumnErrors.foreach { query =>
+        val exception = intercept[AnalysisException] {
+          sql(query)
+        }
+        assert(exception.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      }
+
+      // sanity checks
+      withTable("from") {
+        sql(s"CREATE TABLE from (from INT) USING PARQUET")
+
+        sql(s"SELECT from FROM from")
+        sql(s"SELECT from as from FROM from")
+        sql(s"SELECT from from FROM from from")
+        sql(s"SELECT c1, from FROM VALUES(1, 2) AS T(c1, from)")
+
+        intercept[ParseException] {
+          sql("SELECT 1,")
+        }
+      }
     }
   }
 }

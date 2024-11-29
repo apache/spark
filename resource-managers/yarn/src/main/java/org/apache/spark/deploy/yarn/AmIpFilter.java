@@ -89,9 +89,9 @@ public class AmIpFilter implements Filter {
       proxyUriBases = new HashMap<>(proxyUriBasesArr.length);
       for (String proxyUriBase : proxyUriBasesArr) {
         try {
-          URL url = new URL(proxyUriBase);
+          URL url = new URI(proxyUriBase).toURL();
           proxyUriBases.put(url.getHost() + ":" + url.getPort(), proxyUriBase);
-        } catch(MalformedURLException e) {
+        } catch (MalformedURLException | URISyntaxException e) {
           LOG.warn(proxyUriBase + " does not appear to be a valid URL", e);
         }
       }
@@ -215,7 +215,7 @@ public class AmIpFilter implements Filter {
   public boolean isValidUrl(String url) {
     boolean isValid = false;
     try {
-      HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+      HttpURLConnection conn = (HttpURLConnection) new URI(url).toURL().openConnection();
       conn.connect();
       isValid = conn.getResponseCode() == HttpURLConnection.HTTP_OK;
       // If security is enabled, any valid RM which can give 401 Unauthorized is

@@ -137,7 +137,7 @@ Note that the format string used in most of these examples expects:
 > SELECT to_number('1234-', '999999MI');
   -1234
  
--- PR indicates optional wrapping angel brakets.
+-- PR indicates optional wrapping angel brackets.
 > SELECT to_number('9', '999PR')
   9
 ```

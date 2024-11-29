@@ -2,25 +2,25 @@
 Add 2 columns and drop 2 columns at 3 different depths of nesting
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 Add 2 columns and drop 2 columns at 3 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------------------------------
 To non-nullable StructTypes using performant method                            2              3           1          0.0      Infinity       1.0X
-To nullable StructTypes using performant method                                1              2           0          0.0      Infinity       1.3X
-To non-nullable StructTypes using non-performant method                       19             20           2          0.0      Infinity       0.1X
-To nullable StructTypes using non-performant method                          867            899          30          0.0      Infinity       0.0X
+To nullable StructTypes using performant method                                1              1           0          0.0      Infinity       1.4X
+To non-nullable StructTypes using non-performant method                       18             19           2          0.0      Infinity       0.1X
+To nullable StructTypes using non-performant method                          846            885          45          0.0      Infinity       0.0X
 
 
 ================================================================================================
 Add 50 columns and drop 50 columns at 100 different depths of nesting
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.11+9-LTS on Linux 6.5.0-1018-azure
+OpenJDK 64-Bit Server VM 17.0.12+7-LTS on Linux 6.5.0-1025-azure
 AMD EPYC 7763 64-Core Processor
 Add 50 columns and drop 50 columns at 100 different depths of nesting:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -----------------------------------------------------------------------------------------------------------------------------------------------------
-To non-nullable StructTypes using performant method                             1554           1575          30          0.0      Infinity       1.0X
-To nullable StructTypes using performant method                                 1666           1704          54          0.0      Infinity       0.9X
+To non-nullable StructTypes using performant method                             1087           1109          31          0.0      Infinity       1.0X
+To nullable StructTypes using performant method                                 1123           1190          95          0.0      Infinity       1.0X
 
 

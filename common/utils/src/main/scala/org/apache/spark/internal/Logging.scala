@@ -165,11 +165,17 @@ trait Logging {
   }
 
   protected def withLogContext(context: java.util.HashMap[String, String])(body: => Unit): Unit = {
-    val threadContext = CloseableThreadContext.putAll(context)
+    // put into thread context only when structured logging is enabled
+    val closeableThreadContextOpt = if (Logging.isStructuredLoggingEnabled) {
+      Some(CloseableThreadContext.putAll(context))
+    } else {
+      None
+    }
+
     try {
       body
     } finally {
-      threadContext.close()
+      closeableThreadContextOpt.foreach(_.close())
     }
   }
 
@@ -328,7 +334,7 @@ trait Logging {
       // If Log4j 2 is used but is initialized by default configuration,
       // load a default properties file
       // scalastyle:off println
-      if (Logging.islog4j2DefaultConfigured()) {
+      if (Logging.defaultSparkLog4jConfig || Logging.islog4j2DefaultConfigured()) {
         Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = if (Logging.isStructuredLoggingEnabled) {
           "org/apache/spark/log4j2-defaults.properties"
@@ -418,7 +424,6 @@ private[spark] object Logging {
   def uninitialize(): Unit = initLock.synchronized {
     if (isLog4j2()) {
       if (defaultSparkLog4jConfig) {
-        defaultSparkLog4jConfig = false
         val context = LogManager.getContext(false).asInstanceOf[LoggerContext]
         context.reconfigure()
       } else {

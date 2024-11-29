@@ -19,7 +19,6 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.IntegratedUDFTestUtils._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical.{NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Complete, Update}
 import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
@@ -87,7 +86,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Update",
@@ -161,7 +160,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         inputDataDS
           .groupBy("key")
           .applyInPandasWithState(
-            pythonFunc(inputDataDS("key"), inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+            pythonFunc(inputDataDS("key"), inputDataDS("value")),
             outputStructType,
             stateStructType,
             "Update",
@@ -234,7 +233,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Append",
@@ -318,7 +317,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Update",
@@ -434,7 +433,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             .withWatermark("eventTime", "10 seconds")
             .groupBy("key")
             .applyInPandasWithState(
-              pythonFunc(inputDataDF("key"), inputDataDF("eventTime")).expr.asInstanceOf[PythonUDF],
+              pythonFunc(inputDataDF("key"), inputDataDF("eventTime")),
               outputStructType,
               stateStructType,
               "Update",
@@ -519,7 +518,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
             .withWatermark("timestamp", "10 second")
             .groupBy("key")
             .applyInPandasWithState(
-              pythonFunc(inputDataDF("key"), inputDataDF("timestamp")).expr.asInstanceOf[PythonUDF],
+              pythonFunc(inputDataDF("key"), inputDataDF("timestamp")),
               outputStructType,
               stateStructType,
               "Update",
@@ -589,7 +588,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Update",
@@ -656,7 +655,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
           inputDataDS
             .groupBy("key")
             .applyInPandasWithState(
-              pythonFunc(inputDataDS("key")).expr.asInstanceOf[PythonUDF],
+              pythonFunc(inputDataDS("key")),
               outputStructType,
               stateStructType,
               "Update",
@@ -713,7 +712,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
           inputDataDS
             .groupBy("key")
             .applyInPandasWithState(
-              pythonFunc(inputDataDS("key")).expr.asInstanceOf[PythonUDF],
+              pythonFunc(inputDataDS("key")),
               outputStructType,
               stateStructType,
               "Update",
@@ -789,8 +788,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         .groupBy("key1", "key2")
         .applyInPandasWithState(
           pythonFunc(
-            inputDataDS("key1"), inputDataDS("key2"), inputDataDS("val1"), inputDataDS("val2")
-          ).expr.asInstanceOf[PythonUDF],
+            inputDataDS("key1"), inputDataDS("key2"), inputDataDS("val1"), inputDataDS("val2")),
           outputStructType,
           stateStructType,
           "Update",
@@ -877,8 +875,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
         .applyInPandasWithState(
           pythonFunc(
             inputDataDS("val1"), inputDataDS("key2"), inputDataDS("val2"), inputDataDS("key1"),
-            inputDataDS("val3")
-          ).expr.asInstanceOf[PythonUDF],
+            inputDataDS("val3")),
           outputStructType,
           stateStructType,
           "Update",
@@ -949,7 +946,7 @@ class FlatMapGroupsInPandasWithStateSuite extends StateStoreMetricsTest {
       inputDataDS
         .groupBy("value")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("value")).expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("value")),
           outputStructType,
           stateStructType,
           "Update",

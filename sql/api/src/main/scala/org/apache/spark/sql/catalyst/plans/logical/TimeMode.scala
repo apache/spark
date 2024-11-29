@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.catalyst.plans.logical
 
+import java.util.Locale
+
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.streaming.TimeMode
 
 /** TimeMode types used in transformWithState operator */
@@ -24,3 +27,20 @@ case object NoTime extends TimeMode
 case object ProcessingTime extends TimeMode
 
 case object EventTime extends TimeMode
+
+object TimeModes {
+  def apply(timeMode: String): TimeMode = {
+    timeMode.toLowerCase(Locale.ROOT) match {
+      case "none" =>
+        NoTime
+      case "processingtime" =>
+        ProcessingTime
+      case "eventtime" =>
+        EventTime
+      case _ =>
+        throw new SparkIllegalArgumentException(
+          errorClass = "STATEFUL_PROCESSOR_UNKNOWN_TIME_MODE",
+          messageParameters = Map("timeMode" -> timeMode))
+    }
+  }
+}

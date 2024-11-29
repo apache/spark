@@ -19,8 +19,10 @@ package org.apache.spark.sql.artifact
 
 import java.io.File
 import java.net.{URI, URL, URLClassLoader}
-import java.nio.file.{Files, Path, Paths, StandardCopyOption}
+import java.nio.ByteBuffer
+import java.nio.file.{CopyOption, Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -28,13 +30,13 @@ import scala.reflect.ClassTag
 import org.apache.commons.io.{FilenameUtils, FileUtils}
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
-import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkUnsupportedOperationException}
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkEnv, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.artifact.util.ArtifactUtils
+import org.apache.spark.sql.{Artifact, SparkSession}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.storage.{CacheId, StorageLevel}
+import org.apache.spark.sql.util.ArtifactUtils
+import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
 import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
 
 /**
@@ -67,27 +69,59 @@ class ArtifactManager(session: SparkSession) extends Logging {
       s"$artifactRootURI/${session.sessionUUID}")
 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
-  protected[artifact] val (classDir, classURI): (Path, String) =
+  protected[artifact] val (classDir, replClassURI): (Path, String) =
     (ArtifactUtils.concatenatePaths(artifactPath, "classes"), s"$artifactURI/classes/")
 
-  protected[artifact] val state: JobArtifactState =
-    JobArtifactState(session.sessionUUID, Option(classURI))
+  private lazy val alwaysApplyClassLoader =
+    session.conf.get(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key).toBoolean
 
-  def withResources[T](f: => T): T = {
-    Utils.withContextClassLoader(classloader) {
-      JobArtifactSet.withActiveJobArtifactState(state) {
+  private lazy val sessionIsolated =
+    session.conf.get(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key).toBoolean
+
+  protected[sql] lazy val state: JobArtifactState =
+    if (sessionIsolated) JobArtifactState(session.sessionUUID, Some(replClassURI)) else null
+
+  /**
+   * Whether any artifact has been added to this artifact manager. We use this to determine whether
+   * we should apply the classloader to the session, see `withClassLoaderIfNeeded`.
+   */
+  protected val sessionArtifactAdded = new AtomicBoolean(false)
+
+  private def withClassLoaderIfNeeded[T](f: => T): T = {
+    val log = s" classloader for session ${session.sessionUUID} because " +
+      s"alwaysApplyClassLoader=$alwaysApplyClassLoader, " +
+      s"sessionArtifactAdded=${sessionArtifactAdded.get()}."
+    if (alwaysApplyClassLoader || sessionArtifactAdded.get()) {
+      logDebug(s"Applying $log")
+      Utils.withContextClassLoader(classloader) {
         f
       }
+    } else {
+      logDebug(s"Not applying $log")
+      f
     }
   }
 
+  def withResources[T](f: => T): T = withClassLoaderIfNeeded {
+    JobArtifactSet.withActiveJobArtifactState(state) {
+      f
+    }
+  }
+
+  protected val cachedBlockIdList = new CopyOnWriteArrayList[CacheId]
   protected val jarsList = new CopyOnWriteArrayList[Path]
   protected val pythonIncludeList = new CopyOnWriteArrayList[String]
+  protected val sparkContextRelativePaths =
+    new CopyOnWriteArrayList[(SparkContextResourceType.ResourceType, Path, Option[String])]
 
   /**
    * Get the URLs of all jar artifacts.
    */
-  def getAddedJars: Seq[URL] = jarsList.asScala.map(_.toUri.toURL).toSeq
+  def getAddedJars: Seq[URL] = jarsList
+    .asScala
+    .map(ArtifactUtils.concatenatePaths(artifactPath, _))
+    .map(_.toUri.toURL)
+    .toSeq
 
   /**
    * Get the py-file names added to this SparkSession.
@@ -96,15 +130,30 @@ class ArtifactManager(session: SparkSession) extends Logging {
    */
   def getPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
 
-  protected def moveFile(source: Path, target: Path, allowOverwrite: Boolean = false): Unit = {
+  private def transferFile(
+      source: Path,
+      target: Path,
+      allowOverwrite: Boolean = false,
+      deleteSource: Boolean = true): Unit = {
+    def execute(s: Path, t: Path, opt: CopyOption*): Path =
+      if (deleteSource) Files.move(s, t, opt: _*) else Files.copy(s, t, opt: _*)
+
     Files.createDirectories(target.getParent)
     if (allowOverwrite) {
-      Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
+      execute(source, target, StandardCopyOption.REPLACE_EXISTING)
     } else {
-      Files.move(source, target)
+      execute(source, target)
     }
   }
 
+  private def normalizePath(path: Path): Path = {
+    // Convert the path to a string with the current system's separator
+    val normalizedPathString = path.toString
+      .replace('/', File.separatorChar)
+      .replace('\\', File.separatorChar)
+    // Convert the normalized string back to a Path object
+    Paths.get(normalizedPathString).normalize()
+  }
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
    * over the wire) for use.
@@ -112,19 +161,23 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * @param remoteRelativePath
    * @param serverLocalStagingPath
    * @param fragment
+   * @param deleteStagedFile
    */
   def addArtifact(
       remoteRelativePath: Path,
       serverLocalStagingPath: Path,
-      fragment: Option[String]): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
+      fragment: Option[String],
+      deleteStagedFile: Boolean = true
+  ): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
-    if (remoteRelativePath.startsWith(s"cache${File.separator}")) {
+    val normalizedRemoteRelativePath = normalizePath(remoteRelativePath)
+    if (normalizedRemoteRelativePath.startsWith(s"cache${File.separator}")) {
       val tmpFile = serverLocalStagingPath.toFile
       Utils.tryWithSafeFinallyAndFailureCallbacks {
         val blockManager = session.sparkContext.env.blockManager
         val blockId = CacheId(
           sessionUUID = session.sessionUUID,
-          hash = remoteRelativePath.toString.stripPrefix(s"cache${File.separator}"))
+          hash = normalizedRemoteRelativePath.toString.stripPrefix(s"cache${File.separator}"))
         val updater = blockManager.TempFileBasedBlockStoreUpdater(
           blockId = blockId,
           level = StorageLevel.MEMORY_AND_DISK_SER,
@@ -133,18 +186,24 @@ class ArtifactManager(session: SparkSession) extends Logging {
           blockSize = tmpFile.length(),
           tellMaster = false)
         updater.save()
-      }(catchBlock = { tmpFile.delete() })
-    } else if (remoteRelativePath.startsWith(s"classes${File.separator}")) {
+        cachedBlockIdList.add(blockId)
+      }(finallyBlock = { tmpFile.delete() })
+    } else if (normalizedRemoteRelativePath.startsWith(s"classes${File.separator}")) {
       // Move class files to the right directory.
       val target = ArtifactUtils.concatenatePaths(
         classDir,
-        remoteRelativePath.toString.stripPrefix(s"classes${File.separator}"))
+        normalizedRemoteRelativePath.toString.stripPrefix(s"classes${File.separator}"))
       // Allow overwriting class files to capture updates to classes.
       // This is required because the client currently sends all the class files in each class file
       // transfer.
-      moveFile(serverLocalStagingPath, target, allowOverwrite = true)
+      transferFile(
+        serverLocalStagingPath,
+        target,
+        allowOverwrite = true,
+        deleteSource = deleteStagedFile)
+      sessionArtifactAdded.set(true)
     } else {
-      val target = ArtifactUtils.concatenatePaths(artifactPath, remoteRelativePath)
+      val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
       // Disallow overwriting with modified version
       if (Files.exists(target)) {
         // makes the query idempotent
@@ -152,31 +211,72 @@ class ArtifactManager(session: SparkSession) extends Logging {
           return
         }
 
-        throw new RuntimeException(s"Duplicate Artifact: $remoteRelativePath. " +
+        throw new RuntimeException(s"Duplicate Artifact: $normalizedRemoteRelativePath. " +
             "Artifacts cannot be overwritten.")
       }
-      moveFile(serverLocalStagingPath, target)
+      transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
 
       // This URI is for Spark file server that starts with "spark://".
       val uri = s"$artifactURI/${Utils.encodeRelativeUnixPathToURIRawPath(
-          FilenameUtils.separatorsToUnix(remoteRelativePath.toString))}"
+          FilenameUtils.separatorsToUnix(normalizedRemoteRelativePath.toString))}"
 
-      if (remoteRelativePath.startsWith(s"jars${File.separator}")) {
+      if (normalizedRemoteRelativePath.startsWith(s"jars${File.separator}")) {
         session.sparkContext.addJar(uri)
-        jarsList.add(target)
-      } else if (remoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
+        sparkContextRelativePaths.add(
+          (SparkContextResourceType.JAR, normalizedRemoteRelativePath, fragment))
+        jarsList.add(normalizedRemoteRelativePath)
+        sessionArtifactAdded.set(true)
+      } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
-        val stringRemotePath = remoteRelativePath.toString
+        sparkContextRelativePaths.add(
+          (SparkContextResourceType.FILE, normalizedRemoteRelativePath, fragment))
+        val stringRemotePath = normalizedRemoteRelativePath.toString
         if (stringRemotePath.endsWith(".zip") || stringRemotePath.endsWith(
             ".egg") || stringRemotePath.endsWith(".jar")) {
           pythonIncludeList.add(target.getFileName.toString)
         }
-      } else if (remoteRelativePath.startsWith(s"archives${File.separator}")) {
+      } else if (normalizedRemoteRelativePath.startsWith(s"archives${File.separator}")) {
         val canonicalUri =
           fragment.map(Utils.getUriBuilder(new URI(uri)).fragment).getOrElse(new URI(uri))
         session.sparkContext.addArchive(canonicalUri.toString)
-      } else if (remoteRelativePath.startsWith(s"files${File.separator}")) {
+        sparkContextRelativePaths.add(
+          (SparkContextResourceType.ARCHIVE, normalizedRemoteRelativePath, fragment))
+      } else if (normalizedRemoteRelativePath.startsWith(s"files${File.separator}")) {
         session.sparkContext.addFile(uri)
+        sparkContextRelativePaths.add(
+          (SparkContextResourceType.FILE, normalizedRemoteRelativePath, fragment))
+      }
+    }
+  }
+
+  /**
+   * Add locally-stored artifacts to the session. These artifacts are from a user-provided
+   * permanent path which are accessible by the driver directly.
+   *
+   * Different from the [[addArtifact]] method, this method will not delete staged artifacts since
+   * they are from a permanent location.
+   */
+  private[sql] def addLocalArtifacts(artifacts: Seq[Artifact]): Unit = {
+    artifacts.foreach { artifact =>
+      artifact.storage match {
+        case d: Artifact.LocalFile =>
+          addArtifact(
+            artifact.path,
+            d.path,
+            fragment = None,
+            deleteStagedFile = false)
+        case d: Artifact.InMemory =>
+          val tempDir = Utils.createTempDir().toPath
+          val tempFile = tempDir.resolve(artifact.path.getFileName)
+          val outStream = Files.newOutputStream(tempFile)
+          Utils.tryWithSafeFinallyAndFailureCallbacks {
+            d.stream.transferTo(outStream)
+            addArtifact(artifact.path, tempFile, fragment = None)
+          }(finallyBlock = {
+            outStream.close()
+          })
+        case _ =>
+          throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
       }
     }
   }
@@ -185,9 +285,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
    * Returns a [[ClassLoader]] for session-specific jar/class file resources.
    */
   def classloader: ClassLoader = {
-    val urls = getAddedJars :+ classDir.toUri.toURL
+    val urls = (getAddedJars :+ classDir.toUri.toURL).toArray
     val prefixes = SparkEnv.get.conf.get(CONNECT_SCALA_UDF_STUB_PREFIXES)
     val userClasspathFirst = SparkEnv.get.conf.get(EXECUTOR_USER_CLASS_PATH_FIRST)
+    val fallbackClassLoader = session.sharedState.jarClassLoader
     val loader = if (prefixes.nonEmpty) {
       // Two things you need to know about classloader for all of this to make sense:
       // 1. A classloader needs to be able to fully define a class.
@@ -201,26 +302,62 @@ class ArtifactManager(session: SparkSession) extends Logging {
       // it delegates to.
       if (userClasspathFirst) {
         // USER -> SYSTEM -> STUB
-        new ChildFirstURLClassLoader(
-          urls.toArray,
-          StubClassLoader(Utils.getContextOrSparkClassLoader, prefixes))
+        new ChildFirstURLClassLoader(urls, StubClassLoader(fallbackClassLoader, prefixes))
       } else {
         // SYSTEM -> USER -> STUB
-        new ChildFirstURLClassLoader(
-          urls.toArray,
-          StubClassLoader(null, prefixes),
-          Utils.getContextOrSparkClassLoader)
+        new ChildFirstURLClassLoader(urls, StubClassLoader(null, prefixes), fallbackClassLoader)
       }
     } else {
       if (userClasspathFirst) {
-        new ChildFirstURLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+        new ChildFirstURLClassLoader(urls, fallbackClassLoader)
       } else {
-        new URLClassLoader(urls.toArray, Utils.getContextOrSparkClassLoader)
+        new URLClassLoader(urls, fallbackClassLoader)
       }
     }
 
     logDebug(s"Using class loader: $loader, containing urls: $urls")
     loader
+  }
+
+  private[sql] def clone(newSession: SparkSession): ArtifactManager = {
+    val sparkContext = session.sparkContext
+    val newArtifactManager = new ArtifactManager(newSession)
+    if (artifactPath.toFile.exists()) {
+      FileUtils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+    }
+    val blockManager = sparkContext.env.blockManager
+    val newBlockIds = cachedBlockIdList.asScala.map { blockId =>
+      val newBlockId = blockId.copy(sessionUUID = newSession.sessionUUID)
+      copyBlock(blockId, newBlockId, blockManager)
+    }
+
+    // Re-register resources to SparkContext
+    JobArtifactSet.withActiveJobArtifactState(newArtifactManager.state) {
+      sparkContextRelativePaths.forEach { case (resourceType, relativePath, fragment) =>
+        val uri = s"${newArtifactManager.artifactURI}/${
+          Utils.encodeRelativeUnixPathToURIRawPath(
+            FilenameUtils.separatorsToUnix(relativePath.toString))
+        }"
+        resourceType match {
+          case SparkContextResourceType.JAR =>
+            sparkContext.addJar(uri)
+          case SparkContextResourceType.FILE =>
+            sparkContext.addFile(uri)
+          case SparkContextResourceType.ARCHIVE =>
+            val canonicalUri =
+              fragment.map(Utils.getUriBuilder(new URI(uri)).fragment).getOrElse(new URI(uri))
+            sparkContext.addArchive(canonicalUri.toString)
+          case _ =>
+            throw SparkException.internalError(s"Unsupported resource type: $resourceType")
+        }
+      }
+    }
+
+    newArtifactManager.cachedBlockIdList.addAll(newBlockIds.asJava)
+    newArtifactManager.jarsList.addAll(jarsList)
+    newArtifactManager.pythonIncludeList.addAll(pythonIncludeList)
+    newArtifactManager.sparkContextRelativePaths.addAll(sparkContextRelativePaths)
+    newArtifactManager
   }
 
   /**
@@ -233,14 +370,16 @@ class ArtifactManager(session: SparkSession) extends Logging {
     // Clean up added files
     val fileserver = SparkEnv.get.rpcEnv.fileServer
     val sparkContext = session.sparkContext
-    val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
-      sparkContext.addedArchives.contains(state.uuid) ||
-      sparkContext.addedJars.contains(state.uuid)
-    if (shouldUpdateEnv) {
-      sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-      sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
-      sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
-      sparkContext.postEnvironmentUpdate()
+    if (state != null) {
+      val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
+        sparkContext.addedArchives.contains(state.uuid) ||
+        sparkContext.addedJars.contains(state.uuid)
+      if (shouldUpdateEnv) {
+        sparkContext.addedFiles.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+        sparkContext.addedArchives.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeFile))
+        sparkContext.addedJars.remove(state.uuid).foreach(_.keys.foreach(fileserver.removeJar))
+        sparkContext.postEnvironmentUpdate()
+      }
     }
 
     // Clean up cached relations
@@ -249,25 +388,32 @@ class ArtifactManager(session: SparkSession) extends Logging {
 
     // Clean up artifacts folder
     FileUtils.deleteDirectory(artifactPath.toFile)
+
+    // Clean up internal trackers
+    jarsList.clear()
+    pythonIncludeList.clear()
+    cachedBlockIdList.clear()
+    sparkContextRelativePaths.clear()
   }
 
   def uploadArtifactToFs(
       remoteRelativePath: Path,
       serverLocalStagingPath: Path): Unit = {
+    val normalizedRemoteRelativePath = normalizePath(remoteRelativePath)
     val hadoopConf = session.sparkContext.hadoopConfiguration
     assert(
-      remoteRelativePath.startsWith(
+      normalizedRemoteRelativePath.startsWith(
         ArtifactManager.forwardToFSPrefix + File.separator))
     val destFSPath = new FSPath(
       Paths
-        .get("/")
-        .resolve(remoteRelativePath.subpath(1, remoteRelativePath.getNameCount))
+        .get(File.separator)
+        .resolve(normalizedRemoteRelativePath.subpath(1, normalizedRemoteRelativePath.getNameCount))
         .toString)
     val localPath = serverLocalStagingPath
     val fs = destFSPath.getFileSystem(hadoopConf)
     if (fs.isInstanceOf[LocalFileSystem]) {
       val allowDestLocalConf =
-        session.conf.get(SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
+        session.sessionState.conf.getConf(SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
           .getOrElse(
             session.conf.get("spark.connect.copyFromLocalToFs.allowDestLocal").contains("true"))
 
@@ -295,4 +441,28 @@ object ArtifactManager extends Logging {
 
   private[artifact] lazy val artifactRootDirectory =
     Utils.createTempDir(ARTIFACT_DIRECTORY_PREFIX).toPath
+
+  private[artifact] object SparkContextResourceType extends Enumeration {
+    type ResourceType = Value
+    val JAR, FILE, ARCHIVE = Value
+  }
+
+  private def copyBlock(fromId: CacheId, toId: CacheId, blockManager: BlockManager): CacheId = {
+    require(fromId != toId)
+    blockManager.getLocalBytes(fromId) match {
+      case Some(blockData) =>
+        Utils.tryWithSafeFinallyAndFailureCallbacks {
+          val updater = blockManager.ByteBufferBlockStoreUpdater(
+            blockId = toId,
+            level = StorageLevel.MEMORY_AND_DISK_SER,
+            classTag = implicitly[ClassTag[Array[Byte]]],
+            bytes = blockData.toChunkedByteBuffer(ByteBuffer.allocate),
+            tellMaster = false)
+          updater.save()
+          toId
+        }(finallyBlock = { blockManager.releaseLock(fromId); blockData.dispose() })
+      case None =>
+        throw SparkException.internalError(s"Block $fromId not found in the block manager.")
+    }
+  }
 }

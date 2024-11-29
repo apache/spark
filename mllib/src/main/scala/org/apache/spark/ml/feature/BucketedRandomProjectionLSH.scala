@@ -227,7 +227,7 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
     private case class Data(randUnitVectors: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.randMatrix)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
@@ -241,7 +241,7 @@ object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProject
     private val className = classOf[BucketedRandomProjectionLSHModel].getName
 
     override def load(path: String): BucketedRandomProjectionLSHModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.parquet(dataPath)

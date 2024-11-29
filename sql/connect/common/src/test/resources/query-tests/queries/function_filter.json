@@ -1,0 +1,45 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "project": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double,d:struct\u003cid:bigint,a:int,b:double\u003e,e:array\u003cint\u003e,f:map\u003cstring,struct\u003cid:bigint,a:int,b:double\u003e\u003e,g:string\u003e"
+      }
+    },
+    "expressions": [{
+      "unresolvedFunction": {
+        "functionName": "filter",
+        "arguments": [{
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "e"
+          }
+        }, {
+          "lambdaFunction": {
+            "function": {
+              "unresolvedFunction": {
+                "functionName": "\u003e",
+                "arguments": [{
+                  "unresolvedNamedLambdaVariable": {
+                    "nameParts": ["x_1"]
+                  }
+                }, {
+                  "literal": {
+                    "integer": 10
+                  }
+                }]
+              }
+            },
+            "arguments": [{
+              "nameParts": ["x_1"]
+            }]
+          }
+        }]
+      }
+    }]
+  }
+}

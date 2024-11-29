@@ -22,12 +22,13 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{functions, Column, DataFrame}
+import org.apache.spark.sql.{functions, DataFrame}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, TypedImperativeAggregate}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -57,8 +58,7 @@ object FrequentItems extends Logging {
     val sizeOfMap = (1 / support).toInt
 
     val frequentItemCols = cols.map { col =>
-      val aggExpr = new CollectFrequentItems(functions.col(col).expr, sizeOfMap)
-      Column(aggExpr.toAggregateExpression(isDistinct = false)).as(s"${col}_freqItems")
+      column(new CollectFrequentItems(functions.col(col), sizeOfMap)).as(s"${col}_freqItems")
     }
 
     df.select(frequentItemCols: _*)

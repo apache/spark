@@ -94,6 +94,27 @@ abstract class PythonDataSourceSuiteBase extends QueryTest with SharedSparkSessi
 class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
   import IntegratedUDFTestUtils._
 
+  test("SPARK-50426: should not trigger static Python data source lookup") {
+    assume(shouldTestPandasUDFs)
+    val testAppender = new LogAppender("Python data source lookup")
+    // Using builtin and Java data sources should not trigger a static
+    // Python data source lookup
+    withLogAppender(testAppender) {
+      spark.read.format("org.apache.spark.sql.test").load()
+      spark.range(3).write.mode("overwrite").format("noop").save()
+    }
+    assert(!testAppender.loggingEvents
+      .exists(msg => msg.getMessage.getFormattedMessage.contains(
+        "Loading static Python Data Sources.")))
+    // Now trigger a Python data source lookup
+    withLogAppender(testAppender) {
+      spark.read.format(staticSourceName).load()
+    }
+    assert(testAppender.loggingEvents
+      .exists(msg => msg.getMessage.getFormattedMessage.contains(
+        "Loading static Python Data Sources.")))
+  }
+
   test("SPARK-45917: automatic registration of Python Data Source") {
     assume(shouldTestPandasUDFs)
     val df = spark.read.format(staticSourceName).load()
@@ -188,7 +209,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     spark.dataSource.registerPython(dataSourceName, dataSource)
     checkError(
       exception = intercept[AnalysisException](spark.read.format(dataSourceName).load()),
-      errorClass = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
       parameters = Map("inputSchema" -> "INT", "dataType" -> "\"INT\""))
   }
 
@@ -309,7 +330,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
           exception = intercept[AnalysisException] {
             spark.dataSource.registerPython(provider, dataSource)
           },
-          errorClass = "DATA_SOURCE_ALREADY_EXISTS",
+          condition = "DATA_SOURCE_ALREADY_EXISTS",
           parameters = Map("provider" -> provider))
       }
     }
@@ -330,7 +351,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("PySparkNotImplementedError"))
   }
 
@@ -350,7 +371,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("error creating reader"))
   }
 
@@ -369,7 +390,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val err = intercept[AnalysisException] {
       spark.read.format(dataSourceName).schema(schema).load().collect()
     }
-    assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+    assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
     assert(err.getMessage.contains("DATA_SOURCE_TYPE_MISMATCH"))
     assert(err.getMessage.contains("PySparkAssertionError"))
   }
@@ -480,7 +501,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
       spark.dataSource.registerPython(dataSourceName, dataSource)
       val err = intercept[AnalysisException](
         spark.read.format(dataSourceName).load().collect())
-      assert(err.getErrorClass == "PYTHON_DATA_SOURCE_ERROR")
+      assert(err.getCondition == "PYTHON_DATA_SOURCE_ERROR")
       assert(err.getMessage.contains("partitions"))
     }
   }
@@ -657,7 +678,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           spark.range(1).write.format(dataSourceName).save()
         },
-        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        condition = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
         parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"ErrorIfExists\""))
     }
 
@@ -666,7 +687,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           spark.range(1).write.format(dataSourceName).mode("ignore").save()
         },
-        errorClass = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
+        condition = "UNSUPPORTED_DATA_SOURCE_SAVE_MODE",
         parameters = Map("source" -> "SimpleDataSource", "createMode" -> "\"Ignore\""))
     }
 
@@ -675,7 +696,7 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
         exception = intercept[AnalysisException] {
           spark.range(1).write.format(dataSourceName).mode("foo").save()
         },
-        errorClass = "INVALID_SAVE_MODE",
+        condition = "INVALID_SAVE_MODE",
         parameters = Map("mode" -> "\"foo\""))
     }
   }

@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Subque
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -230,7 +231,8 @@ class SessionCatalog(
   /** This method discards any cached table relation plans for the given table identifier. */
   def invalidateCachedTable(name: TableIdentifier): Unit = {
     val qualified = qualifyIdentifier(name)
-    invalidateCachedTable(QualifiedTableName(qualified.database.get, qualified.table))
+    invalidateCachedTable(QualifiedTableName(
+      qualified.catalog.get, qualified.database.get, qualified.table))
   }
 
   /** This method provides a way to invalidate all the cached plans. */
@@ -299,7 +301,7 @@ class SessionCatalog(
     }
     if (cascade && databaseExists(dbName)) {
       listTables(dbName).foreach { t =>
-        invalidateCachedTable(QualifiedTableName(dbName, t.table))
+        invalidateCachedTable(QualifiedTableName(SESSION_CATALOG_NAME, dbName, t.table))
       }
     }
     externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
@@ -334,12 +336,16 @@ class SessionCatalog(
   def getCurrentDatabase: String = synchronized { currentDb }
 
   def setCurrentDatabase(db: String): Unit = {
+    setCurrentDatabaseWithNameCheck(db, requireDbExists)
+  }
+
+  def setCurrentDatabaseWithNameCheck(db: String, nameCheck: String => Unit): Unit = {
     val dbName = format(db)
     if (dbName == globalTempDatabase) {
       throw QueryCompilationErrors.cannotUsePreservedDatabaseAsCurrentDatabaseError(
         globalTempDatabase)
     }
-    requireDbExists(dbName)
+    nameCheck(dbName)
     synchronized { currentDb = dbName }
   }
 
@@ -1177,7 +1183,8 @@ class SessionCatalog(
   def refreshTable(name: TableIdentifier): Unit = synchronized {
     getLocalOrGlobalTempView(name).map(_.refresh()).getOrElse {
       val qualifiedIdent = qualifyIdentifier(name)
-      val qualifiedTableName = QualifiedTableName(qualifiedIdent.database.get, qualifiedIdent.table)
+      val qualifiedTableName = QualifiedTableName(
+        qualifiedIdent.catalog.get, qualifiedIdent.database.get, qualifiedIdent.table)
       tableRelationCache.invalidate(qualifiedTableName)
     }
   }

@@ -792,7 +792,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   test("randomSplit") {
     val n = 600
     val data = sc.parallelize(1 to n, 2)
-    for(seed <- 1 to 5) {
+    for (seed <- 1 to 5) {
       val splits = data.randomSplit(Array(1.0, 2.0, 3.0), seed)
       assert(splits.length == 3, "wrong number of splits")
       assert(splits.flatMap(_.collect()).sorted.toList == data.collect().toList,
@@ -922,7 +922,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       exception = intercept[SparkIllegalArgumentException] {
         rdd1.cartesian(rdd2).partitions
       },
-      errorClass = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
+      condition = "COLLECTION_SIZE_LIMIT_EXCEEDED.INITIALIZE",
       sqlState = "54000",
       parameters = Map(
         "numberOfElements" -> (numSlices.toLong * numSlices.toLong).toString,

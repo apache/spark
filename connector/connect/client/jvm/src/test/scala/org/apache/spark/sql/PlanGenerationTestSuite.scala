@@ -37,6 +37,7 @@ import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -71,7 +72,7 @@ import org.apache.spark.util.SparkFileUtils
  * compatibility.
  *
  * Note that the plan protos are used as the input for the `ProtoToParsedPlanTestSuite` in the
- * `connect/server` module
+ * `sql/connect/server` module
  */
 // scalastyle:on
 class PlanGenerationTestSuite
@@ -88,7 +89,7 @@ class PlanGenerationTestSuite
 
   protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
-  // A relative path to /connect/server, used by `ProtoToParsedPlanTestSuite` to run
+  // A relative path to /sql/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
   protected val testDataPath: Path = java.nio.file.Paths.get(
     "../",
@@ -118,6 +119,7 @@ class PlanGenerationTestSuite
 
   override protected def beforeEach(): Unit = {
     session.resetPlanIdGenerator()
+    internal.UnresolvedNamedLambdaVariable.resetIdGenerator()
   }
 
   override protected def afterAll(): Unit = {
@@ -549,6 +551,14 @@ class PlanGenerationTestSuite
       ids = Array(fn.col("id"), fn.col("a")),
       variableColumnName = "name",
       valueColumnName = "value")
+  }
+
+  test("transpose index_column") {
+    simple.transpose(indexColumn = fn.col("id"))
+  }
+
+  test("transpose no_index_column") {
+    simple.transpose()
   }
 
   test("offset") {
@@ -1800,7 +1810,11 @@ class PlanGenerationTestSuite
     fn.sentences(fn.col("g"))
   }
 
-  functionTest("sentences with locale") {
+  functionTest("sentences with language") {
+    fn.sentences(fn.col("g"), lit("en"))
+  }
+
+  functionTest("sentences with language and country") {
     fn.sentences(fn.col("g"), lit("en"), lit("US"))
   }
 
@@ -1911,6 +1925,47 @@ class PlanGenerationTestSuite
     fn.make_interval()
   }
 
+  functionTest("try_make_interval years months weeks days hours mins secs") {
+    fn.try_make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_interval years months weeks days hours mins") {
+    fn.try_make_interval(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks days hours") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks days") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months weeks") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years months") {
+    fn.try_make_interval(fn.col("a"), fn.col("a"))
+  }
+
+  functionTest("try_make_interval years") {
+    fn.try_make_interval(fn.col("a"))
+  }
+
   functionTest("make_timestamp with timezone") {
     fn.make_timestamp(
       fn.col("a"),
@@ -1955,6 +2010,58 @@ class PlanGenerationTestSuite
 
   functionTest("make_timestamp_ntz") {
     fn.make_timestamp_ntz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp with timezone") {
+    fn.try_make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("try_make_timestamp without timezone") {
+    fn.try_make_timestamp(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp_ltz with timezone") {
+    fn.try_make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"),
+      fn.col("g"))
+  }
+
+  functionTest("try_make_timestamp_ltz without timezone") {
+    fn.try_make_timestamp_ltz(
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("a"),
+      fn.col("b"))
+  }
+
+  functionTest("try_make_timestamp_ntz") {
+    fn.try_make_timestamp_ntz(
       fn.col("a"),
       fn.col("a"),
       fn.col("a"),
@@ -2433,6 +2540,10 @@ class PlanGenerationTestSuite
     fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y)
   }
 
+  functionTest("aggregate with finish lambda") {
+    fn.aggregate(fn.col("e"), lit(0), (x, y) => x + y, x => x + lit(2))
+  }
+
   functionTest("reduce") {
     fn.reduce(fn.col("e"), lit(0), (x, y) => x + y)
   }
@@ -2491,6 +2602,10 @@ class PlanGenerationTestSuite
 
   functionTest("from_json") {
     fn.from_json(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_json with json schema") {
+    fn.from_json(fn.col("g"), fn.lit(simpleSchema.json))
   }
 
   functionTest("schema_of_json") {
@@ -2667,6 +2782,14 @@ class PlanGenerationTestSuite
 
   functionTest("parse_url with key") {
     fn.parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"))
+  }
+
+  functionTest("try_parse_url with key") {
+    fn.try_parse_url(fn.col("g"), fn.col("g"), fn.col("g"))
   }
 
   functionTest("printf") {
@@ -2968,6 +3091,14 @@ class PlanGenerationTestSuite
     fn.call_function("lower", fn.col("g"))
   }
 
+  functionTest("from_xml") {
+    fn.from_xml(fn.col("g"), simpleSchema)
+  }
+
+  functionTest("from_xml with json schema") {
+    fn.from_xml(fn.col("g"), fn.lit(simpleSchema.json))
+  }
+
   test("hll_sketch_agg with column lgConfigK") {
     binary.select(fn.hll_sketch_agg(fn.col("bytes"), lit(0)))
   }
@@ -3264,7 +3395,7 @@ class PlanGenerationTestSuite
             .setUnparsedIdentifier("id")))
       .setCustomField("abc")
       .build()
-    simple.select(Column(_.setExtension(com.google.protobuf.Any.pack(extension))))
+    simple.select(column(_.setExtension(com.google.protobuf.Any.pack(extension))))
   }
 
   test("crosstab") {
@@ -3325,10 +3456,10 @@ class PlanGenerationTestSuite
   /* Protobuf functions */
   // scalastyle:off line.size.limit
   // If `common.desc` needs to be updated, execute the following command to regenerate it:
-  //  1. cd connect/common/src/main/protobuf/spark/connect
+  //  1. cd sql/connect/common/src/main/protobuf/spark/connect
   //  2. protoc --include_imports --descriptor_set_out=../../../../test/resources/protobuf-tests/common.desc common.proto
   // scalastyle:on line.size.limit
-  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/connect/" +
+  private val testDescFilePath: String = s"${IntegrationTestUtils.sparkHome}/sql/connect/" +
     "common/src/test/resources/protobuf-tests/common.desc"
 
   // TODO(SPARK-45030): Re-enable this test when all Maven test scenarios succeed and there

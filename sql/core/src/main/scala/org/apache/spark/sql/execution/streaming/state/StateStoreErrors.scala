@@ -123,11 +123,6 @@ object StateStoreErrors {
     new StatefulProcessorCannotPerformOperationWithInvalidHandleState(operationType, handleState)
   }
 
-  def cannotReInitializeStateOnKey(groupingKey: String):
-    StatefulProcessorCannotReInitializeState = {
-    new StatefulProcessorCannotReInitializeState(groupingKey)
-  }
-
   def cannotProvideTTLConfigForTimeMode(stateName: String, timeMode: String):
     StatefulProcessorCannotAssignTTLInTimeMode = {
     new StatefulProcessorCannotAssignTTLInTimeMode(stateName, timeMode)
@@ -173,7 +168,50 @@ object StateStoreErrors {
     StateStoreProviderDoesNotSupportFineGrainedReplay = {
     new StateStoreProviderDoesNotSupportFineGrainedReplay(inputClass)
   }
+
+  def invalidConfigChangedAfterRestart(configName: String, oldConfig: String, newConfig: String):
+    StateStoreInvalidConfigAfterRestart = {
+    new StateStoreInvalidConfigAfterRestart(configName, oldConfig, newConfig)
+  }
+
+  def duplicateStateVariableDefined(stateName: String):
+    StateStoreDuplicateStateVariableDefined = {
+    new StateStoreDuplicateStateVariableDefined(stateName)
+  }
+
+  def invalidVariableTypeChange(stateName: String, oldType: String, newType: String):
+    StateStoreInvalidVariableTypeChange = {
+    new StateStoreInvalidVariableTypeChange(stateName, oldType, newType)
+  }
 }
+
+class StateStoreDuplicateStateVariableDefined(stateVarName: String)
+  extends SparkRuntimeException(
+    errorClass = "STATEFUL_PROCESSOR_DUPLICATE_STATE_VARIABLE_DEFINED",
+    messageParameters = Map(
+      "stateVarName" -> stateVarName
+    )
+  )
+
+class StateStoreInvalidConfigAfterRestart(configName: String, oldConfig: String, newConfig: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_CONFIG_AFTER_RESTART",
+    messageParameters = Map(
+      "configName" -> configName,
+      "oldConfig" -> oldConfig,
+      "newConfig" -> newConfig
+    )
+  )
+
+class StateStoreInvalidVariableTypeChange(stateVarName: String, oldType: String, newType: String)
+  extends SparkUnsupportedOperationException(
+    errorClass = "STATE_STORE_INVALID_VARIABLE_TYPE_CHANGE",
+    messageParameters = Map(
+      "stateVarName" -> stateVarName,
+      "oldType" -> oldType,
+      "newType" -> newType
+    )
+  )
 
 class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(
@@ -228,11 +266,6 @@ class StatefulProcessorCannotPerformOperationWithInvalidHandleState(
     errorClass = "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_HANDLE_STATE",
     messageParameters = Map("operationType" -> operationType, "handleState" -> handleState)
   )
-
-class StatefulProcessorCannotReInitializeState(groupingKey: String)
-  extends SparkUnsupportedOperationException(
-  errorClass = "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY",
-  messageParameters = Map("groupingKey" -> groupingKey))
 
 class StateStoreUnsupportedOperationOnMissingColumnFamily(
     operationType: String,

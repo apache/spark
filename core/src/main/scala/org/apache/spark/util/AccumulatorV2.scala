@@ -102,14 +102,22 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
     metadata.countFailedValues
   }
 
+  private def isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
+
   /**
    * Creates an [[AccumulableInfo]] representation of this [[AccumulatorV2]] with the provided
    * values.
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
     AccumulableInfo(id, name, internOption(update), internOption(value), isInternal,
       countFailedValues)
+  }
+
+  /**
+   * Creates an [[AccumulableInfo]] representation of this [[AccumulatorV2]] as an update.
+   */
+  private[spark] def toInfoUpdate: AccumulableInfo = {
+    AccumulableInfo(id, name, internOption(Some(value)), None, isInternal, countFailedValues)
   }
 
   final private[spark] def isAtDriverSide: Boolean = atDriverSide

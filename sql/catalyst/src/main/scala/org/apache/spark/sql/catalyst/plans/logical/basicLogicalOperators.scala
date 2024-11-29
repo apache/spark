@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.{AliasIdentifier, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
@@ -559,12 +559,12 @@ case class Join(
 
   override def maxRows: Option[Long] = {
     joinType match {
-      case Inner | Cross | FullOuter | LeftOuter | RightOuter
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
           if left.maxRows.isDefined && right.maxRows.isDefined =>
         val leftMaxRows = BigInt(left.maxRows.get)
         val rightMaxRows = BigInt(right.maxRows.get)
         val minRows = joinType match {
-          case LeftOuter => leftMaxRows
+          case LeftOuter | LeftSingle => leftMaxRows
           case RightOuter => rightMaxRows
           case FullOuter => leftMaxRows + rightMaxRows
           case _ => BigInt(0)
@@ -590,7 +590,7 @@ case class Join(
         left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
-      case LeftOuter =>
+      case LeftOuter | LeftSingle =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
@@ -627,7 +627,7 @@ case class Join(
         left.constraints.union(right.constraints)
       case LeftExistence(_) =>
         left.constraints
-      case LeftOuter =>
+      case LeftOuter | LeftSingle =>
         left.constraints
       case RightOuter =>
         right.constraints
@@ -659,7 +659,7 @@ case class Join(
     var patterns = Seq(JOIN)
     joinType match {
       case _: InnerLike => patterns = patterns :+ INNER_LIKE_JOIN
-      case LeftOuter | FullOuter | RightOuter => patterns = patterns :+ OUTER_JOIN
+      case LeftOuter | FullOuter | RightOuter | LeftSingle => patterns = patterns :+ OUTER_JOIN
       case LeftSemiOrAnti(_) => patterns = patterns :+ LEFT_SEMI_OR_ANTI_JOIN
       case NaturalJoin(_) | UsingJoin(_, _) => patterns = patterns :+ NATURAL_LIKE_JOIN
       case _ =>
@@ -929,7 +929,8 @@ trait CTEInChildren extends LogicalPlan {
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    forPipeSQL: Boolean) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
@@ -945,7 +946,8 @@ case class WithWindowDefinition(
 case class Sort(
     order: Seq[SortOrder],
     global: Boolean,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    hint: Option[SortHint] = None) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = {
@@ -992,12 +994,18 @@ object Range {
     castAndEval[Int](expression, IntegerType, paramIndex, paramName)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(start: long, end: long, step: long, numSlices: integer)
-    _FUNC_(start: long, end: long, step: long)
-    _FUNC_(start: long, end: long)
-    _FUNC_(end: long)""",
+    _FUNC_(start[, end[, step[, numSlices]]]) / _FUNC_(end) - Returns a table of values within a specified range.
+  """,
+  arguments = """
+    Arguments:
+      * start - An optional BIGINT literal defaulted to 0, marking the first value generated.
+      * end - A BIGINT literal marking endpoint (exclusive) of the number generation.
+      * step - An optional BIGINT literal defaulted to 1, specifying the increment used when generating values.
+      * numParts - An optional INTEGER literal specifying how the production of rows is spread across partitions.
+  """,
   examples = """
     Examples:
       > SELECT * FROM _FUNC_(1);
@@ -1023,6 +1031,7 @@ object Range {
   """,
   since = "2.0.0",
   group = "table_funcs")
+// scalastyle:on line.size.limit
 case class Range(
     start: Long,
     end: Long,
@@ -1190,7 +1199,8 @@ case class Range(
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    hint: Option[AggregateHint] = None)
   extends UnaryNode {
 
   override lazy val resolved: Boolean = {
@@ -1257,7 +1267,8 @@ case class Window(
     windowExpressions: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    hint: Option[WindowHint] = None) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
@@ -1440,7 +1451,7 @@ case class Offset(offsetExpr: Expression, child: LogicalPlan) extends OrderPrese
 }
 
 /**
- * A constructor for creating a pivot, which will later be converted to a [[Project]]
+ * A logical plan node for creating a pivot, which will later be converted to a [[Project]]
  * or an [[Aggregate]] during the query analysis.
  *
  * @param groupByExprsOpt A sequence of group by expressions. This field should be None if coming
@@ -1474,9 +1485,27 @@ case class Pivot(
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
 }
 
+/**
+ * A logical plan node for transpose, which will later be converted to a [[LocalRelation]]
+ * at ReplaceTranspose during the query optimization.
+ *
+ * The result of the transpose operation is held in the `data` field, and the corresponding
+ * schema is stored in the `output` field. The `Transpose` node does not depend on any child
+ * logical plans after the data has been collected and transposed.
+ *
+ * @param output A sequence of output attributes representing the schema of the transposed data.
+ * @param data A sequence of [[InternalRow]] containing the transposed data.
+ */
+case class Transpose(
+    output: Seq[Attribute],
+    data: Seq[InternalRow] = Nil
+) extends LeafNode {
+  final override val nodePatterns: Seq[TreePattern] = Seq(TRANSPOSE)
+}
+
 
 /**
- * A constructor for creating an Unpivot, which will later be converted to an [[Expand]]
+ * A logical plan node for creating an Unpivot, which will later be converted to an [[Expand]]
  * during the query analysis.
  *
  * Either ids or values array must be set. The ids array can be empty,
@@ -1582,7 +1611,7 @@ case class Unpivot(
 }
 
 /**
- * A constructor for creating a logical limit, which is split into two separate logical nodes:
+ * A logical plan node for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
  *
  * This muds the water for clean logical/physical separation, and is done for better limit pushdown.
@@ -2072,7 +2101,7 @@ case class LateralJoin(
     joinType: JoinType,
     condition: Option[Expression]) extends UnaryNode {
 
-  override lazy val allAttributes: AttributeSeq = left.output ++ right.plan.output
+  override def allAttributes: AttributeSeq = left.output ++ right.plan.output
 
   require(Seq(Inner, LeftOuter, Cross).contains(joinType),
     s"Unsupported lateral join type $joinType")

@@ -1073,7 +1073,8 @@ abstract class CatalogTestUtils {
   def newTable(
       name: String,
       database: Option[String] = None,
-      defaultColumns: Boolean = false): CatalogTable = {
+      defaultColumns: Boolean = false,
+      clusterBy: Boolean = false): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
@@ -1110,8 +1111,14 @@ abstract class CatalogTestUtils {
           .add("b", "string")
       },
       provider = Some(defaultProvider),
-      partitionColumnNames = Seq("a", "b"),
-      bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
+      partitionColumnNames = if (clusterBy) Seq.empty else Seq("a", "b"),
+      bucketSpec = if (clusterBy) None else Some(BucketSpec(4, Seq("col1"), Nil)),
+      properties = if (clusterBy) {
+        Map(
+          ClusterBySpec.toPropertyWithoutValidation(ClusterBySpec.fromColumnNames(Seq("c1", "c2"))))
+      } else {
+        Map.empty
+      })
   }
 
   def newView(

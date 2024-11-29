@@ -255,7 +255,8 @@ public class LevelDB implements KVStore {
           iteratorTracker.add(new WeakReference<>(it));
           return it;
         } catch (Exception e) {
-          throw Throwables.propagate(e);
+          Throwables.throwIfUnchecked(e);
+          throw new RuntimeException(e);
         }
       }
     };

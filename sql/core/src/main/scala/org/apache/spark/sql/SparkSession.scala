@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql
 
-import java.io.Closeable
+import java.net.URI
+import java.nio.file.Paths
 import java.util.{ServiceLoader, UUID}
-import java.util.concurrent.TimeUnit._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
+import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
+import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
@@ -34,28 +36,32 @@ import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
+import org.apache.spark.sql.SparkSession.applyAndLoadExtensions
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{CallSite, SparkFileUtils, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -90,8 +96,9 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState],
     @transient private val parentSessionState: Option[SessionState],
     @transient private[sql] val extensions: SparkSessionExtensions,
-    @transient private[sql] val initialSessionOptions: Map[String, String])
-  extends Serializable with Closeable with Logging { self =>
+    @transient private[sql] val initialSessionOptions: Map[String, String],
+    @transient private val parentManagedJobTags: Map[String, String])
+  extends api.SparkSession with Logging { self =>
 
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -105,8 +112,12 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None, SparkSession.applyExtensions(sc, new SparkSessionExtensions),
-      initialSessionOptions.asScala.toMap)
+    this(
+      sc,
+      existingSharedState = None,
+      parentSessionState = None,
+      applyAndLoadExtensions(sc), initialSessionOptions.asScala.toMap,
+      parentManagedJobTags = Map.empty)
   }
 
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
@@ -121,40 +132,53 @@ class SparkSession private(
       .getOrElse(SQLConf.getFallbackConf)
   })
 
+  /** Tag to mark all jobs owned by this session. */
+  private[sql] lazy val sessionJobTag = s"spark-session-$sessionUUID"
+
   /**
-   * The version of Spark on which this application is running.
-   *
-   * @since 2.0.0
+   * A UUID that is unique on the thread level. Used by managedJobTags to make sure that a same
+   * tag from two threads does not overlap in the underlying SparkContext/SQLExecution.
    */
+  private[sql] lazy val threadUuid = new InheritableThreadLocal[String] {
+    override def childValue(parent: String): String = parent
+
+    override def initialValue(): String = UUID.randomUUID().toString
+  }
+
+  /**
+   * A map to hold the mapping from user-defined tags to the real tags attached to Jobs.
+   * Real tag have the current session ID attached:
+   *   tag1 -> spark-session-$sessionUUID-thread-$threadUuid-tag1
+   *
+   */
+  @transient
+  private[sql] lazy val managedJobTags = new InheritableThreadLocal[mutable.Map[String, String]] {
+      override def childValue(parent: mutable.Map[String, String]): mutable.Map[String, String] = {
+        // Note: make a clone such that changes in the parent tags aren't reflected in
+        // those of the children threads.
+        parent.clone()
+      }
+
+      override def initialValue(): mutable.Map[String, String] = {
+        mutable.Map(parentManagedJobTags.toSeq: _*)
+      }
+    }
+
+  /** @inheritdoc */
   def version: String = SPARK_VERSION
 
   /* ----------------------- *
    |  Session-related state  |
    * ----------------------- */
 
-  /**
-   * State shared across sessions, including the `SparkContext`, cached data, listener,
-   * and a catalog that interacts with external systems.
-   *
-   * This is internal to Spark and there is no guarantee on interface stability.
-   *
-   * @since 2.2.0
-   */
+  /** @inheritdoc */
   @Unstable
   @transient
   lazy val sharedState: SharedState = {
     existingSharedState.getOrElse(new SharedState(sparkContext, initialSessionOptions))
   }
 
-  /**
-   * State isolated across sessions, including SQL configurations, temporary tables, registered
-   * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
-   * If `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
-   *
-   * This is internal to Spark and there is no guarantee on interface stability.
-   *
-   * @since 2.2.0
-   */
+  /** @inheritdoc */
   @Unstable
   @transient
   lazy val sessionState: SessionState = {
@@ -168,68 +192,25 @@ class SparkSession private(
       }
   }
 
-  /**
-   * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @transient
   val sqlContext: SQLContext = new SQLContext(this)
 
-  /**
-   * Runtime configuration interface for Spark.
-   *
-   * This is the interface through which the user can get and set all Spark and Hadoop
-   * configurations that are relevant to Spark SQL. When getting the value of a config,
-   * this defaults to the value set in the underlying `SparkContext`, if any.
-   *
-   * @since 2.0.0
-   */
-  @transient lazy val conf: RuntimeConfig = new RuntimeConfig(sessionState.conf)
+  /** @inheritdoc */
+  @transient lazy val conf: RuntimeConfig = new RuntimeConfigImpl(sessionState.conf)
 
-  /**
-   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
-   * that listen for execution metrics.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
-  /**
-   * :: Experimental ::
-   * A collection of methods that are considered experimental, but can be used to hook into
-   * the query planner for advanced functionality.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @Experimental
   @Unstable
   def experimental: ExperimentalMethods = sessionState.experimentalMethods
 
-  /**
-   * A collection of methods for registering user-defined functions (UDF).
-   *
-   * The following example registers a Scala closure as UDF:
-   * {{{
-   *   sparkSession.udf.register("myUDF", (arg1: Int, arg2: String) => arg2 + arg1)
-   * }}}
-   *
-   * The following example registers a UDF in Java:
-   * {{{
-   *   sparkSession.udf().register("myUDF",
-   *       (Integer arg1, String arg2) -> arg2 + arg1,
-   *       DataTypes.StringType);
-   * }}}
-   *
-   * @note The user-defined functions must be deterministic. Due to optimization,
-   * duplicate invocations may be eliminated or the function may even be invoked more times than
-   * it is present in the query.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def udf: UDFRegistration = sessionState.udfRegistration
 
-  def udtf: UDTFRegistration = sessionState.udtfRegistration
+  private[sql] def udtf: UDTFRegistration = sessionState.udtfRegistration
 
   /**
    * A collection of methods for registering user-defined data sources.
@@ -238,14 +219,9 @@ class SparkSession private(
    */
   @Experimental
   @Unstable
-  def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
+  private[sql] def dataSource: DataSourceRegistration = sessionState.dataSourceRegistration
 
-  /**
-   * Returns a `StreamingQueryManager` that allows managing all the
-   * `StreamingQuery`s active on `this`.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
@@ -259,24 +235,15 @@ class SparkSession private(
   @Unstable
   private[sql] def artifactManager: ArtifactManager = sessionState.artifactManager
 
-  /**
-   * Start a new session with isolated SQL configurations, temporary tables, registered
-   * functions are isolated, but sharing the underlying `SparkContext` and cached data.
-   *
-   * @note Other than the `SparkContext`, all shared state is initialized lazily.
-   * This method will force the initialization of the shared state to ensure that parent
-   * and child sessions are set up with the same shared state. If the underlying catalog
-   * implementation is Hive, this will initialize the metastore, which may take some time.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def newSession(): SparkSession = {
     new SparkSession(
       sparkContext,
       Some(sharedState),
       parentSessionState = None,
       extensions,
-      initialSessionOptions)
+      initialSessionOptions,
+      parentManagedJobTags = Map.empty)
   }
 
   /**
@@ -297,8 +264,11 @@ class SparkSession private(
       Some(sharedState),
       Some(sessionState),
       extensions,
-      Map.empty)
+      Map.empty,
+      managedJobTags.get().toMap)
     result.sessionState // force copy of SessionState
+    result.sessionState.artifactManager // force copy of ArtifactManager and its resources
+    result.managedJobTags // force copy of managedJobTags
     result
   }
 
@@ -307,76 +277,30 @@ class SparkSession private(
    |  Methods for creating DataFrames  |
    * --------------------------------- */
 
-  /**
-   * Returns a `DataFrame` with no rows or columns.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @transient
   lazy val emptyDataFrame: DataFrame = Dataset.ofRows(self, LocalRelation())
 
-  /**
-   * Creates a new [[Dataset]] of type T containing zero elements.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def emptyDataset[T: Encoder]: Dataset[T] = {
     val encoder = implicitly[Encoder[T]]
     new Dataset(self, LocalRelation(encoder.schema), encoder)
   }
 
-  /**
-   * Creates a `DataFrame` from an RDD of Product (e.g. case classes, tuples).
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = withActive {
     val encoder = Encoders.product[A]
     Dataset.ofRows(self, ExternalRDD(rdd, self)(encoder))
   }
 
-  /**
-   * Creates a `DataFrame` from a local Seq of Product.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = withActive {
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = toAttributes(schema)
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from an `RDD` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   * Example:
-   * {{{
-   *  import org.apache.spark.sql._
-   *  import org.apache.spark.sql.types._
-   *  val sparkSession = new org.apache.spark.sql.SparkSession(sc)
-   *
-   *  val schema =
-   *    StructType(
-   *      StructField("name", StringType, false) ::
-   *      StructField("age", IntegerType, true) :: Nil)
-   *
-   *  val people =
-   *    sc.textFile("examples/src/main/resources/people.txt").map(
-   *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
-   *  val dataFrame = sparkSession.createDataFrame(people, schema)
-   *  dataFrame.printSchema
-   *  // root
-   *  // |-- name: string (nullable = false)
-   *  // |-- age: integer (nullable = true)
-   *
-   *  dataFrame.createOrReplaceTempView("people")
-   *  sparkSession.sql("select name from people").collect.foreach(println)
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = withActive {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
@@ -388,42 +312,21 @@ class SparkSession private(
     internalCreateDataFrame(catalystRows.setName(rowRDD.name), schema)
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from a `JavaRDD` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
     createDataFrame(rowRDD.rdd, replaced)
   }
 
-  /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from a `java.util.List` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided List matches
-   * the provided schema. Otherwise, there will be runtime exception.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @DeveloperApi
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = withActive {
     val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
     Dataset.ofRows(self, LocalRelation.fromExternalRows(toAttributes(replaced), rows.asScala.toSeq))
   }
 
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
     val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
     val className = beanClass.getName
@@ -434,36 +337,19 @@ class SparkSession private(
     Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
   }
 
-  /**
-   * Applies a schema to an RDD of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   * SELECT * queries will return the columns in an undefined order.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd.rdd, beanClass)
   }
 
-  /**
-   * Applies a schema to a List of Java Beans.
-   *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   *          SELECT * queries will return the columns in an undefined order.
-   * @since 1.6.0
-   */
+  /** @inheritdoc */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = withActive {
     val attrSeq = getSchema(beanClass)
     val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
     Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
-  /**
-   * Convert a `BaseRelation` created for external data sources into a `DataFrame`.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
     Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
@@ -472,33 +358,7 @@ class SparkSession private(
    |  Methods for creating DataSets  |
    * ------------------------------- */
 
-  /**
-   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
-   *
-   * == Example ==
-   *
-   * {{{
-   *
-   *   import spark.implicits._
-   *   case class Person(name: String, age: Long)
-   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
-   *   val ds = spark.createDataset(data)
-   *
-   *   ds.show()
-   *   // +-------+---+
-   *   // |   name|age|
-   *   // +-------+---+
-   *   // |Michael| 29|
-   *   // |   Andy| 30|
-   *   // | Justin| 19|
-   *   // +-------+---+
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val toRow = enc.createSerializer()
@@ -508,72 +368,30 @@ class SparkSession private(
     Dataset[T](self, plan)
   }
 
-  /**
-   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     Dataset[T](self, ExternalRDD(data, self))
   }
 
-  /**
-   * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
-   *
-   * == Java Example ==
-   *
-   * {{{
-   *     List<String> data = Arrays.asList("hello", "world");
-   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala.toSeq)
   }
 
-  /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from 0 to `end` (exclusive) with step value 1.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def range(end: Long): Dataset[java.lang.Long] = range(0, end)
 
-  /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with step value 1.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def range(start: Long, end: Long): Dataset[java.lang.Long] = {
     range(start, end, step = 1, numPartitions = leafNodeDefaultParallelism)
   }
 
-  /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
     range(start, end, step, numPartitions = leafNodeDefaultParallelism)
   }
 
-  /**
-   * Creates a [[Dataset]] with a single `LongType` column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value, with partition number
-   * specified.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
   }
@@ -599,27 +417,10 @@ class SparkSession private(
    |  Catalog-related methods  |
    * ------------------------- */
 
-  /**
-   * Interface through which the user may create, drop, alter or query underlying
-   * databases, tables, functions etc.
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
-  /**
-   * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
-   * reading and the returned DataFrame is the batch scan query plan of this table. If it's a view,
-   * the returned DataFrame is simply the query plan of the view, which can either be a batch or
-   * streaming query plan.
-   *
-   * @param tableName is either a qualified or unqualified name that designates a table or view.
-   *                  If a database is specified, it identifies the table/view from the database.
-   *                  Otherwise, it first attempts to find a temporary view with the given name
-   *                  and then match the table/view from the current database.
-   *                  Note that, the global temporary view database is also valid here.
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     read.table(tableName)
   }
@@ -631,6 +432,42 @@ class SparkSession private(
   /* ----------------- *
    |  Everything else  |
    * ----------------- */
+
+  /**
+   * Executes given script and return the result of the last statement.
+   * If script contains no queries, an empty `DataFrame` is returned.
+   *
+   * @param script A SQL script to execute.
+   * @param args A map of parameter names to SQL literal expressions.
+   *
+   * @return The result as a `DataFrame`.
+   */
+  private def executeSqlScript(
+      script: CompoundBody,
+      args: Map[String, Expression] = Map.empty): DataFrame = {
+    val sse = new SqlScriptingExecution(script, this, args)
+    var result: Option[Seq[Row]] = None
+
+    while (sse.hasNext) {
+      sse.withErrorHandling {
+        val df = sse.next()
+        if (sse.hasNext) {
+          df.write.format("noop").mode("overwrite").save()
+        } else {
+          // Collect results from the last DataFrame.
+          result = Some(df.collect().toSeq)
+        }
+      }
+    }
+
+    if (result.isEmpty) {
+      emptyDataFrame
+    } else {
+      val attributes = DataTypeUtils.toAttributes(result.get.head.schema)
+      Dataset.ofRows(
+        self, LocalRelation.fromExternalRows(attributes, result.get))
+    }
+  }
 
   /**
    * Executes a SQL query substituting positional parameters by the given arguments,
@@ -651,32 +488,33 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          PosParameterizedQuery(parsedPlan, args.map(lit(_).expr).toImmutableArraySeq)
-        } else {
-          parsedPlan
+        parsedPlan match {
+          case compoundBody: CompoundBody =>
+            if (args.nonEmpty) {
+              // Positional parameters are not supported for SQL scripting.
+              throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
+            }
+            compoundBody
+          case logicalPlan: LogicalPlan =>
+            if (args.nonEmpty) {
+              PosParameterizedQuery(logicalPlan, args.map(lit(_).expr).toImmutableArraySeq)
+            } else {
+              logicalPlan
+            }
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case compoundBody: CompoundBody =>
+          // Execute the SQL script.
+          executeSqlScript(compoundBody)
+        case logicalPlan: LogicalPlan =>
+          // Execute the standalone SQL statement.
+          Dataset.ofRows(self, plan, tracker)
+      }
     }
 
-  /**
-   * Executes a SQL query substituting positional parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @param sqlText A SQL statement with positional parameters to execute.
-   * @param args An array of Java/Scala objects that can be converted to
-   *             SQL literal expressions. See
-   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *             Supported Data Types</a> for supported value types in Scala/Java.
-   *             For example, 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             A value can be also a `Column` of a literal or collection constructor functions
-   *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
-   *
-   * @since 3.5.0
-   */
-  @Experimental
+  /** @inheritdoc */
   def sql(sqlText: String, args: Array[_]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
@@ -704,81 +542,43 @@ class SparkSession private(
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
         val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
-        if (args.nonEmpty) {
-          NameParameterizedQuery(parsedPlan, args.transform((_, v) => lit(v).expr))
-        } else {
-          parsedPlan
+        parsedPlan match {
+          case compoundBody: CompoundBody =>
+            compoundBody
+          case logicalPlan: LogicalPlan =>
+            if (args.nonEmpty) {
+              NameParameterizedQuery(logicalPlan, args.transform((_, v) => lit(v).expr))
+            } else {
+              logicalPlan
+            }
         }
       }
-      Dataset.ofRows(self, plan, tracker)
+
+      plan match {
+        case compoundBody: CompoundBody =>
+          // Execute the SQL script.
+          executeSqlScript(compoundBody, args.transform((_, v) => lit(v).expr))
+        case logicalPlan: LogicalPlan =>
+          // Execute the standalone SQL statement.
+          Dataset.ofRows(self, plan, tracker)
+      }
     }
 
-  /**
-   * Executes a SQL query substituting named parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to Java/Scala objects that can be converted to
-   *             SQL literal expressions. See
-   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *             Supported Data Types</a> for supported value types in Scala/Java.
-   *             For example, map keys: "rank", "name", "birthdate";
-   *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             Map value can be also a `Column` of a literal or collection constructor functions
-   *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
-   *
-   * @since 3.4.0
-   */
-  @Experimental
+  /** @inheritdoc */
   def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args, new QueryPlanningTracker)
   }
 
-  /**
-   * Executes a SQL query substituting named parameters by the given arguments,
-   * returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to Java/Scala objects that can be converted to
-   *             SQL literal expressions. See
-   *             <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
-   *             Supported Data Types</a> for supported value types in Scala/Java.
-   *             For example, map keys: "rank", "name", "birthdate";
-   *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             Map value can be also a `Column` of a literal or collection constructor functions
-   *             such as `map()`, `array()`, `struct()`, in that case it is taken as is.
-   *
-   * @since 3.4.0
-   */
-  @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
+  /** @inheritdoc */
+  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
 
-  /**
-   * Executes a SQL query using Spark, returning the result as a `DataFrame`.
-   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
-   *
-   * @since 2.0.0
-   */
-  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
+  /** @inheritdoc */
+  override def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
 
   /**
-   * Execute an arbitrary string command inside an external execution engine rather than Spark.
-   * This could be useful when user wants to execute some commands out of Spark. For
-   * example, executing custom DDL/DML command for JDBC, creating index for ElasticSearch,
-   * creating cores for Solr and so on.
-   *
-   * The command will be eagerly executed after this method is called and the returned
-   * DataFrame will contain the output of the command(if any).
-   *
-   * @param runner The class name of the runner that implements `ExternalCommandRunner`.
-   * @param command The target command to be executed
-   * @param options The options for the runner.
-   *
-   * @since 3.0.0
+   * @inheritdoc
    */
   @Unstable
   def executeCommand(runner: String, command: String, options: Map[String, String]): DataFrame = {
@@ -793,78 +593,145 @@ class SparkSession private(
     }
   }
 
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(path: String): Unit = addArtifact(SparkFileUtils.resolveURI(path))
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(uri: URI): Unit = {
+    artifactManager.addLocalArtifacts(Artifact.parseArtifacts(uri))
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(bytes: Array[Byte], target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.InMemory(bytes))
+    artifactManager.addLocalArtifacts(artifact :: Nil)
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  override def addArtifact(source: String, target: String): Unit = {
+    val targetPath = Paths.get(target)
+    val artifact = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.LocalFile(Paths.get(source)))
+    artifactManager.addLocalArtifacts(artifact :: Nil)
+  }
+
+  /** @inheritdoc */
+  @Experimental
+  @scala.annotation.varargs
+  override def addArtifacts(uri: URI*): Unit = {
+    artifactManager.addLocalArtifacts(uri.flatMap(Artifact.parseArtifacts))
+  }
+
+  /** @inheritdoc */
+  override def addTag(tag: String): Unit = {
+    SparkContext.throwIfInvalidTag(tag)
+    managedJobTags.get().put(tag, s"spark-session-$sessionUUID-thread-${threadUuid.get()}-$tag")
+  }
+
+  /** @inheritdoc */
+  override def removeTag(tag: String): Unit = managedJobTags.get().remove(tag)
+
+  /** @inheritdoc */
+  override def getTags(): Set[String] = managedJobTags.get().keySet.toSet
+
+  /** @inheritdoc */
+  override def clearTags(): Unit = managedJobTags.get().clear()
+
   /**
-   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
-   * `DataFrame`.
-   * {{{
-   *   sparkSession.read.parquet("/path/to/file.parquet")
-   *   sparkSession.read.schema(schema).json("/path/to/file.json")
-   * }}}
+   * Request to interrupt all currently running SQL operations of this session.
    *
-   * @since 2.0.0
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+
+   * @return Sequence of SQL execution IDs requested to be interrupted.
+
+   * @since 4.0.0
    */
+  override def interruptAll(): Seq[String] =
+    doInterruptTag(sessionJobTag, "as part of cancellation of all jobs")
+
+  /**
+   * Request to interrupt all currently running SQL operations of this session with the given
+   * job tag.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return Sequence of SQL execution IDs requested to be interrupted.
+
+   * @since 4.0.0
+   */
+  override def interruptTag(tag: String): Seq[String] = {
+    val realTag = managedJobTags.get().get(tag)
+    realTag.map(doInterruptTag(_, s"part of cancelled job tags $tag")).getOrElse(Seq.empty)
+  }
+
+  private def doInterruptTag(tag: String, reason: String): Seq[String] = {
+    val cancelledTags =
+      sparkContext.cancelJobsWithTagWithFuture(tag, reason)
+
+    ThreadUtils.awaitResult(cancelledTags, 60.seconds)
+      .flatMap(job => Option(job.properties.getProperty(SQLExecution.EXECUTION_ROOT_ID_KEY)))
+  }
+
+  /**
+   * Request to interrupt a SQL operation of this session, given its SQL execution ID.
+   *
+   * @note Only DataFrame/SQL operations started by this session can be interrupted.
+   *
+   * @note This method will wait up to 60 seconds for the interruption request to be issued.
+   *
+   * @return The execution ID requested to be interrupted, as a single-element sequence, or an empty
+   *    sequence if the operation is not started by this session.
+   *
+   * @since 4.0.0
+   */
+  override def interruptOperation(operationId: String): Seq[String] = {
+    scala.util.Try(operationId.toLong).toOption match {
+      case Some(executionIdToBeCancelled) =>
+        val tagToBeCancelled = SQLExecution.executionIdJobTag(this, executionIdToBeCancelled)
+        doInterruptTag(tagToBeCancelled, reason = "")
+      case None =>
+        throw new IllegalArgumentException("executionId must be a number in string form.")
+    }
+  }
+
+  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(self)
 
-  /**
-   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
-   * {{{
-   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
-   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
-   * }}}
-   *
-   * @since 2.0.0
-   */
+  /** @inheritdoc */
   def readStream: DataStreamReader = new DataStreamReader(self)
 
-  /**
-   * Executes some code block and prints to stdout the time taken to execute the block. This is
-   * available in Scala only and is used primarily for interactive testing and debugging.
-   *
-   * @since 2.1.0
-   */
-  def time[T](f: => T): T = {
-    val start = System.nanoTime()
-    val ret = f
-    val end = System.nanoTime()
-    // scalastyle:off println
-    println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
-    // scalastyle:on println
-    ret
-  }
+  /** @inheritdoc */
+  def tvf: TableValuedFunction = new TableValuedFunction(self)
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
-  /**
-   * (Scala-specific) Implicit methods available in Scala for converting
-   * common Scala objects into `DataFrame`s.
-   *
-   * {{{
-   *   val sparkSession = SparkSession.builder.getOrCreate()
-   *   import sparkSession.implicits._
-   * }}}
-   *
-   * @since 2.0.0
-   */
-  object implicits extends SQLImplicits with Serializable {
-    protected override def session: SparkSession = SparkSession.this
+  object implicits extends SQLImplicits {
+    override protected def session: SparkSession = self
   }
   // scalastyle:on
 
   /**
    * Stop the underlying `SparkContext`.
    *
-   * @since 2.0.0
-   */
-  def stop(): Unit = {
-    sparkContext.stop()
-  }
-
-  /**
-   * Synonym for `stop()`.
-   *
    * @since 2.1.0
    */
-  override def close(): Unit = stop()
+  override def close(): Unit = {
+    sparkContext.stop()
+  }
 
   /**
    * Parses the data type in our internal string representation. The data type string should
@@ -911,14 +778,14 @@ class SparkSession private(
   }
 
   /**
-   * Execute a block of code with the this session set as the active session, and restore the
+   * Execute a block of code with this session set as the active session, and restore the
    * previous session on completion.
    */
   private[sql] def withActive[T](block: => T): T = {
     // Use the active session thread local directly to make sure we get the session that is actually
     // set and not the default session. This to prevent that we promote the default session to the
     // active session once we are done.
-    val old = SparkSession.activeThreadSession.get()
+    val old = SparkSession.getActiveSession.orNull
     SparkSession.setActiveSession(this)
     try block finally {
       SparkSession.setActiveSession(old)
@@ -926,135 +793,91 @@ class SparkSession private(
   }
 
   private[sql] def leafNodeDefaultParallelism: Int = {
-    conf.get(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(sparkContext.defaultParallelism)
+    sessionState.conf.getConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM)
+      .getOrElse(sparkContext.defaultParallelism)
   }
+
+  private[sql] object Converter extends ColumnNodeToExpressionConverter with Serializable {
+    override protected def parser: ParserInterface = sessionState.sqlParser
+    override protected def conf: SQLConf = sessionState.conf
+  }
+
+  private[sql] def expression(e: Column): Expression = Converter(e.node)
+
+  private[sql] implicit class RichColumn(val column: Column) {
+    /**
+     * Returns the expression for this column.
+     */
+    def expr: Expression = Converter(column.node)
+    /**
+     * Returns the expression for this column either with an existing or auto assigned name.
+     */
+    def named: NamedExpression = ExpressionUtils.toNamed(expr)
+  }
+
+  private[sql] lazy val observationManager = new ObservationManager(this)
+
+  override private[sql] def isUsable: Boolean = !sparkContext.isStopped
 }
 
 
 @Stable
-object SparkSession extends Logging {
+object SparkSession extends api.BaseSparkSessionCompanion with Logging {
+  override private[sql] type Session = SparkSession
 
   /**
    * Builder for [[SparkSession]].
    */
   @Stable
-  class Builder extends Logging {
-
-    private[this] val options = new scala.collection.mutable.HashMap[String, String]
+  class Builder extends api.SparkSessionBuilder {
 
     private[this] val extensions = new SparkSessionExtensions
 
     private[this] var userSuppliedContext: Option[SparkContext] = None
 
-    private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
+    private[spark] def sparkContext(sparkContext: SparkContext): this.type = synchronized {
       userSuppliedContext = Option(sparkContext)
       this
     }
 
-    /**
-     * Sets a name for the application, which will be shown in the Spark web UI.
-     * If no application name is set, a randomly generated name will be used.
-     *
-     * @since 2.0.0
-     */
-    def appName(name: String): Builder = config("spark.app.name", name)
+    /** @inheritdoc */
+    override def remote(connectionString: String): this.type = this
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
-      this
-    }
+    /** @inheritdoc */
+    override def appName(name: String): this.type = super.appName(name)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: String): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Long): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 2.0.0
-     */
-    def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Double): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.4.0
-     */
-    def config(map: Map[String, Any]): Builder = synchronized {
-      map.foreach {
-        kv: (String, Any) => {
-          options += kv._1 -> kv._2.toString
-        }
-      }
-      this
-    }
+    /** @inheritdoc */
+    override def config(key: String, value: Boolean): this.type = super.config(key, value)
 
-    /**
-     * Sets a config option. Options set using this method are automatically propagated to
-     * both `SparkConf` and SparkSession's own configuration.
-     *
-     * @since 3.4.0
-     */
-    def config(map: java.util.Map[String, Any]): Builder = synchronized {
-      config(map.asScala.toMap)
-    }
+    /** @inheritdoc */
+    override def config(map: Map[String, Any]): this.type = super.config(map)
 
-    /**
-     * Sets a list of config options based on the given `SparkConf`.
-     *
-     * @since 2.0.0
-     */
-    def config(conf: SparkConf): Builder = synchronized {
-      conf.getAll.foreach { case (k, v) => options += k -> v }
-      this
-    }
+    /** @inheritdoc */
+    override def config(map: java.util.Map[String, Any]): this.type = super.config(map)
 
-    /**
-     * Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]" to
-     * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
-     *
-     * @since 2.0.0
-     */
-    def master(master: String): Builder = config("spark.master", master)
+    /** @inheritdoc */
+    override def config(conf: SparkConf): this.type = super.config(conf)
 
-    /**
-     * Enables Hive support, including connectivity to a persistent Hive metastore, support for
-     * Hive serdes, and Hive user-defined functions.
-     *
-     * @since 2.0.0
-     */
-    def enableHiveSupport(): Builder = synchronized {
+    /** @inheritdoc */
+    override def master(master: String): this.type = super.master(master)
+
+    /** @inheritdoc */
+    override def enableHiveSupport(): this.type = synchronized {
       if (hiveClassesArePresent) {
-        config(CATALOG_IMPLEMENTATION.key, "hive")
+        // TODO(SPARK-50244): We now isolate artifacts added by the `ADD JAR` command. This will
+        //  break an existing Hive use case (one session adds JARs and another session uses them).
+        //  We need to decide whether/how to enable isolation for Hive.
+        super.enableHiveSupport()
+          .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, false)
       } else {
         throw new IllegalArgumentException(
           "Unable to instantiate SparkSession with Hive support because " +
@@ -1062,33 +885,13 @@ object SparkSession extends Logging {
       }
     }
 
-    /**
-     * Inject extensions into the [[SparkSession]]. This allows a user to add Analyzer rules,
-     * Optimizer rules, Planning Strategies or a customized parser.
-     *
-     * @since 2.2.0
-     */
-    def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
+    /** @inheritdoc */
+    override def withExtensions(f: SparkSessionExtensions => Unit): this.type = synchronized {
       f(extensions)
       this
     }
 
-    /**
-     * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
-     * one based on the options set in this builder.
-     *
-     * This method first checks whether there is a valid thread-local SparkSession,
-     * and if yes, return that one. It then checks whether there is a valid global
-     * default SparkSession, and if yes, return that one. If no valid global default
-     * SparkSession exists, the method creates a new SparkSession and assigns the
-     * newly created SparkSession as the global default.
-     *
-     * In case an existing SparkSession is returned, the non-static config options specified in
-     * this builder will be applied to the existing SparkSession.
-     *
-     * @since 2.0.0
-     */
-    def getOrCreate(): SparkSession = synchronized {
+    private def build(forceCreate: Boolean): SparkSession = synchronized {
       val sparkConf = new SparkConf()
       options.foreach { case (k, v) => sparkConf.set(k, v) }
 
@@ -1097,8 +900,9 @@ object SparkSession extends Logging {
       }
 
       // Get the session from current thread's active session.
-      var session = activeThreadSession.get()
-      if ((session ne null) && !session.sparkContext.isStopped) {
+      val active = getActiveSession
+      if (!forceCreate && active.isDefined) {
+        val session = active.get
         applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
         return session
       }
@@ -1106,14 +910,18 @@ object SparkSession extends Logging {
       // Global synchronization so we will only set the default session once.
       SparkSession.synchronized {
         // If the current thread does not have an active session, get it from the global session.
-        session = defaultSession.get()
-        if ((session ne null) && !session.sparkContext.isStopped) {
+        val default = getDefaultSession
+        if (!forceCreate && default.isDefined) {
+          val session = default.get
           applyModifiableSettings(session, new java.util.HashMap[String, String](options.asJava))
           return session
         }
 
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
+          // Override appName with the submitted appName
+          sparkConf.getOption("spark.submit.appName")
+            .map(sparkConf.setAppName)
           // set a random app name if not given.
           if (!sparkConf.contains("spark.app.name")) {
             sparkConf.setAppName(java.util.UUID.randomUUID().toString)
@@ -1126,14 +934,23 @@ object SparkSession extends Logging {
         loadExtensions(extensions)
         applyExtensions(sparkContext, extensions)
 
-        session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
-        setDefaultSession(session)
-        setActiveSession(session)
+        val session = new SparkSession(sparkContext,
+          existingSharedState = None,
+          parentSessionState = None,
+          extensions,
+          initialSessionOptions = options.toMap,
+          parentManagedJobTags = Map.empty)
+        setDefaultAndActiveSession(session)
         registerContextListener(sparkContext)
+        session
       }
-
-      return session
     }
+
+    /** @inheritdoc */
+    def getOrCreate(): SparkSession = build(forceCreate = false)
+
+    /** @inheritdoc */
+    def create(): SparkSession = build(forceCreate = true)
   }
 
   /**
@@ -1143,87 +960,17 @@ object SparkSession extends Logging {
    */
   def builder(): Builder = new Builder
 
-  /**
-   * Changes the SparkSession that will be returned in this thread and its children when
-   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
-   * a SparkSession with an isolated session, instead of the global (first created) context.
-   *
-   * @since 2.0.0
-   */
-  def setActiveSession(session: SparkSession): Unit = {
-    activeThreadSession.set(session)
-  }
+  /** @inheritdoc */
+  override def getActiveSession: Option[SparkSession] = super.getActiveSession
 
-  /**
-   * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
-   * return the first created context instead of a thread-local override.
-   *
-   * @since 2.0.0
-   */
-  def clearActiveSession(): Unit = {
-    activeThreadSession.remove()
-  }
+  /** @inheritdoc */
+  override def getDefaultSession: Option[SparkSession] = super.getDefaultSession
 
-  /**
-   * Sets the default SparkSession that is returned by the builder.
-   *
-   * @since 2.0.0
-   */
-  def setDefaultSession(session: SparkSession): Unit = {
-    defaultSession.set(session)
-  }
+  /** @inheritdoc */
+  override def active: SparkSession = super.active
 
-  /**
-   * Clears the default SparkSession that is returned by the builder.
-   *
-   * @since 2.0.0
-   */
-  def clearDefaultSession(): Unit = {
-    defaultSession.set(null)
-  }
-
-  /**
-   * Returns the active SparkSession for the current thread, returned by the builder.
-   *
-   * @note Return None, when calling this function on executors
-   *
-   * @since 2.2.0
-   */
-  def getActiveSession: Option[SparkSession] = {
-    if (Utils.isInRunningSparkTask) {
-      // Return None when running on executors.
-      None
-    } else {
-      Option(activeThreadSession.get)
-    }
-  }
-
-  /**
-   * Returns the default SparkSession that is returned by the builder.
-   *
-   * @note Return None, when calling this function on executors
-   *
-   * @since 2.2.0
-   */
-  def getDefaultSession: Option[SparkSession] = {
-    if (Utils.isInRunningSparkTask) {
-      // Return None when running on executors.
-      None
-    } else {
-      Option(defaultSession.get)
-    }
-  }
-
-  /**
-   * Returns the currently active SparkSession, otherwise the default one. If there is no default
-   * SparkSession, throws an exception.
-   *
-   * @since 2.4.0
-   */
-  def active: SparkSession = {
-    getActiveSession.getOrElse(getDefaultSession.getOrElse(
-      throw SparkException.internalError("No active or default Spark session found")))
-  }
+  override protected def canUseSession(session: SparkSession): Boolean =
+    session.isUsable && !Utils.isInRunningSparkTask
 
   /**
    * Apply modifiable settings to an existing [[SparkSession]]. This method are used
@@ -1271,13 +1018,13 @@ object SparkSession extends Logging {
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
       configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
-    val configsEnabled = configurations.filter(session.conf.get[Boolean])
+    val configsEnabled = configurations.filter(session.sessionState.conf.getConf[Boolean])
     if (configsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
       configsEnabled.foreach(conf => {
-        newSession.conf.set(conf, false)
+        newSession.sessionState.conf.setConf(conf, false)
       })
       newSession
     }
@@ -1294,19 +1041,14 @@ object SparkSession extends Logging {
     if (!listenerRegistered.get()) {
       sparkContext.addSparkListener(new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-          defaultSession.set(null)
+          clearDefaultSession()
+          clearActiveSession()
           listenerRegistered.set(false)
         }
       })
       listenerRegistered.set(true)
     }
   }
-
-  /** The active SparkSession for the current thread. */
-  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
-
-  /** Reference to the root SparkSession. */
-  private val defaultSession = new AtomicReference[SparkSession]
 
   private val HIVE_SESSION_STATE_BUILDER_CLASS_NAME =
     "org.apache.spark.sql.hive.HiveSessionStateBuilder"
@@ -1377,13 +1119,25 @@ object SparkSession extends Logging {
   }
 
   /**
+   * Create new session extensions, initialize with the confs set in [[StaticSQLConf]],
+   * and optionally apply the [[SparkSessionExtensionsProvider]] present on the classpath.
+   */
+  private[sql] def applyAndLoadExtensions(sparkContext: SparkContext): SparkSessionExtensions = {
+    val extensions = applyExtensions(sparkContext, new SparkSessionExtensions)
+    if (sparkContext.conf.get(StaticSQLConf.LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH)) {
+      loadExtensions(extensions)
+    }
+    extensions
+  }
+
+  /**
    * Initialize extensions specified in [[StaticSQLConf]]. The classes will be applied to the
    * extensions passed into this function.
    */
   private def applyExtensions(
       sparkContext: SparkContext,
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
-    val extensionConfClassNames = sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+    val extensionConfClassNames = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
       .getOrElse(Seq.empty)
     extensionConfClassNames.foreach { extensionConfClassName =>
       try {

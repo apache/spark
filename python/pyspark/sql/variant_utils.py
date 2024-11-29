@@ -149,7 +149,7 @@ class VariantUtils:
     @classmethod
     def _check_index(cls, pos: int, length: int) -> None:
         if pos < 0 or pos >= length:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _get_type_info(cls, value: bytes, pos: int) -> Tuple[int, int]:
@@ -169,14 +169,14 @@ class VariantUtils:
         offset_size = ((metadata[0] >> 6) & 0x3) + 1
         dict_size = cls._read_long(metadata, 1, offset_size, signed=False)
         if id >= dict_size:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         string_start = 1 + (dict_size + 2) * offset_size
         offset = cls._read_long(metadata, 1 + (id + 1) * offset_size, offset_size, signed=False)
         next_offset = cls._read_long(
             metadata, 1 + (id + 2) * offset_size, offset_size, signed=False
         )
         if offset > next_offset:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         cls._check_index(string_start + next_offset - 1, len(metadata))
         return metadata[string_start + offset : (string_start + next_offset)].decode("utf-8")
 
@@ -187,7 +187,7 @@ class VariantUtils:
         if basic_type != VariantUtils.PRIMITIVE or (
             type_info != VariantUtils.TRUE and type_info != VariantUtils.FALSE
         ):
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         return type_info == VariantUtils.TRUE
 
     @classmethod
@@ -195,7 +195,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         if type_info == VariantUtils.INT1:
             return cls._read_long(value, pos + 1, 1, signed=True)
         elif type_info == VariantUtils.INT2:
@@ -204,25 +204,25 @@ class VariantUtils:
             return cls._read_long(value, pos + 1, 4, signed=True)
         elif type_info == VariantUtils.INT8:
             return cls._read_long(value, pos + 1, 8, signed=True)
-        raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _get_date(cls, value: bytes, pos: int) -> datetime.date:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         if type_info == VariantUtils.DATE:
             days_since_epoch = cls._read_long(value, pos + 1, 4, signed=True)
             return datetime.date.fromordinal(VariantUtils.EPOCH.toordinal() + days_since_epoch)
-        raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _get_timestamp(cls, value: bytes, pos: int, zone_id: str) -> datetime.datetime:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         if type_info == VariantUtils.TIMESTAMP_NTZ:
             microseconds_since_epoch = cls._read_long(value, pos + 1, 8, signed=True)
             return VariantUtils.EPOCH_NTZ + datetime.timedelta(
@@ -233,7 +233,7 @@ class VariantUtils:
             return (
                 VariantUtils.EPOCH + datetime.timedelta(microseconds=microseconds_since_epoch)
             ).astimezone(ZoneInfo(zone_id))
-        raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _get_string(cls, value: bytes, pos: int) -> str:
@@ -252,35 +252,35 @@ class VariantUtils:
                 length = cls._read_long(value, pos + 1, VariantUtils.U32_SIZE, signed=False)
             cls._check_index(start + length - 1, len(value))
             return value[start : start + length].decode("utf-8")
-        raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _get_double(cls, value: bytes, pos: int) -> float:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         if type_info == VariantUtils.FLOAT:
             cls._check_index(pos + 4, len(value))
             return struct.unpack("<f", value[pos + 1 : pos + 5])[0]
         elif type_info == VariantUtils.DOUBLE:
             cls._check_index(pos + 8, len(value))
             return struct.unpack("<d", value[pos + 1 : pos + 9])[0]
-        raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _check_decimal(cls, unscaled: int, scale: int, max_unscaled: int, max_scale: int) -> None:
         # max_unscaled == 10**max_scale, but we pass a literal parameter to avoid redundant
         # computation.
         if unscaled >= max_unscaled or unscaled <= -max_unscaled or scale > max_scale:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _get_decimal(cls, value: bytes, pos: int) -> decimal.Decimal:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         scale = value[pos + 1]
         unscaled = 0
         if type_info == VariantUtils.DECIMAL4:
@@ -296,7 +296,7 @@ class VariantUtils:
                 unscaled, scale, cls.MAX_DECIMAL16_VALUE, cls.MAX_DECIMAL16_PRECISION
             )
         else:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         return decimal.Decimal(unscaled) * (decimal.Decimal(10) ** (-scale))
 
     @classmethod
@@ -304,7 +304,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.PRIMITIVE or type_info != VariantUtils.BINARY:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         start = pos + 1 + VariantUtils.U32_SIZE
         length = cls._read_long(value, pos + 1, VariantUtils.U32_SIZE, signed=False)
         cls._check_index(start + length - 1, len(value))
@@ -350,7 +350,7 @@ class VariantUtils:
             return datetime.datetime
         elif type_info == VariantUtils.LONG_STR:
             return str
-        raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+        raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _to_json(cls, value: bytes, metadata: bytes, pos: int, zone_id: str) -> str:
@@ -438,7 +438,7 @@ class VariantUtils:
         elif variant_type == datetime.datetime:
             return cls._get_timestamp(value, pos, zone_id)
         else:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
 
     @classmethod
     def _handle_object(
@@ -451,7 +451,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.OBJECT:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         large_size = ((type_info >> 4) & 0x1) != 0
         size_bytes = VariantUtils.U32_SIZE if large_size else 1
         num_fields = cls._read_long(value, pos + 1, size_bytes, signed=False)
@@ -480,7 +480,7 @@ class VariantUtils:
         cls._check_index(pos, len(value))
         basic_type, type_info = cls._get_type_info(value, pos)
         if basic_type != VariantUtils.ARRAY:
-            raise PySparkValueError(error_class="MALFORMED_VARIANT", message_parameters={})
+            raise PySparkValueError(errorClass="MALFORMED_VARIANT", messageParameters={})
         large_size = ((type_info >> 2) & 0x1) != 0
         size_bytes = VariantUtils.U32_SIZE if large_size else 1
         num_fields = cls._read_long(value, pos + 1, size_bytes, signed=False)

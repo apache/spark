@@ -47,7 +47,7 @@ case class TestData(a: Int, b: String)
  */
 @SlowHiveTest
 class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAndAfter {
-  import org.apache.spark.sql.hive.test.TestHive.implicits._
+  import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
 
@@ -70,6 +70,14 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
+  override def afterEach(): Unit = {
+    try {
+      spark.artifactManager.cleanUpResources()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   private def assertUnsupportedFeature(
       body: => Unit,
       operation: String,
@@ -78,7 +86,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       exception = intercept[ParseException] {
         body
       },
-      errorClass = "INVALID_STATEMENT_OR_CLAUSE",
+      condition = "INVALID_STATEMENT_OR_CLAUSE",
       parameters = Map("operation" -> operation),
       context = expectedContext)
   }
@@ -683,7 +691,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       exception = intercept[AnalysisException] {
         sql("SELECT (CASE WHEN key > 2 THEN 3 WHEN 1 THEN 2 ELSE 0 END) FROM src").collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"CASE WHEN (key > 2) THEN 3 WHEN 1 THEN 2 ELSE 0 END\"",
         "paramIndex" -> "second",
@@ -819,7 +827,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
             """ALTER TABLE alter1 SET SERDE 'org.apache.hadoop.hive.serde2.TestSerDe'
               |WITH serdeproperties('s1'='9')""".stripMargin)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_3065",
+        condition = "_LEGACY_ERROR_TEMP_3065",
         parameters = Map(
           "clazz" -> "org.apache.hadoop.hive.ql.metadata.HiveException",
           "msg" -> "at least one column must be specified for the table"))
@@ -1251,7 +1259,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
               """INSERT INTO TABLE dp_test PARTITION(dp)
                 |SELECT key, value, key % 5 FROM src""".stripMargin)
           },
-          errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
+          condition = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`dp_test`",
             "tableColumns" -> "`key`, `value`, `dp`, `sp`",
@@ -1265,7 +1273,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
               """INSERT INTO TABLE dp_test PARTITION(dp, sp = 1)
                 |SELECT key, value, key % 5 FROM src""".stripMargin)
           },
-          errorClass = "_LEGACY_ERROR_TEMP_3079",
+          condition = "_LEGACY_ERROR_TEMP_3079",
           parameters = Map.empty)
       }
     }
@@ -1368,7 +1376,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           exception = intercept[AnalysisException] {
             sql("select * from test_b")
           },
-          errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
           parameters = Map("relationName" -> "`test_b`"),
           context = ExpectedContext(
             fragment = "test_b",
@@ -1382,7 +1390,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           exception = intercept[AnalysisException] {
             s2.sql("select * from test_a")
           },
-          errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
           parameters = Map("relationName" -> "`test_a`"),
           context = ExpectedContext(
             fragment = "test_a",
@@ -1408,7 +1416,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
         exception = intercept[AnalysisException] {
           sql("USE not_existing_db")
         },
-        errorClass = "SCHEMA_NOT_FOUND",
+        condition = "SCHEMA_NOT_FOUND",
         parameters = Map("schemaName" -> "`spark_catalog`.`not_existing_db`")
       )
     }
@@ -1420,7 +1428,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       exception = intercept[AnalysisException] {
         range(1).selectExpr("not_a_udf()")
       },
-      errorClass = "UNRESOLVED_ROUTINE",
+      condition = "UNRESOLVED_ROUTINE",
       sqlState = None,
       parameters = Map(
         "routineName" -> "`not_a_udf`",
@@ -1437,7 +1445,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           exception = intercept[AnalysisException] {
             range(1).selectExpr("not_a_udf()")
           },
-          errorClass = "UNRESOLVED_ROUTINE",
+          condition = "UNRESOLVED_ROUTINE",
           sqlState = None,
           parameters = Map(
             "routineName" -> "`not_a_udf`",

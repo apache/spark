@@ -28,6 +28,7 @@ import scala.io.Source
 import scala.jdk.CollectionConverters._
 
 import com.google.common.io.Files
+import kafka.log.LogManager
 import kafka.server.{HostedPartition, KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.zk.KafkaZkClient
@@ -42,11 +43,12 @@ import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.requests.FetchRequest
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
 import org.apache.kafka.common.serialization.StringSerializer
-import org.apache.kafka.common.utils.SystemTime
+import org.apache.kafka.common.utils.Time
 import org.apache.zookeeper.client.ZKClientConfig
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
 import org.scalatest.Assertions._
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
@@ -65,7 +67,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class KafkaTestUtils(
     withBrokerProps: Map[String, Object] = Map.empty,
-    secure: Boolean = false) extends Logging {
+    secure: Boolean = false) extends PrivateMethodTester with Logging {
 
   private val JAVA_AUTH_CONFIG = "java.security.auth.login.config"
 
@@ -174,7 +176,7 @@ class KafkaTestUtils(
     }
 
     kdc.getKrb5conf.delete()
-    Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    Files.asCharSink(kdc.getKrb5conf, StandardCharsets.UTF_8).write(krb5confStr)
     logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
@@ -238,7 +240,7 @@ class KafkaTestUtils(
       |  principal="$kafkaServerUser@$realm";
       |};
       """.stripMargin.trim
-    Files.write(content, file, StandardCharsets.UTF_8)
+    Files.asCharSink(file, StandardCharsets.UTF_8).write(content)
     logDebug(s"Created JAAS file: ${file.getPath}")
     logDebug(s"JAAS file content: $content")
     file.getAbsolutePath()
@@ -251,7 +253,7 @@ class KafkaTestUtils(
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
     zkClient = KafkaZkClient(s"$zkHost:$zkPort", isSecure = false, zkSessionTimeout,
-      zkConnectionTimeout, 1, new SystemTime(), "test", new ZKClientConfig)
+      zkConnectionTimeout, 1, Time.SYSTEM, "test", new ZKClientConfig)
     zkReady = true
   }
 
@@ -447,8 +449,9 @@ class KafkaTestUtils(
     sendMessages(msgs.toImmutableArraySeq)
   }
 
+  private val cleanupLogsPrivateMethod = PrivateMethod[LogManager](Symbol("cleanupLogs"))
   def cleanupLogs(): Unit = {
-    server.logManager.cleanupLogs()
+    server.logManager.invokePrivate(cleanupLogsPrivateMethod())
   }
 
   private def getOffsets(topics: Set[String], offsetSpec: OffsetSpec): Map[TopicPartition, Long] = {

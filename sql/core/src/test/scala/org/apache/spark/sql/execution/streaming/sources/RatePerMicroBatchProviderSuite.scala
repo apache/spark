@@ -202,7 +202,7 @@ class RatePerMicroBatchProviderSuite extends StreamTest {
           .schema(spark.range(1).schema)
           .load()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2242",
+      condition = "_LEGACY_ERROR_TEMP_2242",
       parameters = Map("provider" -> "RatePerMicroBatchProvider"))
   }
 }

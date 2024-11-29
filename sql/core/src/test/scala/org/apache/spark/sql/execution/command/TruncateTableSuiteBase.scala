@@ -181,7 +181,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[AnalysisException] {
             sql("TRUNCATE TABLE v0")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`spark_catalog`.`default`.`v0`",
             "operation" -> "TRUNCATE TABLE"),
@@ -198,7 +198,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[AnalysisException] {
             sql("TRUNCATE TABLE v1")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`v1`",
             "operation" -> "TRUNCATE TABLE"),
@@ -213,7 +213,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[AnalysisException] {
             sql(s"TRUNCATE TABLE $v2")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`global_temp`.`v2`",
             "operation" -> "TRUNCATE TABLE"),

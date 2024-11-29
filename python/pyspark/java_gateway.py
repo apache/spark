@@ -108,8 +108,8 @@ def launch_gateway(conf=None, popen_kwargs=None):
 
             if not os.path.isfile(conn_info_file):
                 raise PySparkRuntimeError(
-                    error_class="JAVA_GATEWAY_EXITED",
-                    message_parameters={},
+                    errorClass="JAVA_GATEWAY_EXITED",
+                    messageParameters={},
                 )
 
             with open(conn_info_file, "rb") as info:

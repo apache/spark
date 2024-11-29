@@ -88,13 +88,13 @@ class Observation:
         if name is not None:
             if not isinstance(name, str):
                 raise PySparkTypeError(
-                    error_class="NOT_STR",
-                    message_parameters={"arg_name": "name", "arg_type": type(name).__name__},
+                    errorClass="NOT_STR",
+                    messageParameters={"arg_name": "name", "arg_type": type(name).__name__},
                 )
             if name == "":
                 raise PySparkValueError(
-                    error_class="VALUE_NOT_NON_EMPTY_STR",
-                    message_parameters={"arg_name": "name", "arg_value": name},
+                    errorClass="VALUE_NOT_NON_EMPTY_STR",
+                    messageParameters={"arg_name": "name", "arg_value": name},
                 )
         self._name = name
         self._jvm: Optional[JVMView] = None
@@ -118,16 +118,14 @@ class Observation:
         from pyspark.sql.classic.column import _to_seq
 
         if self._jo is not None:
-            raise PySparkAssertionError(error_class="REUSE_OBSERVATION", message_parameters={})
+            raise PySparkAssertionError(errorClass="REUSE_OBSERVATION", messageParameters={})
 
         self._jvm = df._sc._jvm
         assert self._jvm is not None
         cls = self._jvm.org.apache.spark.sql.Observation
         self._jo = cls(self._name) if self._name is not None else cls()
-        observed_df = self._jo.on(
-            df._jdf,
-            exprs[0]._jc,
-            _to_seq(df._sc, [c._jc for c in exprs[1:]]),
+        observed_df = df._jdf.observe(
+            self._jo, exprs[0]._jc, _to_seq(df._sc, [c._jc for c in exprs[1:]])
         )
         return DataFrame(observed_df, df.sparkSession)
 
@@ -144,7 +142,7 @@ class Observation:
             the observed metrics
         """
         if self._jo is None:
-            raise PySparkAssertionError(error_class="NO_OBSERVE_BEFORE_GET", message_parameters={})
+            raise PySparkAssertionError(errorClass="NO_OBSERVE_BEFORE_GET", messageParameters={})
 
         jmap = self._jo.getAsJava()
         # return a pure Python dict, not jmap which is a py4j JavaMap

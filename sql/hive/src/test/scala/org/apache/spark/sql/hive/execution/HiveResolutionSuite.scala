@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.test.TestHive.{read, sparkContext, sql}
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
 import org.apache.spark.tags.SlowHiveTest
 
 case class Nested(a: Int, B: Int)
@@ -48,7 +48,7 @@ class HiveResolutionSuite extends HiveComparisonTest {
       exception = intercept[AnalysisException] {
         sql("SELECT a[0].b from nested").queryExecution.analyzed
       },
-      errorClass = "AMBIGUOUS_REFERENCE_TO_FIELDS",
+      condition = "AMBIGUOUS_REFERENCE_TO_FIELDS",
       sqlState = "42000",
       parameters = Map("field" -> "`b`", "count" -> "2")
     )
