@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -144,7 +145,7 @@ case class ResolvedCollation(collationName: String) extends LeafExpression with 
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
-      UTF8_BINARY
+      SYSTEM.BUILTIN.UTF8_BINARY
   """,
   since = "4.0.0",
   group = "string_funcs")
