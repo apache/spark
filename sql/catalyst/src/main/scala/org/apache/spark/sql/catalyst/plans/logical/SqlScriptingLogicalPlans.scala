@@ -267,3 +267,31 @@ case class LoopStatement(
     LoopStatement(newChildren(0).asInstanceOf[CompoundBody], label)
   }
 }
+
+/**
+ * Logical operator for FOR statement.
+ * @param query Query which is executed once, then it's result set is iterated on, row by row.
+ * @param variableName Name of variable which is used to access the current row during iteration.
+ * @param body Compound body is a collection of statements that are executed for each row in
+ *             the result set of the query.
+ * @param label An optional label for the loop which is unique amongst all labels for statements
+ *              within which the FOR statement is contained.
+ *              If an end label is specified it must match the beginning label.
+ *              The label can be used to LEAVE or ITERATE the loop.
+ */
+case class ForStatement(
+    query: SingleStatement,
+    variableName: Option[String],
+    body: CompoundBody,
+    label: Option[String]) extends CompoundPlanStatement {
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override def children: Seq[LogicalPlan] = Seq(query, body)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = newChildren match {
+    case IndexedSeq(query: SingleStatement, body: CompoundBody) =>
+      ForStatement(query, variableName, body, label)
+  }
+}

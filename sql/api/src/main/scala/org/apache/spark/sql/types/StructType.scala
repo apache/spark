@@ -502,6 +502,18 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
+
+  override private[spark] def transformRecursively(
+      f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) {
+      return f(this)
+    }
+
+    val newFields = fields.map { field =>
+      field.copy(dataType = field.dataType.transformRecursively(f))
+    }
+    StructType(newFields)
+  }
 }
 
 /**
