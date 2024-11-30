@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions._
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.internal.SqlApiConf
+=======
+import org.apache.spark.sql.internal.SQLConf
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType}
 
-// scalastyle:off nonascii
-class CollationSQLRegexpSuite
+class CollationRegexpExpressionsSuite
   extends QueryTest
   with SharedSparkSession
   with ExpressionEvalHelper {
@@ -33,22 +37,30 @@ class CollationSQLRegexpSuite
     // Supported collations
     case class LikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       LikeTestCase("ABC", "%B%", "UTF8_BINARY", true),
       LikeTestCase("AḂC", "%ḃ%", "UTF8_LCASE", true),
       LikeTestCase("ABC", "%b%", "UTF8_BINARY", false)
+=======
+      LikeTestCase("ABC", "%B%", "UTF8_BINARY", true)
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     )
     testCases.foreach(t => {
-      val query = s"SELECT like(collate('${t.l}', '${t.c}'), '${t.r}')"
+      val query = s"SELECT like(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class LikeTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      LikeTestFail("ABC", "%b%", "UTF8_BINARY_LCASE"),
+      LikeTestFail("ABC", "%B%", "UNICODE"),
       LikeTestFail("ABC", "%b%", "UNICODE_CI")
     )
     failCases.foreach(t => {
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       val query = s"SELECT like(collate('${t.l}', '${t.c}'), '${t.r}')"
       checkError(
         exception = intercept[AnalysisException] {
@@ -66,7 +78,13 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 47)
       )
+=======
+      val query = s"SELECT like(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Like simplification should work with collated strings") {
@@ -129,22 +147,29 @@ class CollationSQLRegexpSuite
     // Supported collations
     case class ILikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       ILikeTestCase("ABC", "%b%", "UTF8_BINARY", true),
       ILikeTestCase("AḂC", "%ḃ%", "UTF8_LCASE", true),
+=======
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
       ILikeTestCase("ABC", "%b%", "UTF8_BINARY", true)
     )
     testCases.foreach(t => {
-      val query = s"SELECT ilike(collate('${t.l}', '${t.c}'), '${t.r}')"
+      val query = s"SELECT ilike(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class ILikeTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      ILikeTestFail("ABC", "%b%", "UTF8_BINARY_LCASE"),
+      ILikeTestFail("ABC", "%b%", "UNICODE"),
       ILikeTestFail("ABC", "%b%", "UNICODE_CI")
     )
     failCases.foreach(t => {
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       val query = s"SELECT ilike(collate('${t.l}', '${t.c}'), '${t.r}')"
       checkError(
         exception = intercept[AnalysisException] {
@@ -322,29 +347,43 @@ class CollationSQLRegexpSuite
           start = 36,
           stop = 63)
       )
+=======
+      val query = s"SELECT ilike(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support RLike string expression with collation") {
     // Supported collations
     case class RLikeTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       RLikeTestCase("ABC", ".B.", "UTF8_BINARY", true),
       RLikeTestCase("AḂC", ".ḃ.", "UTF8_LCASE", true),
       RLikeTestCase("ABC", ".b.", "UTF8_BINARY", false)
+=======
+      RLikeTestCase("ABC", ".B.", "UTF8_BINARY", true)
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     )
     testCases.foreach(t => {
-      val query = s"SELECT rlike(collate('${t.l}', '${t.c}'), '${t.r}')"
+      val query = s"SELECT rlike(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(BooleanType))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class RLikeTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      RLikeTestFail("ABC", ".b.", "UTF8_BINARY_LCASE"),
+      RLikeTestFail("ABC", ".B.", "UNICODE"),
       RLikeTestFail("ABC", ".b.", "UNICODE_CI")
     )
     failCases.foreach(t => {
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       val query = s"SELECT rlike(collate('${t.l}', '${t.c}'), '${t.r}')"
       checkError(
         exception = intercept[AnalysisException] {
@@ -362,29 +401,42 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 48)
       )
+=======
+      val query = s"SELECT rlike(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support StringSplit string expression with collation") {
     // Supported collations
     case class StringSplitTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       StringSplitTestCase("ABC", "[B]", "UTF8_BINARY", Seq("A", "C")),
       StringSplitTestCase("AḂC", "[ḃ]", "UTF8_LCASE", Seq("A", "C")),
+=======
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
       StringSplitTestCase("ABC", "[B]", "UTF8_BINARY", Seq("A", "C"))
     )
     testCases.foreach(t => {
-      val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}')"
+      val query = s"SELECT split(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(ArrayType(StringType(t.c))))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class StringSplitTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      StringSplitTestFail("ABC", "[b]", "UTF8_BINARY_LCASE"),
+      StringSplitTestFail("ABC", "[B]", "UNICODE"),
       StringSplitTestFail("ABC", "[b]", "UNICODE_CI")
     )
     failCases.foreach(t => {
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       val query = s"SELECT split(collate('${t.l}', '${t.c}'), '${t.r}')"
       checkError(
         exception = intercept[AnalysisException] {
@@ -402,29 +454,36 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 48)
       )
+=======
+      val query = s"SELECT split(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support RegExpReplace string expression with collation") {
     // Supported collations
     case class RegExpReplaceTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       RegExpReplaceTestCase("ABCDE", ".C.", "UTF8_BINARY", "AFFFE"),
       RegExpReplaceTestCase("ABĆDE", ".ć.", "UTF8_LCASE", "AFFFE"),
       RegExpReplaceTestCase("ABCDE", ".c.", "UTF8_BINARY", "ABCDE")
+=======
+      RegExpReplaceTestCase("ABCDE", ".C.", "UTF8_BINARY", "AFFFE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     )
     testCases.foreach(t => {
       val query =
-        s"SELECT regexp_replace(collate('${t.l}', '${t.c}'), '${t.r}', collate('FFF', '${t.c}'))"
+        s"SELECT regexp_replace(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'), 'FFF')"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
-      // Implicit casting
-      checkAnswer(sql(s"SELECT regexp_replace(collate('${t.l}', '${t.c}'), '${t.r}', 'FFF')"),
-        Row(t.result))
-      checkAnswer(sql(s"SELECT regexp_replace('${t.l}', '${t.r}', collate('FFF', '${t.c}'))"),
-        Row(t.result))
+      // TODO: Implicit casting (not currently supported)
     })
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
     // Collation mismatch
     val (c1, c2) = ("UTF8_BINARY", "UTF8_LCASE")
     checkError(
@@ -436,13 +495,18 @@ class CollationSQLRegexpSuite
         "explicitTypes" -> """"STRING", "STRING COLLATE UTF8_LCASE""""
       )
     )
+=======
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     // Unsupported collations
     case class RegExpReplaceTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      RegExpReplaceTestFail("ABCDE", ".c.", "UTF8_BINARY_LCASE"),
+      RegExpReplaceTestFail("ABCDE", ".C.", "UNICODE"),
       RegExpReplaceTestFail("ABCDE", ".c.", "UNICODE_CI")
     )
     failCases.foreach(t => {
       val query =
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
         s"SELECT regexp_replace(collate('${t.l}', '${t.c}'), '${t.r}', 'FFF')"
       checkError(
         exception = intercept[AnalysisException] {
@@ -460,31 +524,45 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 66)
       )
+=======
+        s"SELECT regexp_replace(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'), 'FFF')"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support RegExpExtract string expression with collation") {
     // Supported collations
     case class RegExpExtractTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       RegExpExtractTestCase("ABCDE", ".C.", "UTF8_BINARY", "BCD"),
       RegExpExtractTestCase("ABĆDE", ".ć.", "UTF8_LCASE", "BĆD"),
       RegExpExtractTestCase("ABCDE", ".c.", "UTF8_BINARY", "")
+=======
+      RegExpExtractTestCase("ABCDE", ".C.", "UTF8_BINARY", "BCD")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     )
     testCases.foreach(t => {
       val query =
-        s"SELECT regexp_extract(collate('${t.l}', '${t.c}'), '${t.r}', 0)"
+        s"SELECT regexp_extract(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'), 0)"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class RegExpExtractTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      RegExpExtractTestFail("ABCDE", ".c.", "UTF8_BINARY_LCASE"),
+      RegExpExtractTestFail("ABCDE", ".C.", "UNICODE"),
       RegExpExtractTestFail("ABCDE", ".c.", "UNICODE_CI")
     )
     failCases.foreach(t => {
       val query =
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
         s"SELECT regexp_extract(collate('${t.l}', '${t.c}'), '${t.r}', 0)"
       checkError(
         exception = intercept[AnalysisException] {
@@ -502,31 +580,45 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 62)
       )
+=======
+        s"SELECT regexp_extract(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'), 0)"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support RegExpExtractAll string expression with collation") {
     // Supported collations
     case class RegExpExtractAllTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       RegExpExtractAllTestCase("ABCDE", ".C.", "UTF8_BINARY", Seq("BCD")),
       RegExpExtractAllTestCase("ABĆDE", ".ć.", "UTF8_LCASE", Seq("BĆD")),
       RegExpExtractAllTestCase("ABCDE", ".c.", "UTF8_BINARY", Seq())
+=======
+      RegExpExtractAllTestCase("ABCDE", ".C.", "UTF8_BINARY", Seq("BCD"))
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     )
     testCases.foreach(t => {
       val query =
-        s"SELECT regexp_extract_all(collate('${t.l}', '${t.c}'), '${t.r}', 0)"
+        s"SELECT regexp_extract_all(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'), 0)"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(ArrayType(StringType(t.c))))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class RegExpExtractAllTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      RegExpExtractAllTestFail("ABCDE", ".c.", "UTF8_BINARY_LCASE"),
+      RegExpExtractAllTestFail("ABCDE", ".C.", "UNICODE"),
       RegExpExtractAllTestFail("ABCDE", ".c.", "UNICODE_CI")
     )
     failCases.foreach(t => {
       val query =
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
         s"SELECT regexp_extract_all(collate('${t.l}', '${t.c}'), '${t.r}', 0)"
       checkError(
         exception = intercept[AnalysisException] {
@@ -544,29 +636,43 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 66)
       )
+=======
+        s"SELECT regexp_extract_all(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'), 0)"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support RegExpCount string expression with collation") {
     // Supported collations
     case class RegExpCountTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       RegExpCountTestCase("ABCDE", ".C.", "UTF8_BINARY", 1),
       RegExpCountTestCase("ABĆDE", ".ć.", "UTF8_LCASE", 1),
       RegExpCountTestCase("ABCDE", ".c.", "UTF8_BINARY", 0)
+=======
+      RegExpCountTestCase("ABCDE", ".C.", "UTF8_BINARY", 1)
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     )
     testCases.foreach(t => {
-      val query = s"SELECT regexp_count(collate('${t.l}', '${t.c}'), '${t.r}')"
+      val query = s"SELECT regexp_count(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class RegExpCountTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      RegExpCountTestFail("ABCDE", ".c.", "UTF8_BINARY_LCASE"),
+      RegExpCountTestFail("ABCDE", ".C.", "UNICODE"),
       RegExpCountTestFail("ABCDE", ".c.", "UNICODE_CI")
     )
     failCases.foreach(t => {
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       val query = s"SELECT regexp_count(collate('${t.l}', '${t.c}'), '${t.r}')"
       checkError(
         exception = intercept[AnalysisException] {
@@ -584,29 +690,43 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 57)
       )
+=======
+      val query = s"SELECT regexp_count(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support RegExpSubStr string expression with collation") {
     // Supported collations
     case class RegExpSubStrTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       RegExpSubStrTestCase("ABCDE", ".C.", "UTF8_BINARY", "BCD"),
       RegExpSubStrTestCase("ABĆDE", ".ć.", "UTF8_LCASE", "BĆD"),
       RegExpSubStrTestCase("ABCDE", ".c.", "UTF8_BINARY", null)
+=======
+      RegExpSubStrTestCase("ABCDE", ".C.", "UTF8_BINARY", "BCD")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     )
     testCases.foreach(t => {
-      val query = s"SELECT regexp_substr(collate('${t.l}', '${t.c}'), '${t.r}')"
+      val query = s"SELECT regexp_substr(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(StringType(t.c)))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class RegExpSubStrTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      RegExpSubStrTestFail("ABCDE", ".c.", "UTF8_BINARY_LCASE"),
+      RegExpSubStrTestFail("ABCDE", ".C.", "UNICODE"),
       RegExpSubStrTestFail("ABCDE", ".c.", "UNICODE_CI")
     )
     failCases.foreach(t => {
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       val query = s"SELECT regexp_substr(collate('${t.l}', '${t.c}'), '${t.r}')"
       checkError(
         exception = intercept[AnalysisException] {
@@ -624,29 +744,43 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 58)
       )
+=======
+      val query = s"SELECT regexp_substr(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      val unsupportedCollation = intercept[AnalysisException] { sql(query) }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 
   test("Support RegExpInStr string expression with collation") {
     // Supported collations
     case class RegExpInStrTestCase[R](l: String, r: String, c: String, result: R)
     val testCases = Seq(
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       RegExpInStrTestCase("ABCDE", ".C.", "UTF8_BINARY", 2),
       RegExpInStrTestCase("ABĆDE", ".ć.", "UTF8_LCASE", 2),
       RegExpInStrTestCase("ABCDE", ".c.", "UTF8_BINARY", 0)
+=======
+      RegExpInStrTestCase("ABCDE", ".C.", "UTF8_BINARY", 2)
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     )
     testCases.foreach(t => {
-      val query = s"SELECT regexp_instr(collate('${t.l}', '${t.c}'), '${t.r}')"
+      val query = s"SELECT regexp_instr(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
       // Result & data type
       checkAnswer(sql(query), Row(t.result))
       assert(sql(query).schema.fields.head.dataType.sameType(IntegerType))
+      // TODO: Implicit casting (not currently supported)
     })
     // Unsupported collations
     case class RegExpInStrTestFail(l: String, r: String, c: String)
     val failCases = Seq(
+      RegExpInStrTestFail("ABCDE", ".c.", "UTF8_BINARY_LCASE"),
+      RegExpInStrTestFail("ABCDE", ".C.", "UNICODE"),
       RegExpInStrTestFail("ABCDE", ".c.", "UNICODE_CI")
     )
     failCases.foreach(t => {
+<<<<<<< HEAD:sql/core/src/test/scala/org/apache/spark/sql/CollationSQLRegexpSuite.scala
       val query = s"SELECT regexp_instr(collate('${t.l}', '${t.c}'), '${t.r}')"
       checkError(
         exception = intercept[AnalysisException] {
@@ -664,7 +798,22 @@ class CollationSQLRegexpSuite
           start = 7,
           stop = 57)
       )
+=======
+      val query = s"SELECT regexp_instr(collate('${t.l}', '${t.c}'), collate('${t.r}', '${t.c}'))"
+      val unsupportedCollation = intercept[AnalysisException] {
+        sql(query)
+      }
+      assert(unsupportedCollation.getErrorClass === "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+>>>>>>> parent of b4624bf4be2 ([SPARK-47414][SQL] Lowercase collation support for regexp expressions):sql/core/src/test/scala/org/apache/spark/sql/CollationRegexpExpressionsSuite.scala
     })
+    // TODO: Collation mismatch (not currently supported)
   }
 }
-// scalastyle:on nonascii
+
+class CollationRegexpExpressionsANSISuite extends CollationRegexpExpressionsSuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
+
+  // TODO: If needed, add more tests for other regexp expressions (with ANSI mode enabled)
+
+}
