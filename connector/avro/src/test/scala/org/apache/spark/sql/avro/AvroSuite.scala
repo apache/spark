@@ -3020,6 +3020,28 @@ abstract class AvroSuite
         assert(df.count() == 0)
       }
     }
+
+
+  case class AvroUnionRecordField(a: Int)
+  case class AvroUnionRecord(data: AvroUnionRecordField)
+
+  test("Deserialize union of null, record") {
+
+    val schema =
+      """[
+        |"null",
+        |{
+        |   "name": "data",
+        |   "type": "record",
+        |   "fields": [{"type": "int", "name": "a"}]
+        |}]""".stripMargin
+
+
+    val df = spark.createDataset(Seq(AvroUnionRecord(AvroUnionRecordField(1))))
+      .select(avro.functions.to_avro(col("data"), schema).as("encoded"))
+      .select(avro.functions.from_avro(col("encoded"), schema).as("decoded"))
+
+    assert(df.filter("decoded.a == 1").count() == 0)
   }
 }
 
