@@ -21,7 +21,8 @@ import java.io.File
 import java.sql.{Date, Timestamp}
 import java.time.LocalDateTime
 
-import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetTest, SparkShreddingUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -38,7 +39,8 @@ class VariantShreddingSuite extends QueryTest with SharedSparkSession with Parqu
     builder.result().getMetadata
   }
 
-  // Make a variant value binary by parsing a JSON string on a pre-defined metadata key set.
+  // Build a shredded variant value binary. Its IDs refer to the metadata built from `metadataKeys`,
+  // which can include more keys than the JSON string contains.
   def shreddedValue(s: String, metadataKeys: Seq[String]): Array[Byte] = {
     val builder = new VariantBuilder(false)
     metadataKeys.foreach(builder.addKey)
@@ -46,93 +48,119 @@ class VariantShreddingSuite extends QueryTest with SharedSparkSession with Parqu
     builder.result().getValue
   }
 
-  def checkRead(path: File, expected: Seq[String]): Unit = {
-    withAllParquetReaders {
-      val df = spark.read.schema("v variant").parquet(path.getAbsolutePath)
-        .selectExpr("to_json(v)")
-      checkAnswer(df, expected.map(Row(_)))
+  // Given an expected schema of a Variant value, return a write schema with a single column `v`
+  // with the corresponding shredding schema.
+  def writeSchema(schema: DataType): StructType =
+    StructType(Array(StructField("v", SparkShreddingUtils.variantShreddingSchema(schema))))
+
+  def testWithTempPath(name: String)(block: File => Unit): Unit = test(name) {
+    withTempPath { path =>
+      block(path)
     }
   }
 
-  test("scalar types rebuild") {
+  def writeRows(path: File, schema: StructType, rows: Row*): Unit =
+    spark.createDataFrame(spark.sparkContext.parallelize(rows.map(Row(_)), numSlices = 1), schema)
+      .write.mode("overwrite").parquet(path.getAbsolutePath)
+
+  def read(path: File): DataFrame =
+    spark.read.schema("v variant").parquet(path.getAbsolutePath)
+
+  def checkExpr(path: File, expr: String, expected: Any*): Unit = withAllParquetReaders {
+    checkAnswer(read(path).selectExpr(expr), expected.map(Row(_)))
+  }
+
+  def checkException(path: File, expr: String, msg: String): Unit = withAllParquetReaders {
+    val ex = intercept[Exception with SparkThrowable] {
+      read(path).selectExpr(expr).collect()
+    }
+    // When reading with the parquet-mr reader, the expected message can be nested in
+    // `ex.getCause.getCause`.
+    assert(ex.getMessage.contains(msg) || ex.getCause.getMessage.contains(msg)
+      || ex.getCause.getCause.getMessage.contains(msg))
+  }
+
+  testWithTempPath("scalar types rebuild") { path =>
     val scalarTypes = Array(
       BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
       TimestampType, TimestampNTZType, DateType,
       StringType, BinaryType,
       DecimalType(9, 3), DecimalType(18, 6), DecimalType(22, 9))
-    val obj = StructType(scalarTypes.zipWithIndex.map { case (t, i) =>
-      StructField(i.toString, StructType(Array(StructField("typed_value", t))))
+    val schema = StructType(scalarTypes.zipWithIndex.map { case (t, i) =>
+      StructField(i.toString, t)
     })
-    val v = StructType(Array(
-      StructField("typed_value", obj),
-      StructField("value", BinaryType),
-      StructField("metadata", BinaryType)
-    ))
 
     val values = Seq[Any](
       true, 1.toByte, 2.toShort, 3, 4L, 5.5F, 6.6,
       new Timestamp(7), LocalDateTime.of(1, 1, 1, 0, 0, 8, 0), new Date(9),
       "str10", Array[Byte](11),
-      Decimal("12.12"), Decimal("13.13"), Decimal("14.14"))
-    val row = Row(Row.fromSeq(values.map(Row(_))), null,
-      metadata(scalarTypes.indices.map(_.toString)))
+      Decimal("12.12"), Decimal("13.13"), Decimal("14.14")).map(Row(null, _))
+    val row = Row(metadata(scalarTypes.indices.map(_.toString)), null, Row.fromSeq(values))
 
-    withTempPath { path =>
-      spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(row))),
-          StructType(Array(StructField("v", v))))
-        .write.parquet(path.getAbsolutePath)
-      for (tz <- Seq("Etc/UTC", "America/Los_Angeles")) {
-        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
-          val timestamp = if (tz == "Etc/UTC") {
-            "1970-01-01 00:00:00.007+00:00"
-          } else {
-            "1969-12-31 16:00:00.007-08:00"
-          }
-          checkRead(path, Seq(
-            """{"0":true,"1":1,"10":"str10","11":"Cw==","12":12.12,"13":13.13,"14":14.14,""" +
-              s""""2":2,"3":3,"4":4,"5":5.5,"6":6.6,"7":"$timestamp",""" +
-              """"8":"0001-01-01 00:00:08","9":"1969-12-31"}"""))
+    writeRows(path, writeSchema(schema), row)
+    for (tz <- Seq("Etc/UTC", "America/Los_Angeles")) {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+        val timestamp = if (tz == "Etc/UTC") {
+          "1970-01-01 00:00:00.007+00:00"
+        } else {
+          "1969-12-31 16:00:00.007-08:00"
         }
+        checkExpr(path, "to_json(v)",
+          """{"0":true,"1":1,"10":"str10","11":"Cw==","12":12.12,"13":13.13,"14":14.14,""" +
+            s""""2":2,"3":3,"4":4,"5":5.5,"6":6.6,"7":"$timestamp",""" +
+            """"8":"0001-01-01 00:00:08","9":"1969-12-31"}""")
+        checkExpr(path, "variant_get(v, '$.0', 'int')", 1)
+        checkExpr(path, "variant_get(v, '$.2', 'boolean')", true)
+        checkExpr(path, "variant_get(v, '$.6', 'float')", 6.6F)
+        checkExpr(path, "variant_get(v, '$.11', 'string')", new String(Array[Byte](11)))
+        checkExpr(path, "variant_get(v, '$.14', 'decimal(9, 1)')", BigDecimal("14.1"))
       }
     }
   }
 
-  test("object rebuild") {
-    val schema = StructType.fromDDL("v struct<metadata binary, value binary, " +
-      "typed_value struct<b struct<typed_value int, value binary>, " +
-      "d struct<typed_value int, value binary>>>")
-    withTempPath { path =>
-      spark.createDataFrame(spark.sparkContext.parallelize(Seq(
-          Row(metadata(Seq("b", "d")), null, Row(Row(1, null), Row(null, null))),
-          Row(metadata(Seq("b", "d")), null, Row(Row(1, null), Row(null, value("null")))),
-          Row(metadata(Seq("a", "b", "c", "d")),
-            shreddedValue("""{"a": 1, "c": 3}""", Seq("a", "b", "c", "d")),
-            Row(Row(2, null), Row(null, value("4")))),
-          Row(metadata(Nil), value("null"), null),
-          null).map(Row(_))), schema)
-        .write.parquet(path.getAbsolutePath)
-      checkRead(path, Seq(
-        """{"b":1}""",
-        """{"b":1,"d":null}""",
-        """{"a":1,"b":2,"c":3,"d":4}""",
-        "null",
-        null))
-    }
+  testWithTempPath("object rebuild") { path =>
+    writeRows(path, writeSchema(StructType.fromDDL("b int, d int")),
+      Row(metadata(Seq("b", "d")), null, Row(Row(null, 1), Row(null, null))),
+      Row(metadata(Seq("b", "d")), null, Row(Row(null, 1), Row(value("null"), null))),
+      Row(metadata(Seq("a", "b", "c", "d")),
+        shreddedValue("""{"a": 1, "c": 3}""", Seq("a", "b", "c", "d")),
+        Row(Row(null, 2), Row(value("4"), null))),
+      Row(metadata(Nil), value("null"), null),
+      null)
+    checkExpr(path, "to_json(v)", """{"b":1}""", """{"b":1,"d":null}""",
+      """{"a":1,"b":2,"c":3,"d":4}""", "null", null)
+    checkExpr(path, "variant_get(v, '$.b', 'string')", "1", "1", "2", null, null)
+    checkExpr(path, "variant_get(v, '$.d', 'string')", null, null, "4", null, null)
   }
 
-  test("array rebuild") {
-    val schema = StructType.fromDDL("v struct<metadata binary, value binary, " +
-      "typed_value array<struct<typed_value int, value binary>>>")
-    withTempPath { path =>
-      spark.createDataFrame(spark.sparkContext.parallelize(Seq(
-          Row(metadata(Nil), null, Array(Row(1, null), Row(2, null), Row(null, value("3")))),
-          Row(metadata(Seq("a", "b")), null, Array(
-            Row(null, shreddedValue("""{"a": 1}""", Seq("a", "b"))),
-            Row(null, shreddedValue("""{"b": 2}""", Seq("a", "b"))))),
-          Row(metadata(Seq("a", "b")), value("""{"a": 1, "b": 2}"""), null)
-        ).map(Row(_))), schema)
-        .write.parquet(path.getAbsolutePath)
-      checkRead(path, Seq("""[1,2,3]""", """[{"a":1},{"b":2}]""", """{"a":1,"b":2}"""))
-    }
+  testWithTempPath("array rebuild") { path =>
+    writeRows(path, writeSchema(ArrayType(IntegerType)),
+      Row(metadata(Nil), null, Array(Row(null, 1), Row(null, 2), Row(value("3"), null))),
+      Row(metadata(Seq("a", "b")), null, Array(
+        Row(shreddedValue("""{"a": 1}""", Seq("a", "b")), null),
+        Row(shreddedValue("""{"b": 2}""", Seq("a", "b")), null))),
+      Row(metadata(Seq("a", "b")), value("""{"a": 1, "b": 2}"""), null))
+    checkExpr(path, "to_json(v)", """[1,2,3]""", """[{"a":1},{"b":2}]""", """{"a":1,"b":2}""")
+    checkExpr(path, "variant_get(v, '$[2]', 'int')", 3, null, null)
+    checkExpr(path, "variant_get(v, '$[1].b', 'int')", null, 2, null)
+    checkExpr(path, "variant_get(v, '$.a', 'long')", null, null, 1L)
+  }
+
+  testWithTempPath("malformed input") { path =>
+    // Top-level variant must not be missing.
+    writeRows(path, writeSchema(IntegerType), Row(metadata(Nil), null, null))
+    checkException(path, "v", "MALFORMED_VARIANT")
+    // Array-element variant must not be missing.
+    writeRows(path, writeSchema(ArrayType(IntegerType)),
+      Row(metadata(Nil), null, Array(Row(null, null))))
+    checkException(path, "v", "MALFORMED_VARIANT")
+    // Shredded field must not be null.
+    writeRows(path, writeSchema(StructType.fromDDL("a int")),
+      Row(metadata(Seq("a")), null, Row(null)))
+    checkException(path, "v", "MALFORMED_VARIANT")
+    // `value` must not contain any shredded field.
+    writeRows(path, writeSchema(StructType.fromDDL("a int")),
+      Row(metadata(Seq("a")), value("""{"a": 1}"""), Row(Row(null, null))))
+    checkException(path, "v", "MALFORMED_VARIANT")
   }
 }

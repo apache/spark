@@ -42,6 +42,8 @@ public class ShreddingUtils {
     int numElements();
   }
 
+  // This `rebuild` function should only be called on the top-level schema, and that other private
+  // implementation will be called on any recursively shredded sub-schema.
   public static Variant rebuild(ShreddedRow row, VariantSchema schema) {
     if (schema.topLevelMetadataIdx < 0 || row.isNullAt(schema.topLevelMetadataIdx)) {
       throw malformedVariant();
@@ -124,6 +126,10 @@ public class ShreddingUtils {
         ArrayList<VariantBuilder.FieldEntry> fields = new ArrayList<>();
         int start = builder.getWritePos();
         for (int fieldIdx = 0; fieldIdx < schema.objectSchema.length; ++fieldIdx) {
+          // Shredded field must not be null.
+          if (object.isNullAt(fieldIdx)) {
+            throw malformedVariant();
+          }
           String fieldName = schema.objectSchema[fieldIdx].fieldName;
           VariantSchema fieldSchema = schema.objectSchema[fieldIdx].schema;
           ShreddedRow fieldValue = object.getStruct(fieldIdx, fieldSchema.numFields);
@@ -141,6 +147,10 @@ public class ShreddingUtils {
           if (v.getType() != VariantUtil.Type.OBJECT) throw malformedVariant();
           for (int i = 0; i < v.objectSize(); ++i) {
             Variant.ObjectField field = v.getFieldAtIndex(i);
+            // `value` must not contain any shredded field.
+            if (schema.objectSchemaMap.containsKey(field.key)) {
+              throw malformedVariant();
+            }
             int id = builder.addKey(field.key);
             fields.add(new VariantBuilder.FieldEntry(field.key, id, builder.getWritePos() - start));
             builder.appendVariant(field.value);
@@ -149,9 +159,12 @@ public class ShreddingUtils {
         builder.finishWritingObject(start, fields);
       }
     } else if (variantIdx >= 0 && !row.isNullAt(variantIdx)) {
+      // `typed_value` doesn't exist or is null. Read from `value`.
       builder.appendVariant(new Variant(row.getBinary(variantIdx), metadata));
     } else {
-      builder.appendNull();
+      // This means the variant is missing in a context where it must present, so the input data is
+      // invalid.
+      throw malformedVariant();
     }
   }
 }
