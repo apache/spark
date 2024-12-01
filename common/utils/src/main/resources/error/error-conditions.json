@@ -2627,29 +2627,6 @@
     ],
     "sqlState" : "22006"
   },
-  "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
-    "message" : [
-      "Invalid inverse distribution function <funcName>."
-    ],
-    "subClass" : {
-      "DISTINCT_UNSUPPORTED" : {
-        "message" : [
-          "Cannot use DISTINCT with WITHIN GROUP."
-        ]
-      },
-      "WITHIN_GROUP_MISSING" : {
-        "message" : [
-          "WITHIN GROUP is required for inverse distribution function."
-        ]
-      },
-      "WRONG_NUM_ORDERINGS" : {
-        "message" : [
-          "Requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
-        ]
-      }
-    },
-    "sqlState" : "42K0K"
-  },
   "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
     "message" : [
       "<fieldName> is not a valid identifier of Java and cannot be used as field name",
@@ -3363,6 +3340,34 @@
       "Cannot specify ORDER BY or a window frame for <aggFunc>."
     ],
     "sqlState" : "42601"
+  },
+  "INVALID_WITHIN_GROUP_EXPRESSION" : {
+    "message" : [
+      "Invalid function <funcName> with WITHIN GROUP."
+    ],
+    "subClass" : {
+      "DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "The function does not support DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "MISMATCH_WITH_DISTINCT_INPUT" : {
+        "message" : [
+          "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
+        ]
+      },
+      "WITHIN_GROUP_MISSING" : {
+        "message" : [
+          "WITHIN GROUP is required for the function."
+        ]
+      },
+      "WRONG_NUM_ORDERINGS" : {
+        "message" : [
+          "The function requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
+        ]
+      }
+    },
+    "sqlState" : "42K0K"
   },
   "INVALID_WRITER_COMMIT_MESSAGE" : {
     "message" : [
@@ -4747,12 +4752,6 @@
       "Unable to infer schema for <format>. It must be specified manually."
     ],
     "sqlState" : "42KD9"
-  },
-  "UNANALYZABLE_EXPRESSION" : {
-    "message" : [
-      "The plan contains an unanalyzable expression <expr> that holds the analysis."
-    ],
-    "sqlState" : "03000"
   },
   "UNBOUND_SQL_PARAMETER" : {
     "message" : [

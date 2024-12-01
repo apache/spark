@@ -47,18 +47,21 @@ class SubqueryTestsMixin:
             ["c", "d"],
         )
 
-    def test_unanalyzable_expression(self):
-        sub = self.spark.range(1).where(sf.col("id") == sf.col("id").outer())
+    def test_noop_outer(self):
+        assertDataFrameEqual(
+            self.spark.range(1).select(sf.col("id").outer()),
+            self.spark.range(1).select(sf.col("id")),
+        )
 
         with self.assertRaises(AnalysisException) as pe:
-            sub.schema
+            self.spark.range(1).select(sf.col("outer_col").outer()).collect()
 
         self.check_error(
             exception=pe.exception,
-            errorClass="UNANALYZABLE_EXPRESSION",
-            messageParameters={"expr": '"outer(id)"'},
+            errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            messageParameters={"objectName": "`outer_col`", "proposal": "`id`"},
             query_context_type=QueryContextType.DataFrame,
-            fragment="outer",
+            fragment="col",
         )
 
     def test_simple_uncorrelated_scalar_subquery(self):
@@ -189,7 +192,7 @@ class SubqueryTestsMixin:
                     "c1",
                     (
                         self.spark.table("t2")
-                        .where(sf.col("c2").outer() == sf.col("c2"))
+                        .where(sf.col("t1.c2").outer() == sf.col("t2.c2"))
                         .select(sf.max("c1"))
                         .scalar()
                     ),
@@ -205,45 +208,72 @@ class SubqueryTestsMixin:
             self.df2.createOrReplaceTempView("r")
 
             with self.subTest("in where"):
-                assertDataFrameEqual(
-                    self.spark.table("l").where(
-                        sf.col("b")
-                        < (
-                            self.spark.table("r")
-                            .where(sf.col("a").outer() == sf.col("c"))
-                            .select(sf.max("d"))
-                            .scalar()
+                for cond in [
+                    sf.col("a").outer() == sf.col("c"),
+                    (sf.col("a") == sf.col("c")).outer(),
+                    sf.expr("a = c").outer(),
+                ]:
+                    with self.subTest(cond=cond):
+                        assertDataFrameEqual(
+                            self.spark.table("l").where(
+                                sf.col("b")
+                                < self.spark.table("r").where(cond).select(sf.max("d")).scalar()
+                            ),
+                            self.spark.sql(
+                                """select * from l where b < (select max(d) from r where a = c)"""
+                            ),
                         )
-                    ),
-                    self.spark.sql(
-                        """select * from l where b < (select max(d) from r where a = c)"""
-                    ),
-                )
 
             with self.subTest("in select"):
+                df1 = self.spark.table("l").alias("t1")
+                df2 = self.spark.table("l").alias("t2")
+
+                for cond in [
+                    sf.col("t1.a") == sf.col("t2.a").outer(),
+                    (sf.col("t1.a") == sf.col("t2.a")).outer(),
+                    sf.expr("t1.a = t2.a").outer(),
+                ]:
+                    with self.subTest(cond=cond):
+                        assertDataFrameEqual(
+                            df1.select(
+                                "a",
+                                df2.where(cond).select(sf.sum("b")).scalar().alias("sum_b"),
+                            ),
+                            self.spark.sql(
+                                """
+                                select
+                                    a, (select sum(b) from l t2 where t2.a = t1.a) sum_b
+                                from l t1
+                                """
+                            ),
+                        )
+
+            with self.subTest("without .outer()"):
                 assertDataFrameEqual(
                     self.spark.table("l").select(
                         "a",
                         (
-                            self.spark.table("l")
-                            .where(sf.col("a") == sf.col("a").outer())
-                            .select(sf.sum("b"))
+                            self.spark.table("r")
+                            .where(sf.col("b") == sf.col("a").outer())
+                            .select(sf.sum("d"))
                             .scalar()
-                            .alias("sum_b")
+                            .alias("sum_d")
                         ),
                     ),
                     self.spark.sql(
-                        """select a, (select sum(b) from l l2 where l2.a = l1.a) sum_b from l l1"""
+                        """select a, (select sum(d) from r where b = l.a) sum_d from l"""
                     ),
                 )
 
             with self.subTest("in select (null safe)"):
+                df1 = self.spark.table("l").alias("t1")
+                df2 = self.spark.table("l").alias("t2")
+
                 assertDataFrameEqual(
-                    self.spark.table("l").select(
+                    df1.select(
                         "a",
                         (
-                            self.spark.table("l")
-                            .where(sf.col("a").eqNullSafe(sf.col("a").outer()))
+                            df2.where(sf.col("t2.a").eqNullSafe(sf.col("t1.a").outer()))
                             .select(sf.sum("b"))
                             .scalar()
                             .alias("sum_b")
@@ -278,15 +308,13 @@ class SubqueryTestsMixin:
                 )
 
             with self.subTest("non-aggregated"):
+                df1 = self.spark.table("l").alias("t1")
+                df2 = self.spark.table("l").alias("t2")
+
                 with self.assertRaises(SparkRuntimeException) as pe:
-                    self.spark.table("l").select(
+                    df1.select(
                         "a",
-                        (
-                            self.spark.table("l")
-                            .where(sf.col("a") == sf.col("a").outer())
-                            .select("b")
-                            .scalar()
-                        ),
+                        df2.where(sf.col("t1.a") == sf.col("t2.a").outer()).select("b").scalar(),
                     ).collect()
 
                 self.check_error(
@@ -296,19 +324,21 @@ class SubqueryTestsMixin:
                 )
 
             with self.subTest("non-equal"):
+                df1 = self.spark.table("l").alias("t1")
+                df2 = self.spark.table("l").alias("t2")
+
                 assertDataFrameEqual(
-                    self.spark.table("l").select(
+                    df1.select(
                         "a",
                         (
-                            self.spark.table("l")
-                            .where(sf.col("a") < sf.col("a").outer())
+                            df2.where(sf.col("t2.a") < sf.col("t1.a").outer())
                             .select(sf.sum("b"))
                             .scalar()
                             .alias("sum_b")
                         ),
                     ),
                     self.spark.sql(
-                        """select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1"""
+                        """select a, (select sum(b) from l t2 where t2.a < t1.a) sum_b from l t1"""
                     ),
                 )
 
@@ -343,26 +373,30 @@ class SubqueryTestsMixin:
             self.df2.createOrReplaceTempView("r")
 
             with self.subTest("EXISTS"):
-                assertDataFrameEqual(
-                    self.spark.table("l").where(
-                        self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
-                    ),
-                    self.spark.sql(
-                        """select * from l where exists (select * from r where l.a = r.c)"""
-                    ),
-                )
+                for cond in [
+                    sf.col("a").outer() == sf.col("c"),
+                    (sf.col("a") == sf.col("c")).outer(),
+                    sf.expr("a = c").outer(),
+                ]:
+                    with self.subTest(cond=cond):
+                        assertDataFrameEqual(
+                            self.spark.table("l").where(self.spark.table("r").where(cond).exists()),
+                            self.spark.sql(
+                                """select * from l where exists (select * from r where l.a = r.c)"""
+                            ),
+                        )
 
-                assertDataFrameEqual(
-                    self.spark.table("l").where(
-                        self.spark.table("r").where(sf.col("a").outer() == sf.col("c")).exists()
-                        & (sf.col("a") <= sf.lit(2))
-                    ),
-                    self.spark.sql(
-                        """
+                        assertDataFrameEqual(
+                            self.spark.table("l").where(
+                                self.spark.table("r").where(cond).exists()
+                                & (sf.col("a") <= sf.lit(2))
+                            ),
+                            self.spark.sql(
+                                """
                         select * from l where exists (select * from r where l.a = r.c) and l.a <= 2
                         """
-                    ),
-                )
+                            ),
+                        )
 
             with self.subTest("NOT EXISTS"):
                 assertDataFrameEqual(
@@ -446,46 +480,6 @@ class SubqueryTestsMixin:
                     exception=pe.exception,
                     errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
                     messageParameters={"objectName": "`a`", "proposal": "`c`, `d`"},
-                    query_context_type=QueryContextType.DataFrame,
-                    fragment="col",
-                )
-
-            with self.subTest("extra `outer()`"):
-                with self.assertRaises(AnalysisException) as pe:
-                    self.spark.table("l").select(
-                        "a",
-                        (
-                            self.spark.table("r")
-                            .where(sf.col("c").outer() == sf.col("a").outer())
-                            .select(sf.sum("d"))
-                            .scalar()
-                        ),
-                    ).collect()
-
-                self.check_error(
-                    exception=pe.exception,
-                    errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
-                    messageParameters={"objectName": "`c`", "proposal": "`a`, `b`"},
-                    query_context_type=QueryContextType.DataFrame,
-                    fragment="outer",
-                )
-
-            with self.subTest("missing `outer()` for another outer"):
-                with self.assertRaises(AnalysisException) as pe:
-                    self.spark.table("l").select(
-                        "a",
-                        (
-                            self.spark.table("r")
-                            .where(sf.col("b") == sf.col("a").outer())
-                            .select(sf.sum("d"))
-                            .scalar()
-                        ),
-                    ).collect()
-
-                self.check_error(
-                    exception=pe.exception,
-                    errorClass="UNRESOLVED_COLUMN.WITH_SUGGESTION",
-                    messageParameters={"objectName": "`b`", "proposal": "`c`, `d`"},
                     query_context_type=QueryContextType.DataFrame,
                     fragment="col",
                 )

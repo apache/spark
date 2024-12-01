@@ -83,6 +83,17 @@ case class TransformWithStateExec(
   // dummy value schema, the real schema will get during state variable init time
   private val DUMMY_VALUE_ROW_SCHEMA = new StructType().add("value", BinaryType)
 
+  // We need to just initialize key and value deserializer once per partition.
+  // The deserializers need to be lazily created on the executor since they
+  // are not serializable.
+  // Ideas for for improvement can be found here:
+  // https://issues.apache.org/jira/browse/SPARK-50437
+  private lazy val getKeyObj =
+    ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+
+  private lazy val getValueObj =
+    ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     if (timeMode == ProcessingTime) {
       // TODO SPARK-50180: check if we can return true only if actual timers are registered,
@@ -230,11 +241,6 @@ case class TransformWithStateExec(
 
   private def handleInputRows(keyRow: UnsafeRow, valueRowIter: Iterator[InternalRow]):
     Iterator[InternalRow] = {
-    val getKeyObj =
-      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
-
-    val getValueObj =
-      ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
 
     val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
@@ -261,8 +267,6 @@ case class TransformWithStateExec(
   private def processInitialStateRows(
       keyRow: UnsafeRow,
       initStateIter: Iterator[InternalRow]): Unit = {
-    val getKeyObj =
-      ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
 
     val getInitStateValueObj =
       ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
