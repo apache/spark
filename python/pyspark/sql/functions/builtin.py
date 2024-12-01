@@ -16756,12 +16756,12 @@ def collation(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([('name',)], ['dt'])
-    >>> df.select(collation('dt').alias('collation')).show()
-    +-----------+
-    |  collation|
-    +-----------+
-    |UTF8_BINARY|
-    +-----------+
+    >>> df.select(collation('dt').alias('collation')).show(truncate=False)
+    +--------------------------+
+    |collation                 |
+    +--------------------------+
+    |SYSTEM.BUILTIN.UTF8_BINARY|
+    +--------------------------+
     """
     return _invoke_function_over_columns("collation", col)
 

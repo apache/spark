@@ -26,6 +26,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentExceptio
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -40,6 +41,7 @@ class CollationSQLExpressionsSuite
 
   private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
   private val testAdditionalCollations = Seq("UNICODE", "SR", "SR_CI", "SR_AI", "SR_CI_AI")
+  private val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
 
   test("Support Md5 hash expression with collation") {
     case class Md5TestCase(
@@ -2027,11 +2029,11 @@ class CollationSQLExpressionsSuite
       val queryExtractor = s"select collation(map($mapKey, $mapVal)[$mapKey])"
       val queryElementAt = s"select collation(element_at(map($mapKey, $mapVal), $mapKey))"
 
-      checkAnswer(sql(queryExtractor), Row(collation))
-      checkAnswer(sql(queryElementAt), Row(collation))
+      checkAnswer(sql(queryExtractor), Row(fullyQualifiedPrefix + collation))
+      checkAnswer(sql(queryElementAt), Row(fullyQualifiedPrefix + collation))
 
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> defaultCollation) {
-        val res = if (collateVal) "UTF8_LCASE" else defaultCollation
+        val res = fullyQualifiedPrefix + (if (collateVal) "UTF8_LCASE" else defaultCollation)
         checkAnswer(sql(queryExtractor), Row(res))
         checkAnswer(sql(queryElementAt), Row(res))
       }
