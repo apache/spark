@@ -3987,6 +3987,7 @@ class AstBuilder extends DataTypeAstBuilder
    * - options
    * - location
    * - comment
+   * - collation
    * - serde
    * - clusterBySpec
    *
@@ -4283,6 +4284,10 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
           PROP_EXTERNAL, ctx, "please use CREATE EXTERNAL TABLE")
       case (PROP_EXTERNAL, _) => false
+      case (PROP_COLLATION, _) if !legacyOn =>
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_COLLATION, ctx, "please use the DEFAULT COLLATION clause to specify it")
+      case (PROP_COLLATION, _) => false
       // It's safe to set whatever table comment, so we don't make it a reserved table property.
       case (PROP_COMMENT, _) => true
       case (k, _) =>
