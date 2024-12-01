@@ -18,6 +18,7 @@
 package org.apache.spark.sql.collation
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.DatasourceV2SQLBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -28,6 +29,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
   def dataSource: String = "parquet"
   def testTable: String = "test_tbl"
   def testView: String = "test_view"
+  protected val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
 
   def withSessionCollationAndTable(collation: String, testTables: String*)(f: => Unit): Unit = {
     withTable(testTables: _*) {
@@ -144,9 +146,12 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
            |  array('a') AS c3
            |""".stripMargin)
 
-      checkAnswer(sql(s"SELECT COLLATION(c1.col1) FROM $testTable"), Seq(Row("UTF8_BINARY")))
-      checkAnswer(sql(s"SELECT COLLATION(c2['a']) FROM $testTable"), Seq(Row("UTF8_BINARY")))
-      checkAnswer(sql(s"SELECT COLLATION(c3[0]) FROM $testTable"), Seq(Row("UTF8_BINARY")))
+      checkAnswer(sql(s"SELECT COLLATION(c1.col1) FROM $testTable"),
+        Seq(Row(fullyQualifiedPrefix + "UTF8_BINARY")))
+      checkAnswer(sql(s"SELECT COLLATION(c2['a']) FROM $testTable"),
+        Seq(Row(fullyQualifiedPrefix + "UTF8_BINARY")))
+      checkAnswer(sql(s"SELECT COLLATION(c3[0]) FROM $testTable"),
+        Seq(Row(fullyQualifiedPrefix + "UTF8_BINARY")))
     }
   }
 
@@ -234,55 +239,62 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
 
   test("literals with default collation") {
     val sessionCollation = "UTF8_LCASE"
-    withSessionCollation(sessionCollation) {
+    val sessionCollationFullyQualified = fullyQualifiedPrefix + sessionCollation
+      withSessionCollation(sessionCollation) {
 
       // literal without collation
-      checkAnswer(sql("SELECT COLLATION('a')"), Seq(Row(sessionCollation)))
+      checkAnswer(sql("SELECT COLLATION('a')"), Seq(Row(sessionCollationFullyQualified)))
 
-      checkAnswer(sql("SELECT COLLATION(map('a', 'b')['a'])"), Seq(Row(sessionCollation)))
+      checkAnswer(sql("SELECT COLLATION(map('a', 'b')['a'])"),
+        Seq(Row(sessionCollationFullyQualified)))
 
-      checkAnswer(sql("SELECT COLLATION(array('a')[0])"), Seq(Row(sessionCollation)))
+      checkAnswer(sql("SELECT COLLATION(array('a')[0])"), Seq(Row(sessionCollationFullyQualified)))
 
-      checkAnswer(sql("SELECT COLLATION(struct('a' as c)['c'])"), Seq(Row(sessionCollation)))
+      checkAnswer(sql("SELECT COLLATION(struct('a' as c)['c'])"),
+        Seq(Row(sessionCollationFullyQualified)))
     }
   }
 
   test("literals with explicit collation") {
+    val unicodeCollation = fullyQualifiedPrefix + "UNICODE"
     withSessionCollation("UTF8_LCASE") {
-      checkAnswer(sql("SELECT COLLATION('a' collate unicode)"), Seq(Row("UNICODE")))
+      checkAnswer(sql("SELECT COLLATION('a' collate unicode)"), Seq(Row(unicodeCollation)))
 
       checkAnswer(
         sql("SELECT COLLATION(map('a', 'b' collate unicode)['a'])"),
-        Seq(Row("UNICODE")))
+        Seq(Row(unicodeCollation)))
 
-      checkAnswer(sql("SELECT COLLATION(array('a' collate unicode)[0])"), Seq(Row("UNICODE")))
+      checkAnswer(sql("SELECT COLLATION(array('a' collate unicode)[0])"),
+        Seq(Row(unicodeCollation)))
 
       checkAnswer(
         sql("SELECT COLLATION(struct('a' collate unicode as c)['c'])"),
-        Seq(Row("UNICODE")))
+        Seq(Row(unicodeCollation)))
     }
   }
 
   test("cast is aware of session collation") {
     val sessionCollation = "UTF8_LCASE"
+    val sessionCollationFullyQualified = fullyQualifiedPrefix + sessionCollation
     withSessionCollation(sessionCollation) {
-      checkAnswer(sql("SELECT COLLATION(cast('a' as STRING))"), Seq(Row(sessionCollation)))
+      checkAnswer(sql("SELECT COLLATION(cast('a' as STRING))"),
+        Seq(Row(sessionCollationFullyQualified)))
 
       checkAnswer(
         sql("SELECT COLLATION(cast(map('a', 'b') as MAP<STRING, STRING>)['a'])"),
-        Seq(Row(sessionCollation)))
+        Seq(Row(sessionCollationFullyQualified)))
 
       checkAnswer(
         sql("SELECT COLLATION(map_keys(cast(map('a', 'b') as MAP<STRING, STRING>))[0])"),
-        Seq(Row(sessionCollation)))
+        Seq(Row(sessionCollationFullyQualified)))
 
       checkAnswer(
         sql("SELECT COLLATION(cast(array('a') as ARRAY<STRING>)[0])"),
-        Seq(Row(sessionCollation)))
+        Seq(Row(sessionCollationFullyQualified)))
 
       checkAnswer(
         sql("SELECT COLLATION(cast(struct('a' as c) as STRUCT<c: STRING>)['c'])"),
-        Seq(Row(sessionCollation)))
+        Seq(Row(sessionCollationFullyQualified)))
     }
   }
 
@@ -395,7 +407,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
         assertTableColumnCollation(testView, "c2", "UNICODE_CI")
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION(c1), COLLATION('a') FROM $testView"),
-          Row("UTF8_BINARY", sessionCollation))
+          Row(fullyQualifiedPrefix + "UTF8_BINARY", fullyQualifiedPrefix + sessionCollation))
 
         // filter should use session collation
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE 'a' = 'A'"), Row(2))
@@ -420,7 +432,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
         assertTableColumnCollation(testView, "c2", "UNICODE_CI")
         checkAnswer(
           sql(s"SELECT DISTINCT COLLATION(c1), COLLATION('a') FROM $testView"),
-          Row("UNICODE_CI", sessionCollation))
+          Row(fullyQualifiedPrefix + "UNICODE_CI", fullyQualifiedPrefix + sessionCollation))
 
         // after alter both rows should be returned
         checkAnswer(sql(s"SELECT COUNT(*) FROM $testView WHERE c1 = 'A'"), Row(2))
@@ -451,7 +463,7 @@ class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
                  |FROM $testView JOIN $joinTableName
                  |ON $testView.c1 = $joinTableName.c1 COLLATE UNICODE_CI
                  |""".stripMargin),
-          Row("UNICODE_CI", "UTF8_LCASE"))
+          Row(fullyQualifiedPrefix + "UNICODE_CI", fullyQualifiedPrefix + "UTF8_LCASE"))
       }
     }
   }
