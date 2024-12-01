@@ -456,7 +456,7 @@ class FunctionsTestsMixin:
     def test_collation(self):
         df = self.spark.createDataFrame([("a",), ("b",)], ["name"])
         actual = df.select(F.collation(F.collate("name", "UNICODE"))).distinct().collect()
-        self.assertEqual([Row("UNICODE")], actual)
+        self.assertEqual([Row("SYSTEM.BUILTIN.UNICODE")], actual)
 
     def test_try_make_interval(self):
         df = self.spark.createDataFrame([(2147483647,)], ["num"])
