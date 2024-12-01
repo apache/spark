@@ -303,12 +303,15 @@ case class AlterTableSetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    // This overrides old properties and update the comment parameter of CatalogTable
-    // with the newly added/modified comment since CatalogTable also holds comment as its
-    // direct property.
+    // This overrides old properties and updates the comment and collation parameters of
+    // CatalogTable with the newly added/modified comment and collation since CatalogTable
+    // also holds comment and collation as its direct properties.
+    val newProperties = table.properties ++ properties --
+      Seq(TableCatalog.PROP_COMMENT, TableCatalog.PROP_COLLATION)
     val newTable = table.copy(
-      properties = table.properties ++ properties,
-      comment = properties.get(TableCatalog.PROP_COMMENT).orElse(table.comment))
+      properties = newProperties,
+      comment = properties.get(TableCatalog.PROP_COMMENT).orElse(table.comment),
+      collation = properties.get(TableCatalog.PROP_COLLATION).orElse(table.collation))
     catalog.alterTable(newTable)
     catalog.invalidateCachedTable(tableName)
     Seq.empty[Row]
