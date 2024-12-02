@@ -86,7 +86,7 @@ class BlockManagerMasterEndpoint(
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
   // Keep track of last access times if we're using block TTLs
-  private val blockAccessTime = new JHashMap[BlockId, Long]
+  private[spark] val blockAccessTime = new JHashMap[BlockId, Long]
 
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
@@ -258,7 +258,10 @@ class BlockManagerMasterEndpoint(
     // Only update access times if we have the cleaner enabled.
     if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined ||
       blockId.isShuffle && conf.get(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
-      // TODO: Update the access time.
+      // Note: we don't _really_ care about concurrency here too much, if we have
+      // conflicting updates in time they're going to "close enough" to be a wash
+      // so we don't bother checking the return value here.
+      blockAccessTime.put(blockId, System.currentTimeMillis())
     }
   }
 
