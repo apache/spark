@@ -327,8 +327,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
       var ttlValue = testState.getTTLValue()
       assert(ttlValue.isDefined)
       assert(ttlValue.get._2 === ttlExpirationMs)
-      var ttlStateValueIterator = testState.getValuesInTTLState()
-      assert(ttlStateValueIterator.hasNext)
+      var ttlStateValueIterator = testState.getValueInTTLState()
+      assert(ttlStateValueIterator.isDefined)
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
       val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
@@ -349,10 +349,9 @@ class ValueStateSuite extends StateVariableSuiteBase {
       ttlValue = nextBatchTestState.getTTLValue()
       assert(ttlValue.isDefined)
       assert(ttlValue.get._2 === ttlExpirationMs)
-      ttlStateValueIterator = nextBatchTestState.getValuesInTTLState()
-      assert(ttlStateValueIterator.hasNext)
-      assert(ttlStateValueIterator.next() === ttlExpirationMs)
-      assert(ttlStateValueIterator.isEmpty)
+      ttlStateValueIterator = nextBatchTestState.getValueInTTLState()
+      assert(ttlStateValueIterator.isDefined)
+      assert(ttlStateValueIterator.get === ttlExpirationMs)
 
       // getWithoutTTL should still return the expired value
       assert(nextBatchTestState.getWithoutEnforcingTTL().get === "v1")
@@ -412,8 +411,8 @@ class ValueStateSuite extends StateVariableSuiteBase {
       val ttlValue = testState.getTTLValue()
       assert(ttlValue.isDefined)
       assert(ttlValue.get._2 === ttlExpirationMs)
-      val ttlStateValueIterator = testState.getValuesInTTLState()
-      assert(ttlStateValueIterator.hasNext)
+      val ttlStateValueIterator = testState.getValueInTTLState()
+      assert(ttlStateValueIterator.isDefined)
     }
   }
 }
@@ -423,7 +422,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
  * types (ValueState, ListState, MapState) used in arbitrary stateful operators.
  */
 abstract class StateVariableSuiteBase extends SharedSparkSession
-  with BeforeAndAfter {
+  with BeforeAndAfter with AlsoTestWithEncodingTypes {
 
   before {
     StateStore.stop()

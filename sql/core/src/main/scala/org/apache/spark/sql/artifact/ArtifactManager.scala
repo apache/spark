@@ -66,12 +66,11 @@ class ArtifactManager(session: SparkSession) extends Logging {
   // The base directory/URI where all artifacts are stored for this `sessionUUID`.
   protected[artifact] val (artifactPath, artifactURI): (Path, String) =
     (ArtifactUtils.concatenatePaths(artifactRootPath, session.sessionUUID),
-      s"$artifactRootURI${File.separator}${session.sessionUUID}")
+      s"$artifactRootURI/${session.sessionUUID}")
 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
   protected[artifact] val (classDir, replClassURI): (Path, String) =
-    (ArtifactUtils.concatenatePaths(artifactPath, "classes"),
-      s"$artifactURI${File.separator}classes${File.separator}")
+    (ArtifactUtils.concatenatePaths(artifactPath, "classes"), s"$artifactURI/classes/")
 
   private lazy val alwaysApplyClassLoader =
     session.conf.get(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key).toBoolean

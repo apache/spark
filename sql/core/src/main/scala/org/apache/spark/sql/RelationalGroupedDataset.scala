@@ -21,7 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -475,7 +475,8 @@ class RelationalGroupedDataset protected[sql](
       outputStructType: StructType,
       outputModeStr: String,
       timeModeStr: String,
-      initialState: RelationalGroupedDataset): DataFrame = {
+      initialState: RelationalGroupedDataset,
+      eventTimeColumnName: String): DataFrame = {
     def exprToAttr(expr: Seq[Expression]): Seq[Attribute] = {
       expr.map {
         case ne: NamedExpression => ne
@@ -529,7 +530,30 @@ class RelationalGroupedDataset protected[sql](
         initialStateSchema = initialState.df.schema
       )
     }
-    Dataset.ofRows(df.sparkSession, plan)
+    if (eventTimeColumnName.isEmpty) {
+      Dataset.ofRows(df.sparkSession, plan)
+    } else {
+      updateEventTimeColumnAfterTransformWithState(plan, eventTimeColumnName)
+    }
+  }
+
+  /**
+   * Creates a new dataset with updated eventTimeColumn after the transformWithState
+   * logical node.
+   */
+  private def updateEventTimeColumnAfterTransformWithState(
+      transformWithStateInPandas: LogicalPlan,
+      eventTimeColumnName: String): DataFrame = {
+    val transformWithStateDataset = Dataset.ofRows(
+      df.sparkSession,
+      transformWithStateInPandas
+    )
+
+    Dataset.ofRows(df.sparkSession,
+      UpdateEventTimeWatermarkColumn(
+        UnresolvedAttribute(eventTimeColumnName),
+        None,
+        transformWithStateDataset.logicalPlan))
   }
 
   override def toString: String = {

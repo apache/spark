@@ -90,7 +90,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
       }
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
-    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _, _)
+    case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
       if conf.getConf(SQLConf.DECORRELATE_SUBQUERY_PREVENT_CONSTANT_FOLDING_FOR_COUNT_BUG) &&
         mayHaveCountBug.nonEmpty && mayHaveCountBug.get =>
       s
@@ -249,6 +249,11 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
     case _ => ExpressionSet(Seq.empty)
   }
 
+  private def isSameInteger(expr: Expression, value: Int): Boolean = expr match {
+    case l: Literal => l.value == value
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(BINARY_ARITHMETIC), ruleId) {
     case q: LogicalPlan =>
@@ -259,32 +264,31 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       val groupingExpressionSet = collectGroupingExpressions(q)
       q.transformExpressionsDownWithPruning(_.containsPattern(BINARY_ARITHMETIC)) {
       case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
-        if (foldables.nonEmpty) {
-          val foldableExpr = foldables.reduce((x, y) => Add(x, y, f))
-          val foldableValue = foldableExpr.eval(EmptyRow)
+        val (literals, others) = flattenAdd(a, groupingExpressionSet)
+          .partition(_.isInstanceOf[Literal])
+        if (literals.nonEmpty) {
+          val literalExpr = literals.reduce((x, y) => Add(x, y, f))
           if (others.isEmpty) {
-            Literal.create(foldableValue, a.dataType)
-          } else if (foldableValue == 0) {
+            literalExpr
+          } else if (isSameInteger(literalExpr, 0)) {
             others.reduce((x, y) => Add(x, y, f))
           } else {
-            Add(others.reduce((x, y) => Add(x, y, f)), Literal.create(foldableValue, a.dataType), f)
+            Add(others.reduce((x, y) => Add(x, y, f)), literalExpr, f)
           }
         } else {
           a
         }
       case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
-        if (foldables.nonEmpty) {
-          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y, f))
-          val foldableValue = foldableExpr.eval(EmptyRow)
-          if (others.isEmpty || (foldableValue == 0 && !m.nullable)) {
-            Literal.create(foldableValue, m.dataType)
-          } else if (foldableValue == 1) {
+        val (literals, others) = flattenMultiply(m, groupingExpressionSet)
+          .partition(_.isInstanceOf[Literal])
+        if (literals.nonEmpty) {
+          val literalExpr = literals.reduce((x, y) => Multiply(x, y, f))
+          if (others.isEmpty || (isSameInteger(literalExpr, 0) && !m.nullable)) {
+            literalExpr
+          } else if (isSameInteger(literalExpr, 1)) {
             others.reduce((x, y) => Multiply(x, y, f))
           } else {
-            Multiply(others.reduce((x, y) => Multiply(x, y, f)),
-              Literal.create(foldableValue, m.dataType), f)
+            Multiply(others.reduce((x, y) => Multiply(x, y, f)), literalExpr, f)
           }
         } else {
           m

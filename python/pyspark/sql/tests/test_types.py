@@ -2310,7 +2310,7 @@ class TypesTestsMixin:
                 StringType("UTF8_LCASE"),
             )
 
-    def test_infer_array_element_type_with_struct(self):
+    def test_infer_nested_array_element_type_with_struct(self):
         # SPARK-48248: Nested array to respect legacy conf of inferArrayTypeFromFirstElement
         with self.sql_conf(
             {"spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled": True}
