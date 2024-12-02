@@ -50,7 +50,6 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
     val variant = new Variant(variantVal.getValue, variantVal.getMetadata)
     val variantSchema = SparkShreddingUtils.buildVariantSchema(shreddingSchema)
     val actual = SparkShreddingUtils.castShredded(variant, variantSchema)
-
     val catalystExpected = CatalystTypeConverters.convertToCatalyst(expected)
     if (!checkResult(actual, catalystExpected, shreddingSchema, exprNullable = false)) {
       fail(s"Incorrect evaluation of castShredded: " +
@@ -179,6 +178,18 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
     // Not an object
     testWithSchema(obj, ArrayType(StructType.fromDDL("a int, b string")),
       Row(obj.getMetadata, untypedValue(obj), null))
+
+
+    // Similar to the case above where we didn't shred one field, but with the unshredded value
+    // being an object. We need to check that the copied value is also not modified.
+    val obj2 = parseJson("""{"a": 1, "b": {"c": "hello"}}""")
+    val residual2 = untypedValue("""{"b": {"c": "hello"}}""")
+    // First byte is the type, second is number of fields, and the third is the ID for "b"
+    residual2(2) = 1
+    // Followed by 2 bytes for offsets, inner object type and number of fields, then ID for "c".
+    residual2(7) = 2
+    testWithSchema(obj2, StructType.fromDDL("a int, c string"),
+      Row(obj2.getMetadata, residual2, Row(Row(null, 1), Row(null, null))))
   }
 
   test("shredding as array") {
