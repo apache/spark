@@ -20,21 +20,18 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.nio.charset.Charset
 import java.util.concurrent.Executors
-
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.Random
-
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataInputStream, Path, RawLocalFileSystem}
 import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
-
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.util.quietly
@@ -42,10 +39,12 @@ import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAt
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+
+import scala.collection.mutable.ArrayBuffer
 
 class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
@@ -62,6 +61,17 @@ class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Co
       super.renameTempFile(srcPath, dstPath, overwriteIfPossible)
     }
   }
+}
+
+class TestStateStoreChangelogWriterV101(
+    fm: CheckpointFileManager,
+    file: Path,
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogWriterV1(fm, file, compressionCodec) {
+
+  override def version: Short = 101
+
+  writeVersion()
 }
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
@@ -814,6 +824,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
       dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+    // Failure case 1: reader writer version mismatch
     // Create a v1 writer
     val changelogWriterV1 = fileManager.getChangeLogWriter(101)
     assert(changelogWriterV1.version === 1)
@@ -829,13 +840,33 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     // Failure case, force creating a V3 reader.
     val dfsChangelogFile = PrivateMethod[Path](Symbol("dfsChangelogFile"))
     val codec = PrivateMethod[CompressionCodec](Symbol("codec"))
-    val changelogFile = fileManager invokePrivate dfsChangelogFile(101L, None)
+    var changelogFile = fileManager invokePrivate dfsChangelogFile(101L, None)
     val compressionCodec = fileManager invokePrivate codec()
     val fm = CheckpointFileManager.create(new Path(dfsRootDir.getAbsolutePath), new Configuration)
     val e = intercept[AssertionError] {
       new StateStoreChangelogReaderV3(fm, changelogFile, compressionCodec)
     }
     assert(e.getMessage.contains("Changelog version mismatch"))
+
+    changelogFile = fileManager invokePrivate dfsChangelogFile(1L, None)
+    // Failure case 2: readerFactory throw when reading from ckpt built in future Spark version
+    // Create a v101 writer
+    val changelogWriter = new TestStateStoreChangelogWriterV101(
+      fm, changelogFile, compressionCodec)
+    assert(changelogWriter.version === 101)
+
+    changelogWriter.commit()
+
+    // Failure case, force creating a V3 reader.
+    val ex = intercept[SparkException] {
+      fileManager.getChangelogReader(1)
+    }
+    checkError(
+      ex,
+      condition = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_READER_VERSION",
+      parameters = Map("version" -> 101.toString)
+    )
+    assert(ex.getMessage.contains("please upgrade your Spark"))
   }
 
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog " +
