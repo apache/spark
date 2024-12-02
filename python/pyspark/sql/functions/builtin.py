@@ -16756,12 +16756,12 @@ def collation(col: "ColumnOrName") -> Column:
     Examples
     --------
     >>> df = spark.createDataFrame([('name',)], ['dt'])
-    >>> df.select(collation('dt').alias('collation')).show()
-    +-----------+
-    |  collation|
-    +-----------+
-    |UTF8_BINARY|
-    +-----------+
+    >>> df.select(collation('dt').alias('collation')).show(truncate=False)
+    +--------------------------+
+    |collation                 |
+    +--------------------------+
+    |SYSTEM.BUILTIN.UTF8_BINARY|
+    +--------------------------+
     """
     return _invoke_function_over_columns("collation", col)
 
@@ -18710,7 +18710,7 @@ def explode(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Target column to work on.
 
     Returns
@@ -18723,6 +18723,8 @@ def explode(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.posexplode`
     :meth:`pyspark.sql.functions.explode_outer`
     :meth:`pyspark.sql.functions.posexplode_outer`
+    :meth:`pyspark.sql.functions.inline`
+    :meth:`pyspark.sql.functions.inline_outer`
 
     Notes
     -----
@@ -18732,119 +18734,79 @@ def explode(col: "ColumnOrName") -> Column:
     --------
     Example 1: Exploding an array column
 
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(id=1, values=[1, 2, 3])])
-    >>> df.select(sf.explode(df.values).alias("value")).show()
-    +-----+
-    |value|
-    +-----+
-    |    1|
-    |    2|
-    |    3|
-    +-----+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,ARRAY(1,2,3,NULL)), (2,ARRAY()), (3,NULL) AS t(i,a)')
+    >>> df.show()
+    +---+---------------+
+    |  i|              a|
+    +---+---------------+
+    |  1|[1, 2, 3, NULL]|
+    |  2|             []|
+    |  3|           NULL|
+    +---+---------------+
+
+    >>> df.select('*', sf.explode('a')).show()
+    +---+---------------+----+
+    |  i|              a| col|
+    +---+---------------+----+
+    |  1|[1, 2, 3, NULL]|   1|
+    |  1|[1, 2, 3, NULL]|   2|
+    |  1|[1, 2, 3, NULL]|   3|
+    |  1|[1, 2, 3, NULL]|NULL|
+    +---+---------------+----+
 
     Example 2: Exploding a map column
 
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(id=1, values={"a": "b", "c": "d"})])
-    >>> df.select(sf.explode(df.values).alias("key", "value")).show()
-    +---+-----+
-    |key|value|
-    +---+-----+
-    |  a|    b|
-    |  c|    d|
-    +---+-----+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,MAP(1,2,3,4,5,NULL)), (2,MAP()), (3,NULL) AS t(i,m)')
+    >>> df.show(truncate=False)
+    +---+---------------------------+
+    |i  |m                          |
+    +---+---------------------------+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|
+    |2  |{}                         |
+    |3  |NULL                       |
+    +---+---------------------------+
 
-    Example 3: Exploding an array column with multiple rows
+    >>> df.select('*', sf.explode('m')).show(truncate=False)
+    +---+---------------------------+---+-----+
+    |i  |m                          |key|value|
+    +---+---------------------------+---+-----+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|1  |2    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|3  |4    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|5  |NULL |
+    +---+---------------------------+---+-----+
 
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame(
-    ...     [Row(id=1, values=[1, 2]), Row(id=2, values=[3, 4])])
-    >>> df.select("id", sf.explode(df.values).alias("value")).show()
-    +---+-----+
-    | id|value|
-    +---+-----+
-    |  1|    1|
-    |  1|    2|
-    |  2|    3|
-    |  2|    4|
-    +---+-----+
-
-    Example 4: Exploding a map column with multiple rows
+    Example 3: Exploding multiple array columns
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([
-    ...     Row(id=1, values={"a": "b", "c": "d"}),
-    ...     Row(id=2, values={"e": "f", "g": "h"})
-    ... ])
-    >>> df.select("id", sf.explode(df.values).alias("key", "value")).show()
-    +---+---+-----+
-    | id|key|value|
-    +---+---+-----+
-    |  1|  a|    b|
-    |  1|  c|    d|
-    |  2|  e|    f|
-    |  2|  g|    h|
-    +---+---+-----+
+    >>> df = spark.sql('SELECT ARRAY(1,2) AS a1, ARRAY(3,4,5) AS a2')
+    >>> df.select(
+    ...     '*', sf.explode('a1').alias('v1')
+    ... ).select('*', sf.explode('a2').alias('v2')).show()
+    +------+---------+---+---+
+    |    a1|       a2| v1| v2|
+    +------+---------+---+---+
+    |[1, 2]|[3, 4, 5]|  1|  3|
+    |[1, 2]|[3, 4, 5]|  1|  4|
+    |[1, 2]|[3, 4, 5]|  1|  5|
+    |[1, 2]|[3, 4, 5]|  2|  3|
+    |[1, 2]|[3, 4, 5]|  2|  4|
+    |[1, 2]|[3, 4, 5]|  2|  5|
+    +------+---------+---+---+
 
-    Example 5: Exploding multiple array columns
-
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(a=1, list1=[1, 2], list2=[3, 4])])
-    >>> df.select(sf.explode(df.list1).alias("list1"), "list2") \\
-    ...     .select("list1", sf.explode(df.list2).alias("list2")).show()
-    +-----+-----+
-    |list1|list2|
-    +-----+-----+
-    |    1|    3|
-    |    1|    4|
-    |    2|    3|
-    |    2|    4|
-    +-----+-----+
-
-    Example 6: Exploding an array of struct column
+    Example 4: Exploding an array of struct column
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame(
-    ...     [(1, [(1, 2), (3, 4)])],
-    ...     "id: int, structlist: array<struct<a:int,b:int>>")
-    >>> df = df.select(sf.explode(df.structlist).alias("struct"))
-    >>> df.select("struct.*").show()
+    >>> df = spark.sql('SELECT ARRAY(NAMED_STRUCT("a",1,"b",2), NAMED_STRUCT("a",3,"b",4)) AS a')
+    >>> df.select(sf.explode('a').alias("s")).select("s.*").show()
     +---+---+
     |  a|  b|
     +---+---+
     |  1|  2|
     |  3|  4|
     +---+---+
-
-    Example 7: Exploding an empty array column
-
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([(1, [])], "id: int, values: array<int>")
-    >>> df.select(sf.explode(df.values).alias("value")).show()
-    +-----+
-    |value|
-    +-----+
-    +-----+
-
-    Example 8: Exploding an empty map column
-
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([(1, {})], "id: int, values: map<int,int>")
-    >>> df.select(sf.explode(df.values).alias("key", "value")).show()
-    +---+-----+
-    |key|value|
-    +---+-----+
-    +---+-----+
-    """
+    """  # noqa: E501
     return _invoke_function_over_columns("explode", col)
 
 
@@ -18862,7 +18824,7 @@ def posexplode(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
 
     Returns
@@ -18870,20 +18832,61 @@ def posexplode(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         one row per array item or map key value including positions as a separate column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.explode`
+    :meth:`pyspark.sql.functions.explode_outer`
+    :meth:`pyspark.sql.functions.posexplode_outer`
+    :meth:`pyspark.sql.functions.inline`
+    :meth:`pyspark.sql.functions.inline_outer`
+
     Examples
     --------
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(a=1, intlist=[1,2,3], mapfield={"a": "b"})])
-    >>> df.select(posexplode(df.intlist)).collect()
-    [Row(pos=0, col=1), Row(pos=1, col=2), Row(pos=2, col=3)]
+    Example 1: Exploding an array column
 
-    >>> df.select(posexplode(df.mapfield)).show()
-    +---+---+-----+
-    |pos|key|value|
-    +---+---+-----+
-    |  0|  a|    b|
-    +---+---+-----+
-    """
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,ARRAY(1,2,3,NULL)), (2,ARRAY()), (3,NULL) AS t(i,a)')
+    >>> df.show()
+    +---+---------------+
+    |  i|              a|
+    +---+---------------+
+    |  1|[1, 2, 3, NULL]|
+    |  2|             []|
+    |  3|           NULL|
+    +---+---------------+
+
+    >>> df.select('*', sf.posexplode('a')).show()
+    +---+---------------+---+----+
+    |  i|              a|pos| col|
+    +---+---------------+---+----+
+    |  1|[1, 2, 3, NULL]|  0|   1|
+    |  1|[1, 2, 3, NULL]|  1|   2|
+    |  1|[1, 2, 3, NULL]|  2|   3|
+    |  1|[1, 2, 3, NULL]|  3|NULL|
+    +---+---------------+---+----+
+
+    Example 2: Exploding a map column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,MAP(1,2,3,4,5,NULL)), (2,MAP()), (3,NULL) AS t(i,m)')
+    >>> df.show(truncate=False)
+    +---+---------------------------+
+    |i  |m                          |
+    +---+---------------------------+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|
+    |2  |{}                         |
+    |3  |NULL                       |
+    +---+---------------------------+
+
+    >>> df.select('*', sf.posexplode('m')).show(truncate=False)
+    +---+---------------------------+---+---+-----+
+    |i  |m                          |pos|key|value|
+    +---+---------------------------+---+---+-----+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|0  |1  |2    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|1  |3  |4    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|2  |5  |NULL |
+    +---+---------------------------+---+---+-----+
+    """  # noqa: E501
     return _invoke_function_over_columns("posexplode", col)
 
 
@@ -18899,7 +18902,7 @@ def inline(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         Input column of values to explode.
 
     Returns
@@ -18910,6 +18913,9 @@ def inline(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.explode`
+    :meth:`pyspark.sql.functions.explode_outer`
+    :meth:`pyspark.sql.functions.posexplode`
+    :meth:`pyspark.sql.functions.posexplode_outer`
     :meth:`pyspark.sql.functions.inline_outer`
 
     Examples
@@ -18917,102 +18923,89 @@ def inline(col: "ColumnOrName") -> Column:
     Example 1: Using inline with a single struct array column
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
-    >>> df.select(sf.inline(df.structlist)).show()
-    +---+---+
-    |  a|  b|
-    +---+---+
-    |  1|  2|
-    |  3|  4|
-    +---+---+
+    >>> df = spark.sql('SELECT ARRAY(NAMED_STRUCT("a",1,"b",2), NAMED_STRUCT("a",3,"b",4)) AS a')
+    >>> df.select('*', sf.inline(df.a)).show()
+    +----------------+---+---+
+    |               a|  a|  b|
+    +----------------+---+---+
+    |[{1, 2}, {3, 4}]|  1|  2|
+    |[{1, 2}, {3, 4}]|  3|  4|
+    +----------------+---+---+
 
     Example 2: Using inline with a column name
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
-    >>> df.select(sf.inline("structlist")).show()
-    +---+---+
-    |  a|  b|
-    +---+---+
-    |  1|  2|
-    |  3|  4|
-    +---+---+
+    >>> df = spark.sql('SELECT ARRAY(NAMED_STRUCT("a",1,"b",2), NAMED_STRUCT("a",3,"b",4)) AS a')
+    >>> df.select('*', sf.inline('a')).show()
+    +----------------+---+---+
+    |               a|  a|  b|
+    +----------------+---+---+
+    |[{1, 2}, {3, 4}]|  1|  2|
+    |[{1, 2}, {3, 4}]|  3|  4|
+    +----------------+---+---+
 
     Example 3: Using inline with an alias
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), Row(a=3, b=4)])])
-    >>> df.select(sf.inline("structlist").alias("c1", "c2")).show()
-    +---+---+
-    | c1| c2|
-    +---+---+
-    |  1|  2|
-    |  3|  4|
-    +---+---+
+    >>> df = spark.sql('SELECT ARRAY(NAMED_STRUCT("a",1,"b",2), NAMED_STRUCT("a",3,"b",4)) AS a')
+    >>> df.select('*', sf.inline('a').alias("c1", "c2")).show()
+    +----------------+---+---+
+    |               a| c1| c2|
+    +----------------+---+---+
+    |[{1, 2}, {3, 4}]|  1|  2|
+    |[{1, 2}, {3, 4}]|  3|  4|
+    +----------------+---+---+
 
     Example 4: Using inline with multiple struct array columns
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([
-    ...     Row(structlist1=[Row(a=1, b=2), Row(a=3, b=4)],
-    ...         structlist2=[Row(c=5, d=6), Row(c=7, d=8)])
-    ... ])
-    >>> df.select(sf.inline("structlist1"), "structlist2") \\
-    ...     .select("a", "b", sf.inline("structlist2")).show()
-    +---+---+---+---+
-    |  a|  b|  c|  d|
-    +---+---+---+---+
-    |  1|  2|  5|  6|
-    |  1|  2|  7|  8|
-    |  3|  4|  5|  6|
-    |  3|  4|  7|  8|
-    +---+---+---+---+
+    >>> df = spark.sql('SELECT ARRAY(NAMED_STRUCT("a",1,"b",2), NAMED_STRUCT("a",3,"b",4)) AS a1, ARRAY(NAMED_STRUCT("c",5,"d",6), NAMED_STRUCT("c",7,"d",8)) AS a2')
+    >>> df.select(
+    ...     '*', sf.inline('a1')
+    ... ).select('*', sf.inline('a2')).show()
+    +----------------+----------------+---+---+---+---+
+    |              a1|              a2|  a|  b|  c|  d|
+    +----------------+----------------+---+---+---+---+
+    |[{1, 2}, {3, 4}]|[{5, 6}, {7, 8}]|  1|  2|  5|  6|
+    |[{1, 2}, {3, 4}]|[{5, 6}, {7, 8}]|  1|  2|  7|  8|
+    |[{1, 2}, {3, 4}]|[{5, 6}, {7, 8}]|  3|  4|  5|  6|
+    |[{1, 2}, {3, 4}]|[{5, 6}, {7, 8}]|  3|  4|  7|  8|
+    +----------------+----------------+---+---+---+---+
 
     Example 5: Using inline with a nested struct array column
 
     >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([
-    ...     Row(structlist=Row(a=1, b=2, nested=[Row(c=3, d=4), Row(c=5, d=6)]))
-    ... ])
-    >>> df.select(sf.inline("structlist.nested")).show()
-    +---+---+
-    |  c|  d|
-    +---+---+
-    |  3|  4|
-    |  5|  6|
-    +---+---+
+    >>> df = spark.sql('SELECT NAMED_STRUCT("a",1,"b",2,"c",ARRAY(NAMED_STRUCT("c",3,"d",4), NAMED_STRUCT("c",5,"d",6))) AS s')
+    >>> df.select('*', sf.inline('s.c')).show(truncate=False)
+    +------------------------+---+---+
+    |s                       |c  |d  |
+    +------------------------+---+---+
+    |{1, 2, [{3, 4}, {5, 6}]}|3  |4  |
+    |{1, 2, [{3, 4}, {5, 6}]}|5  |6  |
+    +------------------------+---+---+
 
-    Example 6: Using inline with an empty struct array column
+    Example 6: Using inline with a column containing: array continaing null, empty array and null
 
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame(
-    ...     [Row(structlist=[])], "structlist: array<struct<a:int,b:int>>")
-    >>> df.select(sf.inline(df.structlist)).show()
-    +---+---+
-    |  a|  b|
-    +---+---+
-    +---+---+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,ARRAY(NAMED_STRUCT("a",1,"b",2), NULL, NAMED_STRUCT("a",3,"b",4))), (2,ARRAY()), (3,NULL) AS t(i,s)')
+    >>> df.show(truncate=False)
+    +---+----------------------+
+    |i  |s                     |
+    +---+----------------------+
+    |1  |[{1, 2}, NULL, {3, 4}]|
+    |2  |[]                    |
+    |3  |NULL                  |
+    +---+----------------------+
 
-    Example 7: Using inline with a struct array column containing null values
-
-    >>> import pyspark.sql.functions as sf
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([Row(structlist=[Row(a=1, b=2), None, Row(a=3, b=4)])])
-    >>> df.select(sf.inline(df.structlist)).show()
-    +----+----+
-    |   a|   b|
-    +----+----+
-    |   1|   2|
-    |NULL|NULL|
-    |   3|   4|
-    +----+----+
-    """
+    >>> df.select('*', sf.inline('s')).show(truncate=False)
+    +---+----------------------+----+----+
+    |i  |s                     |a   |b   |
+    +---+----------------------+----+----+
+    |1  |[{1, 2}, NULL, {3, 4}]|1   |2   |
+    |1  |[{1, 2}, NULL, {3, 4}]|NULL|NULL|
+    |1  |[{1, 2}, NULL, {3, 4}]|3   |4   |
+    +---+----------------------+----+----+
+    """  # noqa: E501
     return _invoke_function_over_columns("inline", col)
 
 
@@ -19031,7 +19024,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
 
     Returns
@@ -19039,31 +19032,47 @@ def explode_outer(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         one row per array item or map key value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.explode`
+    :meth:`pyspark.sql.functions.posexplode`
+    :meth:`pyspark.sql.functions.posexplode_outer`
+    :meth:`pyspark.sql.functions.inline`
+    :meth:`pyspark.sql.functions.inline_outer`
+
     Examples
     --------
-    >>> df = spark.createDataFrame(
-    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
-    ...     ("id", "an_array", "a_map")
-    ... )
-    >>> df.select("id", "an_array", explode_outer("a_map")).show()
-    +---+----------+----+-----+
-    | id|  an_array| key|value|
-    +---+----------+----+-----+
-    |  1|[foo, bar]|   x|  1.0|
-    |  2|        []|NULL| NULL|
-    |  3|      NULL|NULL| NULL|
-    +---+----------+----+-----+
+    Example 1: Using an array column
 
-    >>> df.select("id", "a_map", explode_outer("an_array")).show()
-    +---+----------+----+
-    | id|     a_map| col|
-    +---+----------+----+
-    |  1|{x -> 1.0}| foo|
-    |  1|{x -> 1.0}| bar|
-    |  2|        {}|NULL|
-    |  3|      NULL|NULL|
-    +---+----------+----+
-    """
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,ARRAY(1,2,3,NULL)), (2,ARRAY()), (3,NULL) AS t(i,a)')
+    >>> df.select('*', sf.explode_outer('a')).show()
+    +---+---------------+----+
+    |  i|              a| col|
+    +---+---------------+----+
+    |  1|[1, 2, 3, NULL]|   1|
+    |  1|[1, 2, 3, NULL]|   2|
+    |  1|[1, 2, 3, NULL]|   3|
+    |  1|[1, 2, 3, NULL]|NULL|
+    |  2|             []|NULL|
+    |  3|           NULL|NULL|
+    +---+---------------+----+
+
+    Example 2: Using a map column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,MAP(1,2,3,4,5,NULL)), (2,MAP()), (3,NULL) AS t(i,m)')
+    >>> df.select('*', sf.explode_outer('m')).show(truncate=False)
+    +---+---------------------------+----+-----+
+    |i  |m                          |key |value|
+    +---+---------------------------+----+-----+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|1   |2    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|3   |4    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|5   |NULL |
+    |2  |{}                         |NULL|NULL |
+    |3  |NULL                       |NULL|NULL |
+    +---+---------------------------+----+-----+
+    """  # noqa: E501
     return _invoke_function_over_columns("explode_outer", col)
 
 
@@ -19082,7 +19091,7 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         target column to work on.
 
     Returns
@@ -19090,30 +19099,47 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         one row per array item or map key value including positions as a separate column.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.explode`
+    :meth:`pyspark.sql.functions.explode_outer`
+    :meth:`pyspark.sql.functions.posexplode`
+    :meth:`pyspark.sql.functions.inline`
+    :meth:`pyspark.sql.functions.inline_outer`
+
     Examples
     --------
-    >>> df = spark.createDataFrame(
-    ...     [(1, ["foo", "bar"], {"x": 1.0}), (2, [], {}), (3, None, None)],
-    ...     ("id", "an_array", "a_map")
-    ... )
-    >>> df.select("id", "an_array", posexplode_outer("a_map")).show()
-    +---+----------+----+----+-----+
-    | id|  an_array| pos| key|value|
-    +---+----------+----+----+-----+
-    |  1|[foo, bar]|   0|   x|  1.0|
-    |  2|        []|NULL|NULL| NULL|
-    |  3|      NULL|NULL|NULL| NULL|
-    +---+----------+----+----+-----+
-    >>> df.select("id", "a_map", posexplode_outer("an_array")).show()
-    +---+----------+----+----+
-    | id|     a_map| pos| col|
-    +---+----------+----+----+
-    |  1|{x -> 1.0}|   0| foo|
-    |  1|{x -> 1.0}|   1| bar|
-    |  2|        {}|NULL|NULL|
-    |  3|      NULL|NULL|NULL|
-    +---+----------+----+----+
-    """
+    Example 1: Using an array column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,ARRAY(1,2,3,NULL)), (2,ARRAY()), (3,NULL) AS t(i,a)')
+    >>> df.select('*', sf.posexplode_outer('a')).show()
+    +---+---------------+----+----+
+    |  i|              a| pos| col|
+    +---+---------------+----+----+
+    |  1|[1, 2, 3, NULL]|   0|   1|
+    |  1|[1, 2, 3, NULL]|   1|   2|
+    |  1|[1, 2, 3, NULL]|   2|   3|
+    |  1|[1, 2, 3, NULL]|   3|NULL|
+    |  2|             []|NULL|NULL|
+    |  3|           NULL|NULL|NULL|
+    +---+---------------+----+----+
+
+    Example 2: Using a map column
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,MAP(1,2,3,4,5,NULL)), (2,MAP()), (3,NULL) AS t(i,m)')
+    >>> df.select('*', sf.posexplode_outer('m')).show(truncate=False)
+    +---+---------------------------+----+----+-----+
+    |i  |m                          |pos |key |value|
+    +---+---------------------------+----+----+-----+
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|0   |1   |2    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|1   |3   |4    |
+    |1  |{1 -> 2, 3 -> 4, 5 -> NULL}|2   |5   |NULL |
+    |2  |{}                         |NULL|NULL|NULL |
+    |3  |NULL                       |NULL|NULL|NULL |
+    +---+---------------------------+----+----+-----+
+    """  # noqa: E501
     return _invoke_function_over_columns("posexplode_outer", col)
 
 
@@ -19127,7 +19153,7 @@ def inline_outer(col: "ColumnOrName") -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column` or str
+    col : :class:`~pyspark.sql.Column` or column name
         input column of values to explode.
 
     Returns
@@ -19137,7 +19163,10 @@ def inline_outer(col: "ColumnOrName") -> Column:
 
     See Also
     --------
+    :meth:`pyspark.sql.functions.explode`
     :meth:`pyspark.sql.functions.explode_outer`
+    :meth:`pyspark.sql.functions.posexplode`
+    :meth:`pyspark.sql.functions.posexplode_outer`
     :meth:`pyspark.sql.functions.inline`
 
     Notes
@@ -19146,20 +19175,27 @@ def inline_outer(col: "ColumnOrName") -> Column:
 
     Examples
     --------
-    >>> from pyspark.sql import Row
-    >>> df = spark.createDataFrame([
-    ...     Row(id=1, structlist=[Row(a=1, b=2), Row(a=3, b=4)]),
-    ...     Row(id=2, structlist=[])
-    ... ])
-    >>> df.select('id', inline_outer(df.structlist)).show()
-    +---+----+----+
-    | id|   a|   b|
-    +---+----+----+
-    |  1|   1|   2|
-    |  1|   3|   4|
-    |  2|NULL|NULL|
-    +---+----+----+
-    """
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.sql('SELECT * FROM VALUES (1,ARRAY(NAMED_STRUCT("a",1,"b",2), NULL, NAMED_STRUCT("a",3,"b",4))), (2,ARRAY()), (3,NULL) AS t(i,s)')
+    >>> df.printSchema()
+    root
+     |-- i: integer (nullable = false)
+     |-- s: array (nullable = true)
+     |    |-- element: struct (containsNull = true)
+     |    |    |-- a: integer (nullable = false)
+     |    |    |-- b: integer (nullable = false)
+
+    >>> df.select('*', sf.inline_outer('s')).show(truncate=False)
+    +---+----------------------+----+----+
+    |i  |s                     |a   |b   |
+    +---+----------------------+----+----+
+    |1  |[{1, 2}, NULL, {3, 4}]|1   |2   |
+    |1  |[{1, 2}, NULL, {3, 4}]|NULL|NULL|
+    |1  |[{1, 2}, NULL, {3, 4}]|3   |4   |
+    |2  |[]                    |NULL|NULL|
+    |3  |NULL                  |NULL|NULL|
+    +---+----------------------+----+----+
+    """  # noqa: E501
     return _invoke_function_over_columns("inline_outer", col)
 
 

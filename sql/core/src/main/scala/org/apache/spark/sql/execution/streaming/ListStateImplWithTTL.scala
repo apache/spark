@@ -22,7 +22,6 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore, StateStoreErrors}
 import org.apache.spark.sql.streaming.{ListState, TTLConfig}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.NextIterator
 
 /**
@@ -45,20 +44,12 @@ class ListStateImplWithTTL[S](
     valEncoder: ExpressionEncoder[Any],
     ttlConfig: TTLConfig,
     batchTimestampMs: Long,
-    metrics: Map[String, SQLMetric] = Map.empty)
-  extends SingleKeyTTLStateImpl(stateName, store, keyExprEnc, batchTimestampMs)
-  with ListStateMetricsImpl
-  with ListState[S] {
-
-  override def stateStore: StateStore = store
-  override def baseStateName: String = stateName
-  override def exprEncSchema: StructType = keyExprEnc.schema
+    metrics: Map[String, SQLMetric])
+  extends OneToManyTTLState(
+    stateName, store, keyExprEnc.schema, ttlConfig, batchTimestampMs, metrics) with ListState[S] {
 
   private lazy val stateTypesEncoder = StateTypesEncoder(keyExprEnc, valEncoder,
     stateName, hasTtl = true)
-
-  private lazy val ttlExpirationMs =
-    StateTTL.calculateExpirationTimeForDuration(ttlConfig.ttlDuration, batchTimestampMs)
 
   initialize()
 
@@ -106,35 +97,22 @@ class ListStateImplWithTTL[S](
     validateNewState(newState)
 
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    var isFirst = true
-    var entryCount = 0L
-    TWSMetricsUtils.resetMetric(metrics, "numUpdatedStateRows")
-
-    newState.foreach { v =>
-      val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)
-      if (isFirst) {
-        store.put(encodedKey, encodedValue, stateName)
-        isFirst = false
-      } else {
-        store.merge(encodedKey, encodedValue, stateName)
-      }
-      entryCount += 1
-      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+    val newStateUnsafeRows = newState.iterator.map { v =>
+      stateTypesEncoder.encodeValue(v, ttlExpirationMs)
     }
-    upsertTTLForStateKey(encodedKey)
-    updateEntryCount(encodedKey, entryCount)
+
+    updatePrimaryAndSecondaryIndices(true, encodedKey, newStateUnsafeRows, ttlExpirationMs)
   }
 
   /** Append an entry to the list. */
   override def appendValue(newState: S): Unit = {
     StateStoreErrors.requireNonNullStateValue(newState, stateName)
+
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    val entryCount = getEntryCount(encodedKey)
-    store.merge(encodedKey,
-      stateTypesEncoder.encodeValue(newState, ttlExpirationMs), stateName)
-    TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
-    upsertTTLForStateKey(encodedKey)
-    updateEntryCount(encodedKey, entryCount + 1)
+    val newStateUnsafeRow = stateTypesEncoder.encodeValue(newState, ttlExpirationMs)
+
+    updatePrimaryAndSecondaryIndices(false, encodedKey,
+      Iterator.single(newStateUnsafeRow), ttlExpirationMs)
   }
 
   /** Append an entire list to the existing value. */
@@ -142,25 +120,21 @@ class ListStateImplWithTTL[S](
     validateNewState(newState)
 
     val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    var entryCount = getEntryCount(encodedKey)
-    newState.foreach { v =>
-      val encodedValue = stateTypesEncoder.encodeValue(v, ttlExpirationMs)
-      store.merge(encodedKey, encodedValue, stateName)
-      entryCount += 1
-      TWSMetricsUtils.incrementMetric(metrics, "numUpdatedStateRows")
+    // The UnsafeRows created here are reused: we do NOT copy them. As a result,
+    // this iterator must only be used lazily, and it should never be materialized,
+    // unless you call newStateUnsafeRows.map(_.copy()).
+    val newStateUnsafeRows = newState.iterator.map { v =>
+      stateTypesEncoder.encodeValue(v, ttlExpirationMs)
     }
-    upsertTTLForStateKey(encodedKey)
-    updateEntryCount(encodedKey, entryCount)
+
+    updatePrimaryAndSecondaryIndices(false, encodedKey,
+      newStateUnsafeRows, ttlExpirationMs)
   }
 
   /** Remove this state. */
   override def clear(): Unit = {
-    val encodedKey = stateTypesEncoder.encodeGroupingKey()
-    store.remove(encodedKey, stateName)
-    val entryCount = getEntryCount(encodedKey)
-    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", entryCount)
-    removeEntryCount(encodedKey)
-    clearTTLState()
+    val groupingKey = stateTypesEncoder.encodeGroupingKey()
+    clearAllStateForElementKey(groupingKey)
   }
 
   private def validateNewState(newState: Array[S]): Unit = {
@@ -175,36 +149,41 @@ class ListStateImplWithTTL[S](
   /**
    * Loops through all the values associated with the grouping key, and removes
    * the expired elements from the list.
-   * @param groupingKey grouping key for which cleanup should be performed.
+   * @param elementKey grouping key for which cleanup should be performed.
    */
-  override def clearIfExpired(groupingKey: UnsafeRow): Long = {
+  override def clearExpiredValues(elementKey: UnsafeRow): ValueExpirationResult = {
     var numValuesExpired = 0L
-    val unsafeRowValuesIterator = store.valuesIterator(groupingKey, stateName)
+    val unsafeRowValuesIterator = store.valuesIterator(elementKey, stateName)
     // We clear the list, and use the iterator to put back all of the non-expired values
-    store.remove(groupingKey, stateName)
-    removeEntryCount(groupingKey)
+    store.remove(elementKey, stateName)
+
+    var newMinExpirationMsOpt: Option[Long] = None
     var isFirst = true
-    var entryCount = 0L
     unsafeRowValuesIterator.foreach { encodedValue =>
       if (!stateTypesEncoder.isExpired(encodedValue, batchTimestampMs)) {
         if (isFirst) {
-          store.put(groupingKey, encodedValue, stateName)
           isFirst = false
+          store.put(elementKey, encodedValue, stateName)
         } else {
-          store.merge(groupingKey, encodedValue, stateName)
+          store.merge(elementKey, encodedValue, stateName)
         }
-        entryCount += 1
+
+        // If it is not expired, it needs to be reinserted (either via put or merge), but
+        // it also has an expiration time that might be the new minimum.
+        val currentExpirationMs = stateTypesEncoder.decodeTtlExpirationMs(encodedValue)
+
+        newMinExpirationMsOpt = newMinExpirationMsOpt match {
+          case Some(minExpirationMs) =>
+            Some(math.min(minExpirationMs, currentExpirationMs.get))
+          case None =>
+            Some(currentExpirationMs.get)
+        }
       } else {
         numValuesExpired += 1
       }
     }
-    updateEntryCount(groupingKey, entryCount)
-    TWSMetricsUtils.incrementMetric(metrics, "numRemovedStateRows", numValuesExpired)
-    numValuesExpired
-  }
 
-  private def upsertTTLForStateKey(encodedGroupingKey: UnsafeRow): Unit = {
-    upsertTTLForStateKey(ttlExpirationMs, encodedGroupingKey)
+    ValueExpirationResult(numValuesExpired, newMinExpirationMsOpt)
   }
 
   /*
@@ -238,11 +217,23 @@ class ListStateImplWithTTL[S](
     }
   }
 
+  private[sql] def getMinValues(): Iterator[Long] = {
+    val groupingKey = stateTypesEncoder.encodeGroupingKey()
+    minIndexIterator()
+      .filter(_._1 == groupingKey)
+      .map(_._2)
+  }
+
   /**
-   * Get all ttl values stored in ttl state for current implicit
-   * grouping key.
+   * Get the TTL value stored in TTL state for the current implicit grouping key,
+   * if it exists.
    */
-  private[sql] def getValuesInTTLState(): Iterator[Long] = {
-    getValuesInTTLState(stateTypesEncoder.encodeGroupingKey())
+  private[sql] def getValueInTTLState(): Option[Long] = {
+    val groupingKey = stateTypesEncoder.encodeGroupingKey()
+    val ttlRowsForGroupingKey = getTTLRows().filter(_.elementKey == groupingKey).toSeq
+
+    assert(ttlRowsForGroupingKey.size <= 1, "Multiple TTLRows found for grouping key " +
+      s"$groupingKey. Expected at most 1. Found: ${ttlRowsForGroupingKey.mkString(", ")}.")
+    ttlRowsForGroupingKey.headOption.map(_.expirationMs)
   }
 }

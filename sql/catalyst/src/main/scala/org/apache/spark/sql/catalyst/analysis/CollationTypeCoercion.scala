@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{hasStringType, haveS
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -92,13 +92,6 @@ object CollationTypeCoercion {
       val Seq(str, len, pad) = stringPadExpr.children
       val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
       stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
-
-    case raiseError: RaiseError =>
-      val newErrorParams = raiseError.errorParms.dataType match {
-        case MapType(StringType, StringType, _) => raiseError.errorParms
-        case _ => Cast(raiseError.errorParms, MapType(StringType, StringType))
-      }
-      raiseError.withNewChildren(Seq(raiseError.errorClass, newErrorParams))
 
     case framelessOffsetWindow @ (_: Lag | _: Lead) =>
       val Seq(input, offset, default) = framelessOffsetWindow.children
@@ -219,6 +212,11 @@ object CollationTypeCoercion {
    */
   private def findLeastCommonStringType(expressions: Seq[Expression]): Option[StringType] = {
     if (!expressions.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
+      // if there are no collated types we don't need to do anything
+      return None
+    } else if (ResolveDefaultStringTypes.needsResolution(expressions)) {
+      // if any of the strings types are still not resolved
+      // we need to wait for them to be resolved first
       return None
     }
 
