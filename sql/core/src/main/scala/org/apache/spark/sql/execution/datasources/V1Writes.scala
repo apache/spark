@@ -107,7 +107,11 @@ object V1Writes extends Rule[LogicalPlan] with SQLConfHelper {
     if (orderingMatched) {
       empty2NullPlan
     } else {
-      Sort(requiredOrdering, global = false, empty2NullPlan)
+      // Preserve the outputOrdering and append any missing elements from requiredOrdering.
+      val newOrder = outputOrdering ++ requiredOrdering.filterNot{ requiredOrder =>
+        outputOrdering.exists(_.child.semanticEquals(requiredOrder.child))
+      }
+      Sort(newOrder, global = false, empty2NullPlan)
     }
   }
 }
