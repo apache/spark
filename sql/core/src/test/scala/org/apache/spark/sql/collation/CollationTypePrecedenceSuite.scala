@@ -20,7 +20,7 @@ package org.apache.spark.sql.collation
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
