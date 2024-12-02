@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.internal.{SQLConf, SqlApiConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BooleanType, IntegerType, StringType}
 
@@ -665,6 +665,59 @@ class CollationSQLRegexpSuite
           stop = 57)
       )
     })
+  }
+
+  test("Collation regex flag") {
+    withSQLConf(SQLConf.REGEX_COLLATION_ENABLED.key -> "false") {
+      // Make sure the correct error is thrown.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT regexp_extract('abc' collate UTF8_LCASE, '.b.', 0)")
+        },
+        condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+        parameters = Map(
+          "sqlExpr" -> "\"regexp_extract(collate(abc, UTF8_LCASE), .b., 0)\"",
+          "paramIndex" -> "first",
+          "inputSql" -> "\"collate(abc, UTF8_LCASE)\"",
+          "inputType" -> "\"STRING COLLATE UTF8_LCASE\"",
+          "requiredType" -> "\"STRING\""
+        ),
+        context = ExpectedContext(
+          fragment = s"regexp_extract('abc' collate UTF8_LCASE, '.b.', 0)",
+          start = 7,
+          stop = 56)
+      )
+      // Check if the error is thrown for all regex functions.
+      intercept[AnalysisException](
+        sql("select regexp_extract_all('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](sql("select regexp_instr('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select regexp_replace('abc' collate UTF8_LCASE, '.b.', 'd')"))
+      intercept[AnalysisException](
+        sql("select regexp_substr('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select regexp_count('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select regexp_like('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select regexp_like_all('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select regexp_like_any('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select regexp_not_like('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select like('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select like_all('abc' collate UTF8_LCASE, '.b.')"))
+      intercept[AnalysisException](
+        sql("select ilike('abc' collate UTF8_LCASE, '.b.')"))
+    }
+    // Make sure enabling the flag enables regex expressions. This should be checked
+    // by other tests in-depth.
+    withSQLConf(SQLConf.REGEX_COLLATION_ENABLED.key -> "true") {
+      val df = sql("SELECT regexp_instr('abc' collate UTF8_LCASE, '.B.', 0)")
+      checkAnswer(df, Row(1))
+    }
   }
 }
 // scalastyle:on nonascii
