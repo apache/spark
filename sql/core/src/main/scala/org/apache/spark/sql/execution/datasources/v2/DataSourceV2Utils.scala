@@ -23,16 +23,19 @@ import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -178,5 +181,35 @@ private[sql] object DataSourceV2Utils extends Logging {
     } else {
       extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
     }
+  }
+
+  /**
+   * If `table` is a StagedTable, commit the staged changes and report the commit metrics.
+   * Do nothing if the table is not a StagedTable.
+   */
+  def commitStagedChanges(
+      sparkContext: SparkContext, table: Table, metrics: Map[String, SQLMetric]): Unit = {
+    table match {
+      case stagedTable: StagedTable =>
+        stagedTable.commitStagedChanges()
+
+        val driverMetrics = stagedTable.reportDriverMetrics()
+        if (driverMetrics.nonEmpty) {
+          for (taskMetric <- driverMetrics) {
+            metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
+          }
+
+          val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+        }
+      case _ =>
+    }
+  }
+
+  def commitMetrics(
+      sparkContext: SparkContext, tableCatalog: StagingTableCatalog): Map[String, SQLMetric] = {
+    tableCatalog.supportedCustomMetrics().map {
+      metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
+    }.toMap
   }
 }

@@ -86,6 +86,19 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   }
 }
 
+trait AlsoTestWithEncodingTypes extends SQLTestUtils {
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
+    Seq("unsaferow", "avro").foreach { encoding =>
+      super.test(s"$testName (encoding = $encoding)", testTags: _*) {
+        withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+          testBody
+        }
+      }
+    }
+  }
+}
+
 trait AlsoTestWithChangelogCheckpointingEnabled
   extends SQLTestUtils with RocksDBStateStoreChangelogCheckpointingTestUtil {
 
