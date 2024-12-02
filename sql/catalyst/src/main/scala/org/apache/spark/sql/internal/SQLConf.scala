@@ -778,6 +778,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
+  lazy val REGEX_COLLATION_ENABLED =
+    buildConf("spark.sql.collation.regex.enabled")
+      .internal()
+      .doc(
+        "Regex collation feature is under development and its use should be done under this" +
+        "feature flag. Enabling this flag will allow all regex functions to work with" +
+        "UTF8_LCASE collation."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val DEFAULT_COLLATION =
     buildConf(SqlApiConfHelper.DEFAULT_COLLATION)
       .doc("Sets default collation to use for string literals, parameter markers or the string" +
