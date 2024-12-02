@@ -19,6 +19,7 @@ package org.apache.spark.sql.collation
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
@@ -397,27 +398,30 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"SELECT c1 FROM $tableName WHERE $condition = 'B'")
 
     withTable(tableName) {
-      sql(s"""
-           |CREATE TABLE $tableName (
-           |  c1 MAP<STRING COLLATE UNICODE_CI, STRING COLLATE UNICODE_CI>,
-           |  c2 STRING
-           |) USING $dataSource
-           |""".stripMargin)
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  c1 MAP<STRING COLLATE UNICODE_CI, STRING COLLATE UNICODE_CI>,
+             |  c2 STRING
+             |) USING $dataSource
+             |""".stripMargin)
 
-      sql(s"INSERT INTO $tableName VALUES (map('a', 'b'), 'a')")
+        sql(s"INSERT INTO $tableName VALUES (map('a', 'b'), 'a')")
 
-      Seq("c1['A']",
-        "c1['A' COLLATE UNICODE_CI]",
-        "c1[c2 COLLATE UNICODE_CI]").foreach { condition =>
-        checkAnswer(selectQuery(condition), Seq(Row(Map("a" -> "b"))))
-      }
+        Seq("c1['A']",
+          "c1['A' COLLATE UNICODE_CI]",
+          "c1[c2 COLLATE UNICODE_CI]").foreach { condition =>
+          checkAnswer(selectQuery(condition), Seq(Row(Map("a" -> "b"))))
+        }
 
-      Seq(
-        // different explicit collation
-        "c1['A' COLLATE UNICODE]",
-        // different implicit collation
-        "c1[c2]").foreach { condition =>
-        assertThrowsError(selectQuery(condition), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+        Seq(
+          // different explicit collation
+          "c1['A' COLLATE UNICODE]",
+          // different implicit collation
+          "c1[c2]").foreach { condition =>
+          assertThrowsError(selectQuery(condition), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+        }
       }
     }
   }

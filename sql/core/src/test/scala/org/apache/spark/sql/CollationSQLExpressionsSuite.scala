@@ -2006,9 +2006,11 @@ class CollationSQLExpressionsSuite
       }
       val tableName = s"t_${t1.collationId}_mode_nested_map_struct1"
       withTable(tableName) {
-        sql(s"CREATE TABLE ${tableName}(" +
-          s"i STRUCT<m1: MAP<STRING COLLATE ${t1.collationId}, INT>>) USING parquet")
-        sql(s"INSERT INTO ${tableName} VALUES ${getValuesToAdd(t1)}")
+        withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+          sql(s"CREATE TABLE ${tableName}(" +
+            s"i STRUCT<m1: MAP<STRING COLLATE ${t1.collationId}, INT>>) USING parquet")
+          sql(s"INSERT INTO ${tableName} VALUES ${getValuesToAdd(t1)}")
+        }
         val query = "SELECT lower(cast(mode(i).m1 as string))" +
           s" FROM ${tableName}"
         val queryResult = sql(query)

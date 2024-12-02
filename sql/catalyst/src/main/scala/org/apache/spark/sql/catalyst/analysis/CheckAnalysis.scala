@@ -1539,15 +1539,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         alter.conf.resolver)
     }
 
+    def checkNoCollationsInMapKeys(colsToAdd: Seq[QualifiedColType]): Unit = {
+      if (!SQLConf.get.allowCollationsInMapKeys) {
+        colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
+      }
+    }
+
     alter match {
       case AddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
           checkColumnNotExists("add", colToAdd.name, table.schema)
         }
         checkColumnNameDuplication(colsToAdd)
+        checkNoCollationsInMapKeys(colsToAdd)
 
       case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
         checkColumnNameDuplication(colsToAdd)
+        checkNoCollationsInMapKeys(colsToAdd)
 
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)
