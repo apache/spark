@@ -141,7 +141,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertFalse(executorExtraJavaOptions.contains("*"), "Should not contain *");
     assertFalse(executorExtraJavaOptions.contains("?"), "Should not contain ?");
 
-    assertTrue(executorExtraJavaOptions.contains("-Xmx2g"), "Valid executor Java options should pass");
+    assertTrue(executorExtraJavaOptions.contains("-Xmx2g"), "Valid options should pass");
 
     assertNotNull(driverExtraJavaOptions, "spark.driver.extraJavaOptions should be set");
     assertFalse(driverExtraJavaOptions.contains("`"), "Should not contain `");
@@ -153,7 +153,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertFalse(driverExtraJavaOptions.contains("*"), "Should not contain *");
     assertFalse(driverExtraJavaOptions.contains("?"), "Should not contain ?");
 
-    assertTrue(driverExtraJavaOptions.contains("-Xms1g"), "Valid driver Java options should pass");
+    assertTrue(driverExtraJavaOptions.contains("-Xms1g"), "Valid options should pass");
   }
 
 
