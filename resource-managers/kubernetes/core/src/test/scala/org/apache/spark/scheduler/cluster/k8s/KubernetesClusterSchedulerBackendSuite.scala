@@ -266,7 +266,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     verify(context).reply("1")
   }
 
-  test("Driver attributes") {
+  test("SPARK-47573: Driver attributes") {
     assert(schedulerBackendUnderTest.getDriverAttributes === Some(Map(
       "LOG_FILES" -> "log"
     )))
@@ -285,7 +285,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     }
   }
 
-  test("Driver log urls") {
+  test("SPARK-47573: Driver log urls") {
     assert(schedulerBackendUnderTest.getDriverLogUrls === None)
     withEnvs(
       ENV_DRIVER_ATTRIBUTE_APP_ID -> "spark-app-id",
