@@ -410,6 +410,9 @@ class ArtifactManager(session: SparkSession) extends Logging {
     pythonIncludeList.clear()
     cachedBlockIdList.clear()
     sparkContextRelativePaths.clear()
+
+    // Removed cached classloader
+    cachedClassLoader.remove()
   }
 
   def uploadArtifactToFs(
