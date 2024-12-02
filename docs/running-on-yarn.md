@@ -121,15 +121,15 @@ all environment variables used for launching each container. This process is use
 classpath problems in particular. (Note that enabling this requires admin privileges on cluster
 settings and a restart of all node managers. Thus, this is not applicable to hosted clusters).
 
-To use a custom log4j configuration for the application master or executors, here are the options:
+To use a custom log4j2 configuration for the application master or executors, here are the options:
 
-- upload a custom `log4j.properties` using `spark-submit`, by adding it to the `--files` list of files
+- upload a custom `log4j2.properties` using `spark-submit`, by adding it to the `--files` list of files
   to be uploaded with the application.
-- add `-Dlog4j.configuration=<location of configuration file>` to `spark.driver.extraJavaOptions`
+- add `-Dlog4j.configurationFile=<location of configuration file>` to `spark.driver.extraJavaOptions`
   (for the driver) or `spark.executor.extraJavaOptions` (for executors). Note that if using a file,
   the `file:` protocol should be explicitly provided, and the file needs to exist locally on all
   the nodes.
-- update the `$SPARK_CONF_DIR/log4j.properties` file and it will be automatically uploaded along
+- update the `$SPARK_CONF_DIR/log4j2.properties` file and it will be automatically uploaded along
   with the other configurations. Note that other 2 options has higher priority than this option if
   multiple options are specified.
 
