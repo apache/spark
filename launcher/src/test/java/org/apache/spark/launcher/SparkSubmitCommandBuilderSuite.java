@@ -482,7 +482,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     return builder;
   }
 
-  private List<String>  buildCommand(List<String> args, Map<String, String> env) throws Exception {
+  private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
     return newCommandBuilder(args).buildCommand(env);
   }
 

@@ -214,7 +214,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     for (Map.Entry<String, String> e : conf.entrySet()) {
       String key = e.getKey();
       String value = e.getValue();
-      if ("spark.executor.extraJavaOptions".equals(key)) {
+      if ("spark.executor.extraJavaOptions".equals(key)
+              || "spark.driver.extraJavaOptions".equals(key)) {
         value = sanitizeExtraJavaOptions(value);
       }
       args.add(parser.CONF);
@@ -354,10 +355,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    */
   private String sanitizeExtraJavaOptions(String value) {
     if (value != null) {
-      String[] unsafeChars = {"`", "$(", ")", "&", "|", "<", ";", ">", "*", "?"};
-      for (String unsafeChar : unsafeChars) {
-        value = value.replace(unsafeChar, "");
-      }
+      String regex = "`|\\$\\(|\\)|&|\\||<|;|>|\\*|\\?";
+      value = value.replaceAll(regex, "");
     }
     return value;
   }
