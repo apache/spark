@@ -79,7 +79,7 @@ public class ConstantColumnVector extends ColumnVector {
 
   public void closeIfFreeable() {
     // no-op: `ConstantColumnVector`s reuse the data backing its value across multiple batches and
-    // is freed at the end of execution in `close`.
+    // are freed at the end of execution in `close`.
   }
 
   @Override
