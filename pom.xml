@@ -348,6 +348,29 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <!-- OpenAI's internal Maven artifactory -->
+    <repository>
+      <id>openai-release</id>
+      <name>OpenAI Maven Release Repository</name>
+      <url>https://artifactory.data-0.internal.api.openai.org/libs-release-local/artifactory</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>openai-snapshot</id>
+      <name>OpenAI Maven Snapshot Repository</name>
+      <url>https://artifactory.data-0.internal.api.openai.org/libs-snapshot-local/artifactory</url>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
