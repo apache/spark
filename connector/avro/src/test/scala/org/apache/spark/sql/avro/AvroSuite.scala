@@ -3020,29 +3020,24 @@ abstract class AvroSuite
         assert(df.count() == 0)
       }
     }
-
-
-  case class AvroUnionRecordField(a: Int)
-  case class AvroUnionRecord(data: AvroUnionRecordField)
+  }
 
   test("Deserialize union of null, record") {
-
     val schema =
       """[
         |"null",
-        |{
-        |   "name": "data",
-        |   "type": "record",
-        |   "fields": [{"type": "int", "name": "a"}]
-        |}]""".stripMargin
-
-
-    val df = spark.createDataset(Seq(AvroUnionRecord(AvroUnionRecordField(1))))
+        |{"name": "data", "type": "record", "fields":[{"name": "a", "type": "int"}]}
+        |]""".stripMargin
+    val sparkSchema = StructType(Array(StructField("a", IntegerType)))
+    val rows = spark.sparkContext.parallelize(Seq(Row(1)))
+    val df = spark
+      .createDataFrame(rows, schema = sparkSchema)
+      .select(functions.struct("a").alias("data"))
       .select(avro.functions.to_avro(col("data"), schema).as("encoded"))
       .select(avro.functions.from_avro(col("encoded"), schema).as("decoded"))
-
-    assert(df.filter("decoded.a == 1").count() == 0)
+    assert(df.filter("decoded.a = 1").count() == 1)
   }
+
 }
 
 class AvroV1Suite extends AvroSuite {
