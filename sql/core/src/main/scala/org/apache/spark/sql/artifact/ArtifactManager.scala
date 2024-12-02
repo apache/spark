@@ -73,7 +73,8 @@ class ArtifactManager(session: SparkSession) extends Logging {
     (ArtifactUtils.concatenatePaths(artifactPath, "classes"),
       s"$artifactURI${File.separator}classes${File.separator}")
 
-  private lazy val alwaysApplyClassLoader = true
+  private lazy val alwaysApplyClassLoader =
+    session.conf.get(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key).toBoolean
 
   private lazy val sessionIsolated =
     session.conf.get(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key).toBoolean
