@@ -306,10 +306,8 @@ case class AlterTableSetPropertiesCommand(
     // This overrides old properties and updates the comment and collation parameters of
     // CatalogTable with the newly added/modified comment and collation since CatalogTable
     // also holds comment and collation as its direct properties.
-    val newProperties = table.properties ++ properties --
-      Seq(TableCatalog.PROP_COMMENT, TableCatalog.PROP_COLLATION)
     val newTable = table.copy(
-      properties = newProperties,
+      properties = table.properties ++ properties,
       comment = properties.get(TableCatalog.PROP_COMMENT).orElse(table.comment),
       collation = properties.get(TableCatalog.PROP_COLLATION).orElse(table.collation))
     catalog.alterTable(newTable)
