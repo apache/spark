@@ -31,6 +31,7 @@ from pyspark.errors import (
 from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
     array,
+    col,
     create_map,
     array,
     lit,
@@ -155,6 +156,22 @@ class BaseUDTFTestsMixin:
         )
         assertDataFrameEqual(df, expected)
 
+    def test_udtf_with_lateral_join_dataframe(self):
+        @udtf(returnType="a: int, b: int, c: int")
+        class TestUDTF:
+            def eval(self, a: int, b: int) -> Iterator:
+                yield a, b, a + b
+                yield a, b, a - b
+
+        self.spark.udtf.register("testUDTF", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.sql("values (0, 1), (1, 2) t(a, b)").lateralJoin(
+                TestUDTF(col("a").outer(), col("b").outer())
+            ),
+            self.spark.sql("SELECT * FROM values (0, 1), (1, 2) t(a, b), LATERAL testUDTF(a, b)"),
+        )
+
     def test_udtf_eval_with_return_stmt(self):
         class TestUDTF:
             def eval(self, a: int, b: int):
@@ -237,6 +254,20 @@ class BaseUDTFTestsMixin:
         assertDataFrameEqual(
             self.spark.sql("SELECT * FROM range(0, 8) JOIN LATERAL test_udtf(id)"),
             [Row(id=6, a=6), Row(id=7, a=7)],
+        )
+
+    def test_udtf_with_conditional_return_dataframe(self):
+        @udtf(returnType="a: int")
+        class TestUDTF:
+            def eval(self, a: int):
+                if a > 5:
+                    yield a,
+
+        self.spark.udtf.register("test_udtf", TestUDTF)
+
+        assertDataFrameEqual(
+            self.spark.range(8).lateralJoin(TestUDTF(col("id").outer())),
+            self.spark.sql("SELECT * FROM range(0, 8) JOIN LATERAL test_udtf(id)"),
         )
 
     def test_udtf_with_empty_yield(self):
