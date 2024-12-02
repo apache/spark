@@ -2907,13 +2907,15 @@ package object config {
 
   private[spark] val SPARK_TTL_BLOCK_CLEANER =
     ConfigBuilder("spark.cleaner.ttl.all")
-      .doc("Add a TTL for all blocks tracked in Spark. By default blocks are only removed after GC on driver.")
+      .doc("Add a TTL for all blocks tracked in Spark. By default blocks are only removed after " +
+        " GC on driver which with DataFrames or RDDs at the global scope will not occur.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val SPARK_TTL_SHUFFLE_BLOCK_CLEANER =
     ConfigBuilder("spark.cleaner.ttl.shuffle")
-      .doc("Add a TTL for shuffle blocks tracked in Spark. By default blocks are only removed after GC on driver.")
+      .doc("Add a TTL for shuffle blocks tracked in Spark. By default blocks are only removed " +
+        "after GC on driver which with DataFrames or RDDs at the global scope will not occur.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 }
