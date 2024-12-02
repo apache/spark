@@ -245,7 +245,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             .createObservedMetricsResponse(
               executeHolder.sessionHolder.sessionId,
               executeHolder.sessionHolder.serverSessionId,
-              executeHolder.request.getPlan.getRoot.getCommon.getPlanId,
+              executeHolder.allObservationAndPlanIds,
               observedMetrics ++ accumulatedInPython))
       }
 
