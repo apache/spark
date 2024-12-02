@@ -487,7 +487,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         val expected = spark.range(0, 5)
           .selectExpr("concat(cast(id % 2 as string), 'a') as partCol")
           .collect()
-        
+
         checkAnswer(df, expected)
       }
     }
