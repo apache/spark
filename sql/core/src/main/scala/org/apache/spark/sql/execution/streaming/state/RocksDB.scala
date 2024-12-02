@@ -301,7 +301,7 @@ class RocksDB(
           return (version, Some(uniqueId))
         }
     }
-    throw QueryExecutionErrors.cannotGetLatestSnapshotVersionAndUniqueIdFromLineage(
+    throw QueryExecutionErrors.cannotFindBaseSnapshotCheckpoint(
       printLineageItems(lineage), printLineage(latestSnapshotVersionsAndUniqueIds)
     )
   }
@@ -354,8 +354,9 @@ class RocksDB(
       val (latestSnapshotVersion, latestSnapshotUniqueId) = {
         // Special handling when version is 0.
         // When loading the very first version (0), stateStoreCkptId does not need to be defined
-        // because there won't be 0.changelog / 0.zip file created in RocksDB.
-        if (version == 0 && stateStoreCkptId.isEmpty) {
+        // because there won't be 0.changelog / 0.zip file created in RocksDB under v2.
+        if (version == 0) {
+          assert(stateStoreCkptId.isEmpty, "stateStoreCkptId should be empty when version is zero")
           (0L, None)
         // When there is a snapshot file, it is the ground truth, we can skip
         // reconstructing the lineage from changelog file.
@@ -365,7 +366,7 @@ class RocksDB(
           (version, stateStoreCkptId)
         } else {
           val latestSnapshotVersionsAndUniqueIds =
-            fileManager.getLatestSnapshotVersionAndUniqueId(version, stateStoreCkptId)
+            fileManager.getLatestSnapshotVersionAndUniqueId(version)
           currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
             LineageItem(version, stateStoreCkptId.get)
           lineageManager.resetLineage(currVersionLineage)

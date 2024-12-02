@@ -2602,11 +2602,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def cannotGetLatestSnapshotVersionAndUniqueIdFromLineage(
+  def cannotFindBaseSnapshotCheckpoint(
     lineage: String, snapshotVersionAndUniqueIds: String): Throwable = {
     new SparkException (
       errorClass =
-        "CANNOT_LOAD_STATE_STORE.CANNOT_GET_LATEST_SNAPSHOT_VERSION_AND_UNIQUE_ID_FROM_LINEAGE",
+        "CANNOT_LOAD_STATE_STORE.CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT",
       messageParameters = Map(
         "lineage" -> lineage,
         "snapshotVersionAndUniqueIds" -> snapshotVersionAndUniqueIds),

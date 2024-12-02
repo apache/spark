@@ -233,9 +233,9 @@
       "An error occurred during loading state."
     ],
     "subClass" : {
-      "CANNOT_GET_LATEST_SNAPSHOT_VERSION_AND_UNIQUE_ID_FROM_LINEAGE" : {
+      "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
         "message" : [
-          "Cannot get latest snapshot version and unique ids from lineage. lineage: <lineage>, latest snapshot versions and unique ids: <snapshotVersionAndUniqueIds>."
+          "Cannot find a base snapshot checkpoint. lineage: <lineage>, latest snapshot versions and unique ids: <snapshotVersionAndUniqueIds>."
         ]
       },
       "CANNOT_READ_CHECKPOINT" : {

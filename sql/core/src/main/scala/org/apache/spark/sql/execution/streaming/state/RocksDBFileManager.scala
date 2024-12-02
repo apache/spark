@@ -347,19 +347,16 @@ class RocksDBFileManager(
   }
 
   // Get latest snapshot version <= version
-  def getLatestSnapshotVersionAndUniqueId(
-      version: Long, checkpointUniqueId: Option[String] = None): Array[(Long, Option[String])] = {
+  def getLatestSnapshotVersionAndUniqueId(version: Long): Array[(Long, Option[String])] = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
       val versionAndUniqueIds = fm.list(path, onlyZipFiles)
         .map(_.getPath.getName.stripSuffix(".zip").split("_"))
         .filter {
           case Array(ver, _) => ver.toLong <= version
-          case Array(ver) => ver.toLong <= version
         }
         .map {
           case Array(version, uniqueId) => (version.toLong, Option(uniqueId))
-          case Array(version) => (version.toLong, None)
         }
       val maxVersion = versionAndUniqueIds.map(_._1).foldLeft(0L)(math.max)
       versionAndUniqueIds.filter(_._1 == maxVersion)
