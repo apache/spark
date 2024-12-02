@@ -62,7 +62,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       assert(operatorMetadataV2.operatorPropertiesJson.nonEmpty)
       val stateStoreInfo = operatorMetadataV2.stateStoreInfo.head
       val expectedStateStoreInfo = expectedMetadataV2.stateStoreInfo.head
-      assert(stateStoreInfo.stateSchemaFilePath.nonEmpty)
+      assert(stateStoreInfo.stateSchemaFilePaths.nonEmpty)
       assert(stateStoreInfo.storeName == expectedStateStoreInfo.storeName)
       assert(stateStoreInfo.numPartitions == expectedStateStoreInfo.numPartitions)
     }

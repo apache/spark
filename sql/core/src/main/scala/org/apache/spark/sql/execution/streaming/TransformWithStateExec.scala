@@ -475,7 +475,7 @@ case class TransformWithStateExec(
         metadata match {
           case v2: OperatorStateMetadataV2 =>
             val ssInfo = v2.stateStoreInfo.head
-            val stateSchemaFilePath = ssInfo.stateSchemaFilePath(ssInfo.stateSchemaId)
+            val stateSchemaFilePath = ssInfo.stateSchemaFilePaths(ssInfo.stateSchemaId)
             Some(new Path(stateSchemaFilePath))
           case _ => None
         }
@@ -498,7 +498,7 @@ case class TransformWithStateExec(
       val (oldSchemaId, oldSchemaPaths): (Int, Map[Int, String]) = oldMetadata match {
         case Some(v2: OperatorStateMetadataV2) =>
           val ssInfo = v2.stateStoreInfo.head
-          (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePath)
+          (ssInfo.stateSchemaId, ssInfo.stateSchemaFilePaths)
         case _ => (-1, Map.empty)
       }
       List(oldSchemaPaths + (oldSchemaId + 1 -> validationResult.schemaPath))
@@ -507,7 +507,7 @@ case class TransformWithStateExec(
         case Some(v2: OperatorStateMetadataV2) =>
           // If schema hasn't evolved, keep existing mappings
           val ssInfo = v2.stateStoreInfo.head
-          List(ssInfo.stateSchemaFilePath)
+          List(ssInfo.stateSchemaFilePaths)
         case _ =>
           // If no previous metadata and no evolution, start with schema ID 0
           List(Map(0 -> validationResult.schemaPath))
