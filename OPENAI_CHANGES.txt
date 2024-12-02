@@ -52,3 +52,5 @@
 - [INTERNAL] Ignore flaky tests
 - [INTERNAL] Add an config option to skip streaming metadata file check
 - [INTERNAL] Setup Buildkite to publish release artifacts
+- [INTERNAL] Add internal Maven artifactory
+- [INTERNAL] Switch to OpenAI Hadoop
