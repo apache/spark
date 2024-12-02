@@ -20,18 +20,21 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.nio.charset.Charset
 import java.util.concurrent.Executors
+
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.Random
+
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataInputStream, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.Path
 import org.rocksdb.CompressionType
 import org.scalactic.source.Position
 import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
+
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.util.quietly
@@ -39,12 +42,11 @@ import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAt
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
-import org.apache.spark.sql.test.{SQLTestUtils, SharedSparkSession}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
-import scala.collection.mutable.ArrayBuffer
 
 class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
