@@ -266,6 +266,575 @@ CreateViewCommand `windowTestData`, select * from values
 
 
 -- !query
+create table store_sales(
+  `ss_sold_date_sk` int,
+  `ss_sold_time_sk` int,
+  `ss_item_sk` int,
+  `ss_customer_sk` int,
+  `ss_cdemo_sk` int,
+  `ss_hdemo_sk` int,
+  `ss_addr_sk` int,
+  `ss_store_sk` int,
+  `ss_promo_sk` int,
+  `ss_ticket_number` int,
+  `ss_quantity` int,
+  `ss_wholesale_cost` decimal(7,2),
+  `ss_list_price` decimal(7,2),
+  `ss_sales_price` decimal(7,2),
+  `ss_ext_discount_amt` decimal(7,2),
+  `ss_ext_sales_price` decimal(7,2),
+  `ss_ext_wholesale_cost` decimal(7,2),
+  `ss_ext_list_price` decimal(7,2),
+  `ss_ext_tax` decimal(7,2),
+  `ss_coupon_amt` decimal(7,2),
+  `ss_net_paid` decimal(7,2),
+  `ss_net_paid_inc_tax` decimal(7,2),
+  `ss_net_profit` decimal(7,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`store_sales`, false
+
+
+-- !query
+create table store_returns(
+  `sr_returned_date_sk` int,
+  `sr_return_time_sk` int,
+  `sr_item_sk` int,
+  `sr_customer_sk` int,
+  `sr_cdemo_sk` int,
+  `sr_hdemo_sk` int,
+  `sr_addr_sk` int,
+  `sr_store_sk` int,
+  `sr_reason_sk` int,
+  `sr_ticket_number` int,
+  `sr_return_quantity` int,
+  `sr_return_amt` decimal(7,2),
+  `sr_return_tax` decimal(7,2),
+  `sr_return_amt_inc_tax` decimal(7,2),
+  `sr_fee` decimal(7,2),
+  `sr_return_ship_cost` decimal(7,2),
+  `sr_refunded_cash` decimal(7,2),
+  `sr_reversed_charge` decimal(7,2),
+  `sr_store_credit` decimal(7,2),
+  `sr_net_loss` decimal(7,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`store_returns`, false
+
+
+-- !query
+create table catalog_sales(
+  `cs_sold_date_sk` int,
+  `cs_sold_time_sk` int,
+  `cs_ship_date_sk` int,
+  `cs_bill_customer_sk` int,
+  `cs_bill_cdemo_sk` int,
+  `cs_bill_hdemo_sk` int,
+  `cs_bill_addr_sk` int,
+  `cs_ship_customer_sk` int,
+  `cs_ship_cdemo_sk` int,
+  `cs_ship_hdemo_sk` int,
+  `cs_ship_addr_sk` int,
+  `cs_call_center_sk` int,
+  `cs_catalog_page_sk` int,
+  `cs_ship_mode_sk` int,
+  `cs_warehouse_sk` int,
+  `cs_item_sk` int,
+  `cs_promo_sk` int,
+  `cs_order_number` int,
+  `cs_quantity` int,
+  `cs_wholesale_cost` decimal(7,2),
+  `cs_list_price` decimal(7,2),
+  `cs_sales_price` decimal(7,2),
+  `cs_ext_discount_amt` decimal(7,2),
+  `cs_ext_sales_price` decimal(7,2),
+  `cs_ext_wholesale_cost` decimal(7,2),
+  `cs_ext_list_price` decimal(7,2),
+  `cs_ext_tax` decimal(7,2),
+  `cs_coupon_amt` decimal(7,2),
+  `cs_ext_ship_cost` decimal(7,2),
+  `cs_net_paid` decimal(7,2),
+  `cs_net_paid_inc_tax` decimal(7,2),
+  `cs_net_paid_inc_ship` decimal(7,2),
+  `cs_net_paid_inc_ship_tax` decimal(7,2),
+  `cs_net_profit` decimal(7,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`catalog_sales`, false
+
+
+-- !query
+create table catalog_returns(
+  `cr_returned_date_sk` int,
+  `cr_returned_time_sk` int,
+  `cr_item_sk` int,
+  `cr_refunded_customer_sk` int,
+  `cr_refunded_cdemo_sk` int,
+  `cr_refunded_hdemo_sk` int,
+  `cr_refunded_addr_sk` int,
+  `cr_returning_customer_sk` int,
+  `cr_returning_cdemo_sk` int,
+  `cr_returning_hdemo_sk` int,
+  `cr_returning_addr_sk` int,
+  `cr_call_center_sk` int,
+  `cr_catalog_page_sk` int,
+  `cr_ship_mode_sk` int,
+  `cr_warehouse_sk` int,
+  `cr_reason_sk` int,
+  `cr_order_number` int,
+  `cr_return_quantity` int,
+  `cr_return_amount` decimal(7,2),
+  `cr_return_tax` decimal(7,2),
+  `cr_return_amt_inc_tax` decimal(7,2),
+  `cr_fee` decimal(7,2),
+  `cr_return_ship_cost` decimal(7,2),
+  `cr_refunded_cash` decimal(7,2),
+  `cr_reversed_charge` decimal(7,2),
+  `cr_store_credit` decimal(7,2),
+  `cr_net_loss` decimal(7,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`catalog_returns`, false
+
+
+-- !query
+create table web_sales(
+  `ws_sold_date_sk` int,
+  `ws_sold_time_sk` int,
+  `ws_ship_date_sk` int,
+  `ws_item_sk` int,
+  `ws_bill_customer_sk` int,
+  `ws_bill_cdemo_sk` int,
+  `ws_bill_hdemo_sk` int,
+  `ws_bill_addr_sk` int,
+  `ws_ship_customer_sk` int,
+  `ws_ship_cdemo_sk` int,
+  `ws_ship_hdemo_sk` int,
+  `ws_ship_addr_sk` int,
+  `ws_web_page_sk` int,
+  `ws_web_site_sk` int,
+  `ws_ship_mode_sk` int,
+  `ws_warehouse_sk` int,
+  `ws_promo_sk` int,
+  `ws_order_number` int,
+  `ws_quantity` int,
+  `ws_wholesale_cost` decimal(7,2),
+  `ws_list_price` decimal(7,2),
+  `ws_sales_price` decimal(7,2),
+  `ws_ext_discount_amt` decimal(7,2),
+  `ws_ext_sales_price` decimal(7,2),
+  `ws_ext_wholesale_cost` decimal(7,2),
+  `ws_ext_list_price` decimal(7,2),
+  `ws_ext_tax` decimal(7,2),
+  `ws_coupon_amt` decimal(7,2),
+  `ws_ext_ship_cost` decimal(7,2),
+  `ws_net_paid` decimal(7,2),
+  `ws_net_paid_inc_tax` decimal(7,2),
+  `ws_net_paid_inc_ship` decimal(7,2),
+  `ws_net_paid_inc_ship_tax` decimal(7,2),
+  `ws_net_profit` decimal(7,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`web_sales`, false
+
+
+-- !query
+create table web_returns(
+  `wr_returned_date_sk` int,
+  `wr_returned_time_sk` int,
+  `wr_item_sk` int,
+  `wr_refunded_customer_sk` int,
+  `wr_refunded_cdemo_sk` int,
+  `wr_refunded_hdemo_sk` int,
+  `wr_refunded_addr_sk` int,
+  `wr_returning_customer_sk` int,
+  `wr_returning_cdemo_sk` int,
+  `wr_returning_hdemo_sk` int,
+  `wr_returning_addr_sk` int,
+  `wr_web_page_sk` int,
+  `wr_reason_sk` int,
+  `wr_order_number` int,
+  `wr_return_quantity` int,
+  `wr_return_amt` decimal(7,2),
+  `wr_return_tax` decimal(7,2),
+  `wr_return_amt_inc_tax` decimal(7,2),
+  `wr_fee` decimal(7,2),
+  `wr_return_ship_cost` decimal(7,2),
+  `wr_refunded_cash` decimal(7,2),
+  `wr_reversed_charge` decimal(7,2),
+  `wr_account_credit` decimal(7,2),
+  `wr_net_loss` decimal(7,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`web_returns`, false
+
+
+-- !query
+create table inventory(
+  `inv_date_sk` int,
+  `inv_item_sk` int,
+  `inv_warehouse_sk` int,
+  `inv_quantity_on_hand` int)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`inventory`, false
+
+
+-- !query
+create table store(
+  `s_store_sk` int,
+  `s_store_id` char(16),
+  `s_rec_start_date` date,
+  `s_rec_end_date` date,
+  `s_closed_date_sk` int,
+  `s_store_name` varchar(50),
+  `s_number_employees` int,
+  `s_floor_space` int,
+  `s_hours` char(20),
+  `s_manager` varchar(40),
+  `s_market_id` int,
+  `s_geography_class` varchar(100),
+  `s_market_desc` varchar(100),
+  `s_market_manager` varchar(40),
+  `s_division_id` int,
+  `s_division_name` varchar(50),
+  `s_company_id` int,
+  `s_company_name` varchar(50),
+  `s_street_number` varchar(10),
+  `s_street_name` varchar(60),
+  `s_street_type` char(15),
+  `s_suite_number` char(10),
+  `s_city` varchar(60),
+  `s_county` varchar(30),
+  `s_state` char(2),
+  `s_zip` char(10),
+  `s_country` varchar(20),
+  `s_gmt_offset` decimal(5,2),
+  `s_tax_percentage` decimal(5,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`store`, false
+
+
+-- !query
+create table call_center(
+  `cc_call_center_sk` int,
+  `cc_call_center_id` char(16),
+  `cc_rec_start_date` date,
+  `cc_rec_end_date` date,
+  `cc_closed_date_sk` int,
+  `cc_open_date_sk` int,
+  `cc_name` varchar(50),
+  `cc_class` varchar(50),
+  `cc_employees` int,
+  `cc_sq_ft` int,
+  `cc_hours` char(20),
+  `cc_manager` varchar(40),
+  `cc_mkt_id` int,
+  `cc_mkt_class` char(50),
+  `cc_mkt_desc` varchar(100),
+  `cc_market_manager` varchar(40),
+  `cc_division` int,
+  `cc_division_name` varchar(50),
+  `cc_company` int,
+  `cc_company_name` char(50),
+  `cc_street_number` char(10),
+  `cc_street_name` varchar(60),
+  `cc_street_type` char(15),
+  `cc_suite_number` char(10),
+  `cc_city` varchar(60),
+  `cc_county` varchar(30),
+  `cc_state` char(2),
+  `cc_zip` char(10),
+  `cc_country` varchar(20),
+  `cc_gmt_offset` decimal(5,2),
+  `cc_tax_percentage` decimal(5,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`call_center`, false
+
+
+-- !query
+create table catalog_page(
+  `cp_catalog_page_sk` int,
+  `cp_catalog_page_id` char(16),
+  `cp_start_date_sk` int,
+  `cp_end_date_sk` int,
+  `cp_department` varchar(50),
+  `cp_catalog_number` int,
+  `cp_catalog_page_number` int,
+  `cp_description` varchar(100),
+  `cp_type` varchar(100))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`catalog_page`, false
+
+
+-- !query
+create table web_site(
+  `web_site_sk` int,
+  `web_site_id` char(16),
+  `web_rec_start_date` date,
+  `web_rec_end_date` date,
+  `web_name` varchar(50),
+  `web_open_date_sk` int,
+  `web_close_date_sk` int,
+  `web_class` varchar(50),
+  `web_manager` varchar(40),
+  `web_mkt_id` int,
+  `web_mkt_class` varchar(50),
+  `web_mkt_desc` varchar(100),
+  `web_market_manager` varchar(40),
+  `web_company_id` int,
+  `web_company_name` char(50),
+  `web_street_number` char(10),
+  `web_street_name` varchar(60),
+  `web_street_type` char(15),
+  `web_suite_number` char(10),
+  `web_city` varchar(60),
+  `web_county` varchar(30),
+  `web_state` char(2),
+  `web_zip` char(10),
+  `web_country` varchar(20),
+  `web_gmt_offset` decimal(5,2),
+  `web_tax_percentage` decimal(5,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`web_site`, false
+
+
+-- !query
+create table web_page(
+  `wp_web_page_sk` int,
+  `wp_web_page_id` char(16),
+  `wp_rec_start_date` date,
+  `wp_rec_end_date` date,
+  `wp_creation_date_sk` int,
+  `wp_access_date_sk` int,
+  `wp_autogen_flag` char(1),
+  `wp_customer_sk` int,
+  `wp_url` varchar(100),
+  `wp_type` char(50),
+  `wp_char_count` int,
+  `wp_link_count` int,
+  `wp_image_count` int,
+  `wp_max_ad_count` int)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`web_page`, false
+
+
+-- !query
+create table warehouse(
+  `w_warehouse_sk` int,
+  `w_warehouse_id` char(16),
+  `w_warehouse_name` varchar(20),
+  `w_warehouse_sq_ft` int,
+  `w_street_number` char(10),
+  `w_street_name` varchar(20),
+  `w_street_type` char(15),
+  `w_suite_number` char(10),
+  `w_city` varchar(60),
+  `w_county` varchar(30),
+  `w_state` char(2),
+  `w_zip` char(10),
+  `w_country` varchar(20),
+  `w_gmt_offset` decimal(5,2))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`warehouse`, false
+
+
+-- !query
+create table customer(
+  `c_customer_sk` int,
+  `c_customer_id` char(16),
+  `c_current_cdemo_sk` int,
+  `c_current_hdemo_sk` int,
+  `c_current_addr_sk` int,
+  `c_first_shipto_date_sk` int,
+  `c_first_sales_date_sk` int,
+  `c_salutation` char(10),
+  `c_first_name` char(20),
+  `c_last_name` char(30),
+  `c_preferred_cust_flag` char(1),
+  `c_birth_day` int,
+  `c_birth_month` int,
+  `c_birth_year` int,
+  `c_birth_country` varchar(20),
+  `c_login` char(13),
+  `c_email_address` char(50),
+  `c_last_review_date` int)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`customer`, false
+
+
+-- !query
+create table customer_address(
+  `ca_address_sk` int,
+  `ca_address_id` char(16),
+  `ca_street_number` char(10),
+  `ca_street_name` varchar(60),
+  `ca_street_type` char(15),
+  `ca_suite_number` char(10),
+  `ca_city` varchar(60),
+  `ca_county` varchar(30),
+  `ca_state` char(2),
+  `ca_zip` char(10),
+  `ca_country` varchar(20),
+  `ca_gmt_offset` decimal(5,2),
+  `ca_location_type` char(20))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`customer_address`, false
+
+
+-- !query
+create table customer_demographics(
+  `cd_demo_sk` int,
+  `cd_gender` char(1),
+  `cd_marital_status` char(1),
+  `cd_education_status` char(20),
+  `cd_purchase_estimate` int,
+  `cd_credit_rating` char(10),
+  `cd_dep_count` int,
+  `cd_dep_employed_count` int,
+  `cd_dep_college_count` int)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`customer_demographics`, false
+
+
+-- !query
+create table date_dim(
+  `d_date_sk` int,
+  `d_date_id` char(16),
+  `d_date` date,
+  `d_month_seq` int,
+  `d_week_seq` int,
+  `d_quarter_seq` int,
+  `d_year` int,
+  `d_dow` int,
+  `d_moy` int,
+  `d_dom` int,
+  `d_qoy` int,
+  `d_fy_year` int,
+  `d_fy_quarter_seq` int,
+  `d_fy_week_seq` int,
+  `d_day_name` char(9),
+  `d_quarter_name` char(6),
+  `d_holiday` char(1),
+  `d_weekend` char(1),
+  `d_following_holiday` char(1),
+  `d_first_dom` int,
+  `d_last_dom` int,
+  `d_same_day_ly` int,
+  `d_same_day_lq` int,
+  `d_current_day` char(1),
+  `d_current_week` char(1),
+  `d_current_month` char(1),
+  `d_current_quarter` char(1),
+  `d_current_year` char(1))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`date_dim`, false
+
+
+-- !query
+create table household_demographics(
+  `hd_demo_sk` int,
+  `hd_income_band_sk` int,
+  `hd_buy_potential` char(15),
+  `hd_dep_count` int,
+  `hd_vehicle_count` int)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`household_demographics`, false
+
+
+-- !query
+create table item(
+  `i_item_sk` int,
+  `i_item_id` char(16),
+  `i_rec_start_date` date,
+  `i_rec_end_date` date,
+  `i_item_desc` varchar(200),
+  `i_current_price` decimal(7,2),
+  `i_wholesale_cost` decimal(7,2),
+  `i_brand_id` int,
+  `i_brand` char(50),
+  `i_class_id` int,
+  `i_class` char(50),
+  `i_category_id` int,
+  `i_category` char(50),
+  `i_manufact_id` int,
+  `i_manufact` char(50),
+  `i_size` char(20),
+  `i_formulation` char(20),
+  `i_color` char(20),
+  `i_units` char(10),
+  `i_container` char(10),
+  `i_manager_id` int,
+  `i_product_name` char(50))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`item`, false
+
+
+-- !query
+create table income_band(
+  `ib_income_band_sk` int,
+  `ib_lower_bound` int,
+  `ib_upper_bound` int)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`income_band`, false
+
+
+-- !query
+create table promotion(
+  `p_promo_sk` int,
+  `p_promo_id` char(16),
+  `p_start_date_sk` int,
+  `p_end_date_sk` int,
+  `p_item_sk` int,
+  `p_cost` decimal(15,2),
+  `p_response_target` int,
+  `p_promo_name` char(50),
+  `p_channel_dmail` char(1),
+  `p_channel_email` char(1),
+  `p_channel_catalog` char(1),
+  `p_channel_tv` char(1),
+  `p_channel_radio` char(1),
+  `p_channel_press` char(1),
+  `p_channel_event` char(1),
+  `p_channel_demo` char(1),
+  `p_channel_details` varchar(100),
+  `p_purpose` char(15),
+  `p_discount_active` char(1))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`promotion`, false
+
+
+-- !query
+create table reason(
+  `r_reason_sk` int,
+  `r_reason_id` char(16),
+  `r_reason_desc` char(100))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`reason`, false
+
+
+-- !query
+create table ship_mode(
+  `sm_ship_mode_sk` int,
+  `sm_ship_mode_id` char(16),
+  `sm_type` char(30),
+  `sm_code` char(10),
+  `sm_carrier` char(20),
+  `sm_contract` char(20))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`ship_mode`, false
+
+
+-- !query
+create table time_dim(
+  `t_time_sk` int,
+  `t_time_id` char(16),
+  `t_time` int,
+  `t_hour` int,
+  `t_minute` int,
+  `t_second` int,
+  `t_am_pm` char(2),
+  `t_shift` char(20),
+  `t_sub_shift` char(20),
+  `t_meal_time` char(20))
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`time_dim`, false
+
+
+-- !query
 table t
 |> select 1 as x
 -- !query analysis
@@ -936,6 +1505,211 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 -- !query
 table t
+|> drop y
+-- !query analysis
+Project [x#x]
++- SubqueryAlias spark_catalog.default.t
+   +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select 1 as x, 2 as y, 3 as z
+|> drop z, y
+-- !query analysis
+Project [x#x]
++- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+   +- OneRowRelation
+
+
+-- !query
+select 1 as x, 2 as y, 3 as z
+|> drop z
+|> drop y
+-- !query analysis
+Project [x#x]
++- Project [x#x, y#x]
+   +- Project [1 AS x#x, 2 AS y#x, 3 AS z#x]
+      +- OneRowRelation
+
+
+-- !query
+select x from t
+|> drop x
+-- !query analysis
+Project
++- Project [x#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> extend 1 as `x.y.z`
+|> drop `x.y.z`
+-- !query analysis
+Project [x#x, y#x]
++- Project [x#x, y#x, pipeexpression(1, false, EXTEND) AS x.y.z#x]
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> drop z
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`z`",
+    "proposal" : "`x`, `y`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 17,
+    "fragment" : "table t\n|> drop z"
+  } ]
+}
+
+
+-- !query
+table st
+|> drop col.i1
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'.'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table st
+|> drop `col.i1`
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`col.i1`",
+    "proposal" : "`col`, `x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 25,
+    "fragment" : "table st\n|> drop `col.i1`"
+  } ]
+}
+
+
+-- !query
+select 1 as x, 2 as y, 3 as z
+|> drop z, y, z
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "EXCEPT_OVERLAPPING_COLUMNS",
+  "sqlState" : "42702",
+  "messageParameters" : {
+    "columns" : "z, y, z"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 45,
+    "fragment" : "select 1 as x, 2 as y, 3 as z\n|> drop z, y, z"
+  } ]
+}
+
+
+-- !query
+table t
+|> as u
+|> select u.x, u.y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias u
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+select 1 as x, 2 as y
+|> as u
+|> select u.x, u.y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias u
+   +- Project [1 AS x#x, 2 AS y#x]
+      +- OneRowRelation
+
+
+-- !query
+table t
+|> as u
+|> as v
+|> select v.x, v.y
+-- !query analysis
+Project [x#x, y#x]
++- SubqueryAlias v
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> as u
+|> where u.x = 1
+-- !query analysis
+Filter (x#x = 1)
++- SubqueryAlias u
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
+
+
+-- !query
+table t
+|> as u, v
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "','",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table t
+|> as 1 + 2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'1'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+table t
 |> where true
 -- !query analysis
 Filter true
@@ -958,10 +1732,9 @@ table t
 |> where x + length(y) < 3
 -- !query analysis
 Filter ((x#x + length(y#x)) < 3)
-+- SubqueryAlias __auto_generated_subquery_name
-   +- Filter ((x#x + length(y#x)) < 4)
-      +- SubqueryAlias spark_catalog.default.t
-         +- Relation spark_catalog.default.t[x#x,y#x] csv
++- Filter ((x#x + length(y#x)) < 4)
+   +- SubqueryAlias spark_catalog.default.t
+      +- Relation spark_catalog.default.t[x#x,y#x] csv
 
 
 -- !query
@@ -2126,21 +2899,20 @@ table natural_join_test_t1
 |> where k = "one"
 -- !query analysis
 Filter (k#x = one)
-+- SubqueryAlias __auto_generated_subquery_name
-   +- Project [k#x, v1#x, v2#x]
-      +- Join Inner, (k#x = k#x)
-         :- SubqueryAlias natural_join_test_t1
-         :  +- View (`natural_join_test_t1`, [k#x, v1#x])
-         :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
-         :        +- Project [k#x, v1#x]
-         :           +- SubqueryAlias natural_join_test_t1
-         :              +- LocalRelation [k#x, v1#x]
-         +- SubqueryAlias natural_join_test_t2
-            +- View (`natural_join_test_t2`, [k#x, v2#x])
-               +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
-                  +- Project [k#x, v2#x]
-                     +- SubqueryAlias natural_join_test_t2
-                        +- LocalRelation [k#x, v2#x]
++- Project [k#x, v1#x, v2#x]
+   +- Join Inner, (k#x = k#x)
+      :- SubqueryAlias natural_join_test_t1
+      :  +- View (`natural_join_test_t1`, [k#x, v1#x])
+      :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+      :        +- Project [k#x, v1#x]
+      :           +- SubqueryAlias natural_join_test_t1
+      :              +- LocalRelation [k#x, v1#x]
+      +- SubqueryAlias natural_join_test_t2
+         +- View (`natural_join_test_t2`, [k#x, v2#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+               +- Project [k#x, v2#x]
+                  +- SubqueryAlias natural_join_test_t2
+                     +- LocalRelation [k#x, v2#x]
 
 
 -- !query
@@ -3363,6 +4135,383 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+with customer_total_return as
+(select
+    sr_customer_sk as ctr_customer_sk,
+    sr_store_sk as ctr_store_sk,
+    sum(sr_return_amt) as ctr_total_return
+  from store_returns, date_dim
+  where sr_returned_date_sk = d_date_sk and d_year = 2000
+  group by sr_customer_sk, sr_store_sk)
+select c_customer_id
+from customer_total_return ctr1, store, customer
+where ctr1.ctr_total_return >
+  (select avg(ctr_total_return) * 1.2
+  from customer_total_return ctr2
+  where ctr1.ctr_store_sk = ctr2.ctr_store_sk)
+  and s_store_sk = ctr1.ctr_store_sk
+  and s_state = 'tn'
+  and ctr1.ctr_customer_sk = c_customer_sk
+order by c_customer_id
+limit 100
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias customer_total_return
+:     +- Aggregate [sr_customer_sk#x, sr_store_sk#x], [sr_customer_sk#x AS ctr_customer_sk#x, sr_store_sk#x AS ctr_store_sk#x, sum(sr_return_amt#x) AS ctr_total_return#x]
+:        +- Filter ((sr_returned_date_sk#x = d_date_sk#x) AND (d_year#x = 2000))
+:           +- Join Inner
+:              :- SubqueryAlias spark_catalog.default.store_returns
+:              :  +- Relation spark_catalog.default.store_returns[sr_returned_date_sk#x,sr_return_time_sk#x,sr_item_sk#x,sr_customer_sk#x,sr_cdemo_sk#x,sr_hdemo_sk#x,sr_addr_sk#x,sr_store_sk#x,sr_reason_sk#x,sr_ticket_number#x,sr_return_quantity#x,sr_return_amt#x,sr_return_tax#x,sr_return_amt_inc_tax#x,sr_fee#x,sr_return_ship_cost#x,sr_refunded_cash#x,sr_reversed_charge#x,sr_store_credit#x,sr_net_loss#x] parquet
+:              +- SubqueryAlias spark_catalog.default.date_dim
+:                 +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+:                    +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
++- GlobalLimit 100
+   +- LocalLimit 100
+      +- Sort [c_customer_id#x ASC NULLS FIRST], true
+         +- Project [c_customer_id#x]
+            +- Filter (((cast(ctr_total_return#x as decimal(24,7)) > scalar-subquery#x [ctr_store_sk#x]) AND (s_store_sk#x = ctr_store_sk#x)) AND ((s_state#x = tn) AND (ctr_customer_sk#x = c_customer_sk#x)))
+               :  +- Aggregate [(avg(ctr_total_return#x) * 1.2) AS (avg(ctr_total_return) * 1.2)#x]
+               :     +- Filter (outer(ctr_store_sk#x) = ctr_store_sk#x)
+               :        +- SubqueryAlias ctr2
+               :           +- SubqueryAlias customer_total_return
+               :              +- CTERelationRef xxxx, true, [ctr_customer_sk#x, ctr_store_sk#x, ctr_total_return#x], false
+               +- Join Inner
+                  :- Join Inner
+                  :  :- SubqueryAlias ctr1
+                  :  :  +- SubqueryAlias customer_total_return
+                  :  :     +- CTERelationRef xxxx, true, [ctr_customer_sk#x, ctr_store_sk#x, ctr_total_return#x], false
+                  :  +- SubqueryAlias spark_catalog.default.store
+                  :     +- Project [s_store_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(s_store_id#x, 16)) AS s_store_id#x, s_rec_start_date#x, s_rec_end_date#x, s_closed_date_sk#x, s_store_name#x, s_number_employees#x, s_floor_space#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(s_hours#x, 20)) AS s_hours#x, s_manager#x, s_market_id#x, s_geography_class#x, s_market_desc#x, s_market_manager#x, s_division_id#x, s_division_name#x, s_company_id#x, s_company_name#x, s_street_number#x, s_street_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(s_street_type#x, 15)) AS s_street_type#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(s_suite_number#x, 10)) AS s_suite_number#x, s_city#x, s_county#x, ... 5 more fields]
+                  :        +- Relation spark_catalog.default.store[s_store_sk#x,s_store_id#x,s_rec_start_date#x,s_rec_end_date#x,s_closed_date_sk#x,s_store_name#x,s_number_employees#x,s_floor_space#x,s_hours#x,s_manager#x,s_market_id#x,s_geography_class#x,s_market_desc#x,s_market_manager#x,s_division_id#x,s_division_name#x,s_company_id#x,s_company_name#x,s_street_number#x,s_street_name#x,s_street_type#x,s_suite_number#x,s_city#x,s_county#x,... 5 more fields] parquet
+                  +- SubqueryAlias spark_catalog.default.customer
+                     +- Project [c_customer_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_customer_id#x, 16)) AS c_customer_id#x, c_current_cdemo_sk#x, c_current_hdemo_sk#x, c_current_addr_sk#x, c_first_shipto_date_sk#x, c_first_sales_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_salutation#x, 10)) AS c_salutation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_first_name#x, 20)) AS c_first_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_last_name#x, 30)) AS c_last_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_preferred_cust_flag#x, 1)) AS c_preferred_cust_flag#x, c_birth_day#x, c_birth_month#x, c_birth_year#x, c_birth_country#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_login#x, 13)) AS c_login#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_email_address#x, 50)) AS c_email_address#x, c_last_review_date#x]
+                        +- Relation spark_catalog.default.customer[c_customer_sk#x,c_customer_id#x,c_current_cdemo_sk#x,c_current_hdemo_sk#x,c_current_addr_sk#x,c_first_shipto_date_sk#x,c_first_sales_date_sk#x,c_salutation#x,c_first_name#x,c_last_name#x,c_preferred_cust_flag#x,c_birth_day#x,c_birth_month#x,c_birth_year#x,c_birth_country#x,c_login#x,c_email_address#x,c_last_review_date#x] parquet
+
+
+-- !query
+with customer_total_return as
+  (table store_returns
+  |> join date_dim
+  |> where sr_returned_date_sk = d_date_sk and d_year = 2000
+  |> aggregate sum(sr_return_amt) as ctr_total_return
+       group by sr_customer_sk as ctr_customer_sk, sr_store_sk as ctr_store_sk)
+table customer_total_return
+|> as ctr1
+|> join store
+|> join customer
+|> where ctr1.ctr_total_return >
+     (table customer_total_return
+      |> as ctr2
+      |> where ctr1.ctr_store_sk = ctr2.ctr_store_sk
+      |> aggregate avg(ctr_total_return) * 1.2)
+     and s_store_sk = ctr1.ctr_store_sk
+     and s_state = 'tn'
+     and ctr1.ctr_customer_sk = c_customer_sk
+|> order by c_customer_id
+|> limit 100
+|> select c_customer_id
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias customer_total_return
+:     +- Aggregate [sr_customer_sk#x, sr_store_sk#x], [sr_customer_sk#x AS ctr_customer_sk#x, sr_store_sk#x AS ctr_store_sk#x, pipeexpression(sum(sr_return_amt#x), true, AGGREGATE) AS ctr_total_return#x]
+:        +- Filter ((sr_returned_date_sk#x = d_date_sk#x) AND (d_year#x = 2000))
+:           +- Join Inner
+:              :- SubqueryAlias spark_catalog.default.store_returns
+:              :  +- Relation spark_catalog.default.store_returns[sr_returned_date_sk#x,sr_return_time_sk#x,sr_item_sk#x,sr_customer_sk#x,sr_cdemo_sk#x,sr_hdemo_sk#x,sr_addr_sk#x,sr_store_sk#x,sr_reason_sk#x,sr_ticket_number#x,sr_return_quantity#x,sr_return_amt#x,sr_return_tax#x,sr_return_amt_inc_tax#x,sr_fee#x,sr_return_ship_cost#x,sr_refunded_cash#x,sr_reversed_charge#x,sr_store_credit#x,sr_net_loss#x] parquet
+:              +- SubqueryAlias spark_catalog.default.date_dim
+:                 +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+:                    +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
++- Project [c_customer_id#x]
+   +- GlobalLimit 100
+      +- LocalLimit 100
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Sort [c_customer_id#x ASC NULLS FIRST], true
+               +- Filter (((cast(ctr_total_return#x as decimal(24,7)) > scalar-subquery#x [ctr_store_sk#x]) AND (s_store_sk#x = ctr_store_sk#x)) AND ((s_state#x = tn) AND (ctr_customer_sk#x = c_customer_sk#x)))
+                  :  +- Aggregate [pipeexpression((avg(ctr_total_return#x) * 1.2), true, AGGREGATE) AS pipeexpression((avg(ctr_total_return) * 1.2))#x]
+                  :     +- Filter (outer(ctr_store_sk#x) = ctr_store_sk#x)
+                  :        +- SubqueryAlias ctr2
+                  :           +- SubqueryAlias customer_total_return
+                  :              +- CTERelationRef xxxx, true, [ctr_customer_sk#x, ctr_store_sk#x, ctr_total_return#x], false
+                  +- Join Inner
+                     :- Join Inner
+                     :  :- SubqueryAlias ctr1
+                     :  :  +- SubqueryAlias customer_total_return
+                     :  :     +- CTERelationRef xxxx, true, [ctr_customer_sk#x, ctr_store_sk#x, ctr_total_return#x], false
+                     :  +- SubqueryAlias spark_catalog.default.store
+                     :     +- Project [s_store_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(s_store_id#x, 16)) AS s_store_id#x, s_rec_start_date#x, s_rec_end_date#x, s_closed_date_sk#x, s_store_name#x, s_number_employees#x, s_floor_space#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(s_hours#x, 20)) AS s_hours#x, s_manager#x, s_market_id#x, s_geography_class#x, s_market_desc#x, s_market_manager#x, s_division_id#x, s_division_name#x, s_company_id#x, s_company_name#x, s_street_number#x, s_street_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(s_street_type#x, 15)) AS s_street_type#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(s_suite_number#x, 10)) AS s_suite_number#x, s_city#x, s_county#x, ... 5 more fields]
+                     :        +- Relation spark_catalog.default.store[s_store_sk#x,s_store_id#x,s_rec_start_date#x,s_rec_end_date#x,s_closed_date_sk#x,s_store_name#x,s_number_employees#x,s_floor_space#x,s_hours#x,s_manager#x,s_market_id#x,s_geography_class#x,s_market_desc#x,s_market_manager#x,s_division_id#x,s_division_name#x,s_company_id#x,s_company_name#x,s_street_number#x,s_street_name#x,s_street_type#x,s_suite_number#x,s_city#x,s_county#x,... 5 more fields] parquet
+                     +- SubqueryAlias spark_catalog.default.customer
+                        +- Project [c_customer_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_customer_id#x, 16)) AS c_customer_id#x, c_current_cdemo_sk#x, c_current_hdemo_sk#x, c_current_addr_sk#x, c_first_shipto_date_sk#x, c_first_sales_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_salutation#x, 10)) AS c_salutation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_first_name#x, 20)) AS c_first_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_last_name#x, 30)) AS c_last_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_preferred_cust_flag#x, 1)) AS c_preferred_cust_flag#x, c_birth_day#x, c_birth_month#x, c_birth_year#x, c_birth_country#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_login#x, 13)) AS c_login#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(c_email_address#x, 50)) AS c_email_address#x, c_last_review_date#x]
+                           +- Relation spark_catalog.default.customer[c_customer_sk#x,c_customer_id#x,c_current_cdemo_sk#x,c_current_hdemo_sk#x,c_current_addr_sk#x,c_first_shipto_date_sk#x,c_first_sales_date_sk#x,c_salutation#x,c_first_name#x,c_last_name#x,c_preferred_cust_flag#x,c_birth_day#x,c_birth_month#x,c_birth_year#x,c_birth_country#x,c_login#x,c_email_address#x,c_last_review_date#x] parquet
+
+
+-- !query
+with wscs as
+( select
+    sold_date_sk,
+    sales_price
+  from (select
+    ws_sold_date_sk sold_date_sk,
+    ws_ext_sales_price sales_price
+  from web_sales) x
+  union all
+  (select
+    cs_sold_date_sk sold_date_sk,
+    cs_ext_sales_price sales_price
+  from catalog_sales)),
+    wswscs as
+  ( select
+    d_week_seq,
+    sum(case when (d_day_name = 'sunday')
+      then sales_price
+        else null end)
+    sun_sales,
+    sum(case when (d_day_name = 'monday')
+      then sales_price
+        else null end)
+    mon_sales,
+    sum(case when (d_day_name = 'tuesday')
+      then sales_price
+        else null end)
+    tue_sales,
+    sum(case when (d_day_name = 'wednesday')
+      then sales_price
+        else null end)
+    wed_sales,
+    sum(case when (d_day_name = 'thursday')
+      then sales_price
+        else null end)
+    thu_sales,
+    sum(case when (d_day_name = 'friday')
+      then sales_price
+        else null end)
+    fri_sales,
+    sum(case when (d_day_name = 'saturday')
+      then sales_price
+        else null end)
+    sat_sales
+  from wscs, date_dim
+  where d_date_sk = sold_date_sk
+  group by d_week_seq)
+select
+  d_week_seq1,
+  round(sun_sales1 / sun_sales2, 2),
+  round(mon_sales1 / mon_sales2, 2),
+  round(tue_sales1 / tue_sales2, 2),
+  round(wed_sales1 / wed_sales2, 2),
+  round(thu_sales1 / thu_sales2, 2),
+  round(fri_sales1 / fri_sales2, 2),
+  round(sat_sales1 / sat_sales2, 2)
+from
+  (select
+    wswscs.d_week_seq d_week_seq1,
+    sun_sales sun_sales1,
+    mon_sales mon_sales1,
+    tue_sales tue_sales1,
+    wed_sales wed_sales1,
+    thu_sales thu_sales1,
+    fri_sales fri_sales1,
+    sat_sales sat_sales1
+  from wswscs, date_dim
+  where date_dim.d_week_seq = wswscs.d_week_seq and d_year = 2001) y,
+  (select
+    wswscs.d_week_seq d_week_seq2,
+    sun_sales sun_sales2,
+    mon_sales mon_sales2,
+    tue_sales tue_sales2,
+    wed_sales wed_sales2,
+    thu_sales thu_sales2,
+    fri_sales fri_sales2,
+    sat_sales sat_sales2
+  from wswscs, date_dim
+  where date_dim.d_week_seq = wswscs.d_week_seq and d_year = 2001 + 1) z
+where d_week_seq1 = d_week_seq2 - 53
+order by d_week_seq1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias wscs
+:     +- Union false, false
+:        :- Project [sold_date_sk#x, sales_price#x]
+:        :  +- SubqueryAlias x
+:        :     +- Project [ws_sold_date_sk#x AS sold_date_sk#x, ws_ext_sales_price#x AS sales_price#x]
+:        :        +- SubqueryAlias spark_catalog.default.web_sales
+:        :           +- Relation spark_catalog.default.web_sales[ws_sold_date_sk#x,ws_sold_time_sk#x,ws_ship_date_sk#x,ws_item_sk#x,ws_bill_customer_sk#x,ws_bill_cdemo_sk#x,ws_bill_hdemo_sk#x,ws_bill_addr_sk#x,ws_ship_customer_sk#x,ws_ship_cdemo_sk#x,ws_ship_hdemo_sk#x,ws_ship_addr_sk#x,ws_web_page_sk#x,ws_web_site_sk#x,ws_ship_mode_sk#x,ws_warehouse_sk#x,ws_promo_sk#x,ws_order_number#x,ws_quantity#x,ws_wholesale_cost#x,ws_list_price#x,ws_sales_price#x,ws_ext_discount_amt#x,ws_ext_sales_price#x,... 10 more fields] parquet
+:        +- Project [cs_sold_date_sk#x AS sold_date_sk#x, cs_ext_sales_price#x AS sales_price#x]
+:           +- SubqueryAlias spark_catalog.default.catalog_sales
+:              +- Relation spark_catalog.default.catalog_sales[cs_sold_date_sk#x,cs_sold_time_sk#x,cs_ship_date_sk#x,cs_bill_customer_sk#x,cs_bill_cdemo_sk#x,cs_bill_hdemo_sk#x,cs_bill_addr_sk#x,cs_ship_customer_sk#x,cs_ship_cdemo_sk#x,cs_ship_hdemo_sk#x,cs_ship_addr_sk#x,cs_call_center_sk#x,cs_catalog_page_sk#x,cs_ship_mode_sk#x,cs_warehouse_sk#x,cs_item_sk#x,cs_promo_sk#x,cs_order_number#x,cs_quantity#x,cs_wholesale_cost#x,cs_list_price#x,cs_sales_price#x,cs_ext_discount_amt#x,cs_ext_sales_price#x,... 10 more fields] parquet
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias wswscs
+:     +- Aggregate [d_week_seq#x], [d_week_seq#x, sum(CASE WHEN (d_day_name#x = rpad(sunday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END) AS sun_sales#x, sum(CASE WHEN (d_day_name#x = rpad(monday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END) AS mon_sales#x, sum(CASE WHEN (d_day_name#x = rpad(tuesday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END) AS tue_sales#x, sum(CASE WHEN (d_day_name#x = wednesday) THEN sales_price#x ELSE cast(null as decimal(7,2)) END) AS wed_sales#x, sum(CASE WHEN (d_day_name#x = rpad(thursday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END) AS thu_sales#x, sum(CASE WHEN (d_day_name#x = rpad(friday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END) AS fri_sales#x, sum(CASE WHEN (d_day_name#x = rpad(saturday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END) AS sat_sales#x]
+:        +- Filter (d_date_sk#x = sold_date_sk#x)
+:           +- Join Inner
+:              :- SubqueryAlias wscs
+:              :  +- CTERelationRef xxxx, true, [sold_date_sk#x, sales_price#x], false
+:              +- SubqueryAlias spark_catalog.default.date_dim
+:                 +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+:                    +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
++- Sort [d_week_seq1#x ASC NULLS FIRST], true
+   +- Project [d_week_seq1#x, round((sun_sales1#x / sun_sales2#x), 2) AS round((sun_sales1 / sun_sales2), 2)#x, round((mon_sales1#x / mon_sales2#x), 2) AS round((mon_sales1 / mon_sales2), 2)#x, round((tue_sales1#x / tue_sales2#x), 2) AS round((tue_sales1 / tue_sales2), 2)#x, round((wed_sales1#x / wed_sales2#x), 2) AS round((wed_sales1 / wed_sales2), 2)#x, round((thu_sales1#x / thu_sales2#x), 2) AS round((thu_sales1 / thu_sales2), 2)#x, round((fri_sales1#x / fri_sales2#x), 2) AS round((fri_sales1 / fri_sales2), 2)#x, round((sat_sales1#x / sat_sales2#x), 2) AS round((sat_sales1 / sat_sales2), 2)#x]
+      +- Filter (d_week_seq1#x = (d_week_seq2#x - 53))
+         +- Join Inner
+            :- SubqueryAlias y
+            :  +- Project [d_week_seq#x AS d_week_seq1#x, sun_sales#x AS sun_sales1#x, mon_sales#x AS mon_sales1#x, tue_sales#x AS tue_sales1#x, wed_sales#x AS wed_sales1#x, thu_sales#x AS thu_sales1#x, fri_sales#x AS fri_sales1#x, sat_sales#x AS sat_sales1#x]
+            :     +- Filter ((d_week_seq#x = d_week_seq#x) AND (d_year#x = 2001))
+            :        +- Join Inner
+            :           :- SubqueryAlias wswscs
+            :           :  +- CTERelationRef xxxx, true, [d_week_seq#x, sun_sales#x, mon_sales#x, tue_sales#x, wed_sales#x, thu_sales#x, fri_sales#x, sat_sales#x], false
+            :           +- SubqueryAlias spark_catalog.default.date_dim
+            :              +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+            :                 +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+            +- SubqueryAlias z
+               +- Project [d_week_seq#x AS d_week_seq2#x, sun_sales#x AS sun_sales2#x, mon_sales#x AS mon_sales2#x, tue_sales#x AS tue_sales2#x, wed_sales#x AS wed_sales2#x, thu_sales#x AS thu_sales2#x, fri_sales#x AS fri_sales2#x, sat_sales#x AS sat_sales2#x]
+                  +- Filter ((d_week_seq#x = d_week_seq#x) AND (d_year#x = (2001 + 1)))
+                     +- Join Inner
+                        :- SubqueryAlias wswscs
+                        :  +- CTERelationRef xxxx, true, [d_week_seq#x, sun_sales#x, mon_sales#x, tue_sales#x, wed_sales#x, thu_sales#x, fri_sales#x, sat_sales#x], false
+                        +- SubqueryAlias spark_catalog.default.date_dim
+                           +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+                              +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+
+
+-- !query
+with wscs as
+  (table web_sales
+  |> select
+       ws_sold_date_sk sold_date_sk,
+       ws_ext_sales_price sales_price
+  |> as x
+  |> union all (
+       table catalog_sales
+       |> select
+            cs_sold_date_sk sold_date_sk,
+            cs_ext_sales_price sales_price)
+  |> select
+       sold_date_sk,
+       sales_price),
+wswscs as
+  (table wscs
+  |> join date_dim
+  |> where d_date_sk = sold_date_sk
+  |> aggregate
+      sum(case when (d_day_name = 'sunday')
+        then sales_price
+          else null end)
+      sun_sales,
+      sum(case when (d_day_name = 'monday')
+        then sales_price
+          else null end)
+      mon_sales,
+      sum(case when (d_day_name = 'tuesday')
+        then sales_price
+          else null end)
+      tue_sales,
+      sum(case when (d_day_name = 'wednesday')
+        then sales_price
+          else null end)
+      wed_sales,
+      sum(case when (d_day_name = 'thursday')
+        then sales_price
+          else null end)
+      thu_sales,
+      sum(case when (d_day_name = 'friday')
+        then sales_price
+          else null end)
+      fri_sales,
+      sum(case when (d_day_name = 'saturday')
+        then sales_price
+          else null end)
+      sat_sales
+      group by d_week_seq)
+table wswscs
+|> join date_dim
+|> where date_dim.d_week_seq = wswscs.d_week_seq AND d_year = 2001
+|> select
+     wswscs.d_week_seq d_week_seq1,
+     sun_sales sun_sales1,
+     mon_sales mon_sales1,
+     tue_sales tue_sales1,
+     wed_sales wed_sales1,
+     thu_sales thu_sales1,
+     fri_sales fri_sales1,
+     sat_sales sat_sales1
+|> as y
+|> join (
+     table wswscs
+     |> join date_dim
+     |> where date_dim.d_week_seq = wswscs.d_week_seq AND d_year = 2001 + 1
+     |> select
+          wswscs.d_week_seq d_week_seq2,
+          sun_sales sun_sales2,
+          mon_sales mon_sales2,
+          tue_sales tue_sales2,
+          wed_sales wed_sales2,
+          thu_sales thu_sales2,
+          fri_sales fri_sales2,
+          sat_sales sat_sales2
+     |> as z)
+|> where d_week_seq1 = d_week_seq2 - 53
+|> order by d_week_seq1
+|> select
+     d_week_seq1,
+     round(sun_sales1 / sun_sales2, 2),
+     round(mon_sales1 / mon_sales2, 2),
+     round(tue_sales1 / tue_sales2, 2),
+     round(wed_sales1 / wed_sales2, 2),
+     round(thu_sales1 / thu_sales2, 2),
+     round(fri_sales1 / fri_sales2, 2),
+     round(sat_sales1 / sat_sales2, 2)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias wscs
+:     +- Union false, false
+:        :- SubqueryAlias x
+:        :  +- Project [pipeexpression(ws_sold_date_sk#x, false, SELECT) AS sold_date_sk#x, pipeexpression(ws_ext_sales_price#x, false, SELECT) AS sales_price#x]
+:        :     +- SubqueryAlias spark_catalog.default.web_sales
+:        :        +- Relation spark_catalog.default.web_sales[ws_sold_date_sk#x,ws_sold_time_sk#x,ws_ship_date_sk#x,ws_item_sk#x,ws_bill_customer_sk#x,ws_bill_cdemo_sk#x,ws_bill_hdemo_sk#x,ws_bill_addr_sk#x,ws_ship_customer_sk#x,ws_ship_cdemo_sk#x,ws_ship_hdemo_sk#x,ws_ship_addr_sk#x,ws_web_page_sk#x,ws_web_site_sk#x,ws_ship_mode_sk#x,ws_warehouse_sk#x,ws_promo_sk#x,ws_order_number#x,ws_quantity#x,ws_wholesale_cost#x,ws_list_price#x,ws_sales_price#x,ws_ext_discount_amt#x,ws_ext_sales_price#x,... 10 more fields] parquet
+:        +- Project [sold_date_sk#x, sales_price#x]
+:           +- Project [pipeexpression(cs_sold_date_sk#x, false, SELECT) AS sold_date_sk#x, pipeexpression(cs_ext_sales_price#x, false, SELECT) AS sales_price#x]
+:              +- SubqueryAlias spark_catalog.default.catalog_sales
+:                 +- Relation spark_catalog.default.catalog_sales[cs_sold_date_sk#x,cs_sold_time_sk#x,cs_ship_date_sk#x,cs_bill_customer_sk#x,cs_bill_cdemo_sk#x,cs_bill_hdemo_sk#x,cs_bill_addr_sk#x,cs_ship_customer_sk#x,cs_ship_cdemo_sk#x,cs_ship_hdemo_sk#x,cs_ship_addr_sk#x,cs_call_center_sk#x,cs_catalog_page_sk#x,cs_ship_mode_sk#x,cs_warehouse_sk#x,cs_item_sk#x,cs_promo_sk#x,cs_order_number#x,cs_quantity#x,cs_wholesale_cost#x,cs_list_price#x,cs_sales_price#x,cs_ext_discount_amt#x,cs_ext_sales_price#x,... 10 more fields] parquet
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias wswscs
+:     +- Aggregate [d_week_seq#x], [d_week_seq#x, pipeexpression(sum(CASE WHEN (d_day_name#x = rpad(sunday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END), true, AGGREGATE) AS sun_sales#x, pipeexpression(sum(CASE WHEN (d_day_name#x = rpad(monday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END), true, AGGREGATE) AS mon_sales#x, pipeexpression(sum(CASE WHEN (d_day_name#x = rpad(tuesday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END), true, AGGREGATE) AS tue_sales#x, pipeexpression(sum(CASE WHEN (d_day_name#x = wednesday) THEN sales_price#x ELSE cast(null as decimal(7,2)) END), true, AGGREGATE) AS wed_sales#x, pipeexpression(sum(CASE WHEN (d_day_name#x = rpad(thursday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END), true, AGGREGATE) AS thu_sales#x, pipeexpression(sum(CASE WHEN (d_day_name#x = rpad(friday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END), true, AGGREGATE) AS fri_sales#x, pipeexpression(sum(CASE WHEN (d_day_name#x = rpad(saturday, 9,  )) THEN sales_price#x ELSE cast(null as decimal(7,2)) END), true, AGGREGATE) AS sat_sales#x]
+:        +- Filter (d_date_sk#x = sold_date_sk#x)
+:           +- Join Inner
+:              :- SubqueryAlias wscs
+:              :  +- CTERelationRef xxxx, true, [sold_date_sk#x, sales_price#x], false
+:              +- SubqueryAlias spark_catalog.default.date_dim
+:                 +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+:                    +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
++- Project [d_week_seq1#x, round((sun_sales1#x / sun_sales2#x), 2) AS round((sun_sales1 / sun_sales2), 2)#x, round((mon_sales1#x / mon_sales2#x), 2) AS round((mon_sales1 / mon_sales2), 2)#x, round((tue_sales1#x / tue_sales2#x), 2) AS round((tue_sales1 / tue_sales2), 2)#x, round((wed_sales1#x / wed_sales2#x), 2) AS round((wed_sales1 / wed_sales2), 2)#x, round((thu_sales1#x / thu_sales2#x), 2) AS round((thu_sales1 / thu_sales2), 2)#x, round((fri_sales1#x / fri_sales2#x), 2) AS round((fri_sales1 / fri_sales2), 2)#x, round((sat_sales1#x / sat_sales2#x), 2) AS round((sat_sales1 / sat_sales2), 2)#x]
+   +- Sort [d_week_seq1#x ASC NULLS FIRST], true
+      +- Filter (d_week_seq1#x = (d_week_seq2#x - 53))
+         +- Join Inner
+            :- SubqueryAlias y
+            :  +- Project [pipeexpression(d_week_seq#x, false, SELECT) AS d_week_seq1#x, pipeexpression(sun_sales#x, false, SELECT) AS sun_sales1#x, pipeexpression(mon_sales#x, false, SELECT) AS mon_sales1#x, pipeexpression(tue_sales#x, false, SELECT) AS tue_sales1#x, pipeexpression(wed_sales#x, false, SELECT) AS wed_sales1#x, pipeexpression(thu_sales#x, false, SELECT) AS thu_sales1#x, pipeexpression(fri_sales#x, false, SELECT) AS fri_sales1#x, pipeexpression(sat_sales#x, false, SELECT) AS sat_sales1#x]
+            :     +- Filter ((d_week_seq#x = d_week_seq#x) AND (d_year#x = 2001))
+            :        +- Join Inner
+            :           :- SubqueryAlias wswscs
+            :           :  +- CTERelationRef xxxx, true, [d_week_seq#x, sun_sales#x, mon_sales#x, tue_sales#x, wed_sales#x, thu_sales#x, fri_sales#x, sat_sales#x], false
+            :           +- SubqueryAlias spark_catalog.default.date_dim
+            :              +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+            :                 +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+            +- SubqueryAlias __auto_generated_subquery_name
+               +- SubqueryAlias z
+                  +- Project [pipeexpression(d_week_seq#x, false, SELECT) AS d_week_seq2#x, pipeexpression(sun_sales#x, false, SELECT) AS sun_sales2#x, pipeexpression(mon_sales#x, false, SELECT) AS mon_sales2#x, pipeexpression(tue_sales#x, false, SELECT) AS tue_sales2#x, pipeexpression(wed_sales#x, false, SELECT) AS wed_sales2#x, pipeexpression(thu_sales#x, false, SELECT) AS thu_sales2#x, pipeexpression(fri_sales#x, false, SELECT) AS fri_sales2#x, pipeexpression(sat_sales#x, false, SELECT) AS sat_sales2#x]
+                     +- Filter ((d_week_seq#x = d_week_seq#x) AND (d_year#x = (2001 + 1)))
+                        +- Join Inner
+                           :- SubqueryAlias wswscs
+                           :  +- CTERelationRef xxxx, true, [d_week_seq#x, sun_sales#x, mon_sales#x, tue_sales#x, wed_sales#x, thu_sales#x, fri_sales#x, sat_sales#x], false
+                           +- SubqueryAlias spark_catalog.default.date_dim
+                              +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+                                 +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false
@@ -3381,3 +4530,171 @@ drop table st
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.st
+
+
+-- !query
+drop table call_center
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.call_center
+
+
+-- !query
+drop table catalog_page
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.catalog_page
+
+
+-- !query
+drop table catalog_returns
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.catalog_returns
+
+
+-- !query
+drop table catalog_sales
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.catalog_sales
+
+
+-- !query
+drop table customer
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.customer
+
+
+-- !query
+drop table customer_address
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.customer_address
+
+
+-- !query
+drop table customer_demographics
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.customer_demographics
+
+
+-- !query
+drop table date_dim
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.date_dim
+
+
+-- !query
+drop table household_demographics
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.household_demographics
+
+
+-- !query
+drop table income_band
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.income_band
+
+
+-- !query
+drop table inventory
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.inventory
+
+
+-- !query
+drop table item
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.item
+
+
+-- !query
+drop table promotion
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.promotion
+
+
+-- !query
+drop table reason
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.reason
+
+
+-- !query
+drop table ship_mode
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.ship_mode
+
+
+-- !query
+drop table store
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.store
+
+
+-- !query
+drop table store_returns
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.store_returns
+
+
+-- !query
+drop table store_sales
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.store_sales
+
+
+-- !query
+drop table time_dim
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.time_dim
+
+
+-- !query
+drop table warehouse
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.warehouse
+
+
+-- !query
+drop table web_page
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.web_page
+
+
+-- !query
+drop table web_returns
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.web_returns
+
+
+-- !query
+drop table web_sales
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.web_sales
+
+
+-- !query
+drop table web_site
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.web_site
