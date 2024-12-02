@@ -475,19 +475,21 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-50463: Partition values can be read over multiple batches") {
     withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(0, 100000)
-        .selectExpr("concat(cast(id % 2 as string), 'a') as partCol", "id")
-        .write
-        .format("parquet")
-        .mode("overwrite").
-        partitionBy("partCol").save(path)
-      val df = spark.read.format("parquet").load(path).selectExpr("partCol")
-      val expected = spark.range(0, 100000)
-        .selectExpr("concat(cast(id % 2 as string), 'a') as partCol")
-        .collect()
-      
-      checkAnswer(df, expected)
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE.key -> "1") {
+        val path = dir.getAbsolutePath
+        spark.range(0, 5)
+          .selectExpr("concat(cast(id % 2 as string), 'a') as partCol", "id")
+          .write
+          .format("parquet")
+          .mode("overwrite").
+          partitionBy("partCol").save(path)
+        val df = spark.read.format("parquet").load(path).selectExpr("partCol")
+        val expected = spark.range(0, 5)
+          .selectExpr("concat(cast(id % 2 as string), 'a') as partCol")
+          .collect()
+        
+        checkAnswer(df, expected)
+      }
     }
   }
 
