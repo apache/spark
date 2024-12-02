@@ -27,13 +27,12 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{LogUrlHandler, SparkContext}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.LogKeys.{COUNT, TOTAL}
 import org.apache.spark.internal.MDC
 import org.apache.spark.internal.config.{SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO, UI}
@@ -115,7 +114,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Some(Map("LOG_FILES" -> "log") ++ extractAttributes)
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
-    val logUrlHandler = new ExecutorLogUrlHandler(conf.get(UI.CUSTOM_DRIVER_LOG_URL))
+    val logUrlHandler = new LogUrlHandler(conf.get(UI.CUSTOM_DRIVER_LOG_URL))
     getDriverAttributes.map(attr => logUrlHandler.applyPattern(Map.empty, attr)).filter(_.nonEmpty)
   }
 
