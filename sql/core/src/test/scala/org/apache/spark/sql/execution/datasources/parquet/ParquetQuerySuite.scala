@@ -481,8 +481,8 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
           .selectExpr("concat(cast(id % 2 as string), 'a') as partCol", "id")
           .write
           .format("parquet")
-          .mode("overwrite").
-          partitionBy("partCol").save(path)
+          .mode("overwrite")
+          .partitionBy("partCol").save(path)
         val df = spark.read.format("parquet").load(path).selectExpr("partCol")
         val expected = spark.range(0, 5)
           .selectExpr("concat(cast(id % 2 as string), 'a') as partCol")
