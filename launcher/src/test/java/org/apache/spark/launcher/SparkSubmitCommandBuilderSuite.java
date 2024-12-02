@@ -104,40 +104,58 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testExtraJavaOptionsSanitization() throws Exception {
-    //SPARK-50240: Test to check extra Java options inputs are sanitized
+    // SPARK-50240: Test to check extra Java options inputs are sanitized
     Map<String, String> env = new HashMap<>();
     List<String> sparkSubmitArgs = Arrays.asList(
             parser.MASTER,
             "local",
             parser.CONF,
             "spark.executor.extraJavaOptions=`touch /tmp/evil` -Xmx2g",
+            parser.CONF,
+            "spark.driver.extraJavaOptions=`rm -rf /` -Xms1g",
             SparkLauncher.NO_RESOURCE
     );
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
 
-    String extraJavaOptions = null;
+    String executorExtraJavaOptions = null;
+    String driverExtraJavaOptions = null;
     for (int i = 0; i < cmd.size(); i++) {
       if (cmd.get(i).equals(parser.CONF)) {
         String confArg = cmd.get(i + 1);
         if (confArg.startsWith("spark.executor.extraJavaOptions=")) {
-          extraJavaOptions = confArg.substring("spark.executor.extraJavaOptions=".length());
-          break;
+          executorExtraJavaOptions = confArg.substring("spark.executor.extraJavaOptions=".length());
+        } else if (confArg.startsWith("spark.driver.extraJavaOptions=")) {
+          driverExtraJavaOptions = confArg.substring("spark.driver.extraJavaOptions=".length());
         }
-        i += 1;
+        i += 1; // Skip the value since we've already processed it
       }
     }
 
-    assertNotNull(extraJavaOptions, "spark.executor.extraJavaOptions should be set");
+    assertNotNull(executorExtraJavaOptions, "spark.executor.extraJavaOptions should be set");
+    assertFalse(executorExtraJavaOptions.contains("`"), "Executor extra Java options should not contain `");
+    assertFalse(executorExtraJavaOptions.contains("$"), "Executor extra Java options should not contain $");
+    assertFalse(executorExtraJavaOptions.contains("&"), "Executor extra Java options should not contain &");
+    assertFalse(executorExtraJavaOptions.contains("|"), "Executor extra Java options should not contain |");
+    assertFalse(executorExtraJavaOptions.contains("<"), "Executor extra Java options should not contain <");
+    assertFalse(executorExtraJavaOptions.contains(">"), "Executor extra Java options should not contain >");
+    assertFalse(executorExtraJavaOptions.contains("*"), "Executor extra Java options should not contain *");
+    assertFalse(executorExtraJavaOptions.contains("?"), "Executor extra Java options should not contain ?");
 
-    assertFalse(extraJavaOptions.contains("`"), "Extra Java options should not contain `");
-    assertFalse(extraJavaOptions.contains("$"), "Extra Java options should not contain $");
-    assertFalse(extraJavaOptions.contains("&"), "Extra Java options should not contain &");
-    assertFalse(extraJavaOptions.contains("|"), "Extra Java options should not contain |");
-    assertFalse(extraJavaOptions.contains("<"), "Extra Java options should not contain <");
-    assertFalse(extraJavaOptions.contains(">"), "Extra Java options should not contain >");
+    assertTrue(executorExtraJavaOptions.contains("-Xmx2g"), "Valid executor Java options should pass");
 
-    assertTrue(extraJavaOptions.contains("-Xmx2g"), "Valid Java options should pass");
+    assertNotNull(driverExtraJavaOptions, "spark.driver.extraJavaOptions should be set");
+    assertFalse(driverExtraJavaOptions.contains("`"), "Driver extra Java options should not contain `");
+    assertFalse(driverExtraJavaOptions.contains("$"), "Driver extra Java options should not contain $");
+    assertFalse(driverExtraJavaOptions.contains("&"), "Driver extra Java options should not contain &");
+    assertFalse(driverExtraJavaOptions.contains("|"), "Driver extra Java options should not contain |");
+    assertFalse(driverExtraJavaOptions.contains("<"), "Driver extra Java options should not contain <");
+    assertFalse(driverExtraJavaOptions.contains(">"), "Driver extra Java options should not contain >");
+    assertFalse(driverExtraJavaOptions.contains("*"), "Driver extra Java options should not contain *");
+    assertFalse(driverExtraJavaOptions.contains("?"), "Driver extra Java options should not contain ?");
+
+    assertTrue(driverExtraJavaOptions.contains("-Xms1g"), "Valid driver Java options should pass");
   }
+
 
 
   @Test
