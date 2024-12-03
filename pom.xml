@@ -3225,7 +3225,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.20.0</version>
+            <version>10.20.2</version>
           </dependency>
         </dependencies>
         <executions>
