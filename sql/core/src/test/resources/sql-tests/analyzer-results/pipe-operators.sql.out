@@ -4579,6 +4579,93 @@ GlobalLimit 100
 
 
 -- !query
+select
+  i_item_desc,
+  i_category,
+  i_class,
+  i_current_price,
+  sum(ws_ext_sales_price) as itemrevenue,
+  sum(ws_ext_sales_price) * 100 / sum(sum(ws_ext_sales_price))
+  over
+  (partition by i_class) as revenueratio
+from
+  web_sales, item, date_dim
+where
+  ws_item_sk = i_item_sk
+    and i_category in ('sports', 'books', 'home')
+    and ws_sold_date_sk = d_date_sk
+    and d_date between cast('1999-02-22' as date)
+  and (cast('1999-02-22' as date) + interval 30 days)
+group by
+  i_item_id, i_item_desc, i_category, i_class, i_current_price
+order by
+  i_category, i_class, i_item_id, i_item_desc, revenueratio
+limit 100
+-- !query analysis
+GlobalLimit 100
++- LocalLimit 100
+   +- Project [i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, revenueratio#x]
+      +- Sort [i_category#x ASC NULLS FIRST, i_class#x ASC NULLS FIRST, i_item_id#x ASC NULLS FIRST, i_item_desc#x ASC NULLS FIRST, revenueratio#x ASC NULLS FIRST], true
+         +- Project [i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, revenueratio#x, i_item_id#x]
+            +- Project [i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, _w0#x, _we0#x, ((_w0#x * cast(100 as decimal(3,0))) / _we0#x) AS revenueratio#x, i_item_id#x]
+               +- Window [sum(_w0#x) windowspecdefinition(i_class#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#x], [i_class#x]
+                  +- Aggregate [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x], [i_item_desc#x, i_category#x, i_class#x, i_current_price#x, sum(ws_ext_sales_price#x) AS itemrevenue#x, sum(ws_ext_sales_price#x) AS _w0#x, i_item_id#x]
+                     +- Filter (((ws_item_sk#x = i_item_sk#x) AND i_category#x IN (rpad(sports, 50,  ),rpad(books, 50,  ),rpad(home, 50,  ))) AND ((ws_sold_date_sk#x = d_date_sk#x) AND between(d_date#x, cast(1999-02-22 as date), date_add(cast(1999-02-22 as date), extractansiintervaldays(INTERVAL '30' DAY)))))
+                        +- Join Inner
+                           :- Join Inner
+                           :  :- SubqueryAlias spark_catalog.default.web_sales
+                           :  :  +- Relation spark_catalog.default.web_sales[ws_sold_date_sk#x,ws_sold_time_sk#x,ws_ship_date_sk#x,ws_item_sk#x,ws_bill_customer_sk#x,ws_bill_cdemo_sk#x,ws_bill_hdemo_sk#x,ws_bill_addr_sk#x,ws_ship_customer_sk#x,ws_ship_cdemo_sk#x,ws_ship_hdemo_sk#x,ws_ship_addr_sk#x,ws_web_page_sk#x,ws_web_site_sk#x,ws_ship_mode_sk#x,ws_warehouse_sk#x,ws_promo_sk#x,ws_order_number#x,ws_quantity#x,ws_wholesale_cost#x,ws_list_price#x,ws_sales_price#x,ws_ext_discount_amt#x,ws_ext_sales_price#x,... 10 more fields] parquet
+                           :  +- SubqueryAlias spark_catalog.default.item
+                           :     +- Project [i_item_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_item_id#x, 16)) AS i_item_id#x, i_rec_start_date#x, i_rec_end_date#x, i_item_desc#x, i_current_price#x, i_wholesale_cost#x, i_brand_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_brand#x, 50)) AS i_brand#x, i_class_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_class#x, 50)) AS i_class#x, i_category_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_category#x, 50)) AS i_category#x, i_manufact_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_manufact#x, 50)) AS i_manufact#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_size#x, 20)) AS i_size#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_formulation#x, 20)) AS i_formulation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_color#x, 20)) AS i_color#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_units#x, 10)) AS i_units#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_container#x, 10)) AS i_container#x, i_manager_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_product_name#x, 50)) AS i_product_name#x]
+                           :        +- Relation spark_catalog.default.item[i_item_sk#x,i_item_id#x,i_rec_start_date#x,i_rec_end_date#x,i_item_desc#x,i_current_price#x,i_wholesale_cost#x,i_brand_id#x,i_brand#x,i_class_id#x,i_class#x,i_category_id#x,i_category#x,i_manufact_id#x,i_manufact#x,i_size#x,i_formulation#x,i_color#x,i_units#x,i_container#x,i_manager_id#x,i_product_name#x] parquet
+                           +- SubqueryAlias spark_catalog.default.date_dim
+                              +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+                                 +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+
+
+-- !query
+table web_sales
+|> join item
+|> join date_dim
+|> where ws_item_sk = i_item_sk
+     and i_category in ('sports', 'books', 'home')
+     and ws_sold_date_sk = d_date_sk
+     and d_date between cast('1999-02-22' as date)
+     and (cast('1999-02-22' as date) + interval 30 days)
+|> aggregate sum(ws_ext_sales_price) AS itemrevenue
+     group by i_item_id, i_item_desc, i_category, i_class, i_current_price
+|> select *,
+     itemrevenue * 100 / sum(itemrevenue)
+       over (partition by i_class) as revenueratio
+|> order by i_category, i_class, i_item_id, i_item_desc, revenueratio
+|> select i_item_desc, i_category, i_class, i_current_price, itemrevenue, revenueratio
+|> limit 100
+-- !query analysis
+GlobalLimit 100
++- LocalLimit 100
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Project [i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, revenueratio#x]
+         +- Sort [i_category#x ASC NULLS FIRST, i_class#x ASC NULLS FIRST, i_item_id#x ASC NULLS FIRST, i_item_desc#x ASC NULLS FIRST, revenueratio#x ASC NULLS FIRST], true
+            +- SubqueryAlias __auto_generated_subquery_name
+               +- Project [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, revenueratio#x]
+                  +- Project [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, _we0#x, pipeexpression(((itemrevenue#x * cast(100 as decimal(3,0))) / _we0#x), false, SELECT) AS revenueratio#x]
+                     +- Window [sum(itemrevenue#x) windowspecdefinition(i_class#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#x], [i_class#x]
+                        +- Project [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x]
+                           +- Aggregate [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x], [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, pipeexpression(sum(ws_ext_sales_price#x), true, AGGREGATE) AS itemrevenue#x]
+                              +- Filter (((ws_item_sk#x = i_item_sk#x) AND i_category#x IN (rpad(sports, 50,  ),rpad(books, 50,  ),rpad(home, 50,  ))) AND ((ws_sold_date_sk#x = d_date_sk#x) AND between(d_date#x, cast(1999-02-22 as date), date_add(cast(1999-02-22 as date), extractansiintervaldays(INTERVAL '30' DAY)))))
+                                 +- Join Inner
+                                    :- Join Inner
+                                    :  :- SubqueryAlias spark_catalog.default.web_sales
+                                    :  :  +- Relation spark_catalog.default.web_sales[ws_sold_date_sk#x,ws_sold_time_sk#x,ws_ship_date_sk#x,ws_item_sk#x,ws_bill_customer_sk#x,ws_bill_cdemo_sk#x,ws_bill_hdemo_sk#x,ws_bill_addr_sk#x,ws_ship_customer_sk#x,ws_ship_cdemo_sk#x,ws_ship_hdemo_sk#x,ws_ship_addr_sk#x,ws_web_page_sk#x,ws_web_site_sk#x,ws_ship_mode_sk#x,ws_warehouse_sk#x,ws_promo_sk#x,ws_order_number#x,ws_quantity#x,ws_wholesale_cost#x,ws_list_price#x,ws_sales_price#x,ws_ext_discount_amt#x,ws_ext_sales_price#x,... 10 more fields] parquet
+                                    :  +- SubqueryAlias spark_catalog.default.item
+                                    :     +- Project [i_item_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_item_id#x, 16)) AS i_item_id#x, i_rec_start_date#x, i_rec_end_date#x, i_item_desc#x, i_current_price#x, i_wholesale_cost#x, i_brand_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_brand#x, 50)) AS i_brand#x, i_class_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_class#x, 50)) AS i_class#x, i_category_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_category#x, 50)) AS i_category#x, i_manufact_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_manufact#x, 50)) AS i_manufact#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_size#x, 20)) AS i_size#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_formulation#x, 20)) AS i_formulation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_color#x, 20)) AS i_color#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_units#x, 10)) AS i_units#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_container#x, 10)) AS i_container#x, i_manager_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_product_name#x, 50)) AS i_product_name#x]
+                                    :        +- Relation spark_catalog.default.item[i_item_sk#x,i_item_id#x,i_rec_start_date#x,i_rec_end_date#x,i_item_desc#x,i_current_price#x,i_wholesale_cost#x,i_brand_id#x,i_brand#x,i_class_id#x,i_class#x,i_category_id#x,i_category#x,i_manufact_id#x,i_manufact#x,i_size#x,i_formulation#x,i_color#x,i_units#x,i_container#x,i_manager_id#x,i_product_name#x] parquet
+                                    +- SubqueryAlias spark_catalog.default.date_dim
+                                       +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+                                          +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false
