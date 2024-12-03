@@ -769,7 +769,7 @@ object SQLConf {
 
   lazy val ALLOW_COLLATIONS_IN_MAP_KEYS =
     buildConf("spark.sql.collation.allowInMapKeys")
-      .doc("Allow usage of collated strings inside of map's keys")
+      .doc("Allow for non-UTF8_BINARY collated strings inside of map's keys")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)

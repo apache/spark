@@ -241,7 +241,7 @@ case class AlterTableAddColumnsCommand(
     SchemaUtils.checkColumnNameDuplication(
       (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
       conf.caseSensitiveAnalysis)
-    if (!SQLConf.get.allowCollationsInMapKeys) {
+    if (!conf.allowCollationsInMapKeys) {
       colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
     }
     DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))

@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.command.ViewHelper.generateViewProperties
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
@@ -339,7 +338,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     SchemaUtils.checkSchemaColumnNameDuplication(
       schema,
       conf.caseSensitiveAnalysis)
-    if (!SQLConf.get.allowCollationsInMapKeys) {
+    if (!conf.allowCollationsInMapKeys) {
       SchemaUtils.checkNoCollationsInMapKeys(schema)
     }
 
