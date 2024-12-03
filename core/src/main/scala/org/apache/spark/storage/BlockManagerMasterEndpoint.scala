@@ -565,6 +565,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def addMergerLocation(blockManagerId: BlockManagerId): Unit = {
+    logDebug(log"Adding merger location ${MDC(BLOCK_MANAGER_ID, blockManagerId)}")
     if (!blockManagerId.isDriver && !shuffleMergerLocations.contains(blockManagerId.host)) {
       val shuffleServerId = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER,
         blockManagerId.host, externalShuffleServicePort)
@@ -784,7 +785,8 @@ class BlockManagerMasterEndpoint(
   }
 
  private def updateShuffleBlockInfo(blockId: BlockId, blockManagerId: BlockManagerId)
-    : Future[Boolean] = {
+     : Future[Boolean] = {
+   logDebug(s"Updating shuffle block info ${blockId} on ${blockManagerId}")
    blockId match {
      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
        // SPARK-36782: Invoke `MapOutputTracker.updateMapOutput` within the thread
