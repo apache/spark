@@ -1409,4 +1409,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(!Cast(timestampLiteral, TimestampNTZType).resolved)
     assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
   }
+
+  test("Casting from TimestampType to StringType") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    assert(!Cast(timestampLiteral, StringType).resolved)
+    assert(!Cast(timestampLiteral, StringType("UTF8_LCASE")).resolved)
+  }
 }
