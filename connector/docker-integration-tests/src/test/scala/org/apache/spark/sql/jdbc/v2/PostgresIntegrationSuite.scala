@@ -260,8 +260,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       case f: FilterExec => f
     }.isEmpty)
     assert(rows.length == 1)
-    assert(rows(0).getInt(1) === 6)
-    assert(rows(0).getString(2) === "jen")
+    assert(rows(0).getInt(0) === 6)
+    assert(rows(0).getString(1) === "jen")
   }
 
   override def testDatetime(tbl: String): Unit = {
