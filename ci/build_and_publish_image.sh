@@ -12,9 +12,9 @@ fi
 
 cd $SPARK_HOME
 
-REPONAME=openaiapibase
-REPOPATH=${REPONAME}.azurecr.io/api
-IMAGE_PATH=api/spark-py
+REPONAME=databricksregistry
+REPOPATH=${REPONAME}.azurecr.io/base
+IMAGE_PATH=base/spark-py
 IMAGE=${REPONAME}.azurecr.io/${IMAGE_PATH}
 VERSION=$(build/mvn help:evaluate -Dexpression=project.version -q -DforceStdout | tail -n 1 | sed 's/-SNAPSHOT//')
 
