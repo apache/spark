@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -1394,7 +1393,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq(1).toDF("a")
     val schema = StructType(StructField("b", ObjectType(classOf[java.lang.Integer])) :: Nil)
     val row = InternalRow.fromSeq(Seq(Integer.valueOf(1)))
-    val structData = column(Literal.create(row, schema))
+    val structData = Column(Literal.create(row, schema))
     checkError(
       exception = intercept[AnalysisException] {
         df.select($"a").withColumn("c", to_json(structData)).collect()
