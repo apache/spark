@@ -3870,7 +3870,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "case" : "window functions"
+    "case" : "window functions; please update the query to move the window functions to a subsequent |> SELECT operator instead"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -4663,6 +4663,218 @@ GlobalLimit 100
                                     +- SubqueryAlias spark_catalog.default.date_dim
                                        +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
                                           +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+
+
+-- !query
+select
+  asceding.rnk,
+  i1.i_product_name best_performing,
+  i2.i_product_name worst_performing
+from (select *
+from (select
+  item_sk,
+  rank()
+  over (
+    order by rank_col asc) rnk
+from (select
+  ss_item_sk item_sk,
+  avg(ss_net_profit) rank_col
+from store_sales ss1
+where ss_store_sk = 4
+group by ss_item_sk
+having avg(ss_net_profit) > 0.9 * (select avg(ss_net_profit) rank_col
+from store_sales
+where ss_store_sk = 4
+  and ss_addr_sk is null
+group by ss_store_sk)) v1) v11
+where rnk < 11) asceding,
+  (select *
+  from (select
+    item_sk,
+    rank()
+    over (
+      order by rank_col desc) rnk
+  from (select
+    ss_item_sk item_sk,
+    avg(ss_net_profit) rank_col
+  from store_sales ss1
+  where ss_store_sk = 4
+  group by ss_item_sk
+  having avg(ss_net_profit) > 0.9 * (select avg(ss_net_profit) rank_col
+  from store_sales
+  where ss_store_sk = 4
+    and ss_addr_sk is null
+  group by ss_store_sk)) v2) v21
+  where rnk < 11) descending,
+  item i1, item i2
+where asceding.rnk = descending.rnk
+  and i1.i_item_sk = asceding.item_sk
+  and i2.i_item_sk = descending.item_sk
+order by asceding.rnk
+limit 100
+-- !query analysis
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [rnk#x ASC NULLS FIRST], true
+      +- Project [rnk#x, i_product_name#x AS best_performing#x, i_product_name#x AS worst_performing#x]
+         +- Filter (((rnk#x = rnk#x) AND (i_item_sk#x = item_sk#x)) AND (i_item_sk#x = item_sk#x))
+            +- Join Inner
+               :- Join Inner
+               :  :- Join Inner
+               :  :  :- SubqueryAlias asceding
+               :  :  :  +- Project [item_sk#x, rnk#x]
+               :  :  :     +- Filter (rnk#x < 11)
+               :  :  :        +- SubqueryAlias v11
+               :  :  :           +- Project [item_sk#x, rnk#x]
+               :  :  :              +- Project [item_sk#x, rank_col#x, rnk#x, rnk#x]
+               :  :  :                 +- Window [rank(rank_col#x) windowspecdefinition(rank_col#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#x], [rank_col#x ASC NULLS FIRST]
+               :  :  :                    +- Project [item_sk#x, rank_col#x]
+               :  :  :                       +- SubqueryAlias v1
+               :  :  :                          +- Filter (cast(rank_col#x as decimal(13,7)) > (0.9 * scalar-subquery#x []))
+               :  :  :                             :  +- Aggregate [ss_store_sk#x], [avg(ss_net_profit#x) AS rank_col#x]
+               :  :  :                             :     +- Filter ((ss_store_sk#x = 4) AND isnull(ss_addr_sk#x))
+               :  :  :                             :        +- SubqueryAlias spark_catalog.default.store_sales
+               :  :  :                             :           +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+               :  :  :                             +- Aggregate [ss_item_sk#x], [ss_item_sk#x AS item_sk#x, avg(ss_net_profit#x) AS rank_col#x]
+               :  :  :                                +- Filter (ss_store_sk#x = 4)
+               :  :  :                                   +- SubqueryAlias ss1
+               :  :  :                                      +- SubqueryAlias spark_catalog.default.store_sales
+               :  :  :                                         +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+               :  :  +- SubqueryAlias descending
+               :  :     +- Project [item_sk#x, rnk#x]
+               :  :        +- Filter (rnk#x < 11)
+               :  :           +- SubqueryAlias v21
+               :  :              +- Project [item_sk#x, rnk#x]
+               :  :                 +- Project [item_sk#x, rank_col#x, rnk#x, rnk#x]
+               :  :                    +- Window [rank(rank_col#x) windowspecdefinition(rank_col#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rnk#x], [rank_col#x DESC NULLS LAST]
+               :  :                       +- Project [item_sk#x, rank_col#x]
+               :  :                          +- SubqueryAlias v2
+               :  :                             +- Filter (cast(rank_col#x as decimal(13,7)) > (0.9 * scalar-subquery#x []))
+               :  :                                :  +- Aggregate [ss_store_sk#x], [avg(ss_net_profit#x) AS rank_col#x]
+               :  :                                :     +- Filter ((ss_store_sk#x = 4) AND isnull(ss_addr_sk#x))
+               :  :                                :        +- SubqueryAlias spark_catalog.default.store_sales
+               :  :                                :           +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+               :  :                                +- Aggregate [ss_item_sk#x], [ss_item_sk#x AS item_sk#x, avg(ss_net_profit#x) AS rank_col#x]
+               :  :                                   +- Filter (ss_store_sk#x = 4)
+               :  :                                      +- SubqueryAlias ss1
+               :  :                                         +- SubqueryAlias spark_catalog.default.store_sales
+               :  :                                            +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+               :  +- SubqueryAlias i1
+               :     +- SubqueryAlias spark_catalog.default.item
+               :        +- Project [i_item_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_item_id#x, 16)) AS i_item_id#x, i_rec_start_date#x, i_rec_end_date#x, i_item_desc#x, i_current_price#x, i_wholesale_cost#x, i_brand_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_brand#x, 50)) AS i_brand#x, i_class_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_class#x, 50)) AS i_class#x, i_category_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_category#x, 50)) AS i_category#x, i_manufact_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_manufact#x, 50)) AS i_manufact#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_size#x, 20)) AS i_size#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_formulation#x, 20)) AS i_formulation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_color#x, 20)) AS i_color#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_units#x, 10)) AS i_units#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_container#x, 10)) AS i_container#x, i_manager_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_product_name#x, 50)) AS i_product_name#x]
+               :           +- Relation spark_catalog.default.item[i_item_sk#x,i_item_id#x,i_rec_start_date#x,i_rec_end_date#x,i_item_desc#x,i_current_price#x,i_wholesale_cost#x,i_brand_id#x,i_brand#x,i_class_id#x,i_class#x,i_category_id#x,i_category#x,i_manufact_id#x,i_manufact#x,i_size#x,i_formulation#x,i_color#x,i_units#x,i_container#x,i_manager_id#x,i_product_name#x] parquet
+               +- SubqueryAlias i2
+                  +- SubqueryAlias spark_catalog.default.item
+                     +- Project [i_item_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_item_id#x, 16)) AS i_item_id#x, i_rec_start_date#x, i_rec_end_date#x, i_item_desc#x, i_current_price#x, i_wholesale_cost#x, i_brand_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_brand#x, 50)) AS i_brand#x, i_class_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_class#x, 50)) AS i_class#x, i_category_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_category#x, 50)) AS i_category#x, i_manufact_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_manufact#x, 50)) AS i_manufact#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_size#x, 20)) AS i_size#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_formulation#x, 20)) AS i_formulation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_color#x, 20)) AS i_color#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_units#x, 10)) AS i_units#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_container#x, 10)) AS i_container#x, i_manager_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_product_name#x, 50)) AS i_product_name#x]
+                        +- Relation spark_catalog.default.item[i_item_sk#x,i_item_id#x,i_rec_start_date#x,i_rec_end_date#x,i_item_desc#x,i_current_price#x,i_wholesale_cost#x,i_brand_id#x,i_brand#x,i_class_id#x,i_class#x,i_category_id#x,i_category#x,i_manufact_id#x,i_manufact#x,i_size#x,i_formulation#x,i_color#x,i_units#x,i_container#x,i_manager_id#x,i_product_name#x] parquet
+
+
+-- !query
+table store_sales
+|> as ss1
+|> where ss_store_sk = 4
+|> aggregate avg(ss_net_profit) rank_col
+     group by ss_item_sk as item_sk
+|> where rank_col > 0.9 * (
+     table store_sales
+     |> where ss_store_sk = 4
+          and ss_addr_sk is null
+     |> aggregate avg(ss_net_profit) rank_col
+          group by ss_store_sk
+     |> select rank_col)
+|> as v1
+|> select
+     item_sk,
+     rank() over (
+       order by rank_col asc) rnk
+|> as v11
+|> where rnk < 11
+|> as asceding
+|> join (
+     table store_sales
+     |> as ss1
+     |> where ss_store_sk = 4
+     |> aggregate avg(ss_net_profit) rank_col
+          group by ss_item_sk as item_sk
+     |> where rank_col > 0.9 * (
+          table store_sales
+          |> where ss_store_sk = 4
+               and ss_addr_sk is null
+          |> aggregate avg(ss_net_profit) rank_col
+               group by ss_store_sk
+          |> select rank_col)
+     |> as v2
+     |> select
+          item_sk,
+          rank() over (
+            order by rank_col asc) rnk
+     |> as v21
+     |> where rnk < 11) descending
+|> join item i1
+|> join item i2
+|> where asceding.rnk = descending.rnk
+     and i1.i_item_sk = asceding.item_sk
+     and i2.i_item_sk = descending.item_sk
+|> order by asceding.rnk
+|> select
+     asceding.rnk,
+     i1.i_product_name best_performing,
+     i2.i_product_name worst_performing
+-- !query analysis
+Project [rnk#x, pipeexpression(i_product_name#x, false, SELECT) AS best_performing#x, pipeexpression(i_product_name#x, false, SELECT) AS worst_performing#x]
++- Sort [rnk#x ASC NULLS FIRST], true
+   +- Filter (((rnk#x = rnk#x) AND (i_item_sk#x = item_sk#x)) AND (i_item_sk#x = item_sk#x))
+      +- Join Inner
+         :- Join Inner
+         :  :- Join Inner
+         :  :  :- SubqueryAlias asceding
+         :  :  :  +- Filter (rnk#x < 11)
+         :  :  :     +- SubqueryAlias v11
+         :  :  :        +- Project [item_sk#x, rnk#x]
+         :  :  :           +- Project [item_sk#x, rank_col#x, _we0#x, pipeexpression(_we0#x, false, SELECT) AS rnk#x]
+         :  :  :              +- Window [rank(rank_col#x) windowspecdefinition(rank_col#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _we0#x], [rank_col#x ASC NULLS FIRST]
+         :  :  :                 +- Project [item_sk#x, rank_col#x]
+         :  :  :                    +- SubqueryAlias v1
+         :  :  :                       +- Filter (cast(rank_col#x as decimal(13,7)) > (0.9 * scalar-subquery#x []))
+         :  :  :                          :  +- Project [rank_col#x]
+         :  :  :                          :     +- Aggregate [ss_store_sk#x], [ss_store_sk#x, pipeexpression(avg(ss_net_profit#x), true, AGGREGATE) AS rank_col#x]
+         :  :  :                          :        +- Filter ((ss_store_sk#x = 4) AND isnull(ss_addr_sk#x))
+         :  :  :                          :           +- SubqueryAlias spark_catalog.default.store_sales
+         :  :  :                          :              +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+         :  :  :                          +- SubqueryAlias __auto_generated_subquery_name
+         :  :  :                             +- Aggregate [ss_item_sk#x], [ss_item_sk#x AS item_sk#x, pipeexpression(avg(ss_net_profit#x), true, AGGREGATE) AS rank_col#x]
+         :  :  :                                +- Filter (ss_store_sk#x = 4)
+         :  :  :                                   +- SubqueryAlias ss1
+         :  :  :                                      +- SubqueryAlias spark_catalog.default.store_sales
+         :  :  :                                         +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+         :  :  +- SubqueryAlias descending
+         :  :     +- Filter (rnk#x < 11)
+         :  :        +- SubqueryAlias v21
+         :  :           +- Project [item_sk#x, rnk#x]
+         :  :              +- Project [item_sk#x, rank_col#x, _we0#x, pipeexpression(_we0#x, false, SELECT) AS rnk#x]
+         :  :                 +- Window [rank(rank_col#x) windowspecdefinition(rank_col#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS _we0#x], [rank_col#x ASC NULLS FIRST]
+         :  :                    +- Project [item_sk#x, rank_col#x]
+         :  :                       +- SubqueryAlias v2
+         :  :                          +- Filter (cast(rank_col#x as decimal(13,7)) > (0.9 * scalar-subquery#x []))
+         :  :                             :  +- Project [rank_col#x]
+         :  :                             :     +- Aggregate [ss_store_sk#x], [ss_store_sk#x, pipeexpression(avg(ss_net_profit#x), true, AGGREGATE) AS rank_col#x]
+         :  :                             :        +- Filter ((ss_store_sk#x = 4) AND isnull(ss_addr_sk#x))
+         :  :                             :           +- SubqueryAlias spark_catalog.default.store_sales
+         :  :                             :              +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+         :  :                             +- SubqueryAlias __auto_generated_subquery_name
+         :  :                                +- Aggregate [ss_item_sk#x], [ss_item_sk#x AS item_sk#x, pipeexpression(avg(ss_net_profit#x), true, AGGREGATE) AS rank_col#x]
+         :  :                                   +- Filter (ss_store_sk#x = 4)
+         :  :                                      +- SubqueryAlias ss1
+         :  :                                         +- SubqueryAlias spark_catalog.default.store_sales
+         :  :                                            +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+         :  +- SubqueryAlias i1
+         :     +- SubqueryAlias spark_catalog.default.item
+         :        +- Project [i_item_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_item_id#x, 16)) AS i_item_id#x, i_rec_start_date#x, i_rec_end_date#x, i_item_desc#x, i_current_price#x, i_wholesale_cost#x, i_brand_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_brand#x, 50)) AS i_brand#x, i_class_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_class#x, 50)) AS i_class#x, i_category_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_category#x, 50)) AS i_category#x, i_manufact_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_manufact#x, 50)) AS i_manufact#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_size#x, 20)) AS i_size#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_formulation#x, 20)) AS i_formulation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_color#x, 20)) AS i_color#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_units#x, 10)) AS i_units#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_container#x, 10)) AS i_container#x, i_manager_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_product_name#x, 50)) AS i_product_name#x]
+         :           +- Relation spark_catalog.default.item[i_item_sk#x,i_item_id#x,i_rec_start_date#x,i_rec_end_date#x,i_item_desc#x,i_current_price#x,i_wholesale_cost#x,i_brand_id#x,i_brand#x,i_class_id#x,i_class#x,i_category_id#x,i_category#x,i_manufact_id#x,i_manufact#x,i_size#x,i_formulation#x,i_color#x,i_units#x,i_container#x,i_manager_id#x,i_product_name#x] parquet
+         +- SubqueryAlias i2
+            +- SubqueryAlias spark_catalog.default.item
+               +- Project [i_item_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_item_id#x, 16)) AS i_item_id#x, i_rec_start_date#x, i_rec_end_date#x, i_item_desc#x, i_current_price#x, i_wholesale_cost#x, i_brand_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_brand#x, 50)) AS i_brand#x, i_class_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_class#x, 50)) AS i_class#x, i_category_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_category#x, 50)) AS i_category#x, i_manufact_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_manufact#x, 50)) AS i_manufact#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_size#x, 20)) AS i_size#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_formulation#x, 20)) AS i_formulation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_color#x, 20)) AS i_color#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_units#x, 10)) AS i_units#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_container#x, 10)) AS i_container#x, i_manager_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_product_name#x, 50)) AS i_product_name#x]
+                  +- Relation spark_catalog.default.item[i_item_sk#x,i_item_id#x,i_rec_start_date#x,i_rec_end_date#x,i_item_desc#x,i_current_price#x,i_wholesale_cost#x,i_brand_id#x,i_brand#x,i_class_id#x,i_class#x,i_category_id#x,i_category#x,i_manufact_id#x,i_manufact#x,i_size#x,i_formulation#x,i_color#x,i_units#x,i_container#x,i_manager_id#x,i_product_name#x] parquet
 
 
 -- !query
