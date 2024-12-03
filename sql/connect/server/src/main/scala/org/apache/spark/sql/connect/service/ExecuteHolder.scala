@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
+import com.google.protobuf.GeneratedMessage
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
@@ -80,6 +82,10 @@ private[connect] class ExecuteHolder(
   val eventsManager: ExecuteEventsManager = ExecuteEventsManager(this, new SystemClock())
 
   val observations: mutable.Map[String, Observation] = mutable.Map.empty
+
+  lazy val allObservationAndPlanIds: Map[String, Long] = {
+    ExecuteHolder.collectAllObservationAndPlanIds(request.getPlan).toMap
+  }
 
   private val runner: ExecuteThreadRunner = new ExecuteThreadRunner(this)
 
@@ -287,6 +293,26 @@ private[connect] class ExecuteHolder(
 
   /** Get the operation ID. */
   def operationId: String = key.operationId
+}
+
+private object ExecuteHolder {
+  private def collectAllObservationAndPlanIds(
+      planOrMessage: GeneratedMessage,
+      collected: mutable.Map[String, Long] = mutable.Map.empty): mutable.Map[String, Long] = {
+    planOrMessage match {
+      case relation: proto.Relation if relation.hasCollectMetrics =>
+        collected += relation.getCollectMetrics.getName -> relation.getCommon.getPlanId
+        collectAllObservationAndPlanIds(relation.getCollectMetrics.getInput, collected)
+      case _ =>
+        planOrMessage.getAllFields.values().asScala.foreach {
+          case message: GeneratedMessage =>
+            collectAllObservationAndPlanIds(message, collected)
+          case _ =>
+          // not a message (probably a primitive type), do nothing
+        }
+    }
+    collected
+  }
 }
 
 /** Used to identify ExecuteHolder jobTag among SparkContext.SPARK_JOB_TAGS. */

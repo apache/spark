@@ -151,7 +151,7 @@
     If you change codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.28</codahale.metrics.version>
+    <codahale.metrics.version>4.2.29</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.12.0</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -180,8 +180,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.18.1</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.18.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.18.2</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.18.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -195,7 +195,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>33.2.1-jre</guava.version>
+    <guava.version>33.3.1-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.16</jersey.version>
@@ -214,7 +214,7 @@
     <bouncycastle.version>1.79</bouncycastle.version>
     <tink.version>1.15.0</tink.version>
     <datasketches.version>6.1.1</datasketches.version>
-    <netty.version>4.1.114.Final</netty.version>
+    <netty.version>4.1.115.Final</netty.version>
     <netty-tcnative.version>2.0.69.Final</netty-tcnative.version>
     <icu4j.version>76.1</icu4j.version>
     <junit-jupiter.version>5.11.3</junit-jupiter.version>
@@ -295,7 +295,7 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>33.2.1-jre</connect.guava.version>
+    <connect.guava.version>33.3.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.67.1</io.grpc.version>
     <mima.version>1.1.4</mima.version>
