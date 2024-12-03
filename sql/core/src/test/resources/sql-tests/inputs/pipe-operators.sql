@@ -1846,7 +1846,7 @@ table web_sales
      and (cast('1999-02-22' as date) + interval 30 days)
 |> aggregate sum(ws_ext_sales_price) AS itemrevenue
      group by i_item_id, i_item_desc, i_category, i_class, i_current_price
-|> select *,
+|> extend
      itemrevenue * 100 / sum(itemrevenue)
        over (partition by i_class) as revenueratio
 |> order by i_category, i_class, i_item_id, i_item_desc, revenueratio

@@ -4634,7 +4634,7 @@ table web_sales
      and (cast('1999-02-22' as date) + interval 30 days)
 |> aggregate sum(ws_ext_sales_price) AS itemrevenue
      group by i_item_id, i_item_desc, i_category, i_class, i_current_price
-|> select *,
+|> extend
      itemrevenue * 100 / sum(itemrevenue)
        over (partition by i_class) as revenueratio
 |> order by i_category, i_class, i_item_id, i_item_desc, revenueratio
@@ -4648,7 +4648,7 @@ GlobalLimit 100
          +- Sort [i_category#x ASC NULLS FIRST, i_class#x ASC NULLS FIRST, i_item_id#x ASC NULLS FIRST, i_item_desc#x ASC NULLS FIRST, revenueratio#x ASC NULLS FIRST], true
             +- SubqueryAlias __auto_generated_subquery_name
                +- Project [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, revenueratio#x]
-                  +- Project [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, _we0#x, pipeexpression(((itemrevenue#x * cast(100 as decimal(3,0))) / _we0#x), false, SELECT) AS revenueratio#x]
+                  +- Project [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x, _we0#x, pipeexpression(((itemrevenue#x * cast(100 as decimal(3,0))) / _we0#x), false, EXTEND) AS revenueratio#x]
                      +- Window [sum(itemrevenue#x) windowspecdefinition(i_class#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#x], [i_class#x]
                         +- Project [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, itemrevenue#x]
                            +- Aggregate [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x], [i_item_id#x, i_item_desc#x, i_category#x, i_class#x, i_current_price#x, pipeexpression(sum(ws_ext_sales_price#x), true, AGGREGATE) AS itemrevenue#x]
