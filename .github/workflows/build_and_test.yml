@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_PREV_SHA: ${{ github.event.before }}
-      PYSPARK_IMAGE_TO_TEST: 'python-309'
+      PYSPARK_IMAGE_TO_TEST: ''
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
@@ -381,7 +381,7 @@ jobs:
     permissions:
       packages: write
     env:
-      PYSPARK_IMAGE_TO_TEST: 'python-309'
+      PYSPARK_IMAGE_TO_TEST: ''
     steps:
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -511,7 +511,7 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-pandas != 'true' && 'pyspark-pandas-connect-part3' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
-      PYTHON_TO_TEST: 'python3.9'
+      PYTHON_TO_TEST: 'python3.11'
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
       # GitHub Actions' default miniconda to use in pip packaging test.
