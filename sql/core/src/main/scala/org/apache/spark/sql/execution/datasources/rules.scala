@@ -343,6 +343,9 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
     SchemaUtils.checkSchemaColumnNameDuplication(
       schema,
       conf.caseSensitiveAnalysis)
+    if (!conf.allowCollationsInMapKeys) {
+      SchemaUtils.checkNoCollationsInMapKeys(schema)
+    }
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
     val normalizedBucketSpec = normalizeBucketSpec(schema, table)
