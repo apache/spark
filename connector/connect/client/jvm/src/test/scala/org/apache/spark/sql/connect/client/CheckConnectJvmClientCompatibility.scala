@@ -299,8 +299,7 @@ object CheckConnectJvmClientCompatibility {
       // ColumnNode conversions
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession.RichColumn"),
-      ProblemFilters.exclude[MissingClassProblem](
-        "org.apache.spark.sql.SparkSession$RichColumn"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$RichColumn"),
 
       // New public APIs added in the client
       // Dataset
