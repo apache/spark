@@ -759,7 +759,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     " with Changelog Checkpointing") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
-      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
     val changelogWriter = fileManager.getChangeLogWriter(1)
     assert(changelogWriter.version === 1)
 
@@ -1169,10 +1169,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // Use 2 file managers here to emulate concurrent execution
       // that checkpoint the same version of state
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val rocksDBFileMapping = new RocksDBFileMapping()
       val fileManager_ = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
@@ -1253,7 +1253,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       (new File(dfsRootDir, "SSTs")).mkdir()
       (new File(dfsRootDir, "logs")).mkdir()
 
@@ -1312,7 +1312,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       val dfsRootDir = dir.getAbsolutePath
       val verificationDir = Utils.createTempDir().getAbsolutePath // local dir to load checkpoints
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
