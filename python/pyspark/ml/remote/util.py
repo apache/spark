@@ -21,9 +21,9 @@ from typing import Any, cast, TypeVar, Callable, TYPE_CHECKING, Type
 import pyspark.sql.connect.proto as pb2
 from pyspark.ml.remote.serialize import serialize_ml_params, serialize, deserialize
 from pyspark.sql import is_remote
-from pyspark.sql.connect.dataframe import DataFrame as RemoteDataFrame
 
 if TYPE_CHECKING:
+    from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
     from pyspark.ml.wrapper import JavaWrapper, JavaEstimator
     from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
@@ -55,12 +55,13 @@ def try_remote_attribute_relation(f: FuncT) -> FuncT:
             # in the AttributeRelation
             from pyspark.ml.remote.proto import AttributeRelation
             from pyspark.sql.connect.session import SparkSession
+            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
             assert isinstance(self._java_obj, str)
             plan = AttributeRelation(self._java_obj, f.__name__)
             session = SparkSession.getActiveSession()
             assert session is not None
-            return RemoteDataFrame(plan, session)
+            return ConnectDataFrame(plan, session)
         else:
             return f(self, *args, **kwargs)
 
@@ -71,7 +72,7 @@ def try_remote_fit(f: FuncT) -> FuncT:
     """Mark the function that fits a model."""
 
     @functools.wraps(f)
-    def wrapped(self: "JavaEstimator", dataset: RemoteDataFrame) -> Any:
+    def wrapped(self: "JavaEstimator", dataset: "ConnectDataFrame") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             client = dataset.sparkSession.client
             input = dataset._plan.plan(client)
@@ -101,10 +102,11 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
     """Mark the function/property that returns a relation for model transform."""
 
     @functools.wraps(f)
-    def wrapped(self: "JavaWrapper", dataset: RemoteDataFrame) -> Any:
+    def wrapped(self: "JavaWrapper", dataset: "ConnectDataFrame") -> Any:
         if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
             from pyspark.ml import Model, Transformer
             from pyspark.sql.connect.session import SparkSession
+            from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
             session = SparkSession.getActiveSession()
             assert session is not None
@@ -114,7 +116,7 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
                 from pyspark.ml.remote.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
-                return RemoteDataFrame(
+                return ConnectDataFrame(
                     TransformerRelation(
                         child=dataset._plan, name=self._java_obj, ml_params=params, is_model=True
                     ),
@@ -125,7 +127,7 @@ def try_remote_transform_relation(f: FuncT) -> FuncT:
                 from pyspark.ml.remote.proto import TransformerRelation
 
                 assert isinstance(self._java_obj, str)
-                return RemoteDataFrame(
+                return ConnectDataFrame(
                     TransformerRelation(
                         child=dataset._plan,
                         name=self._java_obj,

@@ -25,7 +25,6 @@ from pyspark.ml.linalg import (
     DenseMatrix,
     SparseMatrix,
 )
-from pyspark.sql.connect.dataframe import DataFrame as RemoteDataFrame
 from pyspark.sql.connect.expressions import LiteralExpression
 
 if TYPE_CHECKING:
@@ -70,9 +69,11 @@ def serialize_param(value: Any, client: "SparkConnectClient") -> pb2.Param:
 
 
 def serialize(client: "SparkConnectClient", *args: Any) -> List[Any]:
+    from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+
     result = []
     for arg in args:
-        if isinstance(arg, RemoteDataFrame):
+        if isinstance(arg, ConnectDataFrame):
             result.append(pb2.FetchAttr.Args(input=arg._plan.plan(client)))
         else:
             result.append(pb2.FetchAttr.Args(param=serialize_param(arg, client)))
