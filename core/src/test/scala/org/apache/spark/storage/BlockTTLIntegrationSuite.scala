@@ -57,6 +57,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
       .setMaster("local-cluster[2, 1, 1024]")
       .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, 100L)
     sc = new SparkContext(conf)
+    sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
     val managerMasterEndpoint = lookupBlockManagerMasterEndpoint(sc)
     assert(managerMasterEndpoint.blockAccessTime.isEmpty)
