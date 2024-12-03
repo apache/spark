@@ -215,7 +215,7 @@ object CollationTypeCoercion {
         Some(leftType)
 
       case (ArrayType(leftElemType, nullable), ArrayType(rightElemType, _)) =>
-        mergeStructurally(leftElemType, rightElemType)( baseCase).map(ArrayType(_, nullable))
+        mergeStructurally(leftElemType, rightElemType)(baseCase).map(ArrayType(_, nullable))
 
       case (MapType(leftKey, leftValue, nullable), MapType(rightKey, rightValue, _)) =>
         for {
