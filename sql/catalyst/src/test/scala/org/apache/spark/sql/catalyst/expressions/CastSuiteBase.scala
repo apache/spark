@@ -729,6 +729,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(Cast.canUpCast(DateType, TimestampNTZType))
       assert(Cast.canUpCast(TimestampType, TimestampNTZType))
       assert(Cast.canUpCast(TimestampNTZType, TimestampType))
+      assert(Cast.canUpCast(IntegerType, StringType("UTF8_LCASE")))
+      assert(Cast.canUpCast(CalendarIntervalType, StringType("UTF8_LCASE")))
       assert(!Cast.canUpCast(TimestampType, DateType))
       assert(!Cast.canUpCast(TimestampNTZType, DateType))
     }
@@ -1410,7 +1412,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
   }
 
-  test("Casting from TimestampType to StringType") {
+  test("Casting between TimestampType and StringType requires timezone") {
     val timestampLiteral = Literal.create(1L, TimestampType)
     assert(!Cast(timestampLiteral, StringType).resolved)
     assert(!Cast(timestampLiteral, StringType("UTF8_LCASE")).resolved)
