@@ -254,19 +254,21 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     def createTable(bucketColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {
-        sql(
-          s"""
-             |CREATE TABLE $tableName (
-             |  id INT,
-             |  c1 STRING COLLATE UNICODE,
-             |  c2 STRING,
-             |  struct_col STRUCT<col1: STRING COLLATE UNICODE, col2: STRING>,
-             |  array_col ARRAY<STRING COLLATE UNICODE>,
-             |  map_col MAP<STRING COLLATE UNICODE, STRING>
-             |) USING parquet
-             |CLUSTERED BY (${bucketColumns.mkString(",")})
-             |INTO 4 BUCKETS""".stripMargin
-        )
+        withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+          sql(
+            s"""
+               |CREATE TABLE $tableName (
+               |  id INT,
+               |  c1 STRING COLLATE UNICODE,
+               |  c2 STRING,
+               |  struct_col STRUCT<col1: STRING COLLATE UNICODE, col2: STRING>,
+               |  array_col ARRAY<STRING COLLATE UNICODE>,
+               |  map_col MAP<STRING COLLATE UNICODE, STRING>
+               |) USING parquet
+               |CLUSTERED BY (${bucketColumns.mkString(",")})
+               |INTO 4 BUCKETS""".stripMargin
+          )
+        }
       }
     }
     // should work fine on default collated columns
