@@ -242,6 +242,8 @@ private[spark] object LogKeys {
   case object EXECUTOR_IDS extends LogKey
   case object EXECUTOR_LAUNCH_COMMANDS extends LogKey
   case object EXECUTOR_MEMORY_SIZE extends LogKey
+  case object EXECUTOR_MEMORY_OFFHEAP extends LogKey
+  case object EXECUTOR_MEMORY_OVERHEAD extends LogKey
   case object EXECUTOR_RESOURCES extends LogKey
   case object EXECUTOR_SHUFFLE_INFO extends LogKey
   case object EXECUTOR_STATE extends LogKey

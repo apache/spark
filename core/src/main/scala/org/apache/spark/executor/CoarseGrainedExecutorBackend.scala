@@ -486,22 +486,19 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
           .foreach {
             case (ResourceProfile.OFFHEAP_MEM, request) =>
               driverConf.set(MEMORY_OFFHEAP_SIZE.key, request.amount.toString + "m")
-              if (request.amount > 0) {
-                driverConf.set(MEMORY_OFFHEAP_ENABLED.key, "true")
-              }
               logInfo(log"Set executor off-heap memory to " +
-                log"${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, request)}")
+                log"${MDC(LogKeys.EXECUTOR_MEMORY_OFFHEAP, request)}")
             case (ResourceProfile.MEMORY, request) =>
               driverConf.set(EXECUTOR_MEMORY.key, request.amount.toString + "m")
               logInfo(log"Set executor memory to ${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, request)}")
             case (ResourceProfile.OVERHEAD_MEM, request) =>
+              // Maybe don't need to set this since it's nearly used by tasks.
               driverConf.set(EXECUTOR_MEMORY_OVERHEAD.key, request.amount.toString + "m")
               logInfo(log"Set executor memory_overhead to " +
-                log"${MDC(LogKeys.EXECUTOR_MEMORY_SIZE, request)}")
+                log"${MDC(LogKeys.EXECUTOR_MEMORY_OVERHEAD, request)}")
             case (ResourceProfile.CORES, request) =>
               driverConf.set(EXECUTOR_CORES.key, request.amount.toString)
-              logInfo(log"Set executor executor cores to " +
-                log"${MDC(LogKeys.NUM_EXECUTOR_CORES, request)}")
+              logInfo(log"Set executor cores to ${MDC(LogKeys.NUM_EXECUTOR_CORES, request)}")
             case _ =>
           }
       }
