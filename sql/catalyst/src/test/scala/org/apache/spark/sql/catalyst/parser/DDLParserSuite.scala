@@ -3200,4 +3200,40 @@ class DDLParserSuite extends AnalysisTest {
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "INSERT OVERWRITE DIRECTORY is not supported."))
   }
+
+  test("create table with bad collation name") {
+    checkError(
+      exception = internalException("CREATE TABLE t DEFAULT COLLATION XD"),
+      condition = "COLLATION_INVALID_NAME",
+      parameters = Map("proposals" -> "id, xh, af", "collationName" -> "XD")
+    )
+  }
+
+  test("create table with default collation") {
+    comparePlans(parsePlan(
+      "CREATE TABLE t (c STRING) USING parquet DEFAULT COLLATION uNiCoDe"),
+      CreateTable(UnresolvedIdentifier(Seq("t")),
+        Seq(ColumnDefinition("c", StringType)),
+        Seq.empty[Transform],
+        UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+          None, None, Some("UNICODE"), None, false), false))
+  }
+
+  test("replace table with default collation") {
+    comparePlans(parsePlan(
+      "REPLACE TABLE t (c STRING) USING parquet DEFAULT COLLATION uNiCoDe"),
+      ReplaceTable(UnresolvedIdentifier(Seq("t")),
+        Seq(ColumnDefinition("c", StringType)),
+        Seq.empty[Transform],
+        UnresolvedTableSpec(Map.empty[String, String], Some("parquet"), OptionList(Seq.empty),
+          None, None, Some("UNICODE"), None, false), false))
+  }
+
+  test("alter table set collation") {
+    comparePlans(parsePlan(
+      "ALTER TABLE t SET DEFAULT COLLATION uNiCoDe"),
+      AlterTableCollation(UnresolvedTable(Seq("t"),
+        "ALTER TABLE ... SET DEFAULT COLLATION"), "UNICODE")
+    )
+  }
 }
