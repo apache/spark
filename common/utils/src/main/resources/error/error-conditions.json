@@ -5190,7 +5190,7 @@
       },
       "COLLATIONS_IN_MAP_KEYS" : {
         "message" : [
-          "Collated strings are not supported for keys of maps"
+          "Collated strings for keys of maps"
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {

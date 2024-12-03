@@ -85,7 +85,7 @@ case class InsertIntoHadoopFsRelationCommand(
         outputColumnNames,
         sparkSession.sessionState.conf.caseSensitiveAnalysis)
     }
-    if (!SQLConf.get.allowCollationsInMapKeys) {
+    if (!conf.allowCollationsInMapKeys) {
       SchemaUtils.checkNoCollationsInMapKeys(query.schema)
     }
 

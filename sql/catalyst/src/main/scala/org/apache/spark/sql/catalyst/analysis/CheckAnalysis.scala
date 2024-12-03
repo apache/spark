@@ -1540,7 +1540,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     }
 
     def checkNoCollationsInMapKeys(colsToAdd: Seq[QualifiedColType]): Unit = {
-      if (!SQLConf.get.allowCollationsInMapKeys) {
+      if (!alter.conf.allowCollationsInMapKeys) {
         colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
       }
     }
