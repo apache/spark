@@ -27,9 +27,7 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.ShowTables
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
@@ -139,16 +137,6 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
     df.createOrReplaceTempView(tableName)
   }
 
-  /** @inheritdoc */
-  def tables(): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTables(CurrentNamespace, None))
-  }
-
-  /** @inheritdoc */
-  def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
-  }
-
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
    * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
@@ -156,11 +144,6 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
    * @since 2.0.0
    */
   def streams: StreamingQueryManager = sparkSession.streams
-
-  /** @inheritdoc */
-  def tableNames(databaseName: String): Array[String] = {
-    sessionState.catalog.listTables(databaseName).map(_.table).toArray
-  }
 
   /** @inheritdoc */
   override def sparkContext: SparkContext = super.sparkContext
@@ -285,6 +268,12 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
 
   /** @inheritdoc */
   override def table(tableName: String): Dataset[Row] = super.table(tableName)
+
+  /** @inheritdoc */
+  override def tables(): DataFrame = super.tables()
+
+  /** @inheritdoc */
+  override def tables(databaseName: String): DataFrame = super.tables(databaseName)
 
   /** @inheritdoc */
   override def applySchema(rowRDD: RDD[Row], schema: StructType): Dataset[Row] =

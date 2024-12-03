@@ -68,25 +68,6 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
   /** @inheritdoc */
   def readStream: DataStreamReader = sparkSession.readStream
 
-  /** @inheritdoc */
-  def tables(): Dataset[Row] = {
-    sparkSession.catalog
-      .listTables()
-      .map(t => ListTableRow(t.database, t.name, t.isTemporary))(Encoders.product[ListTableRow])
-      .toDF()
-  }
-
-  /** @inheritdoc */
-  def tables(databaseName: String): Dataset[Row] = {
-    sparkSession.catalog
-      .listTables(databaseName)
-      .map(t => ListTableRow(t.database, t.name, t.isTemporary))(Encoders.product[ListTableRow])
-      .toDF()
-  }
-
-  /** A case class to mimic the output schema of Spark Classic's `SQLContext.tables()` API. */
-  private case class ListTableRow(database: String, tableName: String, isTemporary: Boolean)
-
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
    * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
@@ -94,11 +75,6 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
    * @since 4.0.0
    */
   def streams: StreamingQueryManager = sparkSession.streams
-
-  /** @inheritdoc */
-  def tableNames(databaseName: String): Array[String] = {
-    sparkSession.catalog.listTables(databaseName).map(_.name)(Encoders.STRING).collect()
-  }
 
   /** @inheritdoc */
   override def sparkContext: SparkContext = {
@@ -219,6 +195,12 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
 
   /** @inheritdoc */
   override def table(tableName: String): Dataset[Row] = super.table(tableName)
+
+  /** @inheritdoc */
+  override def tables(): Dataset[Row] = super.tables()
+
+  /** @inheritdoc */
+  override def tables(databaseName: String): Dataset[Row] = super.tables(databaseName)
 
   /** @inheritdoc */
   override def applySchema(rowRDD: RDD[Row], schema: StructType): Dataset[Row] =

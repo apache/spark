@@ -27,8 +27,9 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Encoder, ExperimentalMethods, Row}
+import org.apache.spark.sql.{Encoder, Encoders, ExperimentalMethods, Row}
 import org.apache.spark.sql.api.SQLImplicits
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -603,7 +604,11 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
-  def tables(): Dataset[Row]
+  def tables(): Dataset[Row] = {
+    sparkSession.catalog
+      .listTables()
+      .select(col("database"), col("name").as("tableName"), col("isTemporary"))
+  }
 
   /**
    * Returns a `DataFrame` containing names of existing tables in the given database. The returned
@@ -613,7 +618,11 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
-  def tables(databaseName: String): Dataset[Row]
+  def tables(databaseName: String): Dataset[Row] = {
+    sparkSession.catalog
+      .listTables(databaseName)
+      .select(col("database"), col("name").as("tableName"), col("isTemporary"))
+  }
 
   /**
    * Returns a `StreamingQueryManager` that allows managing all the
@@ -639,7 +648,13 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
-  def tableNames(databaseName: String): Array[String]
+  def tableNames(databaseName: String): Array[String] = {
+    sparkSession.catalog
+      .listTables(databaseName)
+      .select(col("name"))
+      .as(Encoders.STRING)
+      .collect()
+  }
 
   ////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////
