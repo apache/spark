@@ -46,8 +46,11 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       compound: CompoundBody,
       args: Map[String, Expression],
       context: SqlScriptingExecutionContext): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound, args, context)
-      .asInstanceOf[CompoundBodyExec].getTreeIterator
+    val compoundBodyExec = transformTreeIntoExecutable(compound, args, context)
+      .asInstanceOf[CompoundBodyExec]
+    context.frames.addOne(new SqlScriptingExecutionFrame(compoundBodyExec.getTreeIterator))
+    compoundBodyExec.enterScope()
+    compoundBodyExec.getTreeIterator
   }
 
   /**

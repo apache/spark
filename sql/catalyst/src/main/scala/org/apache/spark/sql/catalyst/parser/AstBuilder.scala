@@ -144,7 +144,11 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
     val labelCtx = new SqlScriptingLabelContext()
-    visitCompoundBodyImpl(ctx.compoundBody(), Some("root"), allowVarDeclare = true, labelCtx)
+    val labelText = labelCtx.enterLabeledScope(None, None)
+    val script =
+      visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true, labelCtx)
+    labelCtx.exitLabeledScope(None)
+    script
   }
 
   private def visitCompoundBodyImpl(

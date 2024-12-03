@@ -182,14 +182,14 @@ class CompoundBodyExec(
   private var scopeEntered = false
   private var scopeExited = false
 
-  private def enterScope(): Unit = {
+  def enterScope(): Unit = {
     if (label.isDefined && !scopeEntered) {
       scopeEntered = true
       context.enterScope(label.get)
     }
   }
 
-  private def exitScope(): Unit = {
+  def exitScope(): Unit = {
     if (label.isDefined && !scopeExited) {
       scopeExited = true
       context.exitScope(label.get)

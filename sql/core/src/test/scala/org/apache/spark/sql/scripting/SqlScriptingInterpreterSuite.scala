@@ -47,7 +47,7 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     val compoundBody = spark.sessionState.sqlParser.parsePlan(sqlText).asInstanceOf[CompoundBody]
     val context = new SqlScriptingExecutionContext()
     val executionPlan = interpreter.buildExecutionPlan(compoundBody, args, context)
-    context.frames.addOne(new SqlScriptingExecutionFrame(executionPlan))
+
     executionPlan.flatMap {
       case statement: SingleStatementExec =>
         if (statement.isExecuted) {
