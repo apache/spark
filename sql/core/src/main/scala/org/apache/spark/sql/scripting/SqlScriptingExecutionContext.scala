@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark.SparkException
 
@@ -28,11 +28,11 @@ class SqlScriptingExecutionContext {
   // List of frames that are currently active.
   val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer()
 
-  def enterScope(label: String): Unit = {
+  def enterScope(label: String, conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
     if (frames.isEmpty) {
       throw SparkException.internalError(s"Cannot enter scope: no frames.")
     }
-    frames.last.enterScope(label)
+    frames.last.enterScope(label, conditionHandlerMap)
   }
 
   def exitScope(label: String): Unit = {
@@ -41,6 +41,21 @@ class SqlScriptingExecutionContext {
     }
     frames.last.exitScope(label)
   }
+
+  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+    if (frames.isEmpty) {
+      throw SparkException.internalError(s"Cannot find handler: no frames.")
+    }
+
+    frames.reverseIterator.foreach { frame =>
+      val handler = frame.findHandler(condition)
+      if (handler.isDefined) {
+        return handler
+      }
+    }
+    None
+  }
+
 }
 
 /**
@@ -53,8 +68,7 @@ class SqlScriptingExecutionFrame(
     executionPlan: Iterator[CompoundStatementExec]) extends Iterator[CompoundStatementExec] {
 
   // List of scopes that are currently active.
-  private val scopes: ListBuffer[SqlScriptingExecutionScope] =
-    ListBuffer(new SqlScriptingExecutionScope("root"))
+  private val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
   override def hasNext: Boolean = executionPlan.hasNext
 
@@ -63,8 +77,22 @@ class SqlScriptingExecutionFrame(
     executionPlan.next()
   }
 
-  def enterScope(label: String): Unit = {
-    scopes.addOne(new SqlScriptingExecutionScope(label))
+  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+    if (scopes.isEmpty) {
+      throw SparkException.internalError(s"Cannot find handler: no scopes.")
+    }
+
+    scopes.reverseIterator.foreach { scope =>
+      val handler = scope.findHandler(condition)
+      if (handler.isDefined) {
+        return handler
+      }
+    }
+    None
+  }
+
+  def enterScope(label: String, conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
+    scopes.addOne(new SqlScriptingExecutionScope(label, conditionHandlerMap))
   }
 
   def exitScope(label: String): Unit = {
@@ -89,4 +117,11 @@ class SqlScriptingExecutionFrame(
  * @param label
  *   Label of the scope.
  */
-class SqlScriptingExecutionScope(val label: String)
+class SqlScriptingExecutionScope(
+    val label: String,
+    val conditionHandlerMap: HashMap[String, ErrorHandlerExec]) {
+
+  def findHandler(condition: String): Option[ErrorHandlerExec] = {
+    conditionHandlerMap.get(condition)
+  }
+}

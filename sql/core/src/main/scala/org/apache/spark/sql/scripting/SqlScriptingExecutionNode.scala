@@ -18,12 +18,13 @@
 package org.apache.spark.sql.scripting
 
 import java.util
-
+import scala.collection.mutable.HashMap
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -174,7 +175,8 @@ class SingleStatementExec(
 class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
     label: Option[String] = None,
-    context: SqlScriptingExecutionContext)
+    context: SqlScriptingExecutionContext,
+    conditionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap())
   extends NonLeafStatementExec {
 
   private var localIterator = statements.iterator
@@ -182,14 +184,14 @@ class CompoundBodyExec(
   private var scopeEntered = false
   private var scopeExited = false
 
-  private def enterScope(): Unit = {
+  def enterScope(): Unit = {
     if (label.isDefined && !scopeEntered) {
       scopeEntered = true
-      context.enterScope(label.get)
+      context.enterScope(label.get, conditionHandlerMap)
     }
   }
 
-  private def exitScope(): Unit = {
+  def exitScope(): Unit = {
     if (label.isDefined && !scopeExited) {
       scopeExited = true
       context.exitScope(label.get)
@@ -919,4 +921,18 @@ class ForStatementExec(
     interrupted = false
     body.reset()
   }
+}
+
+/**
+ * Executable node for ErrorHandlerStatement.
+ * @param body Executable CompoundBody of the error handler.
+ */
+class ErrorHandlerExec(
+    val body: CompoundBodyExec,
+    val handlerType: HandlerType,
+    val scopeToExit: Option[String]) extends NonLeafStatementExec {
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
+
+  override def reset(): Unit = body.reset()
 }

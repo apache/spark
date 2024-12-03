@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
@@ -40,24 +40,25 @@ class SqlScriptingExecution(
   // Frames to keep what is being executed.
   private val context: SqlScriptingExecutionContext = {
     val ctx = new SqlScriptingExecutionContext()
-    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
-    val frame = new SqlScriptingExecutionFrame(executionPlan)
-    frame.enterScope(sqlScript.label.get)
-    ctx.frames
-      .addOne(new SqlScriptingExecutionFrame(
-        interpreter.buildExecutionPlan(sqlScript, args, ctx)))
+    interpreter.buildExecutionPlan(sqlScript, args, ctx)
     ctx
   }
 
-  private var current = getNextResult
+  private var current: Option[DataFrame] = None
 
-  override def hasNext: Boolean = current.isDefined
+  override def hasNext: Boolean = {
+    val stmt = getNextResult
+    if (stmt.isDefined) {
+      current = stmt
+      true
+    } else {
+      false
+    }
+  }
 
   override def next(): DataFrame = {
     if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    val nextDataFrame = current.get
-    current = getNextResult
-    nextDataFrame
+    current.get
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
@@ -80,6 +81,7 @@ class SqlScriptingExecution(
         case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>
           withErrorHandling {
             val df = stmt.buildDataFrame(session)
+            print("GOT DATAFRAME\n")
             df.logicalPlan match {
               case _: CommandResult => // pass
               case _ => return Some(df) // If the statement is a result, return it to the caller.
@@ -92,18 +94,26 @@ class SqlScriptingExecution(
     None
   }
 
-  private def handleException(e: Throwable): Unit = {
-    // Rethrow the exception.
-    // TODO: SPARK-48353 Add error handling for SQL scripts
-    throw e
+  private def handleException(e: SparkThrowable): Unit = {
+    print("ERROR HAPPENED\n")
+    context.findHandler(e.getSqlState) match {
+      case Some(handler) =>
+        context.frames.addOne(new SqlScriptingExecutionFrame(handler.getTreeIterator))
+      case None =>
+        throw e.asInstanceOf[Throwable]
+    }
   }
 
   def withErrorHandling(f: => Unit): Unit = {
     try {
       f
     } catch {
-      case e: Throwable =>
+      case e: SparkThrowable =>
+        // Try to find a handler for the exception.
         handleException(e)
+      case exception: Exception =>
+        // Throw the exception as is.
+        throw exception
     }
   }
 }
