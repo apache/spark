@@ -377,16 +377,19 @@ class StateStoreChangelogReaderFactory(
    * @return StateStoreChangelogReader
    */
   def constructChangelogReader(): StateStoreChangelogReader = {
-    val reader = readVersion() match {
-      case 1 => new StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec)
-      case 2 => new StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec)
-      case 3 => new StateStoreChangelogReaderV3(fm, fileToRead, compressionCodec)
-      case 4 => new StateStoreChangelogReaderV4(fm, fileToRead, compressionCodec)
-      case version => throw QueryExecutionErrors.invalidChangeLogReaderVersion(version)
-    }
-
-    if (input != null) {
-      input.close()
+    var reader: StateStoreChangelogReader = null
+    try {
+      reader = readVersion() match {
+        case 1 => new StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec)
+        case 2 => new StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec)
+        case 3 => new StateStoreChangelogReaderV3(fm, fileToRead, compressionCodec)
+        case 4 => new StateStoreChangelogReaderV4(fm, fileToRead, compressionCodec)
+        case version => throw QueryExecutionErrors.invalidChangeLogReaderVersion(version)
+      }
+    } finally {
+      if (input != null) {
+        input.close()
+      }
     }
     reader
   }
