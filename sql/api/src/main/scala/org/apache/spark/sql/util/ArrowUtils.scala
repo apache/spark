@@ -72,6 +72,10 @@ private[sql] object ArrowUtils {
     case int: ArrowType.Int if int.getIsSigned && int.getBitWidth == 8 * 2 => ShortType
     case int: ArrowType.Int if int.getIsSigned && int.getBitWidth == 8 * 4 => IntegerType
     case int: ArrowType.Int if int.getIsSigned && int.getBitWidth == 8 * 8 => LongType
+    case int: ArrowType.Int if !int.getIsSigned && int.getBitWidth == 8 => ShortType
+    case int: ArrowType.Int if !int.getIsSigned && int.getBitWidth == 8 * 2 => IntegerType
+    case int: ArrowType.Int if !int.getIsSigned && int.getBitWidth == 8 * 4 => LongType
+    case int: ArrowType.Int if !int.getIsSigned && int.getBitWidth == 8 * 8 => DecimalType(20, 0)
     case float: ArrowType.FloatingPoint
         if float.getPrecision() == FloatingPointPrecision.SINGLE =>
       FloatType

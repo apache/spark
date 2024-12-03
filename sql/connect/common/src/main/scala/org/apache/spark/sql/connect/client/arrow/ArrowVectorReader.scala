@@ -20,7 +20,7 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 
-import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, VarBinaryVector, VarCharVector}
+import org.apache.arrow.vector.{BigIntVector, BitVector, DateDayVector, DecimalVector, DurationVector, FieldVector, Float4Vector, Float8Vector, IntervalYearVector, IntVector, NullVector, SmallIntVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector, UInt1Vector, UInt2Vector, UInt4Vector, UInt8Vector, VarBinaryVector, VarCharVector}
 import org.apache.arrow.vector.util.Text
 
 import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkIntervalUtils, SparkStringUtils, TimestampFormatter}
@@ -78,6 +78,10 @@ object ArrowVectorReader {
       case v: SmallIntVector => new SmallIntVectorReader(v)
       case v: IntVector => new IntVectorReader(v)
       case v: BigIntVector => new BigIntVectorReader(v)
+      case v: UInt1Vector => new UInt1VectorReader(v)
+      case v: UInt2Vector => new UInt2VectorReader(v)
+      case v: UInt4Vector => new UInt4VectorReader(v)
+      case v: UInt8Vector => new UInt8VectorReader(v)
       case v: Float4Vector => new Float4VectorReader(v)
       case v: Float8Vector => new Float8VectorReader(v)
       case v: DecimalVector => new DecimalVectorReader(v)
@@ -149,6 +153,49 @@ private[arrow] class BigIntVectorReader(v: BigIntVector)
   override def getJavaDecimal(i: Int): JBigDecimal = JBigDecimal.valueOf(getLong(i))
   override def getTimestamp(i: Int): Timestamp = toJavaTimestamp(getLong(i) * MICROS_PER_SECOND)
   override def getInstant(i: Int): Instant = microsToInstant(getLong(i))
+}
+
+private[arrow] class UInt1VectorReader(v: UInt1Vector)
+    extends TypedArrowVectorReader[UInt1Vector](v) {
+  override def getShort(i: Int): Short =
+    java.lang.Byte.toUnsignedInt(vector.get(i)).asInstanceOf[Short]
+  override def getInt(i: Int): Int = getShort(i)
+  override def getLong(i: Int): Long = getShort(i)
+  override def getFloat(i: Int): Float = getShort(i).toFloat
+  override def getDouble(i: Int): Double = getShort(i).toDouble
+  override def getString(i: Int): String = String.valueOf(getShort(i))
+  override def getJavaDecimal(i: Int): JBigDecimal = JBigDecimal.valueOf(getShort(i))
+}
+
+private[arrow] class UInt2VectorReader(v: UInt2Vector)
+    extends TypedArrowVectorReader[UInt2Vector](v) {
+  override def getInt(i: Int): Int = vector.get(i).asInstanceOf[Int]
+  override def getLong(i: Int): Long = getInt(i)
+  override def getFloat(i: Int): Float = getInt(i).toFloat
+  override def getDouble(i: Int): Double = getInt(i).toDouble
+  override def getString(i: Int): String = String.valueOf(getInt(i))
+  override def getJavaDecimal(i: Int): JBigDecimal = JBigDecimal.valueOf(getInt(i))
+}
+
+private[arrow] class UInt4VectorReader(v: UInt4Vector)
+    extends TypedArrowVectorReader[UInt4Vector](v) {
+  override def getLong(i: Int): Long = Integer.toUnsignedLong(vector.get(i))
+  override def getFloat(i: Int): Float = getLong(i).toFloat
+  override def getDouble(i: Int): Double = getLong(i).toDouble
+  override def getString(i: Int): String = String.valueOf(getLong(i))
+  override def getJavaDecimal(i: Int): JBigDecimal = JBigDecimal.valueOf(getLong(i))
+}
+
+private[arrow] class UInt8VectorReader(v: UInt8Vector)
+    extends TypedArrowVectorReader[UInt8Vector](v) {
+  override def getDecimal(i: Int): Decimal = Decimal.apply(vector.get(i), 20, 0)
+  override def getFloat(i: Int): Float = getDecimal(i).toFloat
+  override def getDouble(i: Int): Double = getDecimal(i).toDouble
+  override def getString(i: Int): String = String.valueOf(getDecimal(i))
+  override def getJavaDecimal(i: Int): JBigDecimal = getDecimal(i).toJavaBigDecimal
+  override def getTimestamp(i: Int): Timestamp =
+    toJavaTimestamp(getDecimal(i).toLong * MICROS_PER_SECOND)
+  override def getInstant(i: Int): Instant = microsToInstant(getDecimal(i).toLong)
 }
 
 private[arrow] class Float4VectorReader(v: Float4Vector)
