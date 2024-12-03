@@ -1784,6 +1784,34 @@ table wswscs
      round(fri_sales1 / fri_sales2, 2),
      round(sat_sales1 / sat_sales2, 2);
 
+-- Q3
+select
+  dt.d_year,
+  item.i_brand_id brand_id,
+  item.i_brand brand,
+  sum(ss_ext_sales_price) sum_agg
+from date_dim dt, store_sales, item
+where dt.d_date_sk = store_sales.ss_sold_date_sk
+  and store_sales.ss_item_sk = item.i_item_sk
+  and item.i_manufact_id = 128
+  and dt.d_moy = 11
+group by dt.d_year, item.i_brand, item.i_brand_id
+order by dt.d_year, sum_agg desc, brand_id
+limit 100;
+
+table date_dim
+|> as dt
+|> join store_sales
+|> join item
+|> where dt.d_date_sk = store_sales.ss_sold_date_sk
+     and store_sales.ss_item_sk = item.i_item_sk
+     and item.i_manufact_id = 128
+     and dt.d_moy = 11
+|> aggregate sum(ss_ext_sales_price) sum_agg
+     group by dt.d_year d_year, item.i_brand_id brand_id, item.i_brand brand
+|> order by d_year, sum_agg desc, brand_id
+|> limit 100;
+
 -- Cleanup.
 -----------
 drop table t;

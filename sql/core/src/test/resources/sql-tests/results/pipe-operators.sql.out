@@ -4108,6 +4108,45 @@ struct<d_week_seq1:int,round((sun_sales1 / sun_sales2), 2):decimal(20,2),round((
 
 
 -- !query
+select
+  dt.d_year,
+  item.i_brand_id brand_id,
+  item.i_brand brand,
+  sum(ss_ext_sales_price) sum_agg
+from date_dim dt, store_sales, item
+where dt.d_date_sk = store_sales.ss_sold_date_sk
+  and store_sales.ss_item_sk = item.i_item_sk
+  and item.i_manufact_id = 128
+  and dt.d_moy = 11
+group by dt.d_year, item.i_brand, item.i_brand_id
+order by dt.d_year, sum_agg desc, brand_id
+limit 100
+-- !query schema
+struct<d_year:int,brand_id:int,brand:string,sum_agg:decimal(17,2)>
+-- !query output
+
+
+
+-- !query
+table date_dim
+|> as dt
+|> join store_sales
+|> join item
+|> where dt.d_date_sk = store_sales.ss_sold_date_sk
+     and store_sales.ss_item_sk = item.i_item_sk
+     and item.i_manufact_id = 128
+     and dt.d_moy = 11
+|> aggregate sum(ss_ext_sales_price) sum_agg
+     group by dt.d_year d_year, item.i_brand_id brand_id, item.i_brand brand
+|> order by d_year, sum_agg desc, brand_id
+|> limit 100
+-- !query schema
+struct<d_year:int,brand_id:int,brand:string,sum_agg:decimal(17,2)>
+-- !query output
+
+
+
+-- !query
 drop table t
 -- !query schema
 struct<>

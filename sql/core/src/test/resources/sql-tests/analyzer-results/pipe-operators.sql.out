@@ -4512,6 +4512,73 @@ WithCTE
 
 
 -- !query
+select
+  dt.d_year,
+  item.i_brand_id brand_id,
+  item.i_brand brand,
+  sum(ss_ext_sales_price) sum_agg
+from date_dim dt, store_sales, item
+where dt.d_date_sk = store_sales.ss_sold_date_sk
+  and store_sales.ss_item_sk = item.i_item_sk
+  and item.i_manufact_id = 128
+  and dt.d_moy = 11
+group by dt.d_year, item.i_brand, item.i_brand_id
+order by dt.d_year, sum_agg desc, brand_id
+limit 100
+-- !query analysis
+GlobalLimit 100
++- LocalLimit 100
+   +- Sort [d_year#x ASC NULLS FIRST, sum_agg#x DESC NULLS LAST, brand_id#x ASC NULLS FIRST], true
+      +- Aggregate [d_year#x, i_brand#x, i_brand_id#x], [d_year#x, i_brand_id#x AS brand_id#x, i_brand#x AS brand#x, sum(ss_ext_sales_price#x) AS sum_agg#x]
+         +- Filter (((d_date_sk#x = ss_sold_date_sk#x) AND (ss_item_sk#x = i_item_sk#x)) AND ((i_manufact_id#x = 128) AND (d_moy#x = 11)))
+            +- Join Inner
+               :- Join Inner
+               :  :- SubqueryAlias dt
+               :  :  +- SubqueryAlias spark_catalog.default.date_dim
+               :  :     +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+               :  :        +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+               :  +- SubqueryAlias spark_catalog.default.store_sales
+               :     +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+               +- SubqueryAlias spark_catalog.default.item
+                  +- Project [i_item_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_item_id#x, 16)) AS i_item_id#x, i_rec_start_date#x, i_rec_end_date#x, i_item_desc#x, i_current_price#x, i_wholesale_cost#x, i_brand_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_brand#x, 50)) AS i_brand#x, i_class_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_class#x, 50)) AS i_class#x, i_category_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_category#x, 50)) AS i_category#x, i_manufact_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_manufact#x, 50)) AS i_manufact#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_size#x, 20)) AS i_size#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_formulation#x, 20)) AS i_formulation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_color#x, 20)) AS i_color#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_units#x, 10)) AS i_units#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_container#x, 10)) AS i_container#x, i_manager_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_product_name#x, 50)) AS i_product_name#x]
+                     +- Relation spark_catalog.default.item[i_item_sk#x,i_item_id#x,i_rec_start_date#x,i_rec_end_date#x,i_item_desc#x,i_current_price#x,i_wholesale_cost#x,i_brand_id#x,i_brand#x,i_class_id#x,i_class#x,i_category_id#x,i_category#x,i_manufact_id#x,i_manufact#x,i_size#x,i_formulation#x,i_color#x,i_units#x,i_container#x,i_manager_id#x,i_product_name#x] parquet
+
+
+-- !query
+table date_dim
+|> as dt
+|> join store_sales
+|> join item
+|> where dt.d_date_sk = store_sales.ss_sold_date_sk
+     and store_sales.ss_item_sk = item.i_item_sk
+     and item.i_manufact_id = 128
+     and dt.d_moy = 11
+|> aggregate sum(ss_ext_sales_price) sum_agg
+     group by dt.d_year d_year, item.i_brand_id brand_id, item.i_brand brand
+|> order by d_year, sum_agg desc, brand_id
+|> limit 100
+-- !query analysis
+GlobalLimit 100
++- LocalLimit 100
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Sort [d_year#x ASC NULLS FIRST, sum_agg#x DESC NULLS LAST, brand_id#x ASC NULLS FIRST], true
+         +- SubqueryAlias __auto_generated_subquery_name
+            +- Aggregate [d_year#x, i_brand_id#x, i_brand#x], [d_year#x AS d_year#x, i_brand_id#x AS brand_id#x, i_brand#x AS brand#x, pipeexpression(sum(ss_ext_sales_price#x), true, AGGREGATE) AS sum_agg#x]
+               +- Filter (((d_date_sk#x = ss_sold_date_sk#x) AND (ss_item_sk#x = i_item_sk#x)) AND ((i_manufact_id#x = 128) AND (d_moy#x = 11)))
+                  +- Join Inner
+                     :- Join Inner
+                     :  :- SubqueryAlias dt
+                     :  :  +- SubqueryAlias spark_catalog.default.date_dim
+                     :  :     +- Project [d_date_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_date_id#x, 16)) AS d_date_id#x, d_date#x, d_month_seq#x, d_week_seq#x, d_quarter_seq#x, d_year#x, d_dow#x, d_moy#x, d_dom#x, d_qoy#x, d_fy_year#x, d_fy_quarter_seq#x, d_fy_week_seq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_day_name#x, 9)) AS d_day_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_quarter_name#x, 6)) AS d_quarter_name#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_holiday#x, 1)) AS d_holiday#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_weekend#x, 1)) AS d_weekend#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_following_holiday#x, 1)) AS d_following_holiday#x, d_first_dom#x, d_last_dom#x, d_same_day_ly#x, d_same_day_lq#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(d_current_day#x, 1)) AS d_current_day#x, ... 4 more fields]
+                     :  :        +- Relation spark_catalog.default.date_dim[d_date_sk#x,d_date_id#x,d_date#x,d_month_seq#x,d_week_seq#x,d_quarter_seq#x,d_year#x,d_dow#x,d_moy#x,d_dom#x,d_qoy#x,d_fy_year#x,d_fy_quarter_seq#x,d_fy_week_seq#x,d_day_name#x,d_quarter_name#x,d_holiday#x,d_weekend#x,d_following_holiday#x,d_first_dom#x,d_last_dom#x,d_same_day_ly#x,d_same_day_lq#x,d_current_day#x,... 4 more fields] parquet
+                     :  +- SubqueryAlias spark_catalog.default.store_sales
+                     :     +- Relation spark_catalog.default.store_sales[ss_sold_date_sk#x,ss_sold_time_sk#x,ss_item_sk#x,ss_customer_sk#x,ss_cdemo_sk#x,ss_hdemo_sk#x,ss_addr_sk#x,ss_store_sk#x,ss_promo_sk#x,ss_ticket_number#x,ss_quantity#x,ss_wholesale_cost#x,ss_list_price#x,ss_sales_price#x,ss_ext_discount_amt#x,ss_ext_sales_price#x,ss_ext_wholesale_cost#x,ss_ext_list_price#x,ss_ext_tax#x,ss_coupon_amt#x,ss_net_paid#x,ss_net_paid_inc_tax#x,ss_net_profit#x] parquet
+                     +- SubqueryAlias spark_catalog.default.item
+                        +- Project [i_item_sk#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_item_id#x, 16)) AS i_item_id#x, i_rec_start_date#x, i_rec_end_date#x, i_item_desc#x, i_current_price#x, i_wholesale_cost#x, i_brand_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_brand#x, 50)) AS i_brand#x, i_class_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_class#x, 50)) AS i_class#x, i_category_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_category#x, 50)) AS i_category#x, i_manufact_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_manufact#x, 50)) AS i_manufact#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_size#x, 20)) AS i_size#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_formulation#x, 20)) AS i_formulation#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_color#x, 20)) AS i_color#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_units#x, 10)) AS i_units#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_container#x, 10)) AS i_container#x, i_manager_id#x, static_invoke(CharVarcharCodegenUtils.readSidePadding(i_product_name#x, 50)) AS i_product_name#x]
+                           +- Relation spark_catalog.default.item[i_item_sk#x,i_item_id#x,i_rec_start_date#x,i_rec_end_date#x,i_item_desc#x,i_current_price#x,i_wholesale_cost#x,i_brand_id#x,i_brand#x,i_class_id#x,i_class#x,i_category_id#x,i_category#x,i_manufact_id#x,i_manufact#x,i_size#x,i_formulation#x,i_color#x,i_units#x,i_container#x,i_manager_id#x,i_product_name#x] parquet
+
+
+-- !query
 drop table t
 -- !query analysis
 DropTable false, false
