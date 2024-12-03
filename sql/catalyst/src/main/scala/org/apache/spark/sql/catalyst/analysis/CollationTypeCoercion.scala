@@ -279,13 +279,13 @@ object CollationTypeCoercion {
         findCollationContext(right).flatMap { ctx =>
           mergeWinner(left, ctx)
         }
-      case (None, _) => return None
+      case (None, _) => None
     }
     collationContextWinner
   }
 
   /**
-   * Tries to find the collation context for the given expression.
+   * Tries to find the data type with the collation context for the given expression.
    * If found, it will also set the [[COLLATION_CONTEXT_TAG]] on the expression,
    * so that the context can be reused later.
    */
