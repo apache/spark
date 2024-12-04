@@ -21,6 +21,7 @@ import java.net.URI
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -132,6 +133,23 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
           "specKeys" -> "b",
           "partitionColumnNames" -> "a, b",
           "tableName" -> "`spark_catalog`.`ns`.`tbl`"))
+    }
+  }
+
+  test("SPARK-50485: Unwrap SparkThrowable in UEE thrown by tableRelationCache") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(buildCreateTableSQL(t))
+      sql(s"CREATE TABLE t (a INT)")
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql(s"ALTER TABLE t SET LOCATION 'https://mister/spark'")
+        },
+        condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+        parameters = Map(
+          "path" -> "https://mister/spark",
+          "fileSystemClass" -> "org.apache.hadoop.fs.http.HttpsFileSystem",
+          "method" -> "listStatus"))
+
     }
   }
 }
