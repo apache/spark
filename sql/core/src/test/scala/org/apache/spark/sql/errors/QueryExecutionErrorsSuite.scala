@@ -1271,7 +1271,7 @@ class QueryExecutionErrorsSuite
           "path" -> "https://mister/spark",
           "fileSystemClass" -> "org.apache.hadoop.fs.http.HttpsFileSystem",
           "method" -> "listStatus"))
-      sql(s"ALTER TABLE t SET LOCATION '/mister/spark'")
+      sql("ALTER TABLE t SET LOCATION '/mister/spark'")
     }
   }
 }
