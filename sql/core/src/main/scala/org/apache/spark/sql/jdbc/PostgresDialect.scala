@@ -267,6 +267,14 @@ private case class PostgresDialect()
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
+          case "42601" if errorClass == "..." =>
+            throw QueryCompilationErrors.jdbcGeneratedQuerySyntaxError(
+              messageParameters.get("url").getOrElse(""),
+              messageParameters.get("query").getOrElse(""))
+          case "42P01" if errorClass == "..." =>
+            throw QueryCompilationErrors.jdbcGeneratedQueryGetSchemaError(
+              messageParameters.get("url").getOrElse(""),
+              messageParameters.get("query").getOrElse(""))
           case "42P07" =>
             if (errorClass == "FAILED_JDBC.CREATE_INDEX") {
               throw new IndexAlreadyExistsException(

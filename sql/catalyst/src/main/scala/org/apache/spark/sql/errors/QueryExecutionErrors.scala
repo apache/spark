@@ -943,6 +943,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "jdbcQueryString" -> jdbcQueryString))
   }
 
+  def jdbcGeneratedQueryExecutionError(url: String, query: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "FAILED_JDBC.EXECUTE_QUERY",
+      messageParameters = Map(
+        "query" -> query,
+        "url" -> url
+      )
+    )
+  }
+
   def missingJdbcTableNameAndQueryError(
       jdbcTableName: String, jdbcQueryString: String): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(

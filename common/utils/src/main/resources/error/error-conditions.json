@@ -1400,6 +1400,16 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "EXECUTE_QUERY" : {
+        "message" : [
+          "Execution of the query: <query>."
+        ]
+      },
+      "GET_SCHEMA" : {
+        "message" : [
+          "Schema fetching for an external query or a table: <query>."
+        ]
+      },
       "GET_TABLES" : {
         "message" : [
           "Get tables from the namespace: <namespace>."
@@ -1428,6 +1438,11 @@
       "RENAME_TABLE" : {
         "message" : [
           "Rename the table <oldName> to <newName>."
+        ]
+      },
+      "SYNTAX_ERROR" : {
+        "message" : [
+          "Compilation of the query for an external DBMS: <query>."
         ]
       },
       "TABLE_EXISTS" : {
