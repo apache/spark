@@ -78,7 +78,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       args: Map[String, Expression],
       context: SqlScriptingExecutionContext): CompoundStatementExec =
     node match {
-      case CompoundBody(collection, label) =>
+      case CompoundBody(collection, label, isScope) =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
         val variables = collection.flatMap {
           case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
@@ -91,6 +91,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
         new CompoundBodyExec(
           collection.map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables,
           label,
+          isScope,
           context)
 
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>

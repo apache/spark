@@ -174,6 +174,7 @@ class SingleStatementExec(
 class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
     label: Option[String] = None,
+    isScope: Boolean,
     context: SqlScriptingExecutionContext)
   extends NonLeafStatementExec {
 
@@ -182,16 +183,18 @@ class CompoundBodyExec(
   private var scopeEntered = false
   private var scopeExited = false
 
-  def enterScope(): Unit = {
-    if (context != null && label.isDefined && !scopeEntered) {
+  protected def enterScope(): Unit = {
+    if (isScope && !scopeEntered) {
       scopeEntered = true
+      scopeExited = false
       context.enterScope(label.get)
     }
   }
 
-  def exitScope(): Unit = {
-    if (context != null && label.isDefined && !scopeExited) {
+  protected def exitScope(): Unit = {
+    if (isScope && !scopeExited) {
       scopeExited = true
+      scopeEntered = false
       context.exitScope(label.get)
     }
   }
@@ -209,11 +212,7 @@ class CompoundBodyExec(
           case _ => throw SparkException.internalError(
             "Unknown statement type encountered during SQL script interpretation.")
         }
-        val result = !stopIteration && (localIterator.hasNext || childHasNext)
-        if (!result) {
-          exitScope()
-        }
-        result
+        !stopIteration && (localIterator.hasNext || childHasNext)
       }
 
       @scala.annotation.tailrec
@@ -235,6 +234,10 @@ class CompoundBodyExec(
             statement
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
+              body match {
+                case exec: CompoundBodyExec => exec.enterScope()
+                case _ => // pass
+              }
               body.getTreeIterator.next() match {
                 case leaveStatement: LeaveStatementExec =>
                   handleLeaveStatement(leaveStatement)
@@ -245,6 +248,10 @@ class CompoundBodyExec(
                 case other => other
               }
             } else {
+              body match {
+                case exec: CompoundBodyExec => exec.exitScope()
+                case _ => // pass
+              }
               curr = if (localIterator.hasNext) Some(localIterator.next()) else None
               next()
             }
@@ -871,6 +878,7 @@ class ForStatementExec(
       dropVariablesExec = new CompoundBodyExec(
         variablesMap.keys.toSeq.map(colName => createDropVarExec(colName)),
         None,
+        isScope = false,
         context
       )
       ForState.VariableCleanup
