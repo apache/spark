@@ -88,9 +88,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
    */
   protected val sessionArtifactAdded = new AtomicBoolean(false)
 
-  protected val cachedClassLoader = new ThreadLocal[ClassLoader] {
-    override def initialValue(): ClassLoader = null
-  }
+  protected var cachedClassLoader: Option[ClassLoader] = None
 
   private def withClassLoaderIfNeeded[T](f: => T): T = {
     val log = s" classloader for session ${session.sessionUUID} because " +
@@ -207,7 +205,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
         allowOverwrite = true,
         deleteSource = deleteStagedFile)
       sessionArtifactAdded.set(true)
-      cachedClassLoader.remove()
+      cachedClassLoader = None
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
       // Disallow overwriting with modified version
@@ -232,7 +230,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
           (SparkContextResourceType.JAR, normalizedRemoteRelativePath, fragment))
         jarsList.add(normalizedRemoteRelativePath)
         sessionArtifactAdded.set(true)
-        cachedClassLoader.remove()
+        cachedClassLoader = None
       } else if (normalizedRemoteRelativePath.startsWith(s"pyfiles${File.separator}")) {
         session.sparkContext.addFile(uri)
         sparkContextRelativePaths.add(
@@ -288,14 +286,10 @@ class ArtifactManager(session: SparkSession) extends Logging {
     }
   }
 
-  def classloader: ClassLoader = {
-    if (cachedClassLoader.get() != null) {
-      cachedClassLoader.get()
-    } else {
-      val loader = buildClassLoader
-      cachedClassLoader.set(loader)
-      loader
-    }
+  def classloader: ClassLoader = cachedClassLoader.getOrElse {
+    val loader = buildClassLoader
+    cachedClassLoader = Some(loader)
+    loader
   }
 
   /**
@@ -413,7 +407,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
     sparkContextRelativePaths.clear()
 
     // Removed cached classloader
-    cachedClassLoader.remove()
+    cachedClassLoader = None
   }
 
   def uploadArtifactToFs(
