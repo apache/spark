@@ -1024,7 +1024,7 @@ private[spark] class SparkSubmit extends Logging {
         throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
     }
 
-    val app: SparkConnectRunner = if (classOf[SparkConnectRunner].isAssignableFrom(mainClass)) {
+    val app: SparkApplication = if (classOf[SparkConnectRunner].isAssignableFrom(mainClass)) {
       mainClass.getConstructor().newInstance().asInstanceOf[SparkConnectRunner]
     } else {
       new JavaMainApplication(mainClass)
