@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.streaming
 
-// scalastyle:off
-
 import java.io.{ByteArrayInputStream, FileInputStream, FileOutputStream, InputStream, OutputStream}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Path
+
+import scala.io.{Source => IOSource}
+
+import org.json4s.{Formats, NoTypeHints}
+import org.json4s.jackson.Serialization
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.{CommitLog, CommitMetadata, HDFSMetadataLog}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.json4s.jackson.Serialization
-import org.json4s.{Formats, NoTypeHints}
 
-import java.nio.charset.StandardCharsets.UTF_8
-import scala.io.{Source => IOSource}
 
 class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
 
