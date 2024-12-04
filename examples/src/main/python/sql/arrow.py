@@ -33,6 +33,14 @@ require_minimum_pandas_version()
 require_minimum_pyarrow_version()
 
 
+def dataframe_from_list_of_dicts_example(spark: SparkSession) -> None:
+    """Test creating a DataFrame from a list of dictionaries."""
+
+    data_iter = [{'name': 'Alice', 'age': 1}]
+    result_table = spark.createDataFrame(data_iter)
+
+    print(result_table.schema)
+
 def dataframe_to_from_arrow_table_example(spark: SparkSession) -> None:
     import pyarrow as pa
     import numpy as np
@@ -321,6 +329,8 @@ if __name__ == "__main__":
         .appName("Python Arrow-in-Spark example") \
         .getOrCreate()
 
+    print("Running DataFrame from list of dictionaries example")
+    dataframe_from_list_of_dicts_example(spark)
     print("Running Arrow conversion example: DataFrame to Table")
     dataframe_to_from_arrow_table_example(spark)
     print("Running Pandas to/from conversion example")
