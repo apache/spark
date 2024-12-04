@@ -245,6 +245,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     hadoopConf
   }
 
+  override def beforeEach(): Unit = {
+    OpenNumCountedTestInputStream.clearOpenStreams()
+  }
+
   override def afterEach(): Unit = {
     eventually(timeout(10.seconds), interval(2.seconds)) {
       OpenNumCountedTestInputStream.assertNoOpenStreams()
