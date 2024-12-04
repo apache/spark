@@ -32,6 +32,7 @@ from pyspark.sql import Row
 from pyspark.sql.datasource import (
     DataSource,
     DataSourceWriter,
+    DataSourceArrowWriter,
     WriterCommitMessage,
     CaseInsensitiveDict,
 )
@@ -194,7 +195,10 @@ def main(infile: IO, outfile: IO) -> None:
                         ]
                         yield _create_row(fields=fields, values=values)
 
-            res = writer.write(batch_to_rows())
+            if isinstance(writer, DataSourceArrowWriter):
+                res = writer.write(iterator)
+            else:
+                res = writer.write(batch_to_rows())
 
             # Check the commit message has the right type.
             if not isinstance(res, WriterCommitMessage):

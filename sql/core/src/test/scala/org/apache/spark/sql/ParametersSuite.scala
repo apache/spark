@@ -758,4 +758,15 @@ class ParametersSuite extends QueryTest with SharedSparkSession with PlanTest {
       checkAnswer(spark.sql(query("?"), args = Array("tt1")), Row(1))
     }
   }
+
+  test("SPARK-50441: parameterized identifier referencing a CTE") {
+    def query(p: String): String = {
+      s"""
+         |WITH t1 AS (SELECT 1)
+         |SELECT * FROM IDENTIFIER($p)""".stripMargin
+    }
+
+    checkAnswer(spark.sql(query(":cte"), args = Map("cte" -> "t1")), Row(1))
+    checkAnswer(spark.sql(query("?"), args = Array("t1")), Row(1))
+  }
 }

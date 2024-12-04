@@ -18,6 +18,7 @@
 package org.apache.spark.sql.scripting
 
 import scala.collection.mutable.HashMap
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -48,11 +49,8 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       compound: CompoundBody,
       args: Map[String, Expression],
       context: SqlScriptingExecutionContext): Iterator[CompoundStatementExec] = {
-    val compoundBodyExec = transformTreeIntoExecutable(compound, args, context)
-      .asInstanceOf[CompoundBodyExec]
-    context.frames.addOne(new SqlScriptingExecutionFrame(compoundBodyExec.getTreeIterator))
-    compoundBodyExec.enterScope()
-    compoundBodyExec.getTreeIterator
+    transformTreeIntoExecutable(compound, args, context)
+      .asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
   /**

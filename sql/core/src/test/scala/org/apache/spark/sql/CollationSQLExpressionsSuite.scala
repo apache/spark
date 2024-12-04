@@ -26,6 +26,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentExceptio
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.Mode
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.{SqlApiConf, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -40,6 +41,7 @@ class CollationSQLExpressionsSuite
 
   private val testSuppCollations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE", "UNICODE_CI")
   private val testAdditionalCollations = Seq("UNICODE", "SR", "SR_CI", "SR_AI", "SR_CI_AI")
+  private val fullyQualifiedPrefix = s"${CollationFactory.CATALOG}.${CollationFactory.SCHEMA}."
 
   test("Support Md5 hash expression with collation") {
     case class Md5TestCase(
@@ -376,6 +378,10 @@ class CollationSQLExpressionsSuite
           StructField("B", DoubleType, nullable = true)
         )),
       CsvToStructsTestCase("\"Spark\"", "UNICODE", "'a STRING'", "",
+        Row("Spark"), Seq(
+          StructField("a", StringType, nullable = true)
+        )),
+      CsvToStructsTestCase("\"Spark\"", "UTF8_BINARY", "'a STRING COLLATE UNICODE'", "",
         Row("Spark"), Seq(
           StructField("a", StringType("UNICODE"), nullable = true)
         )),
@@ -1292,6 +1298,10 @@ class CollationSQLExpressionsSuite
         )),
       XmlToStructsTestCase("<p><s>Spark</s></p>", "UNICODE", "'s STRING'", "",
         Row("Spark"), Seq(
+          StructField("s", StringType, nullable = true)
+        )),
+      XmlToStructsTestCase("<p><s>Spark</s></p>", "UTF8_BINARY", "'s STRING COLLATE UNICODE'", "",
+        Row("Spark"), Seq(
           StructField("s", StringType("UNICODE"), nullable = true)
         )),
       XmlToStructsTestCase("<p><time>26/08/2015</time></p>", "UNICODE_CI", "'time Timestamp'",
@@ -1515,8 +1525,13 @@ class CollationSQLExpressionsSuite
     val testCases = Seq(
       VariantGetTestCase("{\"a\": 1}", "$.a", "int", "UTF8_BINARY", 1, IntegerType),
       VariantGetTestCase("{\"a\": 1}", "$.b", "int", "UTF8_LCASE", null, IntegerType),
-      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE", "2", StringType("UNICODE")),
+      VariantGetTestCase("[1, \"2\"]", "$[1]", "string", "UNICODE", "2",
+        StringType),
+      VariantGetTestCase("[1, \"2\"]", "$[1]", "string collate unicode", "UTF8_BINARY", "2",
+        StringType("UNICODE")),
       VariantGetTestCase("[1, \"2\"]", "$[2]", "string", "UNICODE_CI", null,
+        StringType),
+      VariantGetTestCase("[1, \"2\"]", "$[2]", "string collate unicode_CI", "UTF8_BINARY", null,
         StringType("UNICODE_CI"))
     )
 
@@ -2014,11 +2029,11 @@ class CollationSQLExpressionsSuite
       val queryExtractor = s"select collation(map($mapKey, $mapVal)[$mapKey])"
       val queryElementAt = s"select collation(element_at(map($mapKey, $mapVal), $mapKey))"
 
-      checkAnswer(sql(queryExtractor), Row(collation))
-      checkAnswer(sql(queryElementAt), Row(collation))
+      checkAnswer(sql(queryExtractor), Row(fullyQualifiedPrefix + collation))
+      checkAnswer(sql(queryElementAt), Row(fullyQualifiedPrefix + collation))
 
       withSQLConf(SqlApiConf.DEFAULT_COLLATION -> defaultCollation) {
-        val res = if (collateVal) "UTF8_LCASE" else defaultCollation
+        val res = fullyQualifiedPrefix + (if (collateVal) "UTF8_LCASE" else defaultCollation)
         checkAnswer(sql(queryExtractor), Row(res))
         checkAnswer(sql(queryElementAt), Row(res))
       }

@@ -264,18 +264,14 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_methods = {
             "addArtifact",
             "addArtifacts",
-            "addTag",
             "clearProgressHandlers",
-            "clearTags",
             "copyFromLocalToFs",
-            "getTags",
             "interruptAll",
             "interruptOperation",
             "interruptTag",
             "newSession",
             "registerProgressHandler",
             "removeProgressHandler",
-            "removeTag",
         }
         expected_missing_classic_methods = set()
         self.check_compatibility(

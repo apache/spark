@@ -25,6 +25,7 @@ from pyspark.sql.datasource import (
     DataSourceReader,
     InputPartition,
     DataSourceWriter,
+    DataSourceArrowWriter,
     WriterCommitMessage,
     CaseInsensitiveDict,
 )
@@ -277,7 +278,7 @@ class BasePythonDataSourceTestsMixin:
                 from pyspark import TaskContext
 
                 context = TaskContext.get()
-                output_path = os.path.join(self.path, f"{context.partitionId}.json")
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
                 count = 0
                 with open(output_path, "w") as file:
                     for row in iterator:
@@ -435,6 +436,37 @@ class BasePythonDataSourceTestsMixin:
             " \\['key', 'value'\\] columns",
         ):
             self.spark.read.format("arrowbatch").schema("key int, dummy string").load().show()
+
+    def test_arrow_batch_sink(self):
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "arrow_sink"
+
+            def writer(self, schema, overwrite):
+                return TestArrowWriter(self.options["path"])
+
+        class TestArrowWriter(DataSourceArrowWriter):
+            def __init__(self, path):
+                self.path = path
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                context = TaskContext.get()
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
+                with open(output_path, "w") as file:
+                    for batch in iterator:
+                        df = batch.to_pandas()
+                        df.to_json(file, orient="records", lines=True)
+                return WriterCommitMessage()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.range(3)
+        with tempfile.TemporaryDirectory(prefix="test_arrow_batch_sink") as d:
+            df.write.format("arrow_sink").mode("append").save(d)
+            df2 = self.spark.read.format("json").load(d)
+            assertDataFrameEqual(df2, df)
 
     def test_data_source_type_mismatch(self):
         class TestDataSource(DataSource):

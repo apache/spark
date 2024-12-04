@@ -40,25 +40,22 @@ class SqlScriptingExecution(
   // Frames to keep what is being executed.
   private val context: SqlScriptingExecutionContext = {
     val ctx = new SqlScriptingExecutionContext()
-    interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    ctx.frames.addOne(new SqlScriptingExecutionFrame(executionPlan))
     ctx
   }
 
-  private var current: Option[DataFrame] = None
+  private var current: Option[DataFrame] = getNextResult
 
-  override def hasNext: Boolean = {
-    val stmt = getNextResult
-    if (stmt.isDefined) {
-      current = stmt
-      true
-    } else {
-      false
-    }
-  }
+  override def hasNext: Boolean = current.isDefined
 
   override def next(): DataFrame = {
-    if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    current.get
+    current match {
+      case None => throw SparkException.internalError("No more elements to iterate through.")
+      case Some(result) =>
+        current = getNextResult
+        result
+    }
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
@@ -66,7 +63,7 @@ class SqlScriptingExecution(
     while (context.frames.nonEmpty && !context.frames.last.hasNext) {
       context.frames.remove(context.frames.size - 1)
     }
-    if (context.frames.nonEmpty && context.frames.last.hasNext) {
+    if (context.frames.nonEmpty) {
       return Some(context.frames.last.next())
     }
     None
@@ -81,7 +78,6 @@ class SqlScriptingExecution(
         case Some(stmt: SingleStatementExec) if !stmt.isExecuted =>
           withErrorHandling {
             val df = stmt.buildDataFrame(session)
-            print("GOT DATAFRAME\n")
             df.logicalPlan match {
               case _: CommandResult => // pass
               case _ => return Some(df) // If the statement is a result, return it to the caller.
@@ -95,7 +91,6 @@ class SqlScriptingExecution(
   }
 
   private def handleException(e: SparkThrowable): Unit = {
-    print("ERROR HAPPENED\n")
     context.findHandler(e.getSqlState) match {
       case Some(handler) =>
         context.frames.addOne(new SqlScriptingExecutionFrame(handler.getTreeIterator))

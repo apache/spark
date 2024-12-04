@@ -35,24 +35,31 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   case class TestCompoundBody(
       statements: Seq[CompoundStatementExec],
       label: Option[String] = None,
-      context: SqlScriptingExecutionContext = new SqlScriptingExecutionContext)
-    extends CompoundBodyExec(statements, label, context)
+      isScope: Boolean = false,
+      context: SqlScriptingExecutionContext = null)
+    extends CompoundBodyExec(statements, label, isScope, context) {
+
+    // No-op to remove unnecessary logic for these tests.
+    override def enterScope(): Unit = ()
+
+    // No-op to remove unnecessary logic for these tests.
+    override def exitScope(): Unit = ()
+  }
 
   case class TestForStatement(
       query: SingleStatementExec,
       variableName: Option[String],
       body: CompoundBodyExec,
       override val label: Option[String],
-      session: SparkSession)
+      session: SparkSession,
+      context: SqlScriptingExecutionContext = null)
     extends ForStatementExec(
       query,
       variableName,
       body,
       label,
       session,
-      new SqlScriptingExecutionContext) {
-    override def reset(): Unit = ()
-  }
+      context)
 
   case class TestLeafStatement(testVal: String) extends LeafStatementExec {
     override def reset(): Unit = ()
@@ -64,7 +71,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       Map.empty,
       isInternal = false,
-      new SqlScriptingExecutionContext
+      null
     )
 
   case class DummyLogicalPlan() extends LeafNode {
@@ -78,7 +85,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       Map.empty,
       isInternal = false,
-      new SqlScriptingExecutionContext)
+      null
+    )
 
   class LoopBooleanConditionEvaluator(condition: TestLoopCondition) {
     private var callCount: Int = 0
@@ -108,9 +116,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   case class TestRepeat(
-    condition: TestLoopCondition,
-    body: TestCompoundBody,
-    label: Option[String] = None)
+      condition: TestLoopCondition,
+      body: TestCompoundBody,
+      label: Option[String] = None)
     extends RepeatStatementExec(condition, body, label, spark) {
 
     private val evaluator = new LoopBooleanConditionEvaluator(condition)
@@ -126,7 +134,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         Origin(startIndex = Some(0), stopIndex = Some(description.length)),
         Map.empty,
         isInternal = false,
-        new SqlScriptingExecutionContext) {
+        null) {
     override def buildDataFrame(session: SparkSession): DataFrame = {
       val data = Seq.range(0, numberOfRows).map(Row(_))
       val schema = List(StructField(columnName, IntegerType))
@@ -744,7 +752,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         label = Some("for1"),
         session = spark,
         body = TestCompoundBody(Seq(TestLeafStatement("body")))
-      ),
+      )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
@@ -807,8 +815,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
             body = TestCompoundBody(Seq(TestLeafStatement("body")))
           )
         ))
-      )
-    )).getTreeIterator
+      )),
+      label = Some("lbl")
+    ).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
@@ -842,7 +851,6 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("for statement no variable - enters body with multiple statements multiple times") {
-    val context = new SqlScriptingExecutionContext
     val iter = TestCompoundBody(Seq(
       TestForStatement(
         query = MockQuery(2, "intCol", "query1"),

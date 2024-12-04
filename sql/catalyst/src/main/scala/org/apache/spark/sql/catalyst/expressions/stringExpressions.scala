@@ -1863,7 +1863,7 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
         BinaryPad(funcName, expressions(0), expressions(1), Literal(Array[Byte](0)))
       } else {
         createStringPad(expressions(0),
-          expressions(1), Literal.create(" ", SQLConf.get.defaultStringType))
+          expressions(1), Literal(" "))
       }
     } else if (numArgs == 3) {
       if (expressions(0).dataType == BinaryType && expressions(2).dataType == BinaryType

@@ -20,9 +20,26 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 
 /**
- * The trait used to set the [[SortOrder]] after inverse distribution functions parsed.
+ * The trait used to set the [[SortOrder]] for supporting functions.
  */
 trait SupportsOrderingWithinGroup { self: AggregateFunction =>
-  def orderingFilled: Boolean = false
   def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction
+
+  /** Indicator that ordering was set. */
+  def orderingFilled: Boolean
+
+  /**
+   * Tells Analyzer that WITHIN GROUP (ORDER BY ...) is mandatory for function.
+   *
+   * @see [[QueryCompilationErrors.functionMissingWithinGroupError]]
+   */
+  def isOrderingMandatory: Boolean
+
+  /**
+   * Tells Analyzer that DISTINCT is supported.
+   * The DISTINCT can conflict with order so some functions can ban it.
+   *
+   * @see [[QueryCompilationErrors.functionMissingWithinGroupError]]
+   */
+  def isDistinctSupported: Boolean
 }

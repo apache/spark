@@ -1190,14 +1190,14 @@ class SparkConnectPlanner(
     val input = transformRelation(rel.getInput)
 
     if (input.isStreaming || executeHolderOpt.isEmpty) {
-      CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
+      CollectMetrics(name, metrics.map(_.named), input, planId)
     } else {
       // TODO this might be too complex for no good reason. It might
       //  be easier to inspect the plan after it completes.
       val observation = Observation(name)
       session.observationManager.register(observation, planId)
       executeHolderOpt.get.addObservation(name, observation)
-      CollectMetrics(name, metrics.map(_.named), transformRelation(rel.getInput), planId)
+      CollectMetrics(name, metrics.map(_.named), input, planId)
     }
   }
 

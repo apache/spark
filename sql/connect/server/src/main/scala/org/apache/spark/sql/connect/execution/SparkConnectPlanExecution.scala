@@ -77,8 +77,10 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(dataframe, responseObserver, executeHolder)
     responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
-    createObservedMetricsResponse(request.getSessionId, dataframe).foreach(
-      responseObserver.onNext)
+    createObservedMetricsResponse(
+      request.getSessionId,
+      executeHolder.allObservationAndPlanIds,
+      dataframe).foreach(responseObserver.onNext)
   }
 
   type Batch = (Array[Byte], Long)
@@ -255,6 +257,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
 
   private def createObservedMetricsResponse(
       sessionId: String,
+      observationAndPlanIds: Map[String, Long],
       dataframe: DataFrame): Option[ExecutePlanResponse] = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
       case (name, row) if !executeHolder.observations.contains(name) =>
@@ -264,13 +267,12 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         name -> values
     }
     if (observedMetrics.nonEmpty) {
-      val planId = executeHolder.request.getPlan.getRoot.getCommon.getPlanId
       Some(
         SparkConnectPlanExecution
           .createObservedMetricsResponse(
             sessionId,
             sessionHolder.serverSessionId,
-            planId,
+            observationAndPlanIds,
             observedMetrics))
     } else None
   }
@@ -280,17 +282,17 @@ object SparkConnectPlanExecution {
   def createObservedMetricsResponse(
       sessionId: String,
       serverSessionId: String,
-      planId: Long,
+      observationAndPlanIds: Map[String, Long],
       metrics: Map[String, Seq[(Option[String], Any)]]): ExecutePlanResponse = {
     val observedMetrics = metrics.map { case (name, values) =>
       val metrics = ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
-        .setPlanId(planId)
       values.foreach { case (key, value) =>
         metrics.addValues(toLiteralProto(value))
         key.foreach(metrics.addKeys)
       }
+      observationAndPlanIds.get(name).foreach(metrics.setPlanId)
       metrics.build()
     }
     // Prepare a response with the observed metrics.

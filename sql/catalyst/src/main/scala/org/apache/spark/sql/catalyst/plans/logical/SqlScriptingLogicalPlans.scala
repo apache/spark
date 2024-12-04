@@ -69,6 +69,7 @@ case class SingleStatement(parsedPlan: LogicalPlan)
 case class CompoundBody(
     collection: Seq[CompoundPlanStatement],
     label: Option[String],
+    isScope: Boolean,
     handlers: Seq[ErrorHandler] = Seq.empty,
     conditions: HashMap[String, String] = HashMap()) extends Command with CompoundPlanStatement {
 
@@ -76,7 +77,7 @@ case class CompoundBody(
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
-    CompoundBody(newChildren.map(_.asInstanceOf[CompoundPlanStatement]), label)
+    CompoundBody(newChildren.map(_.asInstanceOf[CompoundPlanStatement]), label, isScope)
   }
 }
 

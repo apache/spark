@@ -292,13 +292,8 @@ class JacksonParser(
 
     case _: StringType => (parser: JsonParser) => {
       // This must be enabled if we will retrieve the bytes directly from the raw content:
-      val includeSourceInLocation = JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION
-      val originalMask = if (includeSourceInLocation.enabledIn(parser.getFeatureMask)) {
-        1
-      } else {
-        0
-      }
-      parser.overrideStdFeatures(includeSourceInLocation.getMask, includeSourceInLocation.getMask)
+      val oldFeature = parser.getFeatureMask
+      parser.setFeatureMask(oldFeature | JsonParser.Feature.INCLUDE_SOURCE_IN_LOCATION.getMask)
       val result = parseJsonToken[UTF8String](parser, dataType) {
         case VALUE_STRING =>
           UTF8String.fromString(parser.getText)
@@ -344,7 +339,7 @@ class JacksonParser(
           }
         }
       // Reset back to the original configuration:
-      parser.overrideStdFeatures(includeSourceInLocation.getMask, originalMask)
+      parser.setFeatureMask(oldFeature)
       result
     }
 

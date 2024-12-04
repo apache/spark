@@ -283,9 +283,7 @@ object HiveScriptIOSchema extends HiveInspectors {
     propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
 
     val properties = new Properties()
-    // Can not use properties.putAll(propsMap.asJava) in scala-2.12
-    // See https://github.com/scala/bug/issues/10418
-    propsMap.foreach { case (k, v) => properties.put(k, v) }
+    properties.putAll(propsMap.asJava)
     serde.initialize(null, properties)
 
     serde
@@ -299,9 +297,7 @@ object HiveScriptIOSchema extends HiveInspectors {
       val instance = Utils.classForName[RecordReader](klass).getConstructor().
         newInstance()
       val props = new Properties()
-      // Can not use props.putAll(outputSerdeProps.toMap.asJava) in scala-2.12
-      // See https://github.com/scala/bug/issues/10418
-      ioschema.outputSerdeProps.toMap.foreach { case (k, v) => props.put(k, v) }
+      props.putAll(ioschema.outputSerdeProps.toMap.asJava)
       instance.initialize(inputStream, conf, props)
       instance
     }

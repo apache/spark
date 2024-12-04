@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.internal.types
 
-import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 
 /**
@@ -26,7 +25,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
 abstract class AbstractStringType(supportsTrimCollation: Boolean = false)
     extends AbstractDataType
     with Serializable {
-  override private[sql] def defaultConcreteType: DataType = SqlApiConf.get.defaultStringType
+  override private[sql] def defaultConcreteType: DataType = StringType
   override private[sql] def simpleString: String = "string"
 
   override private[sql] def acceptsType(other: DataType): Boolean = other match {

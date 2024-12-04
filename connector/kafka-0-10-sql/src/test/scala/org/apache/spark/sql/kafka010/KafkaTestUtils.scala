@@ -504,9 +504,7 @@ class KafkaTestUtils(
       props.put("sasl.enabled.mechanisms", "GSSAPI,SCRAM-SHA-512")
     }
 
-    // Can not use properties.putAll(propsMap.asJava) in scala-2.12
-    // See https://github.com/scala/bug/issues/10418
-    withBrokerProps.foreach { case (k, v) => props.put(k, v) }
+    props.putAll(withBrokerProps.asJava)
     props
   }
 

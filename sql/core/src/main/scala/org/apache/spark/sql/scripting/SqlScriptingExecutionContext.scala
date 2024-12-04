@@ -26,7 +26,7 @@ import org.apache.spark.SparkException
  */
 class SqlScriptingExecutionContext {
   // List of frames that are currently active.
-  val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer()
+  val frames: ListBuffer[SqlScriptingExecutionFrame] = ListBuffer.empty
 
   def enterScope(label: String, conditionHandlerMap: HashMap[String, ErrorHandlerExec]): Unit = {
     if (frames.isEmpty) {
@@ -105,7 +105,7 @@ class SqlScriptingExecutionFrame(
       scopes.remove(scopes.length - 1)
     }
 
-    if (scopes.nonEmpty && scopes.last.label == label) {
+    if (scopes.nonEmpty) {
       scopes.remove(scopes.length - 1)
     }
   }

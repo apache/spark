@@ -19,6 +19,7 @@ package org.apache.spark.sql.scripting
 
 import java.util
 import scala.collection.mutable.HashMap
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -116,6 +117,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
  *   compound.
+ * @param context
+ *   SqlScriptingExecutionContext keeps the execution state of current script.
  */
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
@@ -171,10 +174,15 @@ class SingleStatementExec(
  *   Executable nodes for nested statements within the CompoundBody.
  * @param label
  *   Label set by user to CompoundBody or None otherwise.
+ * @param isScope
+ *   Flag that indicates whether Compound Body
+ * @param context
+ *   SqlScriptingExecutionContext keeps the execution state of current script.
  */
 class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
     label: Option[String] = None,
+    isScope: Boolean,
     context: SqlScriptingExecutionContext,
     conditionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap())
   extends NonLeafStatementExec {
@@ -184,16 +192,22 @@ class CompoundBodyExec(
   private var scopeEntered = false
   private var scopeExited = false
 
-  def enterScope(): Unit = {
-    if (label.isDefined && !scopeEntered) {
+  // Enter scope represented by this compound statement.
+  protected def enterScope(): Unit = {
+    // This check makes this operation idempotent.
+    if (isScope && !scopeEntered) {
       scopeEntered = true
+      scopeExited = false
       context.enterScope(label.get, conditionHandlerMap)
     }
   }
 
-  def exitScope(): Unit = {
-    if (label.isDefined && !scopeExited) {
+  // Exit scope represented by this compound statement.
+  protected def exitScope(): Unit = {
+    // This check makes this operation idempotent.
+    if (isScope && !scopeExited) {
       scopeExited = true
+      scopeEntered = false
       context.exitScope(label.get)
     }
   }
@@ -211,11 +225,7 @@ class CompoundBodyExec(
           case _ => throw SparkException.internalError(
             "Unknown statement type encountered during SQL script interpretation.")
         }
-        val result = !stopIteration && (localIterator.hasNext || childHasNext)
-        if (!result) {
-          exitScope()
-        }
-        result
+        !stopIteration && (localIterator.hasNext || childHasNext)
       }
 
       @scala.annotation.tailrec
@@ -235,12 +245,11 @@ class CompoundBodyExec(
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement
           case Some(body: NonLeafStatementExec) =>
-            body match {
-              case compound: CompoundBodyExec =>
-                compound.enterScope()
-              case _ => // pass
-            }
             if (body.getTreeIterator.hasNext) {
+              body match {
+                case exec: CompoundBodyExec => exec.enterScope()
+                case _ => // pass
+              }
               body.getTreeIterator.next() match {
                 case leaveStatement: LeaveStatementExec =>
                   handleLeaveStatement(leaveStatement)
@@ -251,6 +260,10 @@ class CompoundBodyExec(
                 case other => other
               }
             } else {
+              body match {
+                case exec: CompoundBodyExec => exec.exitScope()
+                case _ => // pass
+              }
               curr = if (localIterator.hasNext) Some(localIterator.next()) else None
               next()
             }
@@ -267,6 +280,8 @@ class CompoundBodyExec(
     localIterator = statements.iterator
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
     stopIteration = false
+    scopeEntered = false
+    scopeExited = false
   }
 
   /** Actions to do when LEAVE statement is encountered, to stop the execution of this compound. */
@@ -274,6 +289,9 @@ class CompoundBodyExec(
     if (!leaveStatement.hasBeenMatched) {
       // Stop the iteration.
       stopIteration = true
+
+      // Exit scope if leave statement is encountered.
+      exitScope()
 
       // TODO: Variable cleanup (once we add SQL script execution logic).
       // TODO: Add interpreter tests as well.
@@ -703,6 +721,7 @@ class LoopStatementExec(
  * @param body Executable node for the body.
  * @param label Label set to ForStatement by user or None otherwise.
  * @param session Spark session that SQL script is executed within.
+ * @param context SqlScriptingExecutionContext keeps the execution state of current script.
  */
 class ForStatementExec(
     query: SingleStatementExec,
@@ -874,6 +893,7 @@ class ForStatementExec(
       dropVariablesExec = new CompoundBodyExec(
         variablesMap.keys.toSeq.map(colName => createDropVarExec(colName)),
         None,
+        isScope = false,
         context
       )
       ForState.VariableCleanup

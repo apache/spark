@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
  *   The id of collation for this StringType.
  */
 @Stable
-class StringType private (val collationId: Int) extends AtomicType with Serializable {
+class StringType private[sql] (val collationId: Int) extends AtomicType with Serializable {
 
   /**
    * Support for Binary Equality implies that strings are considered equal only if they are byte
@@ -75,7 +75,14 @@ class StringType private (val collationId: Int) extends AtomicType with Serializ
    */
   override def typeName: String =
     if (isUTF8BinaryCollation) "string"
-    else s"string collate ${CollationFactory.fetchCollation(collationId).collationName}"
+    else s"string collate $collationName"
+
+  override def toString: String =
+    if (isUTF8BinaryCollation) "StringType"
+    else s"StringType($collationName)"
+
+  private[sql] def collationName: String =
+    CollationFactory.fetchCollation(collationId).collationName
 
   // Due to backwards compatibility and compatibility with other readers
   // all string types are serialized in json as regular strings and

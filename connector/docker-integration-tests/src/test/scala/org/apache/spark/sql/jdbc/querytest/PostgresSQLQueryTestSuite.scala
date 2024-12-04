@@ -38,23 +38,13 @@ import org.apache.spark.tags.DockerTest
  * }}}
  */
 @DockerTest
-class PostgreSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
+class PostgresSQLQueryTestSuite extends CrossDbmsQueryTestSuite {
 
   val DATABASE_NAME = CrossDbmsQueryTestSuite.POSTGRES
   // Scope to only subquery directory for now.
   protected val customInputFilePath: String = new File(inputFilePath, "subquery").getAbsolutePath
 
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.2-alpine")
-    override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 5432
-
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
-  }
+  override val db = new PostgresDatabaseOnDocker
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement(

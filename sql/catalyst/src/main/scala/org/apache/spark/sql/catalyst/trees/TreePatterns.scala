@@ -146,6 +146,7 @@ object TreePattern extends Enumeration  {
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
   val UNRESOLVED_ATTRIBUTE: Value = Value
+  val UNRESOLVED_COLLATION: Value = Value
   val UNRESOLVED_DESERIALIZER: Value = Value
   val UNRESOLVED_DF_STAR: Value = Value
   val UNRESOLVED_HAVING: Value = Value
@@ -154,7 +155,6 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_FUNCTION: Value = Value
   val UNRESOLVED_HINT: Value = Value
   val UNRESOLVED_WINDOW_EXPRESSION: Value = Value
-  val UNRESOLVED_IDENTIFIER_WITH_CTE: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val UNRESOLVED_FUNC: Value = Value

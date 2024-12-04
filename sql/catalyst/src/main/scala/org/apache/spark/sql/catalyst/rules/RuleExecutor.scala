@@ -22,7 +22,8 @@ import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.rules.RuleExecutor.getForceIterationValue
+import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeTag}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -30,6 +31,27 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 object RuleExecutor {
+
+  /**
+   * A tag used to explicitly request an additional iteration of the current batch during
+   * rule execution, even if the query plan remains unchanged. Increment the tag's value
+   * to enforce another iteration.
+   */
+  private val FORCE_ADDITIONAL_ITERATION = TreeNodeTag[Int]("forceAdditionalIteration")
+
+  /**
+   * Increments the value of the FORCE_ADDITIONAL_ITERATION tag on the given plan to
+   * explicitly force another iteration of the current batch during rule execution.
+   */
+  def forceAdditionalIteration(plan: TreeNode[_]): Unit = {
+    val oldValue = getForceIterationValue(plan)
+    plan.setTagValue(FORCE_ADDITIONAL_ITERATION, oldValue + 1)
+  }
+
+  private def getForceIterationValue(plan: TreeNode[_]): Int = {
+    plan.getTagValue(FORCE_ADDITIONAL_ITERATION).getOrElse(0)
+  }
+
   protected val queryExecutionMeter = QueryExecutionMetering()
 
   /** Dump statistics about time spent running specific rules. */
@@ -303,7 +325,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
           continue = false
         }
 
-        if (curPlan.fastEquals(lastPlan)) {
+        if (isFixedPointReached(lastPlan, curPlan)) {
           logTrace(
             s"Fixed point reached for batch ${batch.name} after ${iteration - 1} iterations.")
           continue = false
@@ -316,5 +338,10 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     planChangeLogger.logMetrics(name, RuleExecutor.getCurrentMetrics() - beforeMetrics)
 
     curPlan
+  }
+
+  private def isFixedPointReached(oldPlan: TreeType, newPlan: TreeType): Boolean = {
+    oldPlan.fastEquals(newPlan) &&
+      getForceIterationValue(newPlan) <= getForceIterationValue(oldPlan)
   }
 }
