@@ -1240,7 +1240,7 @@ collationSpec
     ;
 
 collateClause
-    : COLLATE collationName=identifier
+    : COLLATE collationName=multipartIdentifier
     ;
 
 type

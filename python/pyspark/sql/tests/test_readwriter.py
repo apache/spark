@@ -23,6 +23,7 @@ from pyspark.errors import AnalysisException
 from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
 from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -34,15 +35,15 @@ class ReadwriterTestsMixin:
         try:
             df.write.json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             schema = StructType([StructField("value", StringType(), True)])
             actual = self.spark.read.json(tmpPath, schema)
-            self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df.select("value"), actual)
 
             df.write.json(tmpPath, "overwrite")
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             df.write.save(
                 format="json",
@@ -53,11 +54,11 @@ class ReadwriterTestsMixin:
             actual = self.spark.read.load(
                 format="json", path=tmpPath, noUse="this options will not be used in load."
             )
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             with self.sql_conf({"spark.sql.sources.default": "org.apache.spark.sql.json"}):
                 actual = self.spark.read.load(path=tmpPath)
-                self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+                assertDataFrameEqual(df, actual)
 
             csvpath = os.path.join(tempfile.mkdtemp(), "data")
             df.write.option("quote", None).format("csv").save(csvpath)
@@ -71,15 +72,15 @@ class ReadwriterTestsMixin:
         try:
             df.write.json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             schema = StructType([StructField("value", StringType(), True)])
             actual = self.spark.read.json(tmpPath, schema)
-            self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df.select("value"), actual)
 
             df.write.mode("overwrite").json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             df.write.mode("overwrite").options(
                 noUse="this options will not be used in save."
@@ -89,11 +90,11 @@ class ReadwriterTestsMixin:
             actual = self.spark.read.format("json").load(
                 path=tmpPath, noUse="this options will not be used in load."
             )
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             with self.sql_conf({"spark.sql.sources.default": "org.apache.spark.sql.json"}):
                 actual = self.spark.read.load(path=tmpPath)
-                self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+                assertDataFrameEqual(df, actual)
         finally:
             shutil.rmtree(tmpPath)
 

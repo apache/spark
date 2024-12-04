@@ -225,7 +225,7 @@ class Dataset[T] private[sql](
     queryExecution.sparkSession
   }
 
-  import sparkSession.RichColumn
+  import sparkSession.toRichColumn
 
   // A globally unique id of this Dataset.
   private[sql] val id = Dataset.curId.getAndIncrement()

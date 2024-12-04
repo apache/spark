@@ -1476,6 +1476,11 @@
         "message" : [
           "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
         ]
+      },
+      "UNSUPPORTED_FILE_SYSTEM" : {
+        "message" : [
+          "The file system <fileSystemClass> hasn't implemented <method>."
+        ]
       }
     },
     "sqlState" : "KD001"
@@ -5188,6 +5193,11 @@
           "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
       },
+      "COLLATIONS_IN_MAP_KEYS" : {
+        "message" : [
+          "Collated strings for keys of maps"
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5358,6 +5368,11 @@
       "SET_OPERATION_ON_MAP_TYPE" : {
         "message" : [
           "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+        ]
+      },
+      "SET_OPERATION_ON_VARIANT_TYPE" : {
+        "message" : [
+          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {

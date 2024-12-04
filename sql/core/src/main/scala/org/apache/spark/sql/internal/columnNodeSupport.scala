@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.internal
 
-import scala.language.implicitConversions
-
 import UserDefinedFunctionUtils.toScalaUDF
 
 import org.apache.spark.SparkException
@@ -302,13 +300,14 @@ private[spark] object ExpressionUtils {
   /**
    * Create an Expression backed Column.
    */
-  implicit def column(e: Expression): Column = Column(ExpressionColumnNode(e))
+  def column(e: Expression): Column = Column(ExpressionColumnNode(e))
 
   /**
-   * Create an ColumnNode backed Expression. Please not that this has to be converted to an actual
-   * Expression before it is used.
+   * Create an ColumnNode backed Expression. This can only be used for expressions that will be
+   * used to construct a [[Column]]. In all other cases please use `SparkSession.expression(...)`,
+   * `SparkSession.toRichColumn(...)`, or `org.apache.spark.sql.classic.ColumnConversions`.
    */
-  implicit def expression(c: Column): Expression = ColumnNodeExpression(c.node)
+  def expression(c: Column): Expression = ColumnNodeExpression(c.node)
 
   /**
    * Returns the expression either with an existing or auto assigned name.

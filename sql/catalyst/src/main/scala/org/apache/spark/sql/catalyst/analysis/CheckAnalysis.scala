@@ -76,11 +76,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     dt.existsRecursively(_.isInstanceOf[MapType])
   }
 
+  protected def hasVariantType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[VariantType])
+  }
+
   protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
     case _: Intersect | _: Except | _: Distinct =>
       plan.output.find(a => hasMapType(a.dataType))
     case d: Deduplicate =>
       d.keys.find(a => hasMapType(a.dataType))
+    case _ => None
+  }
+
+  protected def variantColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasVariantType(a.dataType))
+    case d: Deduplicate =>
+      d.keys.find(a => hasVariantType(a.dataType))
     case _ => None
   }
 
@@ -828,6 +840,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                 "colName" -> toSQLId(mapCol.name),
                 "dataType" -> toSQLType(mapCol.dataType)))
 
+          // TODO: Remove this type check once we support Variant ordering
+          case o if variantColumnInSetOperation(o).isDefined =>
+            val variantCol = variantColumnInSetOperation(o).get
+            o.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_VARIANT_TYPE",
+              messageParameters = Map(
+                "colName" -> toSQLId(variantCol.name),
+                "dataType" -> toSQLType(variantCol.dataType)))
+
           case o if o.expressions.exists(!_.deterministic) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
             !o.isInstanceOf[Project] &&
@@ -1539,15 +1560,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         alter.conf.resolver)
     }
 
+    def checkNoCollationsInMapKeys(colsToAdd: Seq[QualifiedColType]): Unit = {
+      if (!alter.conf.allowCollationsInMapKeys) {
+        colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
+      }
+    }
+
     alter match {
       case AddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
           checkColumnNotExists("add", colToAdd.name, table.schema)
         }
         checkColumnNameDuplication(colsToAdd)
+        checkNoCollationsInMapKeys(colsToAdd)
 
       case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
         checkColumnNameDuplication(colsToAdd)
+        checkNoCollationsInMapKeys(colsToAdd)
 
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)

@@ -28,3 +28,5 @@ SELECT * FROM json.`${spark.sql.warehouse.dir}/sql_on_files.db/test_json`;
 DROP TABLE sql_on_files.test_json;
 
 DROP DATABASE sql_on_files;
+
+SELECT * FROM json.`https://raw.githubusercontent.com/apache/spark/refs/heads/master/examples/src/main/resources/employees.json`;

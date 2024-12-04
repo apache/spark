@@ -15,24 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.streaming
+package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.logging.log4j.Level
-import org.apache.logging.log4j.core.config.Configurator
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_COLLATION
+import org.apache.spark.sql.catalyst.util.CollationFactory
 
-import org.apache.spark.internal.Logging
-
-/** Utility functions for Spark Streaming examples. */
-object StreamingExamples extends Logging {
-
-  /** Set reasonable logging levels for streaming if the user has not configured log4j. */
-  def setStreamingLogLevels(): Unit = {
-    if (Logging.islog4j2DefaultConfigured()) {
-      // We first log something to initialize Spark's default logging, then we override the
-      // logging level.
-      logInfo("Setting log level to [WARN] for streaming example." +
-        " To override add a custom log4j2.properties to the classpath.")
-      Configurator.setRootLevel(Level.WARN)
+/**
+ * Resolves fully qualified collation name and replaces [[UnresolvedCollation]] with
+ * [[ResolvedCollation]].
+ */
+object ResolveCollationName extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.resolveExpressionsWithPruning(_.containsPattern(UNRESOLVED_COLLATION), ruleId) {
+      case UnresolvedCollation(collationName) =>
+        ResolvedCollation(CollationFactory.resolveFullyQualifiedName(collationName.toArray))
     }
-  }
 }

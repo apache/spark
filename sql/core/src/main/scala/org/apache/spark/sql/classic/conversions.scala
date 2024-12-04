@@ -20,8 +20,8 @@ import scala.language.implicitConversions
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.internal.ExpressionUtils
+import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
+import org.apache.spark.sql.internal.{ColumnNodeToExpressionConverter, ExpressionUtils}
 
 /**
  * Conversions from sql interfaces to the Classic specific implementation.
@@ -56,4 +56,54 @@ trait ClassicConversions {
   }
 }
 
+@DeveloperApi
 object ClassicConversions extends ClassicConversions
+
+/**
+ * Conversions from a [[Column]] to an [[Expression]].
+ */
+@DeveloperApi
+trait ColumnConversions {
+  protected def converter: ColumnNodeToExpressionConverter
+
+  /**
+   * Convert a [[Column]] into an [[Expression]].
+   */
+  @DeveloperApi
+  def expression(column: Column): Expression = converter(column.node)
+
+  /**
+   * Wrap a [[Column]] with a [[RichColumn]] to provide the `expr` and `named` methods.
+   */
+  @DeveloperApi
+  implicit def toRichColumn(column: Column): RichColumn = new RichColumn(column, converter)
+}
+
+/**
+ * Automatic conversions from a Column to an Expression. This uses the active SparkSession for
+ * parsing, and the active SQLConf for fetching configurations.
+ *
+ * This functionality is not part of the ClassicConversions because it is generally better to use
+ * `SparkSession.toRichColumn(...)` or `SparkSession.expression(...)` directly.
+ */
+@DeveloperApi
+object ColumnConversions extends ColumnConversions {
+  override protected def converter: ColumnNodeToExpressionConverter =
+    ColumnNodeToExpressionConverter
+}
+
+/**
+ * Helper class that adds the `expr` and `named` methods to a Column. This can be used to reinstate
+ * the pre-Spark 4 Column functionality.
+ */
+@DeveloperApi
+class RichColumn(column: Column, converter: ColumnNodeToExpressionConverter) {
+  /**
+   * Returns the expression for this column.
+   */
+  def expr: Expression = converter(column.node)
+  /**
+   * Returns the expression for this column either with an existing or auto assigned name.
+   */
+  def named: NamedExpression = ExpressionUtils.toNamed(expr)
+}
