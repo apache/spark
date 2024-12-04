@@ -3584,6 +3584,28 @@ struct<octet_length(collate(utf8_binary, utf8_lcase)):int,octet_length(collate(u
 
 
 -- !query
+select octet_length(utf8_binary collate utf8_lcase_rtrim), octet_length(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<octet_length(collate(utf8_binary, utf8_lcase_rtrim)):int,octet_length(collate(utf8_lcase, utf8_binary_rtrim)):int>
+-- !query output
+23	23
+29	29
+3	3
+3	3
+3	4
+3	4
+4	3
+4	4
+5	3
+6	7
+7	7
+8	1
+8	24
+8	8
+8	8
+
+
+-- !query
 select luhn_check(num) from t9
 -- !query schema
 struct<luhn_check(num):boolean>
@@ -3777,6 +3799,28 @@ true	true
 
 
 -- !query
+select is_valid_utf8(utf8_binary collate utf8_lcase_rtrim), is_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<is_valid_utf8(collate(utf8_binary, utf8_lcase_rtrim)):boolean,is_valid_utf8(collate(utf8_lcase, utf8_binary_rtrim)):boolean>
+-- !query output
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+
+
+-- !query
 select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t5
 -- !query schema
 struct<make_valid_utf8(utf8_binary):string,make_valid_utf8(utf8_lcase):string collate UTF8_LCASE>
@@ -3802,6 +3846,28 @@ kitten	sitTing
 select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<make_valid_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,make_valid_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select make_valid_utf8(utf8_binary collate utf8_lcase_rtrim), make_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<make_valid_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,make_valid_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3865,6 +3931,28 @@ kitten	sitTing
 
 
 -- !query
+select validate_utf8(utf8_binary collate utf8_lcase_rtrim), validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<validate_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,validate_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
 select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t5
 -- !query schema
 struct<try_validate_utf8(utf8_binary):string,try_validate_utf8(utf8_lcase):string collate UTF8_LCASE>
@@ -3890,6 +3978,28 @@ kitten	sitTing
 select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<try_validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,try_validate_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select try_validate_utf8(utf8_binary collate utf8_lcase_rtrim), try_validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<try_validate_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,try_validate_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
