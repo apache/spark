@@ -228,6 +228,28 @@ def _invoke_higher_order_function(
     return _invoke_function(name, *_cols, *_funs)
 
 
+def _invoke_function_over_args(name: str, *args: Any) -> Column:
+    """
+    Invokes unary JVM function identified by name with
+    and wraps the result with :class:`~pyspark.sql.Column`.
+    Note:
+    1, This function accepts Enums;
+    2, String arguments are treated as column names, if you want to treat them as literals,
+    please use lit function to wrap them at the call sites.
+    """
+    cols = []
+    for arg in args:
+        v = _enum_to_value(arg)
+        if isinstance(v, Column):
+            cols.append(v)
+        elif isinstance(v, str):
+            cols.append(col(v))
+        else:
+            cols.append(lit(v))
+
+    return _invoke_function(name, *cols)
+
+
 def _options_to_col(options: Mapping[str, Any]) -> Column:
     _options: List[Column] = []
     for k, v in options.items():
@@ -2536,11 +2558,12 @@ sentences.__doc__ = pysparkfuncs.sentences.__doc__
 def substring(
     str: "ColumnOrName",
     pos: Union["ColumnOrName", int],
-    len: Union["ColumnOrName", int],
+    len: Optional[Union["ColumnOrName", int]] = None,
 ) -> Column:
-    _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
-    _len = lit(len) if isinstance(len, int) else _to_col(len)
-    return _invoke_function("substring", _to_col(str), _pos, _len)
+    if len is not None:
+        return _invoke_function_over_args("substring", str, pos, len)
+    else:
+        return _invoke_function_over_args("substring", str, pos)
 
 
 substring.__doc__ = pysparkfuncs.substring.__doc__
@@ -2796,12 +2819,14 @@ split_part.__doc__ = pysparkfuncs.split_part.__doc__
 
 
 def substr(
-    str: "ColumnOrName", pos: "ColumnOrName", len: Optional["ColumnOrName"] = None
+    str: "ColumnOrName",
+    pos: Union["ColumnOrName", int],
+    len: Optional[Union["ColumnOrName", int]] = None,
 ) -> Column:
     if len is not None:
-        return _invoke_function_over_columns("substr", str, pos, len)
+        return _invoke_function_over_args("substr", str, pos, len)
     else:
-        return _invoke_function_over_columns("substr", str, pos)
+        return _invoke_function_over_args("substr", str, pos)
 
 
 substr.__doc__ = pysparkfuncs.substr.__doc__
