@@ -57,7 +57,7 @@ AtomicValue = TypeVar(
     float,
 )
 
-RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], pyspark.sql.types.Row)
+RowLike = TypeVar("RowLike", List[Any], Tuple[Any, ...], Dict[str, Any], pyspark.sql.types.Row)
 
 SQLBatchedUDFType = Literal[100]
 SQLArrowBatchedUDFType = Literal[101]
