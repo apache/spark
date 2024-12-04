@@ -35,7 +35,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   case class TestCompoundBody(
       statements: Seq[CompoundStatementExec],
       label: Option[String] = None,
-      context: SqlScriptingExecutionContext = new SqlScriptingExecutionContext)
+      context: SqlScriptingExecutionContext = null)
     extends CompoundBodyExec(statements, label, context)
 
   case class TestForStatement(
@@ -43,14 +43,15 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       variableName: Option[String],
       body: CompoundBodyExec,
       override val label: Option[String],
-      session: SparkSession)
+      session: SparkSession,
+      context: SqlScriptingExecutionContext = null)
     extends ForStatementExec(
       query,
       variableName,
       body,
       label,
       session,
-      new SqlScriptingExecutionContext) {
+      context) {
     override def reset(): Unit = ()
   }
 
@@ -64,7 +65,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       Map.empty,
       isInternal = false,
-      new SqlScriptingExecutionContext
+      null
     )
 
   case class DummyLogicalPlan() extends LeafNode {
@@ -78,7 +79,8 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       Origin(startIndex = Some(0), stopIndex = Some(description.length)),
       Map.empty,
       isInternal = false,
-      new SqlScriptingExecutionContext)
+      null
+    )
 
   class LoopBooleanConditionEvaluator(condition: TestLoopCondition) {
     private var callCount: Int = 0
@@ -126,7 +128,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         Origin(startIndex = Some(0), stopIndex = Some(description.length)),
         Map.empty,
         isInternal = false,
-        new SqlScriptingExecutionContext) {
+        null) {
     override def buildDataFrame(session: SparkSession): DataFrame = {
       val data = Seq.range(0, numberOfRows).map(Row(_))
       val schema = List(StructField(columnName, IntegerType))
@@ -445,13 +447,18 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("leave compound block") {
+    val context = new SqlScriptingExecutionContext
+    val labelText = "lbl"
     val iter = TestCompoundBody(
       statements = Seq(
         TestLeafStatement("one"),
         new LeaveStatementExec("lbl")
       ),
-      label = Some("lbl")
+      label = Some(labelText),
+      context = context
     ).getTreeIterator
+    context.frames.addOne(new SqlScriptingExecutionFrame(iter))
+    context.enterScope(labelText)
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "lbl"))
   }
@@ -792,23 +799,31 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("for statement - nested") {
+    val context = new SqlScriptingExecutionContext
+    val labelText = "lbl"
     val iter = TestCompoundBody(Seq(
       TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         label = Some("for1"),
         session = spark,
-        body = TestCompoundBody(Seq(
-          TestForStatement(
-            query = MockQuery(2, "intCol1", "query2"),
-            variableName = Some("y"),
-            label = Some("for2"),
-            session = spark,
-            body = TestCompoundBody(Seq(TestLeafStatement("body")))
-          )
-        ))
-      )
-    )).getTreeIterator
+        body =
+          TestCompoundBody(Seq(
+            TestForStatement(
+              query = MockQuery(2, "intCol1", "query2"),
+              variableName = Some("y"),
+              label = Some("for2"),
+              session = spark,
+              body = TestCompoundBody(Seq(TestLeafStatement("body"))),
+              context = context
+            )
+          ),
+          context = context),
+        context = context
+      )),
+      label = Some(labelText)).getTreeIterator
+    context.frames.addOne(new SqlScriptingExecutionFrame(iter))
+    context.enterScope(labelText)
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
@@ -842,7 +857,6 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("for statement no variable - enters body with multiple statements multiple times") {
-    val context = new SqlScriptingExecutionContext
     val iter = TestCompoundBody(Seq(
       TestForStatement(
         query = MockQuery(2, "intCol", "query1"),

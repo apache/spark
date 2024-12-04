@@ -40,7 +40,8 @@ class SqlScriptingExecution(
   // Frames to keep what is being executed.
   private val context: SqlScriptingExecutionContext = {
     val ctx = new SqlScriptingExecutionContext()
-    interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    ctx.frames.addOne(new SqlScriptingExecutionFrame(executionPlan))
     ctx
   }
 

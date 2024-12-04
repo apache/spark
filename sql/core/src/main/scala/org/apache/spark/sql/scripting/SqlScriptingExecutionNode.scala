@@ -183,14 +183,14 @@ class CompoundBodyExec(
   private var scopeExited = false
 
   def enterScope(): Unit = {
-    if (label.isDefined && !scopeEntered) {
+    if (context != null && label.isDefined && !scopeEntered) {
       scopeEntered = true
       context.enterScope(label.get)
     }
   }
 
   def exitScope(): Unit = {
-    if (label.isDefined && !scopeExited) {
+    if (context != null && label.isDefined && !scopeExited) {
       scopeExited = true
       context.exitScope(label.get)
     }
@@ -218,6 +218,7 @@ class CompoundBodyExec(
 
       @scala.annotation.tailrec
       override def next(): CompoundStatementExec = {
+        enterScope()
         curr match {
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")
@@ -233,11 +234,6 @@ class CompoundBodyExec(
             curr = if (localIterator.hasNext) Some(localIterator.next()) else None
             statement
           case Some(body: NonLeafStatementExec) =>
-            body match {
-              case compound: CompoundBodyExec =>
-                compound.enterScope()
-              case _ => // pass
-            }
             if (body.getTreeIterator.hasNext) {
               body.getTreeIterator.next() match {
                 case leaveStatement: LeaveStatementExec =>
@@ -272,6 +268,9 @@ class CompoundBodyExec(
     if (!leaveStatement.hasBeenMatched) {
       // Stop the iteration.
       stopIteration = true
+
+      // Exit scope if leave statement is encountered.
+      exitScope()
 
       // TODO: Variable cleanup (once we add SQL script execution logic).
       // TODO: Add interpreter tests as well.
