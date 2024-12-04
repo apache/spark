@@ -555,6 +555,18 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
+    // If we're running a Spark Connect app, set the main class to our specific Spark Connect
+    // runner
+    if (args.isRemote) {
+      if (args.primaryResource == CONNECT_SHELL) {
+        args.mainClass = "org.apache.spark.sql.application.ConnectRepl"
+      } else {
+        val actualMain = args.mainClass
+        args.mainClass = "org.apache.spark.deploy.SparkConnectRunner"
+        args.childArgs = ArrayBuffer(actualMain) ++ args.childArgs
+      }
+    }
+
     // If we're running a python app, set the main class to our specific python runner
     if (args.isPython && deployMode == CLIENT) {
       if (args.primaryResource == PYSPARK_SHELL) {
@@ -1012,8 +1024,8 @@ private[spark] class SparkSubmit extends Logging {
         throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
     }
 
-    val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
-      mainClass.getConstructor().newInstance().asInstanceOf[SparkApplication]
+    val app: SparkConnectRunner = if (classOf[SparkConnectRunner].isAssignableFrom(mainClass)) {
+      mainClass.getConstructor().newInstance().asInstanceOf[SparkConnectRunner]
     } else {
       new JavaMainApplication(mainClass)
     }
@@ -1083,6 +1095,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
   private val CONNECT_SHELL = "connect-shell"
+  private val CONNECT_APP = "connect-app"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
   private val R_PACKAGE_ARCHIVE = "rpkg.zip"
 
@@ -1193,6 +1206,13 @@ object SparkSubmit extends CommandLineUtils with Logging {
    */
   private[deploy] def isR(res: String): Boolean = {
     res != null && (res.endsWith(".R") || res.endsWith(".r")) || res == SPARKR_SHELL
+  }
+
+  /**
+   * Return whether the given primary resource requires running Spark Connect.
+   */
+  private[deploy] def isRemote(res: String): Boolean = {
+    res != null && (res == CONNECT_SHELL || res == CONNECT_APP)
   }
 
   private[deploy] def isInternal(res: String): Boolean = {
