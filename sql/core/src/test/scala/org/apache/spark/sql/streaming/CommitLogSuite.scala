@@ -31,7 +31,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.streaming.{CommitLog, CommitMetadata, HDFSMetadataLog}
 import org.apache.spark.sql.test.SharedSparkSession
 
-
 class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
 
   private def testCommitLogV2FilePath: Path = {
