@@ -4998,7 +4998,7 @@ class RDD(Generic[T_co]):
         -----
         For additional information see
 
-        - `SPIP: Barrier Execution Mode <http://issues.apache.org/jira/browse/SPARK-24374>`_
+        - `SPIP: Barrier Execution Mode <https://issues.apache.org/jira/browse/SPARK-24374>`_
         - `Design Doc <https://issues.apache.org/jira/browse/SPARK-24582>`_
 
         This API is experimental
