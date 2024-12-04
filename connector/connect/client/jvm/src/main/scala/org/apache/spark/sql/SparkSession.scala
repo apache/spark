@@ -598,7 +598,8 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
   private[sql] def withLocalConnectServer[T](f: => T): T = {
     synchronized {
       lazy val isAPIModeConnect = Option(System.getProperty("spark.api.mode"))
-        .getOrElse("connect").toLowerCase(Locale.ROOT) == "connect"
+        .getOrElse("connect")
+        .toLowerCase(Locale.ROOT) == "connect"
       val remoteString = sparkOptions
         .get("spark.remote")
         .orElse(Option(System.getProperty("spark.remote"))) // Set from Spark Submit
