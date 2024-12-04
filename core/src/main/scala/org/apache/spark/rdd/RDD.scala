@@ -1834,8 +1834,9 @@ abstract class RDD[T: ClassTag](
    * Please read the linked SPIP and design docs to understand the limitations and future plans.
    * @return an [[RDDBarrier]] instance that provides actions within a barrier stage
    * @see [[org.apache.spark.BarrierTaskContext]]
-   * @see <a href="https://jira.apache.org/jira/browse/SPARK-24374">SPIP: Barrier Execution Mode</a>
-   * @see <a href="https://jira.apache.org/jira/browse/SPARK-24582">Design Doc</a>
+   * @see <a href="https://issues.apache.org/jira/browse/SPARK-24374">
+   *        SPIP: Barrier Execution Mode</a>
+   * @see <a href="https://issues.apache.org/jira/browse/SPARK-24582">Design Doc</a>
    */
   @Experimental
   @Since("2.4.0")
