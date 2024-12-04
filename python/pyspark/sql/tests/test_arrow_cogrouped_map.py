@@ -302,7 +302,7 @@ class CogroupedMapInArrowTestsMixin:
     def test_self_join(self):
         df = self.spark.createDataFrame([(1, 1)], ("k", "v"))
 
-        def arrow_func(key, l, r):
+        def arrow_func(key, left, right):
             return pa.Table.from_pydict({"x": [2], "y": [2]})
 
         df2 = df.groupby("k").cogroup(df.groupby("k")).applyInArrow(arrow_func, "x long, y long")
