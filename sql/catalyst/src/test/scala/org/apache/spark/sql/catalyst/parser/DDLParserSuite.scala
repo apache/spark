@@ -3229,7 +3229,7 @@ class DDLParserSuite extends AnalysisTest {
           None, None, Some("UNICODE"), None, false), false))
   }
 
-  test("alter table set collation") {
+  test("alter table collation") {
     comparePlans(parsePlan(
       "ALTER TABLE t DEFAULT COLLATION uNiCoDe"),
       AlterTableCollation(UnresolvedTable(Seq("t"),

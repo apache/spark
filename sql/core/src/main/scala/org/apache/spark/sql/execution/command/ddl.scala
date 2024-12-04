@@ -338,8 +338,12 @@ case class AlterTableUnsetPropertiesCommand(
     val table = catalog.getTableRawMetadata(tableName)
     // If comment is in the table property, we reset it to None
     val tableComment = if (propKeys.contains(TableCatalog.PROP_COMMENT)) None else table.comment
+    // If collation is in the table property, we reset it to None
+    val tableCollation =
+      if (propKeys.contains(TableCatalog.PROP_COLLATION)) None else table.collation
     val newProperties = table.properties.filter { case (k, _) => !propKeys.contains(k) }
-    val newTable = table.copy(properties = newProperties, comment = tableComment)
+    val newTable =
+      table.copy(properties = newProperties, comment = tableComment, collation = tableCollation)
     catalog.alterTable(newTable)
     catalog.invalidateCachedTable(tableName)
     Seq.empty[Row]

@@ -3393,6 +3393,7 @@ class DataSourceV2SQLSuiteV1Filter
            |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2')
            |PARTITIONED BY (a)
            |LOCATION '/tmp'
+           |DEFAULT COLLATION SR_CI_AI
         """.stripMargin)
 
       val table = spark.sessionState.catalogManager.v2SessionCatalog.asTableCatalog
@@ -3400,6 +3401,7 @@ class DataSourceV2SQLSuiteV1Filter
       val properties = table.properties
       assert(properties.get(TableCatalog.PROP_PROVIDER) == "parquet")
       assert(properties.get(TableCatalog.PROP_COMMENT) == "This is a comment")
+      assert(properties.get(TableCatalog.PROP_COLLATION) == "SR_CI_AI")
       assert(properties.get(TableCatalog.PROP_LOCATION) == "file:/tmp")
       assert(properties.containsKey(TableCatalog.PROP_OWNER))
       assert(properties.get(TableCatalog.PROP_EXTERNAL) == "true")
