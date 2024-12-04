@@ -37,6 +37,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Utility class for collation-aware UTF8String operations.
@@ -1599,6 +1600,42 @@ public class CollationAwareUTF8String {
       }
     }
     return strings.toArray(new UTF8String[0]);
+  }
+
+  /**
+   * Splits the `string` into an array of substrings based on the `delimiter` regex, with respect
+   * to the maximum number of substrings `limit`.
+   *
+   * @param string the string to be split
+   * @param delimiter the delimiter regex to split the string
+   * @param limit the maximum number of substrings to return
+   * @return an array of substrings
+   */
+  public static UTF8String[] split(final UTF8String string, final UTF8String delimiter,
+      final int limit, final int collationId) {
+    CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
+    assert collation.isUtf8BinaryType || collation.isUtf8LcaseType :
+        "Unsupported collation type for split operation.";
+
+    if (collation.isUtf8BinaryType) {
+      return string.split(delimiter, limit);
+    } else {
+      return lowercaseSplit(string, delimiter, limit);
+    }
+  }
+
+  public static UTF8String[] lowercaseSplit(final UTF8String string, final UTF8String delimiter,
+      final int limit) {
+    if (delimiter.numBytes() == 0) return new UTF8String[] { string };
+    if (string.numBytes() == 0) return new UTF8String[] { UTF8String.EMPTY_UTF8 };
+    Pattern pattern = Pattern.compile(delimiter.toString(),
+        CollationSupport.lowercaseRegexFlags);
+    String[] splits = pattern.split(string.toString(), limit);
+    UTF8String[] res = new UTF8String[splits.length];
+    for (int i = 0; i < res.length; i++) {
+      res[i] = UTF8String.fromString(splits[i]);
+    }
+    return res;
   }
 
   // TODO: Add more collation-aware UTF8String operations here.
