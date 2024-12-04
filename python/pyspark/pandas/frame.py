@@ -70,6 +70,7 @@ from pyspark.errors import PySparkValueError
 from pyspark import StorageLevel
 from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -105,7 +106,6 @@ from pyspark.pandas.correlation import (
     CORRELATION_CORR_OUTPUT_COLUMN,
     CORRELATION_COUNT_OUTPUT_COLUMN,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
     align_diff_frames,

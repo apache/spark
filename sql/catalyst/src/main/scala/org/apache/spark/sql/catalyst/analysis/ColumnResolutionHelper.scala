@@ -72,7 +72,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
               newProject.copyTagsFrom(p)
               (newExprs, newProject)
 
-            case a @ Aggregate(groupExprs, aggExprs, child) =>
+            case a @ Aggregate(groupExprs, aggExprs, child, _) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
                 // All the missing attributes are grouping expressions, valid case.
                 (newExprs,
@@ -239,7 +239,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         None
     }
 
-    e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
+    e.transformWithPruning(
+      _.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
       case u: UnresolvedAttribute =>
         resolve(u.nameParts).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with

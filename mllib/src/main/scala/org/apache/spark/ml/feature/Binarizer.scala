@@ -214,7 +214,9 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case DoubleType =>
           BinaryAttribute.defaultAttr.withName(outputColName).toStructField()
         case _: VectorUDT =>
-          val size = AttributeGroup.fromStructField(schema(inputColName)).size
+          val size = AttributeGroup.fromStructField(
+            SchemaUtils.getSchemaField(schema, inputColName)
+          ).size
           if (size < 0) {
             StructField(outputColName, new VectorUDT)
           } else {

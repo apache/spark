@@ -10,193 +10,625 @@ struct<>
 -- !query
 SELECT cast(1 as binary) = '1' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) = 1):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) > '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) > 2):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) >= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) >= 2):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) < '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) < 2):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) <= '2' FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) <= 2):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) <> '2' FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS BINARY) = 2)):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) = cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) = CAST(NULL AS STRING)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) > cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) > CAST(NULL AS STRING)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) >= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) >= CAST(NULL AS STRING)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) < cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) < CAST(NULL AS STRING)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) <= cast(null as string) FROM t
 -- !query schema
-struct<(CAST(1 AS BINARY) <= CAST(NULL AS STRING)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as binary) <> cast(null as string) FROM t
 -- !query schema
-struct<(NOT (CAST(1 AS BINARY) = CAST(NULL AS STRING))):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '1' = cast(1 as binary) FROM t
 -- !query schema
-struct<(1 = CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 30,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' > cast(1 as binary) FROM t
 -- !query schema
-struct<(2 > CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 30,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' >= cast(1 as binary) FROM t
 -- !query schema
-struct<(2 >= CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 31,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' < cast(1 as binary) FROM t
 -- !query schema
-struct<(2 < CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 30,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' <= cast(1 as binary) FROM t
 -- !query schema
-struct<(2 <= CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 31,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT '2' <> cast(1 as binary) FROM t
 -- !query schema
-struct<(NOT (2 = CAST(1 AS BINARY))):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 31,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) = cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) = CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 47,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) > cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) > CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 47,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) >= cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) >= CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 48,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) < cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) < CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 31,
+    "stopIndex" : 47,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) <= cast(1 as binary) FROM t
 -- !query schema
-struct<(CAST(NULL AS STRING) <= CAST(1 AS BINARY)):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 48,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query
 SELECT cast(null as string) <> cast(1 as binary) FROM t
 -- !query schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(1 AS BINARY))):boolean>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\"",
+    "configVal" : "'false'",
+    "sqlExpr" : "\"CAST(1 AS BINARY)\"",
+    "srcType" : "\"INT\"",
+    "targetType" : "\"BINARY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 48,
+    "fragment" : "cast(1 as binary)"
+  } ]
+}
 
 
 -- !query

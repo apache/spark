@@ -678,6 +678,21 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("analyze stats for collated strings") {
+    val tableName = "collated_strings"
+    Seq[String]("sr_CI").foreach { collation =>
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName (c STRING COLLATE $collation) USING PARQUET")
+        sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
+
+        val table = getCatalogTable(tableName)
+        assert(table.stats.get.colStats("c") ==
+          CatalogColumnStat(Some(1), None, None, Some(0), Some(1), Some(1)))
+      }
+    }
+  }
+
   test("analyzes table statistics in cached catalog view") {
     def getTableStats(tableName: String): Statistics = {
       spark.table(tableName).queryExecution.optimizedPlan.stats

@@ -84,6 +84,8 @@ __all__ = ["SparkContext"]
 DEFAULT_CONFIGS: Dict[str, Any] = {
     "spark.serializer.objectStreamReset": 100,
     "spark.rdd.compress": True,
+    # Disable artifact isolation in PySpark, or user-added .py file won't work
+    "spark.sql.artifact.isolation.enabled": "false",
 }
 
 T = TypeVar("T")
@@ -553,6 +555,28 @@ class SparkContext:
         SparkContext._ensure_initialized()
         assert SparkContext._jvm is not None
         SparkContext._jvm.java.lang.System.setProperty(key, value)
+
+    @classmethod
+    def getSystemProperty(cls, key: str) -> str:
+        """
+        Get a Java system property, such as `java.home`.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        key : str
+            The key of a new Java system property.
+
+        Examples
+        --------
+        >>> sc.getSystemProperty("SPARK_SUBMIT")
+        'true'
+        >>> _ = sc.getSystemProperty("java.home")
+        """
+        SparkContext._ensure_initialized()
+        assert SparkContext._jvm is not None
+        return SparkContext._jvm.java.lang.System.getProperty(key)
 
     @property
     def version(self) -> str:

@@ -113,7 +113,8 @@ public final class CollationFactory {
 
     /**
      * Version of the collation. This is the version of the ICU library Collator.
-     * For non-ICU collations (e.g. UTF8 Binary) the version is set to "1.0".
+     * For UTF8 Binary the version is set to "1.0". For ICU collations and UTF8_LCASE
+     * (because it uses ICU mappings) the version is set to the version of the ICU library.
      * When using ICU Collator this version is exposed through collator.getVersion().
      * Whenever the collation is updated, the version should be updated as well or kept
      * for backwards compatibility.
@@ -359,6 +360,23 @@ public final class CollationFactory {
       }
 
       /**
+       * Returns if leading/trailing spaces should be ignored in trim string expressions. This is
+       * needed because space trimming collation directly changes behaviour of trim functions.
+       */
+      protected static boolean ignoresSpacesInTrimFunctions(
+          int collationId,
+          boolean isLTrim,
+          boolean isRTrim) {
+        if (isRTrim && getSpaceTrimming(collationId) == SpaceTrimming.RTRIM) {
+          return true;
+        }
+
+        // In case of adding new trimming collations in the future (LTRIM and TRIM) here logic
+        // should be added.
+        return false;
+      }
+
+      /**
        * Utility function to trim spaces when collation uses space trimming.
        */
       protected static UTF8String applyTrimmingPolicy(UTF8String s, SpaceTrimming spaceTrimming) {
@@ -395,18 +413,6 @@ public final class CollationFactory {
           collationMap.put(collationId, collation);
           return collation;
         }
-      }
-
-      /**
-       * Method for constructing errors thrown on providing invalid collation name.
-       */
-      protected static SparkException collationInvalidNameException(String collationName) {
-        Map<String, String> params = new HashMap<>();
-        final int maxSuggestions = 3;
-        params.put("collationName", collationName);
-        params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
-        return new SparkException("COLLATION_INVALID_NAME",
-          SparkException.constructMessageParams(params), null);
       }
 
       private static int collationNameToId(String collationName) throws SparkException {
@@ -574,7 +580,7 @@ public final class CollationFactory {
             PROVIDER_SPARK,
             null,
             comparator,
-            "1.0",
+            CollationSpecICU.ICU_VERSION,
             hashFunction,
             equalsFunction,
             /* isUtf8BinaryType = */ true,
@@ -601,7 +607,7 @@ public final class CollationFactory {
             PROVIDER_SPARK,
             null,
             comparator,
-            "1.0",
+            CollationSpecICU.ICU_VERSION,
             hashFunction,
             (s1, s2) -> comparator.compare(s1, s2) == 0,
             /* isUtf8BinaryType = */ false,
@@ -661,10 +667,16 @@ public final class CollationFactory {
       }
 
       static List<CollationIdentifier> listCollations() {
-        CollationIdentifier UTF8_BINARY_COLLATION_IDENT =
-          new CollationIdentifier(PROVIDER_SPARK, UTF8_BINARY_COLLATION_NAME, "1.0");
-        CollationIdentifier UTF8_LCASE_COLLATION_IDENT =
-          new CollationIdentifier(PROVIDER_SPARK, UTF8_LCASE_COLLATION_NAME, "1.0");
+        CollationIdentifier UTF8_BINARY_COLLATION_IDENT = new CollationIdentifier(
+            PROVIDER_SPARK,
+            UTF8_BINARY_COLLATION_NAME,
+            CollationSpecICU.ICU_VERSION
+        );
+        CollationIdentifier UTF8_LCASE_COLLATION_IDENT = new CollationIdentifier(
+            PROVIDER_SPARK,
+            UTF8_LCASE_COLLATION_NAME,
+            CollationSpecICU.ICU_VERSION
+        );
         return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT);
       }
 
@@ -739,9 +751,11 @@ public final class CollationFactory {
       private static final Map<String, Integer> ICULocaleToId = new HashMap<>();
 
       /**
-       * ICU library Collator version passed to `Collation` instance.
+       * ICU library version.
        */
-      private static final String ICU_COLLATOR_VERSION = "153.120.0.0";
+      private static final String ICU_VERSION = String.format("%d.%d",
+        VersionInfo.ICU_VERSION.getMajor(),
+        VersionInfo.ICU_VERSION.getMinor());
 
       static {
         ICULocaleMap.put("UNICODE", ULocale.ROOT);
@@ -987,7 +1001,7 @@ public final class CollationFactory {
           PROVIDER_ICU,
           collator,
           comparator,
-          ICU_COLLATOR_VERSION,
+          ICU_VERSION,
           hashFunction,
           (s1, s2) -> comparator.compare(s1, s2) == 0,
           /* isUtf8BinaryType = */ false,
@@ -997,12 +1011,14 @@ public final class CollationFactory {
 
       @Override
       protected CollationMeta buildCollationMeta() {
+        String language = ICULocaleMap.get(locale).getDisplayLanguage();
+        String country = ICULocaleMap.get(locale).getDisplayCountry();
         return new CollationMeta(
           CATALOG,
           SCHEMA,
           normalizedCollationName(),
-          ICULocaleMap.get(locale).getDisplayLanguage(),
-          ICULocaleMap.get(locale).getDisplayCountry(),
+          language.isEmpty() ? null : language,
+          country.isEmpty() ? null : country,
           VersionInfo.ICU_VERSION.toString(),
           COLLATION_PAD_ATTRIBUTE,
           accentSensitivity == AccentSensitivity.AS,
@@ -1157,6 +1173,52 @@ public final class CollationFactory {
     return Collation.CollationSpec.collationNameToId(collationName);
   }
 
+  /**
+   * Returns the resolved fully qualified collation name.
+   */
+  public static String resolveFullyQualifiedName(String[] collationName) throws SparkException {
+    // If collation name has only one part, then we don't need to do any name resolution.
+    if (collationName.length == 1) return collationName[0];
+    else {
+      // Currently we only support builtin collation names with fixed catalog `SYSTEM` and
+      // schema `BUILTIN`.
+      if (collationName.length != 3 ||
+          !CollationFactory.CATALOG.equalsIgnoreCase(collationName[0]) ||
+          !CollationFactory.SCHEMA.equalsIgnoreCase(collationName[1])) {
+        // Throw exception with original (before case conversion) collation name.
+        throw CollationFactory.collationInvalidNameException(
+            collationName.length != 0 ? collationName[collationName.length - 1] : "");
+      }
+      return collationName[2];
+    }
+  }
+
+  /**
+   * Method for constructing errors thrown on providing invalid collation name.
+   */
+  public static SparkException collationInvalidNameException(String collationName) {
+    Map<String, String> params = new HashMap<>();
+    final int maxSuggestions = 3;
+    params.put("collationName", collationName);
+    params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
+    return new SparkException("COLLATION_INVALID_NAME",
+        SparkException.constructMessageParams(params), null);
+  }
+
+
+
+  /**
+   * Returns the fully qualified collation name for the given collation ID.
+   */
+  public static String fullyQualifiedName(int collationId) {
+    Collation.CollationSpec.DefinitionOrigin definitionOrigin =
+        Collation.CollationSpec.getDefinitionOrigin(collationId);
+    // Currently only predefined collations are supported.
+    assert definitionOrigin == Collation.CollationSpec.DefinitionOrigin.PREDEFINED;
+    return String.format("%s.%s.%s", CATALOG, SCHEMA,
+      Collation.CollationSpec.fetchCollation(collationId).collationName);
+  }
+
   public static boolean isCaseInsensitive(int collationId) {
     return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
             Collation.CollationSpecICU.CaseSensitivity.CI;
@@ -1189,6 +1251,24 @@ public final class CollationFactory {
 
   public static String[] getICULocaleNames() {
     return Collation.CollationSpecICU.ICULocaleNames;
+  }
+
+  /**
+   * Applies trimming policy depending up on trim collation type.
+   */
+  public static UTF8String applyTrimmingPolicy(UTF8String input, int collationId) {
+    return Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
+  }
+
+  /**
+   * Returns if leading/trailing spaces should be ignored in trim string expressions. This is needed
+   * because space trimming collation directly changes behaviour of trim functions.
+   */
+  public static boolean ignoresSpacesInTrimFunctions(
+      int collationId,
+      boolean isLTrim,
+      boolean isRTrim) {
+    return Collation.CollationSpec.ignoresSpacesInTrimFunctions(collationId, isLTrim, isRTrim);
   }
 
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
@@ -1234,19 +1314,26 @@ public final class CollationFactory {
         Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION.collationName,
         Collation.CollationSpecUTF8.UTF8_LCASE_COLLATION.collationName
       };
-      validModifiers = new String[0];
+      validModifiers = new String[]{"_RTRIM"};
     } else {
       validRootNames = getICULocaleNames();
-      validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS"};
+      validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS", "_RTRIM"};
     }
 
     // Split modifiers and locale name.
-    final int MODIFIER_LENGTH = 3;
+    boolean foundModifier = true;
     String localeName = collationName.toUpperCase();
     List<String> modifiers = new ArrayList<>();
-    while (Arrays.stream(validModifiers).anyMatch(localeName::endsWith)) {
-      modifiers.add(localeName.substring(localeName.length() - MODIFIER_LENGTH));
-      localeName = localeName.substring(0, localeName.length() - MODIFIER_LENGTH);
+    while (foundModifier) {
+      foundModifier = false;
+      for (String modifier : validModifiers) {
+        if (localeName.endsWith(modifier)) {
+          modifiers.add(modifier);
+          localeName = localeName.substring(0, localeName.length() - modifier.length());
+          foundModifier = true;
+          break;
+        }
+      }
     }
 
     // Suggest version with unique modifiers.

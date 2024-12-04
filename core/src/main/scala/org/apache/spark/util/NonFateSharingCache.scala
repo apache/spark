@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.util.concurrent.Callable
+import java.util.concurrent.{Callable, TimeUnit}
 
 import com.google.common.cache.{Cache, CacheBuilder, CacheLoader, LoadingCache}
 
@@ -67,6 +67,20 @@ private[spark] object NonFateSharingCache {
     new NonFateSharingLoadingCache(builder.build[K, V](new CacheLoader[K, V] {
       override def load(k: K): V = loadingFunc.apply(k)
     }))
+  }
+
+  def apply[K, V](
+      maximumSize: Long,
+      expireAfterAccessTime: Long,
+      expireAfterAccessTimeUnit: TimeUnit): NonFateSharingCache[K, V] = {
+    val builder = CacheBuilder.newBuilder().asInstanceOf[CacheBuilder[K, V]]
+    if (maximumSize > 0L) {
+      builder.maximumSize(maximumSize)
+    }
+    if(expireAfterAccessTime > 0) {
+      builder.expireAfterAccess(expireAfterAccessTime, expireAfterAccessTimeUnit)
+    }
+    new NonFateSharingCache(builder.build[K, V]())
   }
 }
 

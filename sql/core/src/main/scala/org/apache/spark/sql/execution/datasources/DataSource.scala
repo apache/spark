@@ -466,7 +466,7 @@ case class DataSource(
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
       sparkSession.table(tableIdent).queryExecution.analyzed.collect {
-        case LogicalRelation(t: HadoopFsRelation, _, _, _) => t.location
+        case LogicalRelationWithTable(t: HadoopFsRelation, _) => t.location
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
@@ -682,11 +682,10 @@ object DataSource extends Logging {
                 throw e
               }
           }
-        case _ :: Nil if isUserDefinedDataSource =>
-          // There was DSv1 or DSv2 loaded, but the same name source was found
-          // in user defined data source.
-          throw QueryCompilationErrors.foundMultipleDataSources(provider)
         case head :: Nil =>
+          // We do not check whether the provider is a Python data source
+          // (isUserDefinedDataSource) to avoid the lookup cost. Java data sources
+          // always take precedence over Python user-defined data sources.
           head.getClass
         case sources =>
           // There are multiple registered aliases for the input. If there is single datasource

@@ -31,7 +31,7 @@ import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnsupportedOperationChecker}
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union}
@@ -67,6 +67,11 @@ class QueryExecution(
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
+
+  lazy val isLazyAnalysis: Boolean = {
+    // Only check the main query as subquery expression can be resolved now with the main query.
+    logical.exists(_.expressions.exists(_.exists(_.isInstanceOf[LazyExpression])))
+  }
 
   def assertAnalyzed(): Unit = {
     try {
@@ -243,7 +248,7 @@ class QueryExecution(
   def toRdd: RDD[InternalRow] = lazyToRdd.get
 
   /** Get the metrics observed during the execution of the query plan. */
-  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan, Some(analyzed))
+  def observedMetrics: Map[String, Row] = CollectMetricsExec.collect(executedPlan)
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
@@ -518,6 +523,8 @@ object QueryExecution {
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
       EnsureRequirements(),
+      // This rule must be run after `EnsureRequirements`.
+      InsertSortForLimitAndOffset,
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,

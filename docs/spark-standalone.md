@@ -60,10 +60,6 @@ Finally, the following configuration options can be passed to the master and wor
     <td>Hostname to listen on</td>
   </tr>
   <tr>
-    <td><code>-i HOST</code>, <code>--ip HOST</code></td>
-    <td>Hostname to listen on (deprecated, use -h or --host)</td>
-  </tr>
-  <tr>
     <td><code>-p PORT</code>, <code>--port PORT</code></td>
     <td>Port for service to listen on (default: 7077 for master, random for worker)</td>
   </tr>

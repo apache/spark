@@ -191,7 +191,7 @@ case class JoinEstimation(join: Join) extends Logging {
     }
     val keyStatsAfterJoin = new mutable.HashMap[Attribute, ColumnStat]()
     var i = 0
-    while(i < keyPairs.length && joinCard != 0) {
+    while (i < keyPairs.length && joinCard != 0) {
       val (leftKey, rightKey) = keyPairs(i)
       // Check if the two sides are disjoint
       val leftKeyStat = leftStats.attributeStats(leftKey)

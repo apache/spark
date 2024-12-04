@@ -105,6 +105,7 @@ class Relation(google.protobuf.message.Message):
     COMMON_INLINE_USER_DEFINED_DATA_SOURCE_FIELD_NUMBER: builtins.int
     WITH_RELATIONS_FIELD_NUMBER: builtins.int
     TRANSPOSE_FIELD_NUMBER: builtins.int
+    UNRESOLVED_TABLE_VALUED_FUNCTION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -208,6 +209,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def transpose(self) -> global___Transpose: ...
     @property
+    def unresolved_table_valued_function(self) -> global___UnresolvedTableValuedFunction: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -288,6 +291,7 @@ class Relation(google.protobuf.message.Message):
         | None = ...,
         with_relations: global___WithRelations | None = ...,
         transpose: global___Transpose | None = ...,
+        unresolved_table_valued_function: global___UnresolvedTableValuedFunction | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -412,6 +416,8 @@ class Relation(google.protobuf.message.Message):
             b"unknown",
             "unpivot",
             b"unpivot",
+            "unresolved_table_valued_function",
+            b"unresolved_table_valued_function",
             "with_columns",
             b"with_columns",
             "with_columns_renamed",
@@ -531,6 +537,8 @@ class Relation(google.protobuf.message.Message):
             b"unknown",
             "unpivot",
             b"unpivot",
+            "unresolved_table_valued_function",
+            b"unresolved_table_valued_function",
             "with_columns",
             b"with_columns",
             "with_columns_renamed",
@@ -586,6 +594,7 @@ class Relation(google.protobuf.message.Message):
             "common_inline_user_defined_data_source",
             "with_relations",
             "transpose",
+            "unresolved_table_valued_function",
             "fill_na",
             "drop_na",
             "replace",
@@ -3190,6 +3199,36 @@ class Transpose(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Transpose = Transpose
+
+class UnresolvedTableValuedFunction(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FUNCTION_NAME_FIELD_NUMBER: builtins.int
+    ARGUMENTS_FIELD_NUMBER: builtins.int
+    function_name: builtins.str
+    """(Required) name (or unparsed name for user defined function) for the unresolved function."""
+    @property
+    def arguments(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Function arguments. Empty arguments are allowed."""
+    def __init__(
+        self,
+        *,
+        function_name: builtins.str = ...,
+        arguments: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "arguments", b"arguments", "function_name", b"function_name"
+        ],
+    ) -> None: ...
+
+global___UnresolvedTableValuedFunction = UnresolvedTableValuedFunction
 
 class ToSchema(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

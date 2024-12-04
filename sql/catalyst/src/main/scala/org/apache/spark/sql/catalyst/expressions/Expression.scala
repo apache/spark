@@ -53,8 +53,6 @@ import org.apache.spark.sql.types._
  * - [[Unevaluable]]: an expression that is not supposed to be evaluated.
  * - [[CodegenFallback]]: an expression that does not have code gen implemented and falls back to
  *                        interpreted mode.
- * - [[NullIntolerant]]: an expression that is null intolerant (i.e. any null input will result in
- *                       null output).
  * - [[NonSQLExpression]]: a common base trait for the expressions that do not have SQL
  *                         expressions like representation. For example, `ScalaUDF`, `ScalaUDAF`,
  *                         and object `MapObjects` and `Invoke`.
@@ -140,6 +138,14 @@ abstract class Expression extends TreeNode[Expression] {
    * }}}
    */
   def stateful: Boolean = false
+
+
+  /**
+   * When an expression inherits this, meaning the expression is null intolerant (i.e. any null
+   * input will result in null output). We will use this information during constructing IsNotNull
+   * constraints.
+   */
+  def nullIntolerant: Boolean = false
 
   /**
    * Returns true if the expression could potentially throw an exception when evaluated.
@@ -420,8 +426,12 @@ trait RuntimeReplaceable extends Expression {
   // are semantically equal.
   override lazy val canonicalized: Expression = replacement.canonicalized
 
-  final override def eval(input: InternalRow = null): Any =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override def eval(input: InternalRow = null): Any = {
+    // For convenience, we allow to evaluate `RuntimeReplaceable` expressions, in case we need to
+    // get a constant from foldable expression before the query execution starts.
+    assert(input == null)
+    replacement.eval()
+  }
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
