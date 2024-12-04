@@ -434,7 +434,15 @@ object ArrowSerializer {
       case (RowEncoder(fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (_, i) => r => r.asInstanceOf[Row].get(i) }
 
-      case (VariantEncoder, StructVectors(struct, _)) =>
+      case (VariantEncoder, StructVectors(struct, vectors)) =>
+        assert(vectors.exists(_.getName == "value"))
+        assert(
+          vectors.exists(
+            field =>
+              field.getName == "metadata" && field.getField.getMetadata
+                .containsKey("variant") && field.getField.getMetadata.get("variant") == "true"
+          )
+        )
         new StructSerializer(
           struct,
           Seq(new StructFieldSerializer(
