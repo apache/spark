@@ -6018,11 +6018,7 @@ class AstBuilder extends DataTypeAstBuilder
           target = None, excepts = ids.map(s => Seq(s)), replacements = None))
       Project(projectList, left)
     }.getOrElse(Option(ctx.AS).map { _ =>
-      val child = left match {
-        case s: SubqueryAlias => s.child
-        case _ => left
-      }
-      SubqueryAlias(ctx.errorCapturingIdentifier().getText, child)
+      SubqueryAlias(ctx.errorCapturingIdentifier().getText, left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
         throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
