@@ -76,7 +76,7 @@ class SqlScriptingExecutionFrame(
       scopes.remove(scopes.length - 1)
     }
 
-    if (scopes.nonEmpty && scopes.last.label == label) {
+    if (scopes.nonEmpty) {
       scopes.remove(scopes.length - 1)
     }
   }

@@ -71,7 +71,7 @@ class SqlScriptingExecution(
     while (context.frames.nonEmpty && !context.frames.last.hasNext) {
       context.frames.remove(context.frames.size - 1)
     }
-    if (context.frames.nonEmpty && context.frames.last.hasNext) {
+    if (context.frames.nonEmpty) {
       return Some(context.frames.last.next())
     }
     None
