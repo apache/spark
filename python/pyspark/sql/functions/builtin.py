@@ -14986,15 +14986,20 @@ def randstr(length: Union[Column, int], seed: Optional[Union[Column, int]] = Non
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(5).select(sf.randstr(16, 3)).show()
+    >>> spark.range(0, 10, 1, 1).select(sf.randstr(16, 3)).show()
     +----------------+
     |  randstr(16, 3)|
     +----------------+
-    |R0TmgfhbaigB2YFK|
-    |6Ogz59i3TI1AyJ6a|
-    |Fh83ac6LwWPaSEHb|
-    |HZbSiOBaxCyZXTXE|
-    |XlbZEExu8wQOH6oN|
+    |nurJIpH4cmmMnsCG|
+    |fl9YtT5m01trZtIt|
+    |PD19rAgscTHS7qQZ|
+    |2CuAICF5UJOruVv4|
+    |kNZEs8nDpJEoz3Rl|
+    |OXiU0KN5eaXfjXFs|
+    |qfnTM1BZAHtN0gBV|
+    |1p8XiSKwg33KnRPK|
+    |od5y5MucayQq1bKK|
+    |tklYPmKmc5sIppWM|
     +----------------+
     """
     length = _enum_to_value(length)
@@ -15449,15 +15454,20 @@ def uniform(
     Examples
     --------
     >>> import pyspark.sql.functions as sf
-    >>> spark.range(5).select(sf.uniform(5, 105, 3)).show()
+    >>> spark.range(0, 10, 1, 1).select(sf.uniform(5, 105, 3)).show()
     +------------------+
     |uniform(5, 105, 3)|
     +------------------+
-    |                 7|
-    |                33|
-    |                22|
-    |                41|
-    |                21|
+    |                30|
+    |                71|
+    |                99|
+    |                77|
+    |                16|
+    |                25|
+    |                89|
+    |                80|
+    |                51|
+    |                83|
     +------------------+
     """
     min = _enum_to_value(min)
