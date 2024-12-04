@@ -435,6 +435,8 @@ sparkR.session <- function(
     stopifnot(exists(".sparkRjsc", envir = .sparkREnv))
   }
 
+  sparkConfigMap[["spark.api.mode"]] <- "classic"
+  
   if (exists(".sparkRsession", envir = .sparkREnv)) {
     sparkSession <- get(".sparkRsession", envir = .sparkREnv)
     # Apply config to Spark Context and Spark Session if already there

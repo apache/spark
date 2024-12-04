@@ -195,6 +195,7 @@ class KubernetesSuite extends SparkFunSuite
       .set("spark.kubernetes.driver.pod.name", driverPodName)
       .set("spark.kubernetes.driver.label.spark-app-locator", appLocator)
       .set("spark.kubernetes.executor.label.spark-app-locator", appLocator)
+      .set("spark.api.mode", "classic")
       .set(NETWORK_AUTH_ENABLED.key, "true")
     sys.props.get(CONFIG_DRIVER_REQUEST_CORES).map { cpu =>
       sparkAppConf.set("spark.kubernetes.driver.request.cores", cpu)
