@@ -295,7 +295,7 @@ class DescribeTableSuite extends DescribeTableSuiteBase with CommandSuiteBase {
           assert(descriptionDf.isEmpty)
         }
 
-        sql(s"ALTER TABLE t SET DEFAULT COLLATION UniCode_cI")
+        sql(s"ALTER TABLE t DEFAULT COLLATION UniCode_cI")
         val newDescription = getCollationDescription()
         checkAnswer(newDescription, Seq(Row("Collation", "UNICODE_CI", "")))
       }
