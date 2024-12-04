@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoder, Encoders, ExperimentalMethods, Row}
 import org.apache.spark.sql.api.SQLImplicits
 import org.apache.spark.sql.catalog.Table
-import org.apache.spark.sql.functions.{col, expr}
+import org.apache.spark.sql.functions.{array_size, coalesce, col, lit, when}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -624,8 +624,10 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   private def mapTableDatasetOutput(tables: Dataset[Table]): Dataset[Row] = {
     tables
       .select(
-        // Re-implement  rg. apache. spark. sql. catalog
-        expr("IF(COALESCE(ARRAY_SIZE(namespace), 0) != 1, NULL, namespace[1])").as("database"),
+        // Re-implement `org.apache.spark.sql.catalog.Table.database` method
+        when(coalesce(array_size(col("namespace")), lit(0)).equalTo(lit(1)), col("namespace")(0))
+          .otherwise(lit(""))
+          .as("database"),
         col("name").as("tableName"),
         col("isTemporary"))
   }
