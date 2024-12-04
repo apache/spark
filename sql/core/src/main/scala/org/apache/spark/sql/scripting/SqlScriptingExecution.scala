@@ -45,25 +45,17 @@ class SqlScriptingExecution(
     ctx
   }
 
-  private var current: Option[DataFrame] = None
-  private var resultConsumed: Boolean = true
+  private var current: Option[DataFrame] = getNextResult
 
-  override def hasNext: Boolean = {
-    // If the previous result was not consumed, return true if current element exists.
-    if (!resultConsumed) {
-      return current.isDefined
-    }
-
-    // If the previous result was consumed, get the next result and return true if it exists.
-    current = getNextResult
-    resultConsumed = false
-    current.isDefined
-  }
+  override def hasNext: Boolean = current.isDefined
 
   override def next(): DataFrame = {
-    if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    resultConsumed = true
-    current.get
+    current match {
+      case None => throw SparkException.internalError("No more elements to iterate through.")
+      case Some(result) =>
+        current = getNextResult
+        result
+    }
   }
 
   /** Helper method to iterate get next statements from the first available frame. */
