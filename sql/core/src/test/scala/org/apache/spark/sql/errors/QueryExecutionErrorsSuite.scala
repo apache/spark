@@ -1264,7 +1264,7 @@ class QueryExecutionErrorsSuite
       sql("CREATE TABLE t (a INT)")
       checkError(
         exception = intercept[SparkUnsupportedOperationException] {
-          sql(s"ALTER TABLE t SET LOCATION 'https://mister/spark'")
+          sql("ALTER TABLE t SET LOCATION 'https://mister/spark'")
         },
         condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
         parameters = Map(
