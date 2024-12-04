@@ -2637,8 +2637,12 @@ class DataFrame:
     ) -> "DataFrame":
         """
         Lateral joins with another :class:`DataFrame`, using the given join expression.
-        
-        A lateral join (also known as a correlated join) is a type of join where each row from one DataFrame is used as input to a subquery or a derived table that computes a result specific to that row. The right side `DataFrame` can reference columns from the current row of the left side`DataFrame`, allowing for more complex and context-dependent results than a standard join.
+
+        A lateral join (also known as a correlated join) is a type of join where each row from
+        one DataFrame is used as input to a subquery or a derived table that computes a result
+        specific to that row. The right side `DataFrame` can reference columns from the current
+        row of the left side `DataFrame`, allowing for more complex and context-dependent results
+        than a standard join.
 
         .. versionadded:: 4.0.0
 
