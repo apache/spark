@@ -116,9 +116,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   case class TestRepeat(
-    condition: TestLoopCondition,
-    body: TestCompoundBody,
-    label: Option[String] = None)
+      condition: TestLoopCondition,
+      body: TestCompoundBody,
+      label: Option[String] = None)
     extends RepeatStatementExec(condition, body, label, spark) {
 
     private val evaluator = new LoopBooleanConditionEvaluator(condition)
@@ -453,18 +453,13 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("leave compound block") {
-    val context = new SqlScriptingExecutionContext
-    val labelText = "lbl"
     val iter = TestCompoundBody(
       statements = Seq(
         TestLeafStatement("one"),
         new LeaveStatementExec("lbl")
       ),
-      label = Some(labelText),
-      context = context
+      label = Some("lbl")
     ).getTreeIterator
-    context.frames.addOne(new SqlScriptingExecutionFrame(iter))
-    context.enterScope(labelText)
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq("one", "lbl"))
   }
@@ -757,7 +752,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
         label = Some("for1"),
         session = spark,
         body = TestCompoundBody(Seq(TestLeafStatement("body")))
-      ),
+      )
     )).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
