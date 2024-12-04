@@ -225,7 +225,7 @@ class StateStoreChangelogWriterV2(
 
   override def version: Short = 2
 
-  // append the version field to the changelog file starting from version 2
+  // append the version field to the changelog file
   writeVersion()
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
@@ -293,7 +293,7 @@ class StateStoreChangelogWriterV3(
 
   override def version: Short = 3
 
-  // append the version field to the changelog file starting from version 3
+  // append the version field to the changelog file
   writeVersion()
 
   // Also write lineage information to the changelog, it should appear
@@ -338,14 +338,14 @@ class StateStoreChangelogWriterV4(
 class StateStoreChangelogReaderFactory(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec) extends Logging{
+    compressionCodec: CompressionCodec) extends Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
     new DataInputStream(compressed)
   }
 
-  private val sourceStream = try {
+  private lazy val sourceStream = try {
     fm.open(fileToRead)
   } catch {
     case f: FileNotFoundException =>
@@ -414,7 +414,7 @@ abstract class StateStoreChangelogReader(
     new DataInputStream(compressed)
   }
 
-  private val sourceStream = try {
+  private lazy val sourceStream = try {
     fm.open(fileToRead)
   } catch {
     case f: FileNotFoundException =>
