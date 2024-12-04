@@ -29,7 +29,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoder, Encoders, ExperimentalMethods, Row}
 import org.apache.spark.sql.api.SQLImplicits
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.catalog.Table
+import org.apache.spark.sql.functions.{col, expr}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -605,9 +606,7 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(): Dataset[Row] = {
-    sparkSession.catalog
-      .listTables()
-      .select(col("database"), col("name").as("tableName"), col("isTemporary"))
+    mapTableDatasetOutput(sparkSession.catalog.listTables())
   }
 
   /**
@@ -619,9 +618,16 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(databaseName: String): Dataset[Row] = {
-    sparkSession.catalog
-      .listTables(databaseName)
-      .select(col("database"), col("name").as("tableName"), col("isTemporary"))
+    mapTableDatasetOutput(sparkSession.catalog.listTables(databaseName))
+  }
+
+  private def mapTableDatasetOutput(tables: Dataset[Table]): Dataset[Row] = {
+    tables
+      .select(
+        // Re-implement  rg. apache. spark. sql. catalog
+        expr("IF(COALESCE(ARRAY_SIZE(namespace), 0) != 1, NULL, namespace[1])").as("database"),
+        col("name").as("tableName"),
+        col("isTemporary"))
   }
 
   /**
