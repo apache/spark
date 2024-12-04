@@ -815,8 +815,9 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
             body = TestCompoundBody(Seq(TestLeafStatement("body")))
           )
         ))
-      )
-    ), label = Some("lbl")).getTreeIterator
+      )),
+      label = Some("lbl")
+    ).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",
