@@ -437,22 +437,18 @@ object ArrowSerializer {
       case (VariantEncoder, StructVectors(struct, vectors)) =>
         assert(vectors.exists(_.getName == "value"))
         assert(
-          vectors.exists(
-            field =>
-              field.getName == "metadata" && field.getField.getMetadata
-                .containsKey("variant") && field.getField.getMetadata.get("variant") == "true"
-          )
-        )
+          vectors.exists(field =>
+            field.getName == "metadata" && field.getField.getMetadata
+              .containsKey("variant") && field.getField.getMetadata.get("variant") == "true"))
         new StructSerializer(
           struct,
-          Seq(new StructFieldSerializer(
-            extractor = (v: Any) => v.asInstanceOf[VariantVal].getValue,
-            serializerFor(BinaryEncoder, struct.getChild("value"))
-          ), new StructFieldSerializer(
-            extractor = (v: Any) => v.asInstanceOf[VariantVal].getMetadata,
-            serializerFor(BinaryEncoder, struct.getChild("metadata"))
-          ))
-        )
+          Seq(
+            new StructFieldSerializer(
+              extractor = (v: Any) => v.asInstanceOf[VariantVal].getValue,
+              serializerFor(BinaryEncoder, struct.getChild("value"))),
+            new StructFieldSerializer(
+              extractor = (v: Any) => v.asInstanceOf[VariantVal].getMetadata,
+              serializerFor(BinaryEncoder, struct.getChild("metadata")))))
 
       case (JavaBeanEncoder(tag, fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (field, _) =>

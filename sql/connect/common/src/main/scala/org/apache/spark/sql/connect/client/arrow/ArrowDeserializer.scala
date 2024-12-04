@@ -340,34 +340,28 @@ object ArrowDeserializers {
       case (VariantEncoder, StructVectors(struct, vectors)) =>
         assert(vectors.exists(_.getName == "value"))
         assert(
-          vectors.exists(
-            field =>
-              field.getName == "metadata" && field.getField.getMetadata
-                .containsKey("variant") && field.getField.getMetadata.get("variant") == "true"
-          )
-        )
+          vectors.exists(field =>
+            field.getName == "metadata" && field.getField.getMetadata
+              .containsKey("variant") && field.getField.getMetadata.get("variant") == "true"))
         val valueDecoder =
           deserializerFor(
             BinaryEncoder,
             vectors
               .find(_.getName == "value")
               .getOrElse(throw CompilationErrors.columnNotFoundError("value")),
-            timeZoneId
-          )
+            timeZoneId)
         val metadataDecoder =
           deserializerFor(
             BinaryEncoder,
             vectors
               .find(_.getName == "metadata")
               .getOrElse(throw CompilationErrors.columnNotFoundError("metadata")),
-            timeZoneId
-          )
+            timeZoneId)
         new StructFieldSerializer[VariantVal](struct) {
           def value(i: Int): VariantVal = {
             new VariantVal(
               valueDecoder.get(i).asInstanceOf[Array[Byte]],
-              metadataDecoder.get(i).asInstanceOf[Array[Byte]]
-            )
+              metadataDecoder.get(i).asInstanceOf[Array[Byte]])
           }
         }
 
