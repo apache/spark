@@ -225,7 +225,7 @@ class StateStoreChangelogWriterV2(
 
   override def version: Short = 2
 
-  // append the version field to the changelog file starting from version 2
+  // append the version field to the changelog file
   writeVersion()
 
   override def put(key: Array[Byte], value: Array[Byte]): Unit = {
@@ -293,7 +293,7 @@ class StateStoreChangelogWriterV3(
 
   override def version: Short = 3
 
-  // append the version field to the changelog file starting from version 3
+  // append the version field to the changelog file
   writeVersion()
 
   // Also write lineage information to the changelog, it should appear
@@ -338,14 +338,14 @@ class StateStoreChangelogWriterV4(
 class StateStoreChangelogReaderFactory(
     fm: CheckpointFileManager,
     fileToRead: Path,
-    compressionCodec: CompressionCodec) extends Logging{
+    compressionCodec: CompressionCodec) extends Logging {
 
   private def decompressStream(inputStream: DataInputStream): DataInputStream = {
     val compressed = compressionCodec.compressedInputStream(inputStream)
     new DataInputStream(compressed)
   }
 
-  private val sourceStream = try {
+  private lazy val sourceStream = try {
     fm.open(fileToRead)
   } catch {
     case f: FileNotFoundException =>
@@ -377,16 +377,19 @@ class StateStoreChangelogReaderFactory(
    * @return StateStoreChangelogReader
    */
   def constructChangelogReader(): StateStoreChangelogReader = {
-    val reader = readVersion() match {
-      case 1 => new StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec)
-      case 2 => new StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec)
-      case 3 => new StateStoreChangelogReaderV3(fm, fileToRead, compressionCodec)
-      case 4 => new StateStoreChangelogReaderV4(fm, fileToRead, compressionCodec)
-      case version => throw QueryExecutionErrors.invalidChangeLogReaderVersion(version)
-    }
-
-    if (input != null) {
-      input.close()
+    var reader: StateStoreChangelogReader = null
+    try {
+      reader = readVersion() match {
+        case 1 => new StateStoreChangelogReaderV1(fm, fileToRead, compressionCodec)
+        case 2 => new StateStoreChangelogReaderV2(fm, fileToRead, compressionCodec)
+        case 3 => new StateStoreChangelogReaderV3(fm, fileToRead, compressionCodec)
+        case 4 => new StateStoreChangelogReaderV4(fm, fileToRead, compressionCodec)
+        case version => throw QueryExecutionErrors.invalidChangeLogReaderVersion(version)
+      }
+    } finally {
+      if (input != null) {
+        input.close()
+      }
     }
     reader
   }
@@ -411,7 +414,7 @@ abstract class StateStoreChangelogReader(
     new DataInputStream(compressed)
   }
 
-  private val sourceStream = try {
+  private lazy val sourceStream = try {
     fm.open(fileToRead)
   } catch {
     case f: FileNotFoundException =>
