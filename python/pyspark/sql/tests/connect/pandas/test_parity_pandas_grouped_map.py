@@ -14,21 +14,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
 
-from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
+from pyspark.sql.tests.pandas.test_pandas_grouped_map import GroupedApplyInPandasTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
-    pass
+class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTestCase):
+    # TODO(SPARK-42857): Support CreateDataFrame from Decimal128
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_supported_types(self):
+        super().test_supported_types()
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_pandas_udf import *  # noqa: F401
+    from pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:

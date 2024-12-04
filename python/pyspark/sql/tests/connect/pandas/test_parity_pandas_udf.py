@@ -15,20 +15,17 @@
 # limitations under the License.
 #
 
-from pyspark.sql.tests.pandas.test_pandas_map import MapInPandasTestsMixin
+from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class MapInPandasParityTests(
-    MapInPandasTestsMixin,
-    ReusedConnectTestCase,
-):
+class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
     pass
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.connect.test_parity_pandas_map import *  # noqa: F401
+    from pyspark.sql.tests.connect.pandas.test_parity_pandas_udf import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

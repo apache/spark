@@ -16,22 +16,23 @@
 #
 import unittest
 
-from pyspark.sql.tests.pandas.test_pandas_udf_grouped_agg import GroupedAggPandasUDFTestsMixin
+from pyspark.sql.tests.pandas.test_pandas_grouped_map_with_state import (
+    GroupedApplyInPandasWithStateTestsMixin,
+)
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PandasUDFGroupedAggParityTests(
-    GroupedAggPandasUDFTestsMixin,
-    ReusedConnectTestCase,
+class GroupedApplyInPandasWithStateTests(
+    GroupedApplyInPandasWithStateTestsMixin, ReusedConnectTestCase
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_pandas_udf_grouped_agg import *  # noqa: F401
+    from pyspark.sql.tests.connect.pandas.test_parity_pandas_grouped_map_with_state import *  # noqa: F401
 
     try:
-        import xmlrunner  # type: ignore[import]
+        import xmlrunner
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
