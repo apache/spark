@@ -88,6 +88,7 @@ class ArtifactManager(session: SparkSession) extends Logging {
    */
   protected val sessionArtifactAdded = new AtomicBoolean(false)
 
+  @volatile
   protected var cachedClassLoader: Option[ClassLoader] = None
 
   private def withClassLoaderIfNeeded[T](f: => T): T = {
@@ -286,10 +287,12 @@ class ArtifactManager(session: SparkSession) extends Logging {
     }
   }
 
-  def classloader: ClassLoader = cachedClassLoader.getOrElse {
-    val loader = buildClassLoader
-    cachedClassLoader = Some(loader)
-    loader
+  def classloader: ClassLoader = synchronized {
+    cachedClassLoader.getOrElse {
+      val loader = buildClassLoader
+      cachedClassLoader = Some(loader)
+      loader
+    }
   }
 
   /**
