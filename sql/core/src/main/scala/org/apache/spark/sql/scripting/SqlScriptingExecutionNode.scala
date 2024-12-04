@@ -115,6 +115,8 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
  *   compound.
+ * @param context
+ *   SqlScriptingExecutionContext keeps the execution state of current script.
  */
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
@@ -170,6 +172,10 @@ class SingleStatementExec(
  *   Executable nodes for nested statements within the CompoundBody.
  * @param label
  *   Label set by user to CompoundBody or None otherwise.
+ * @param isScope
+ *   Flag that indicates whether Compound Body
+ * @param context
+ *   SqlScriptingExecutionContext keeps the execution state of current script.
  */
 class CompoundBodyExec(
     statements: Seq[CompoundStatementExec],
@@ -183,7 +189,9 @@ class CompoundBodyExec(
   private var scopeEntered = false
   private var scopeExited = false
 
+  // Enter scope represented by this compound statement.
   protected def enterScope(): Unit = {
+    // This check makes this operation idempotent.
     if (isScope && !scopeEntered) {
       scopeEntered = true
       scopeExited = false
@@ -191,7 +199,9 @@ class CompoundBodyExec(
     }
   }
 
+  // Exit scope represented by this compound statement.
   protected def exitScope(): Unit = {
+    // This check makes this operation idempotent.
     if (isScope && !scopeExited) {
       scopeExited = true
       scopeEntered = false
@@ -217,7 +227,6 @@ class CompoundBodyExec(
 
       @scala.annotation.tailrec
       override def next(): CompoundStatementExec = {
-        enterScope()
         curr match {
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")
@@ -709,6 +718,7 @@ class LoopStatementExec(
  * @param body Executable node for the body.
  * @param label Label set to ForStatement by user or None otherwise.
  * @param session Spark session that SQL script is executed within.
+ * @param context SqlScriptingExecutionContext keeps the execution state of current script.
  */
 class ForStatementExec(
     query: SingleStatementExec,

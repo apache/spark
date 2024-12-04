@@ -39,10 +39,11 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       context: SqlScriptingExecutionContext = null)
     extends CompoundBodyExec(statements, label, isScope, context) {
 
+    // No-op to remove unnecessary logic for these tests.
     override def enterScope(): Unit = ()
 
+    // No-op to remove unnecessary logic for these tests.
     override def exitScope(): Unit = ()
-
   }
 
   case class TestForStatement(
