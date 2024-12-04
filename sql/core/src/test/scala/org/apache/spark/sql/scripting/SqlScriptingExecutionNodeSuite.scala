@@ -58,9 +58,7 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
       body,
       label,
       session,
-      context) {
-    override def reset(): Unit = ()
-  }
+      context)
 
   case class TestLeafStatement(testVal: String) extends LeafStatementExec {
     override def reset(): Unit = ()
@@ -806,31 +804,23 @@ class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedSparkSessi
   }
 
   test("for statement - nested") {
-    val context = new SqlScriptingExecutionContext
-    val labelText = "lbl"
     val iter = TestCompoundBody(Seq(
       TestForStatement(
         query = MockQuery(2, "intCol", "query1"),
         variableName = Some("x"),
         label = Some("for1"),
         session = spark,
-        body =
-          TestCompoundBody(Seq(
-            TestForStatement(
-              query = MockQuery(2, "intCol1", "query2"),
-              variableName = Some("y"),
-              label = Some("for2"),
-              session = spark,
-              body = TestCompoundBody(Seq(TestLeafStatement("body"))),
-              context = context
-            )
-          ),
-          context = context),
-        context = context
-      )),
-      label = Some(labelText)).getTreeIterator
-    context.frames.addOne(new SqlScriptingExecutionFrame(iter))
-    context.enterScope(labelText)
+        body = TestCompoundBody(Seq(
+          TestForStatement(
+            query = MockQuery(2, "intCol1", "query2"),
+            variableName = Some("y"),
+            label = Some("for2"),
+            session = spark,
+            body = TestCompoundBody(Seq(TestLeafStatement("body")))
+          )
+        ))
+      )
+    ), label = Some("lbl")).getTreeIterator
     val statements = iter.map(extractStatementValue).toSeq
     assert(statements === Seq(
       "body",

@@ -268,6 +268,8 @@ class CompoundBodyExec(
     localIterator = statements.iterator
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
     stopIteration = false
+    scopeEntered = false
+    scopeExited = false
   }
 
   /** Actions to do when LEAVE statement is encountered, to stop the execution of this compound. */
