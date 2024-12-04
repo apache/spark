@@ -2065,6 +2065,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStmt.label.contains("lbl"))
   }
 
+  test("for statement - empty body") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: FOR x AS SELECT 5 DO
+        |  END FOR;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'FOR'", "hint" -> ""))
+  }
+
   test("for statement - no label") {
     val sqlScriptText =
       """
@@ -2179,6 +2194,21 @@ class SqlScriptingParserSuite extends SparkFunSuite with SQLHelper {
     assert(forStmt.body.collection.head.asInstanceOf[SingleStatement].getText == "SELECT 1")
 
     assert(forStmt.label.contains("lbl"))
+  }
+
+  test("for statement - no variable - empty body") {
+    val sqlScriptText =
+      """
+        |BEGIN
+        |  lbl: FOR SELECT 5 DO
+        |  END FOR;
+        |END""".stripMargin
+    checkError(
+      exception = intercept[ParseException] {
+        parsePlan(sqlScriptText)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'FOR'", "hint" -> ""))
   }
 
   test("for statement - no variable - no label") {
