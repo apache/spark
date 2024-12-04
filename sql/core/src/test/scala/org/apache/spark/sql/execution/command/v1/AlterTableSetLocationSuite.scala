@@ -139,7 +139,7 @@ trait AlterTableSetLocationSuiteBase extends command.AlterTableSetLocationSuiteB
   test("SPARK-50485: Unwrap SparkThrowable in UEE thrown by tableRelationCache") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(buildCreateTableSQL(t))
-      sql(s"CREATE TABLE t (a INT)")
+      sql(s"CREATE TABLE $t (a INT)")
       checkError(
         exception = intercept[SparkUnsupportedOperationException] {
           sql(s"ALTER TABLE t SET LOCATION 'https://mister/spark'")
