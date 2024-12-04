@@ -57,6 +57,7 @@ class SparkShellSuite extends SparkFunSuite {
       val cliScript = "../bin/spark-shell".split("/").mkString(File.separator)
       s"""$cliScript
          |  --master local
+         |  --conf spark.api-mode=classic
          |  --conf spark.ui.enabled=false
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
