@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.util.Locale
-import java.util.concurrent.{Callable, TimeUnit}
+import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
@@ -213,7 +213,7 @@ class SessionCatalog(
     try {
       tableRelationCache.get(t, c)
     } catch {
-      case e: UncheckedExecutionException
+      case e @ (_: ExecutionException | _: UncheckedExecutionException)
           if e.getCause != null && e.getCause.isInstanceOf[SparkThrowable] =>
         throw e.getCause
     }
@@ -222,13 +222,7 @@ class SessionCatalog(
 
   /** This method provides a way to get a cached plan if the key exists. */
   def getCachedTable(key: QualifiedTableName): LogicalPlan = {
-    try {
-      tableRelationCache.getIfPresent(key)
-    } catch {
-      case e: UncheckedExecutionException
-          if e.getCause != null && e.getCause.isInstanceOf[SparkThrowable] =>
-        throw e.getCause
-    }
+    tableRelationCache.getIfPresent(key)
   }
 
   /** This method provides a way to cache a plan. */
