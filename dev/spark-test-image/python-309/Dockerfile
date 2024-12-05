@@ -51,18 +51,20 @@ RUN apt-get update && apt-get install -y \
     libtiff5-dev \
     libxml2-dev \
     openjdk-17-jdk-headless \
-    pandoc \
     pkg-config \
     qpdf \
+    tzdata \
     software-properties-common \
     wget \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
+    zlib1g-dev
 
 # Install Python 3.9
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
-    python3.9 python3.9-distutils \
+    python3.9 \
+    python3.9-distutils \
+    && apt-get autoremove --purge -y \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.2.3 scipy plotly>=4.8 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
