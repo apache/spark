@@ -716,7 +716,8 @@ class Dataset[T] private[sql](
         logicalPlan,
         LateralSubquery(right.logicalPlan),
         joinType,
-      joinExprs.map(_.expr))
+        joinExprs.map(_.expr)
+      )
     }
   }
 
