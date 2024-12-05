@@ -179,11 +179,16 @@ class AstBuilder extends DataTypeAstBuilder
     val handlerType = Option(ctx.EXIT()).map(_ => HandlerType.EXIT).getOrElse(HandlerType.CONTINUE)
 
     val body = if (!ctx.compoundBody().isEmpty) {
-      visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = true, labelCtx)
+      visitCompoundBodyImpl(
+        ctx.compoundBody(),
+        None,
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = false)
     } else {
       val logicalPlan = visitChildren(ctx).asInstanceOf[LogicalPlan]
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None)
-    }.asInstanceOf[CompoundBody]
+      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)), None, isScope = false)
+    }
 
     ErrorHandler(conditions, body, handlerType)
   }

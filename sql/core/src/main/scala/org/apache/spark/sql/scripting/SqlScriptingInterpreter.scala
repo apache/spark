@@ -140,6 +140,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       return new CompoundBodyExec(
         statements,
         compoundBody.label,
+        isScope = false,
         context,
         conditionHandlerMap)
     }
@@ -148,6 +149,7 @@ case class SqlScriptingInterpreter(session: SparkSession) {
       compoundBody.collection
         .map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables,
       compoundBody.label,
+      compoundBody.isScope,
       context,
       conditionHandlerMap)
   }
