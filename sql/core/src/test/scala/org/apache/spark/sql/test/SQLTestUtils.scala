@@ -45,7 +45,8 @@ import org.apache.spark.sql.classic.{ClassicConversions, ColumnConversions}
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.{ColumnNodeToExpressionConverter, SQLConf}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.utils.ColumnNodeToExpressionConverter
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.UninterruptibleThread
 import org.apache.spark.util.Utils
