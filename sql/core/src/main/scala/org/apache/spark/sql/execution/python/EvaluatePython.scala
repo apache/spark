@@ -31,12 +31,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 object EvaluatePython {
 
   def needConversionInPython(dt: DataType): Boolean = dt match {
-    case DateType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => true
+    case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
@@ -200,6 +200,13 @@ object EvaluatePython {
       }
 
     case udt: UserDefinedType[_] => makeFromJava(udt.sqlType)
+
+    case VariantType => (obj: Any) => nullSafeConvert(obj) {
+      case s: java.util.HashMap[_, _] =>
+        new VariantVal(
+          s.get("value").asInstanceOf[Array[Byte]], s.get("metadata").asInstanceOf[Array[Byte]]
+        )
+    }
 
     case other => (obj: Any) => nullSafeConvert(obj)(PartialFunction.empty)
   }

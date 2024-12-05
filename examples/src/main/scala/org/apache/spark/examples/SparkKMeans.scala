@@ -79,7 +79,7 @@ object SparkKMeans {
     val kPoints = data.takeSample(withReplacement = false, K, 42)
     var tempDist = 1.0
 
-    while(tempDist > convergeDist) {
+    while (tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
       val pointStats = closest.reduceByKey(mergeResults)

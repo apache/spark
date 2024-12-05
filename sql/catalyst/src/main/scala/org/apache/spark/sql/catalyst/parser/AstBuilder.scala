@@ -131,28 +131,30 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCompoundOrSingleStatement(
-      ctx: CompoundOrSingleStatementContext): CompoundBody = withOrigin(ctx) {
+      ctx: CompoundOrSingleStatementContext): LogicalPlan = withOrigin(ctx) {
     Option(ctx.singleCompoundStatement()).map { s =>
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_ENABLED)) {
+        throw SqlScriptingErrors.sqlScriptingNotEnabled(CurrentOrigin.get)
+      }
       visit(s).asInstanceOf[CompoundBody]
     }.getOrElse {
-      val logicalPlan = visitSingleStatement(ctx.singleStatement())
-      CompoundBody(Seq(SingleStatement(parsedPlan = logicalPlan)),
-        Some(java.util.UUID.randomUUID.toString.toLowerCase(Locale.ROOT)))
+      visitSingleStatement(ctx.singleStatement())
     }
   }
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
-    visit(ctx.beginEndCompoundBlock()).asInstanceOf[CompoundBody]
+    val labelCtx = new SqlScriptingLabelContext()
+    visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = true, labelCtx)
   }
 
   private def visitCompoundBodyImpl(
       ctx: CompoundBodyContext,
       label: Option[String],
-      allowVarDeclare: Boolean): CompoundBody = {
+      allowVarDeclare: Boolean,
+      labelCtx: SqlScriptingLabelContext): CompoundBody = {
     val buff = ListBuffer[CompoundPlanStatement]()
-    ctx.compoundStatements.forEach(compoundStatement => {
-      buff += visit(compoundStatement).asInstanceOf[CompoundPlanStatement]
-    })
+    ctx.compoundStatements.forEach(
+      compoundStatement => buff += visitCompoundStatementImpl(compoundStatement, labelCtx))
 
     val compoundStatements = buff.toList
 
@@ -184,55 +186,59 @@ class AstBuilder extends DataTypeAstBuilder
     CompoundBody(buff.toSeq, label)
   }
 
-
-  private def generateLabelText(
-      beginLabelCtx: Option[BeginLabelContext],
-      endLabelCtx: Option[EndLabelContext]): String = {
-
-    (beginLabelCtx, endLabelCtx) match {
-      case (Some(bl: BeginLabelContext), Some(el: EndLabelContext))
-        if bl.multipartIdentifier().getText.nonEmpty &&
-          bl.multipartIdentifier().getText.toLowerCase(Locale.ROOT) !=
-            el.multipartIdentifier().getText.toLowerCase(Locale.ROOT) =>
-        withOrigin(bl) {
-          throw SqlScriptingErrors.labelsMismatch(
-            CurrentOrigin.get,
-            bl.multipartIdentifier().getText,
-            el.multipartIdentifier().getText)
-        }
-      case (None, Some(el: EndLabelContext)) =>
-        withOrigin(el) {
-          throw SqlScriptingErrors.endLabelWithoutBeginLabel(
-            CurrentOrigin.get, el.multipartIdentifier().getText)
-        }
-      case _ =>
-    }
-
-    beginLabelCtx.map(_.multipartIdentifier().getText)
-      .getOrElse(java.util.UUID.randomUUID.toString).toLowerCase(Locale.ROOT)
+  private def visitBeginEndCompoundBlockImpl(
+      ctx: BeginEndCompoundBlockContext,
+      labelCtx: SqlScriptingLabelContext): CompoundBody = {
+    val labelText =
+      labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      Some(labelText),
+      allowVarDeclare = true,
+      labelCtx
+    )
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
+    body
   }
 
-  override def visitBeginEndCompoundBlock(ctx: BeginEndCompoundBlockContext): CompoundBody = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    visitCompoundBodyImpl(ctx.compoundBody(), Some(labelText), allowVarDeclare = true)
-  }
-
-  override def visitCompoundBody(ctx: CompoundBodyContext): CompoundBody = {
-    visitCompoundBodyImpl(ctx, None, allowVarDeclare = false)
-  }
-
-  override def visitCompoundStatement(ctx: CompoundStatementContext): CompoundPlanStatement =
+  private def visitCompoundStatementImpl(
+      ctx: CompoundStatementContext,
+      labelCtx: SqlScriptingLabelContext): CompoundPlanStatement =
     withOrigin(ctx) {
       Option(ctx.statement().asInstanceOf[ParserRuleContext])
         .orElse(Option(ctx.setStatementWithOptionalVarKeyword().asInstanceOf[ParserRuleContext]))
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }.getOrElse {
-          visitChildren(ctx).asInstanceOf[CompoundPlanStatement]
+          if (ctx.getChildCount == 1) {
+            ctx.getChild(0) match {
+              case compoundBodyContext: BeginEndCompoundBlockContext =>
+                visitBeginEndCompoundBlockImpl(compoundBodyContext, labelCtx)
+              case whileStmtContext: WhileStatementContext =>
+                visitWhileStatementImpl(whileStmtContext, labelCtx)
+              case repeatStmtContext: RepeatStatementContext =>
+                visitRepeatStatementImpl(repeatStmtContext, labelCtx)
+              case loopStatementContext: LoopStatementContext =>
+                visitLoopStatementImpl(loopStatementContext, labelCtx)
+              case ifElseStmtContext: IfElseStatementContext =>
+                visitIfElseStatementImpl(ifElseStmtContext, labelCtx)
+              case searchedCaseContext: SearchedCaseStatementContext =>
+                visitSearchedCaseStatementImpl(searchedCaseContext, labelCtx)
+              case simpleCaseContext: SimpleCaseStatementContext =>
+                visitSimpleCaseStatementImpl(simpleCaseContext, labelCtx)
+              case forStatementContext: ForStatementContext =>
+                visitForStatementImpl(forStatementContext, labelCtx)
+              case stmt => visit(stmt).asInstanceOf[CompoundPlanStatement]
+            }
+          } else {
+            null
+          }
         }
     }
 
-  override def visitIfElseStatement(ctx: IfElseStatementContext): IfElseStatement = {
+  private def visitIfElseStatementImpl(
+      ctx: IfElseStatementContext,
+      labelCtx: SqlScriptingLabelContext): IfElseStatement = {
     IfElseStatement(
       conditions = ctx.booleanExpression().asScala.toList.map(boolExpr => withOrigin(boolExpr) {
         SingleStatement(
@@ -240,13 +246,20 @@ class AstBuilder extends DataTypeAstBuilder
             Seq(Alias(expression(boolExpr), "condition")()),
             OneRowRelation()))
       }),
-      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body)),
-      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body))
+      conditionalBodies = ctx.conditionalBodies.asScala.toList.map(
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+      ),
+      elseBody = Option(ctx.elseBody).map(
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+      )
     )
   }
 
-  override def visitWhileStatement(ctx: WhileStatementContext): WhileStatement = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+  private def visitWhileStatementImpl(
+      ctx: WhileStatementContext,
+      labelCtx: SqlScriptingLabelContext): WhileStatement = {
+    val labelText =
+      labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
 
     val condition = withOrigin(boolExpr) {
@@ -254,12 +267,15 @@ class AstBuilder extends DataTypeAstBuilder
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
-    val body = visitCompoundBody(ctx.compoundBody())
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     WhileStatement(condition, body, Some(labelText))
   }
 
-  override def visitSearchedCaseStatement(ctx: SearchedCaseStatementContext): CaseStatement = {
+  private def visitSearchedCaseStatementImpl(
+      ctx: SearchedCaseStatementContext,
+      labelCtx: SqlScriptingLabelContext): CaseStatement = {
     val conditions = ctx.conditions.asScala.toList.map(boolExpr => withOrigin(boolExpr) {
       SingleStatement(
         Project(
@@ -267,7 +283,9 @@ class AstBuilder extends DataTypeAstBuilder
           OneRowRelation()))
     })
     val conditionalBodies =
-      ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body))
+      ctx.conditionalBodies.asScala.toList.map(
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+      )
 
     if (conditions.length != conditionalBodies.length) {
       throw SparkException.internalError(
@@ -278,10 +296,14 @@ class AstBuilder extends DataTypeAstBuilder
     CaseStatement(
       conditions = conditions,
       conditionalBodies = conditionalBodies,
-      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
+      elseBody = Option(ctx.elseBody).map(
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+      ))
   }
 
-  override def visitSimpleCaseStatement(ctx: SimpleCaseStatementContext): CaseStatement = {
+  private def visitSimpleCaseStatementImpl(
+      ctx: SimpleCaseStatementContext,
+      labelCtx: SqlScriptingLabelContext): CaseStatement = {
     // uses EqualTo to compare the case variable(the main case expression)
     // to the WHEN clause expressions
     val conditions = ctx.conditionExpressions.asScala.toList.map(expr => withOrigin(expr) {
@@ -291,7 +313,9 @@ class AstBuilder extends DataTypeAstBuilder
           OneRowRelation()))
     })
     val conditionalBodies =
-      ctx.conditionalBodies.asScala.toList.map(body => visitCompoundBody(body))
+      ctx.conditionalBodies.asScala.toList.map(
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+      )
 
     if (conditions.length != conditionalBodies.length) {
       throw SparkException.internalError(
@@ -302,11 +326,16 @@ class AstBuilder extends DataTypeAstBuilder
     CaseStatement(
       conditions = conditions,
       conditionalBodies = conditionalBodies,
-      elseBody = Option(ctx.elseBody).map(body => visitCompoundBody(body)))
+      elseBody = Option(ctx.elseBody).map(
+        body => visitCompoundBodyImpl(body, None, allowVarDeclare = false, labelCtx)
+      ))
   }
 
-  override def visitRepeatStatement(ctx: RepeatStatementContext): RepeatStatement = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+  private def visitRepeatStatementImpl(
+      ctx: RepeatStatementContext,
+      labelCtx: SqlScriptingLabelContext): RepeatStatement = {
+    val labelText =
+      labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
     val boolExpr = ctx.booleanExpression()
 
     val condition = withOrigin(boolExpr) {
@@ -314,33 +343,54 @@ class AstBuilder extends DataTypeAstBuilder
         Project(
           Seq(Alias(expression(boolExpr), "condition")()),
           OneRowRelation()))}
-    val body = visitCompoundBody(ctx.compoundBody())
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     RepeatStatement(condition, body, Some(labelText))
+  }
+
+  private def visitForStatementImpl(
+      ctx: ForStatementContext,
+      labelCtx: SqlScriptingLabelContext): ForStatement = {
+    val labelText = labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+
+    val queryCtx = ctx.query()
+    val query = withOrigin(queryCtx) {
+      SingleStatement(visitQuery(queryCtx))
+    }
+    val varName = Option(ctx.multipartIdentifier()).map(_.getText)
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
+
+    ForStatement(query, varName, body, Some(labelText))
   }
 
   private def leaveOrIterateContextHasLabel(
       ctx: RuleContext, label: String, isIterate: Boolean): Boolean = {
     ctx match {
       case c: BeginEndCompoundBlockContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label) =>
-        if (isIterate) {
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => if (isIterate) {
           throw SqlScriptingErrors.invalidIterateLabelUsageForCompound(CurrentOrigin.get, label)
         }
         true
       case c: WhileStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case c: RepeatStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case c: LoopStatementContext
-        if Option(c.beginLabel()).isDefined &&
-          c.beginLabel().multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
-        => true
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
+      case c: ForStatementContext
+        if Option(c.beginLabel()).exists { b =>
+          b.multipartIdentifier().getText.toLowerCase(Locale.ROOT).equals(label)
+        } => true
       case _ => false
     }
   }
@@ -377,9 +427,13 @@ class AstBuilder extends DataTypeAstBuilder
         CurrentOrigin.get, labelText, "ITERATE")
     }
 
-  override def visitLoopStatement(ctx: LoopStatementContext): LoopStatement = {
-    val labelText = generateLabelText(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    val body = visitCompoundBody(ctx.compoundBody())
+  private def visitLoopStatementImpl(
+      ctx: LoopStatementContext,
+      labelCtx: SqlScriptingLabelContext): LoopStatement = {
+    val labelText =
+      labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
+    val body = visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = false, labelCtx)
+    labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
 
     LoopStatement(body, Some(labelText))
   }
@@ -979,9 +1033,10 @@ class AstBuilder extends DataTypeAstBuilder
    * Add ORDER BY/SORT BY/CLUSTER BY/DISTRIBUTE BY/LIMIT/WINDOWS clauses to the logical plan. These
    * clauses determine the shape (ordering/partitioning/rows) of the query result.
    *
-   * If 'forPipeOperators' is true, throws an error if the WINDOW clause is present (since this is
-   * not currently supported) or if more than one clause is present (this can be useful when parsing
-   * clauses used with pipe operations which only allow one instance of these clauses each).
+   * If 'forPipeOperators' is true, throws an error if the WINDOW clause is present (since it breaks
+   * the composability of the pipe operators) or if more than one clause is present (this can be
+   * useful when parsing clauses used with pipe operations which only allow one instance of these
+   * clauses each).
    */
   private def withQueryResultClauses(
       ctx: QueryOrganizationContext,
@@ -1023,7 +1078,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // WINDOWS
     val withWindow = withOrder.optionalMap(windowClause) {
-      withWindowClause
+      withWindowClause(_, _, forPipeOperators)
     }
     if (forPipeOperators && windowClause != null) {
       throw QueryParsingErrors.clausesWithPipeOperatorsUnsupportedError(
@@ -1203,7 +1258,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Add a regular (SELECT) query specification to a logical plan. The query specification
    * is the core of the logical plan, this is where sourcing (FROM clause), projection (SELECT),
    * aggregation (GROUP BY ... HAVING ...) and filtering (WHERE) takes place.
-   * If 'isPipeOperatorSelect' is true, wraps each projected expression with a [[PipeSelect]]
+   * If 'isPipeOperatorSelect' is true, wraps each projected expression with a [[PipeExpression]]
    * expression for future validation of the expressions during analysis.
    *
    * Note that query hints are ignored (both by the parser and the builder).
@@ -1260,11 +1315,12 @@ class AstBuilder extends DataTypeAstBuilder
 
     def createProject() = if (namedExpressions.nonEmpty) {
       val newProjectList: Seq[NamedExpression] = if (isPipeOperatorSelect) {
-        // If this is a pipe operator |> SELECT clause, add a [[PipeSelect]] expression wrapping
+        // If this is a pipe operator |> SELECT clause, add a [[PipeExpression]] wrapping
         // each alias in the project list, so the analyzer can check invariants later.
         namedExpressions.map {
           case a: Alias =>
-            a.withNewChildren(Seq(PipeSelect(a.child)))
+            a.withNewChildren(Seq(
+                PipeExpression(a.child, isAggregate = false, PipeOperators.selectClause)))
               .asInstanceOf[NamedExpression]
           case other =>
             other
@@ -1306,7 +1362,9 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // Window
-    val withWindow = withDistinct.optionalMap(windowClause)(withWindowClause)
+    val withWindow = withDistinct.optionalMap(windowClause) {
+      withWindowClause(_, _, isPipeOperatorSelect)
+    }
 
     withWindow
   }
@@ -1463,7 +1521,8 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def withWindowClause(
       ctx: WindowClauseContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+      query: LogicalPlan,
+      forPipeSQL: Boolean): LogicalPlan = withOrigin(ctx) {
     // Collect all window specifications defined in the WINDOW clause.
     val baseWindowTuples = ctx.namedWindow.asScala.map {
       wCtx =>
@@ -1495,7 +1554,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Note that mapValues creates a view instead of materialized map. We force materialization by
     // mapping over identity.
-    WithWindowDefinition(windowMapView.map(identity), query)
+    WithWindowDefinition(windowMapView.map(identity), query, forPipeSQL)
   }
 
   /**
@@ -2091,12 +2150,48 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val unresolvedTable = UnresolvedInlineTable(aliases, rows.toSeq)
-    val table = if (conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+    val table = if (canEagerlyEvaluateInlineTable(ctx, unresolvedTable)) {
       EvaluateUnresolvedInlineTable.evaluate(unresolvedTable)
     } else {
       unresolvedTable
     }
     table.optionalMap(ctx.tableAlias.strictIdentifier)(aliasPlan)
+  }
+
+  /**
+   * Determines if the inline table can be eagerly evaluated.
+   */
+  private def canEagerlyEvaluateInlineTable(
+      ctx: InlineTableContext,
+      table: UnresolvedInlineTable): Boolean = {
+    if (!conf.getConf(SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED)) {
+      return false
+    } else if (!ResolveDefaultStringTypes.needsResolution(table.expressions)) {
+      // if there are no strings to be resolved we can always evaluate eagerly
+      return true
+    }
+
+    val isSessionCollationSet = conf.defaultStringType != StringType
+
+    // if either of these are true we need to resolve
+    // the string types first
+    !isSessionCollationSet && !contextInsideCreate(ctx)
+  }
+
+  private def contextInsideCreate(ctx: ParserRuleContext): Boolean = {
+    var currentContext: RuleContext = ctx
+
+    while (currentContext != null) {
+      if (currentContext.isInstanceOf[CreateTableContext] ||
+          currentContext.isInstanceOf[ReplaceTableContext] ||
+          currentContext.isInstanceOf[CreateViewContext]) {
+        return true
+      }
+
+      currentContext = currentContext.parent
+    }
+
+    false
   }
 
   /**
@@ -2191,14 +2286,6 @@ class AstBuilder extends DataTypeAstBuilder
     FunctionIdentifier(ctx.function.getText, Option(ctx.db).map(_.getText))
   }
 
-  /**
-   * Create a multi-part identifier.
-   */
-  override def visitMultipartIdentifier(ctx: MultipartIdentifierContext): Seq[String] =
-    withOrigin(ctx) {
-      ctx.parts.asScala.map(_.getText).toSeq
-    }
-
   /* ********************************************************************************************
    * Expression parsing
    * ******************************************************************************************** */
@@ -2238,9 +2325,10 @@ class AstBuilder extends DataTypeAstBuilder
   def visitStarExcept(ctx: StarContext, target: Option[Seq[String]]): Expression = withOrigin(ctx) {
     val exceptCols = ctx.exceptClause
       .exceptCols.multipartIdentifier.asScala.map(typedVisit[Seq[String]])
-    UnresolvedStarExcept(
+    UnresolvedStarExceptOrReplace(
       target,
-      exceptCols.toSeq)
+      exceptCols.toSeq,
+      replacements = None)
   }
 
   /**
@@ -2610,15 +2698,16 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCollate(ctx: CollateContext): Expression = withOrigin(ctx) {
     val collationName = visitCollateClause(ctx.collateClause())
-    Collate(expression(ctx.primaryExpression), collationName)
+
+    Collate(expression(ctx.primaryExpression), UnresolvedCollation(collationName))
   }
 
-  override def visitCollateClause(ctx: CollateClauseContext): String = withOrigin(ctx) {
-    val collationName = ctx.collationName.getText
-    if (!SQLConf.get.trimCollationEnabled && collationName.toUpperCase().contains("TRIM")) {
+  override def visitCollateClause(ctx: CollateClauseContext): Seq[String] = withOrigin(ctx) {
+    val collationName = visitMultipartIdentifier(ctx.collationName)
+    if (!SQLConf.get.trimCollationEnabled && collationName.last.toUpperCase().contains("TRIM")) {
       throw QueryCompilationErrors.trimCollationNotEnabledError()
     }
-    ctx.identifier.getText
+    collationName
   }
 
   /**
@@ -3309,7 +3398,7 @@ class AstBuilder extends DataTypeAstBuilder
    * Create a String literal expression.
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal.create(createString(ctx), conf.defaultStringType)
+    Literal.create(createString(ctx), StringType)
   }
 
   /**
@@ -5894,10 +5983,33 @@ class AstBuilder extends DataTypeAstBuilder
         whereClause = null,
         aggregationClause = null,
         havingClause = null,
-        windowClause = null,
+        windowClause = ctx.windowClause,
         relation = left,
         isPipeOperatorSelect = true)
+    }.getOrElse(Option(ctx.EXTEND).map { _ =>
+      // Visit each expression in the EXTEND operator, and add a PipeExpression expression on top of
+      // it to generate clear error messages if the expression contains any aggregate functions
+      // (this is not allowed in the EXTEND operator).
+      val extendExpressions: Seq[NamedExpression] =
+        Option(ctx.extendList).map { n: NamedExpressionSeqContext =>
+          visitNamedExpressionSeq(n).map {
+            case (a: Alias, _) =>
+              a.copy(
+                child = PipeExpression(a.child, isAggregate = false, PipeOperators.extendClause))(
+                a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+            case (e: Expression, aliasFunc) =>
+              UnresolvedAlias(
+                PipeExpression(e, isAggregate = false, PipeOperators.extendClause), aliasFunc)
+          }
+        }.get
+      val projectList: Seq[NamedExpression] = Seq(UnresolvedStar(None)) ++ extendExpressions
+      Project(projectList, left)
+    }.getOrElse(Option(ctx.SET).map { _ =>
+      visitOperatorPipeSet(ctx, left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
+      if (ctx.windowClause() != null) {
+        throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
+      }
       withWhereClause(c, withSubqueryAlias())
     }.getOrElse(Option(ctx.pivotClause()).map { c =>
       if (ctx.unpivotClause() != null) {
@@ -5920,7 +6032,47 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    ))))))))
+    ))))))))))
+  }
+
+  private def visitOperatorPipeSet(
+      ctx: OperatorPipeRightSideContext, left: LogicalPlan): LogicalPlan = {
+    val (setIdentifiers: Seq[String], setTargets: Seq[Expression]) =
+      visitOperatorPipeSetAssignmentSeq(ctx.operatorPipeSetAssignmentSeq())
+    var plan = left
+    setIdentifiers.zip(setTargets).foreach {
+      case (_, _: Alias) =>
+        operationNotAllowed(
+          "SQL pipe syntax |> SET operator with an alias assigned with [AS] aliasName", ctx)
+      case (ident, target) =>
+        // Add an UnresolvedStarExceptOrReplace to exclude the SET expression name from the relation
+        // and add the new SET expression to the projection list.
+        // Use a PipeSelect expression to make sure it does not contain any aggregate functions.
+        val replacement =
+          Alias(PipeExpression(target, isAggregate = false, PipeOperators.setClause), ident)()
+        val projectList: Seq[NamedExpression] =
+          Seq(UnresolvedStarExceptOrReplace(
+            target = None, excepts = Seq(Seq(ident)), replacements = Some(Seq(replacement))))
+        // Add a projection to implement the SET operator using the UnresolvedStarExceptOrReplace
+        // expression. We do this once per SET assignment to allow for multiple SET assignments with
+        // optional lateral references to previous ones.
+        plan = Project(projectList, plan)
+    }
+    plan
+  }
+
+  override def visitOperatorPipeSetAssignmentSeq(
+      ctx: OperatorPipeSetAssignmentSeqContext): (Seq[String], Seq[Expression]) = {
+    withOrigin(ctx) {
+      if (!ctx.DOT.isEmpty) {
+        operationNotAllowed(
+          s"SQL pipe syntax |> SET operator with multi-part assignment key " +
+            s"(only single-part keys are allowed)", ctx)
+      }
+      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
+      val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
+      (setIdentifiers, setTargets)
+    }
   }
 
   private def visitOperatorPipeAggregate(
@@ -5931,11 +6083,18 @@ class AstBuilder extends DataTypeAstBuilder
         "The AGGREGATE clause requires a list of aggregate expressions " +
           "or a list of grouping expressions, or both", ctx)
     }
+    // Visit each aggregate expression, and add a PipeAggregate expression on top of it to generate
+    // clear error messages if the expression does not contain at least one aggregate function.
     val aggregateExpressions: Seq[NamedExpression] =
       Option(ctx.namedExpressionSeq()).map { n: NamedExpressionSeqContext =>
         visitNamedExpressionSeq(n).map {
-          case (e: NamedExpression, _) => e
-          case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
+          case (a: Alias, _) =>
+            a.copy(child =
+              PipeExpression(a.child, isAggregate = true, PipeOperators.aggregateClause))(
+              a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+          case (e: Expression, aliasFunc) =>
+            UnresolvedAlias(
+              PipeExpression(e, isAggregate = true, PipeOperators.aggregateClause), aliasFunc)
         }
       }.getOrElse(Seq.empty)
     Option(ctx.aggregationClause()).map { c: AggregationClauseContext =>

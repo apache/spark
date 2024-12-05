@@ -10,78 +10,155 @@ CreateViewCommand `t`, SELECT 1, false, false, LocalTempView, UNSUPPORTED, true
 -- !query
 SELECT true = cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(true as tinyint) = cast(1 as tinyint)) AS (true = CAST(1 AS TINYINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"TINYINT\"",
+    "sqlExpr" : "\"(true = CAST(1 AS TINYINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "true = cast(1 as tinyint)"
+  } ]
+}
 
 
 -- !query
 SELECT true = cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(true as smallint) = cast(1 as smallint)) AS (true = CAST(1 AS SMALLINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"SMALLINT\"",
+    "sqlExpr" : "\"(true = CAST(1 AS SMALLINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "true = cast(1 as smallint)"
+  } ]
+}
 
 
 -- !query
 SELECT true = cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(true as int) = cast(1 as int)) AS (true = CAST(1 AS INT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"INT\"",
+    "sqlExpr" : "\"(true = CAST(1 AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "true = cast(1 as int)"
+  } ]
+}
 
 
 -- !query
 SELECT true = cast(1 as bigint) FROM t
 -- !query analysis
-Project [(cast(true as bigint) = cast(1 as bigint)) AS (true = CAST(1 AS BIGINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"BIGINT\"",
+    "sqlExpr" : "\"(true = CAST(1 AS BIGINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "true = cast(1 as bigint)"
+  } ]
+}
 
 
 -- !query
 SELECT true = cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(true as float) = cast(1 as float)) AS (true = CAST(1 AS FLOAT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"FLOAT\"",
+    "sqlExpr" : "\"(true = CAST(1 AS FLOAT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "true = cast(1 as float)"
+  } ]
+}
 
 
 -- !query
 SELECT true = cast(1 as double) FROM t
 -- !query analysis
-Project [(cast(true as double) = cast(1 as double)) AS (true = CAST(1 AS DOUBLE))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(true = CAST(1 AS DOUBLE))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "true = cast(1 as double)"
+  } ]
+}
 
 
 -- !query
 SELECT true = cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(true as decimal(10,0)) = cast(1 as decimal(10,0))) AS (true = CAST(1 AS DECIMAL(10,0)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(true = CAST(1 AS DECIMAL(10,0)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "true = cast(1 as decimal(10, 0))"
+  } ]
+}
 
 
 -- !query
@@ -175,78 +252,155 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT true <=> cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(true as tinyint) <=> cast(1 as tinyint)) AS (true <=> CAST(1 AS TINYINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"TINYINT\"",
+    "sqlExpr" : "\"(true <=> CAST(1 AS TINYINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "true <=> cast(1 as tinyint)"
+  } ]
+}
 
 
 -- !query
 SELECT true <=> cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(true as smallint) <=> cast(1 as smallint)) AS (true <=> CAST(1 AS SMALLINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"SMALLINT\"",
+    "sqlExpr" : "\"(true <=> CAST(1 AS SMALLINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "true <=> cast(1 as smallint)"
+  } ]
+}
 
 
 -- !query
 SELECT true <=> cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(true as int) <=> cast(1 as int)) AS (true <=> CAST(1 AS INT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"INT\"",
+    "sqlExpr" : "\"(true <=> CAST(1 AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "true <=> cast(1 as int)"
+  } ]
+}
 
 
 -- !query
 SELECT true <=> cast(1 as bigint) FROM t
 -- !query analysis
-Project [(cast(true as bigint) <=> cast(1 as bigint)) AS (true <=> CAST(1 AS BIGINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"BIGINT\"",
+    "sqlExpr" : "\"(true <=> CAST(1 AS BIGINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "true <=> cast(1 as bigint)"
+  } ]
+}
 
 
 -- !query
 SELECT true <=> cast(1 as float) FROM t
 -- !query analysis
-Project [(cast(true as float) <=> cast(1 as float)) AS (true <=> CAST(1 AS FLOAT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"FLOAT\"",
+    "sqlExpr" : "\"(true <=> CAST(1 AS FLOAT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "true <=> cast(1 as float)"
+  } ]
+}
 
 
 -- !query
 SELECT true <=> cast(1 as double) FROM t
 -- !query analysis
-Project [(cast(true as double) <=> cast(1 as double)) AS (true <=> CAST(1 AS DOUBLE))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(true <=> CAST(1 AS DOUBLE))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "true <=> cast(1 as double)"
+  } ]
+}
 
 
 -- !query
 SELECT true <=> cast(1 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(true as decimal(10,0)) <=> cast(1 as decimal(10,0))) AS (true <=> CAST(1 AS DECIMAL(10,0)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(true <=> CAST(1 AS DECIMAL(10,0)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "true <=> cast(1 as decimal(10, 0))"
+  } ]
+}
 
 
 -- !query
@@ -340,78 +494,155 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as tinyint) = true FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) = cast(true as tinyint)) AS (CAST(1 AS TINYINT) = true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TINYINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS TINYINT) = true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "cast(1 as tinyint) = true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as smallint) = true FROM t
 -- !query analysis
-Project [(cast(1 as smallint) = cast(true as smallint)) AS (CAST(1 AS SMALLINT) = true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"SMALLINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS SMALLINT) = true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "cast(1 as smallint) = true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as int) = true FROM t
 -- !query analysis
-Project [(cast(1 as int) = cast(true as int)) AS (CAST(1 AS INT) = true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"INT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS INT) = true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "cast(1 as int) = true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as bigint) = true FROM t
 -- !query analysis
-Project [(cast(1 as bigint) = cast(true as bigint)) AS (CAST(1 AS BIGINT) = true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BIGINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS BIGINT) = true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "cast(1 as bigint) = true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as float) = true FROM t
 -- !query analysis
-Project [(cast(1 as float) = cast(true as float)) AS (CAST(1 AS FLOAT) = true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"FLOAT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS FLOAT) = true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "cast(1 as float) = true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as double) = true FROM t
 -- !query analysis
-Project [(cast(1 as double) = cast(true as double)) AS (CAST(1 AS DOUBLE) = true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DOUBLE\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DOUBLE) = true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "cast(1 as double) = true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(10, 0)) = true FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) = cast(true as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) = true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(10,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) = true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 39,
+    "fragment" : "cast(1 as decimal(10, 0)) = true"
+  } ]
+}
 
 
 -- !query
@@ -505,78 +736,155 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as tinyint) <=> true FROM t
 -- !query analysis
-Project [(cast(1 as tinyint) <=> cast(true as tinyint)) AS (CAST(1 AS TINYINT) <=> true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TINYINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS TINYINT) <=> true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(1 as tinyint) <=> true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as smallint) <=> true FROM t
 -- !query analysis
-Project [(cast(1 as smallint) <=> cast(true as smallint)) AS (CAST(1 AS SMALLINT) <=> true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"SMALLINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS SMALLINT) <=> true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "cast(1 as smallint) <=> true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as int) <=> true FROM t
 -- !query analysis
-Project [(cast(1 as int) <=> cast(true as int)) AS (CAST(1 AS INT) <=> true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"INT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS INT) <=> true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "cast(1 as int) <=> true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as bigint) <=> true FROM t
 -- !query analysis
-Project [(cast(1 as bigint) <=> cast(true as bigint)) AS (CAST(1 AS BIGINT) <=> true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BIGINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS BIGINT) <=> true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "cast(1 as bigint) <=> true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as float) <=> true FROM t
 -- !query analysis
-Project [(cast(1 as float) <=> cast(true as float)) AS (CAST(1 AS FLOAT) <=> true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"FLOAT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS FLOAT) <=> true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "cast(1 as float) <=> true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as double) <=> true FROM t
 -- !query analysis
-Project [(cast(1 as double) <=> cast(true as double)) AS (CAST(1 AS DOUBLE) <=> true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DOUBLE\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DOUBLE) <=> true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "cast(1 as double) <=> true"
+  } ]
+}
 
 
 -- !query
 SELECT cast(1 as decimal(10, 0)) <=> true FROM t
 -- !query analysis
-Project [(cast(1 as decimal(10,0)) <=> cast(true as decimal(10,0))) AS (CAST(1 AS DECIMAL(10,0)) <=> true)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(10,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(1 AS DECIMAL(10,0)) <=> true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 41,
+    "fragment" : "cast(1 as decimal(10, 0)) <=> true"
+  } ]
+}
 
 
 -- !query
@@ -670,78 +978,155 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT false = cast(0 as tinyint) FROM t
 -- !query analysis
-Project [(cast(false as tinyint) = cast(0 as tinyint)) AS (false = CAST(0 AS TINYINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"TINYINT\"",
+    "sqlExpr" : "\"(false = CAST(0 AS TINYINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "false = cast(0 as tinyint)"
+  } ]
+}
 
 
 -- !query
 SELECT false = cast(0 as smallint) FROM t
 -- !query analysis
-Project [(cast(false as smallint) = cast(0 as smallint)) AS (false = CAST(0 AS SMALLINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"SMALLINT\"",
+    "sqlExpr" : "\"(false = CAST(0 AS SMALLINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "false = cast(0 as smallint)"
+  } ]
+}
 
 
 -- !query
 SELECT false = cast(0 as int) FROM t
 -- !query analysis
-Project [(cast(false as int) = cast(0 as int)) AS (false = CAST(0 AS INT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"INT\"",
+    "sqlExpr" : "\"(false = CAST(0 AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "false = cast(0 as int)"
+  } ]
+}
 
 
 -- !query
 SELECT false = cast(0 as bigint) FROM t
 -- !query analysis
-Project [(cast(false as bigint) = cast(0 as bigint)) AS (false = CAST(0 AS BIGINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"BIGINT\"",
+    "sqlExpr" : "\"(false = CAST(0 AS BIGINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "false = cast(0 as bigint)"
+  } ]
+}
 
 
 -- !query
 SELECT false = cast(0 as float) FROM t
 -- !query analysis
-Project [(cast(false as float) = cast(0 as float)) AS (false = CAST(0 AS FLOAT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"FLOAT\"",
+    "sqlExpr" : "\"(false = CAST(0 AS FLOAT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "false = cast(0 as float)"
+  } ]
+}
 
 
 -- !query
 SELECT false = cast(0 as double) FROM t
 -- !query analysis
-Project [(cast(false as double) = cast(0 as double)) AS (false = CAST(0 AS DOUBLE))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(false = CAST(0 AS DOUBLE))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "false = cast(0 as double)"
+  } ]
+}
 
 
 -- !query
 SELECT false = cast(0 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(false as decimal(10,0)) = cast(0 as decimal(10,0))) AS (false = CAST(0 AS DECIMAL(10,0)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(false = CAST(0 AS DECIMAL(10,0)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "false = cast(0 as decimal(10, 0))"
+  } ]
+}
 
 
 -- !query
@@ -835,78 +1220,155 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT false <=> cast(0 as tinyint) FROM t
 -- !query analysis
-Project [(cast(false as tinyint) <=> cast(0 as tinyint)) AS (false <=> CAST(0 AS TINYINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"TINYINT\"",
+    "sqlExpr" : "\"(false <=> CAST(0 AS TINYINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "false <=> cast(0 as tinyint)"
+  } ]
+}
 
 
 -- !query
 SELECT false <=> cast(0 as smallint) FROM t
 -- !query analysis
-Project [(cast(false as smallint) <=> cast(0 as smallint)) AS (false <=> CAST(0 AS SMALLINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"SMALLINT\"",
+    "sqlExpr" : "\"(false <=> CAST(0 AS SMALLINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "false <=> cast(0 as smallint)"
+  } ]
+}
 
 
 -- !query
 SELECT false <=> cast(0 as int) FROM t
 -- !query analysis
-Project [(cast(false as int) <=> cast(0 as int)) AS (false <=> CAST(0 AS INT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"INT\"",
+    "sqlExpr" : "\"(false <=> CAST(0 AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "false <=> cast(0 as int)"
+  } ]
+}
 
 
 -- !query
 SELECT false <=> cast(0 as bigint) FROM t
 -- !query analysis
-Project [(cast(false as bigint) <=> cast(0 as bigint)) AS (false <=> CAST(0 AS BIGINT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"BIGINT\"",
+    "sqlExpr" : "\"(false <=> CAST(0 AS BIGINT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "false <=> cast(0 as bigint)"
+  } ]
+}
 
 
 -- !query
 SELECT false <=> cast(0 as float) FROM t
 -- !query analysis
-Project [(cast(false as float) <=> cast(0 as float)) AS (false <=> CAST(0 AS FLOAT))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"FLOAT\"",
+    "sqlExpr" : "\"(false <=> CAST(0 AS FLOAT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "false <=> cast(0 as float)"
+  } ]
+}
 
 
 -- !query
 SELECT false <=> cast(0 as double) FROM t
 -- !query analysis
-Project [(cast(false as double) <=> cast(0 as double)) AS (false <=> CAST(0 AS DOUBLE))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DOUBLE\"",
+    "sqlExpr" : "\"(false <=> CAST(0 AS DOUBLE))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "false <=> cast(0 as double)"
+  } ]
+}
 
 
 -- !query
 SELECT false <=> cast(0 as decimal(10, 0)) FROM t
 -- !query analysis
-Project [(cast(false as decimal(10,0)) <=> cast(0 as decimal(10,0))) AS (false <=> CAST(0 AS DECIMAL(10,0)))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BOOLEAN\"",
+    "right" : "\"DECIMAL(10,0)\"",
+    "sqlExpr" : "\"(false <=> CAST(0 AS DECIMAL(10,0)))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "false <=> cast(0 as decimal(10, 0))"
+  } ]
+}
 
 
 -- !query
@@ -1000,78 +1462,155 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(0 as tinyint) = false FROM t
 -- !query analysis
-Project [(cast(0 as tinyint) = cast(false as tinyint)) AS (CAST(0 AS TINYINT) = false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TINYINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS TINYINT) = false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "cast(0 as tinyint) = false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as smallint) = false FROM t
 -- !query analysis
-Project [(cast(0 as smallint) = cast(false as smallint)) AS (CAST(0 AS SMALLINT) = false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"SMALLINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS SMALLINT) = false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(0 as smallint) = false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as int) = false FROM t
 -- !query analysis
-Project [(cast(0 as int) = cast(false as int)) AS (CAST(0 AS INT) = false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"INT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS INT) = false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "cast(0 as int) = false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as bigint) = false FROM t
 -- !query analysis
-Project [(cast(0 as bigint) = cast(false as bigint)) AS (CAST(0 AS BIGINT) = false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BIGINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS BIGINT) = false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "cast(0 as bigint) = false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as float) = false FROM t
 -- !query analysis
-Project [(cast(0 as float) = cast(false as float)) AS (CAST(0 AS FLOAT) = false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"FLOAT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS FLOAT) = false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "cast(0 as float) = false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as double) = false FROM t
 -- !query analysis
-Project [(cast(0 as double) = cast(false as double)) AS (CAST(0 AS DOUBLE) = false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DOUBLE\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS DOUBLE) = false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "cast(0 as double) = false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as decimal(10, 0)) = false FROM t
 -- !query analysis
-Project [(cast(0 as decimal(10,0)) = cast(false as decimal(10,0))) AS (CAST(0 AS DECIMAL(10,0)) = false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(10,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS DECIMAL(10,0)) = false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "cast(0 as decimal(10, 0)) = false"
+  } ]
+}
 
 
 -- !query
@@ -1165,78 +1704,155 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(0 as tinyint) <=> false FROM t
 -- !query analysis
-Project [(cast(0 as tinyint) <=> cast(false as tinyint)) AS (CAST(0 AS TINYINT) <=> false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TINYINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS TINYINT) <=> false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "cast(0 as tinyint) <=> false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as smallint) <=> false FROM t
 -- !query analysis
-Project [(cast(0 as smallint) <=> cast(false as smallint)) AS (CAST(0 AS SMALLINT) <=> false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"SMALLINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS SMALLINT) <=> false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "cast(0 as smallint) <=> false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as int) <=> false FROM t
 -- !query analysis
-Project [(cast(0 as int) <=> cast(false as int)) AS (CAST(0 AS INT) <=> false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"INT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS INT) <=> false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "cast(0 as int) <=> false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as bigint) <=> false FROM t
 -- !query analysis
-Project [(cast(0 as bigint) <=> cast(false as bigint)) AS (CAST(0 AS BIGINT) <=> false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"BIGINT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS BIGINT) <=> false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(0 as bigint) <=> false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as float) <=> false FROM t
 -- !query analysis
-Project [(cast(0 as float) <=> cast(false as float)) AS (CAST(0 AS FLOAT) <=> false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"FLOAT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS FLOAT) <=> false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "cast(0 as float) <=> false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as double) <=> false FROM t
 -- !query analysis
-Project [(cast(0 as double) <=> cast(false as double)) AS (CAST(0 AS DOUBLE) <=> false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DOUBLE\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS DOUBLE) <=> false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "cast(0 as double) <=> false"
+  } ]
+}
 
 
 -- !query
 SELECT cast(0 as decimal(10, 0)) <=> false FROM t
 -- !query analysis
-Project [(cast(0 as decimal(10,0)) <=> cast(false as decimal(10,0))) AS (CAST(0 AS DECIMAL(10,0)) <=> false)#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"DECIMAL(10,0)\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(CAST(0 AS DECIMAL(10,0)) <=> false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "cast(0 as decimal(10, 0)) <=> false"
+  } ]
+}
 
 
 -- !query

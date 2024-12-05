@@ -929,7 +929,8 @@ trait CTEInChildren extends LogicalPlan {
 
 case class WithWindowDefinition(
     windowDefinitions: Map[String, WindowSpecDefinition],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    forPipeSQL: Boolean) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   final override val nodePatterns: Seq[TreePattern] = Seq(WITH_WINDOW_DEFINITION)
   override protected def withNewChildInternal(newChild: LogicalPlan): WithWindowDefinition =
@@ -945,7 +946,8 @@ case class WithWindowDefinition(
 case class Sort(
     order: Seq[SortOrder],
     global: Boolean,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    hint: Option[SortHint] = None) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = {
@@ -1265,7 +1267,8 @@ case class Window(
     windowExpressions: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    hint: Option[WindowHint] = None) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)

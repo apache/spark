@@ -233,9 +233,11 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.artifact.ArtifactManager$SparkContextResourceType$"),
 
       // ColumnNode conversions
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession.Converter"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$Converter$"),
+        "org.apache.spark.sql.SparkSession.expression"),
+      ProblemFilters.exclude[DirectMissingMethodProblem](
+        "org.apache.spark.sql.SparkSession.toRichColumn"),
 
       // UDFRegistration
       ProblemFilters.exclude[DirectMissingMethodProblem](
@@ -295,10 +297,9 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.KeyValueGroupedDatasetImpl$"),
 
       // ColumnNode conversions
-      ProblemFilters.exclude[IncompatibleResultTypeProblem](
-        "org.apache.spark.sql.SparkSession#RichColumn.expr"),
       ProblemFilters.exclude[DirectMissingMethodProblem](
-        "org.apache.spark.sql.SparkSession#RichColumn.typedExpr"),
+        "org.apache.spark.sql.SparkSession.RichColumn"),
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSession$RichColumn"),
 
       // New public APIs added in the client
       // Dataset

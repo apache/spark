@@ -31,10 +31,12 @@ from pyspark.serializers import (
 )
 from pyspark.sql.pandas.types import (
     from_arrow_type,
+    is_variant,
     to_arrow_type,
     _create_converter_from_pandas,
     _create_converter_to_pandas,
 )
+from pyspark.sql.streaming.stateful_processor_util import TransformWithStateInPandasFuncMode
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -420,7 +422,14 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     def arrow_to_pandas(self, arrow_column):
         import pyarrow.types as types
 
-        if self._df_for_struct and types.is_struct(arrow_column.type):
+        # If the arrow type is struct, return a pandas dataframe where the fields of the struct
+        # correspond to columns in the DataFrame. However, if the arrow struct is actually a
+        # Variant, which is an atomic type, treat it as a non-struct arrow type.
+        if (
+            self._df_for_struct
+            and types.is_struct(arrow_column.type)
+            and not is_variant(arrow_column.type)
+        ):
             import pandas as pd
 
             series = [
@@ -505,7 +514,15 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
         arrs = []
         for s, t in series:
-            if self._struct_in_pandas == "dict" and t is not None and pa.types.is_struct(t):
+            # Variants are represented in arrow as structs with additional metadata (checked by
+            # is_variant). If the data type is Variant, return a VariantVal atomic type instead of
+            # a dict of two binary values.
+            if (
+                self._struct_in_pandas == "dict"
+                and t is not None
+                and pa.types.is_struct(t)
+                and not is_variant(t)
+            ):
                 # A pandas UDF should return pd.DataFrame when the return type is a struct type.
                 # If it returns a pd.Series, it should throw an error.
                 if not isinstance(s, pd.DataFrame):
@@ -1181,7 +1198,11 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)
 
     def dump_stream(self, iterator, stream):
         """
@@ -1265,4 +1286,8 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         data_batches = generate_data_batches(_batches)
 
         for k, g in groupby(data_batches, key=lambda x: x[0]):
-            yield (k, g)
+            yield (TransformWithStateInPandasFuncMode.PROCESS_DATA, k, g)
+
+        yield (TransformWithStateInPandasFuncMode.PROCESS_TIMER, None, None)
+
+        yield (TransformWithStateInPandasFuncMode.COMPLETE, None, None)

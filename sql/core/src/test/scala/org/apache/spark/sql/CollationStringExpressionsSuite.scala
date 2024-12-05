@@ -180,11 +180,12 @@ class CollationStringExpressionsSuite
 
     // Because `StringSplitSQL` is an internal expression,
     // E2E SQL test cannot be performed in `collations.sql`.
+
     checkError(
       exception = intercept[AnalysisException] {
         val expr = StringSplitSQL(
-          Cast(Literal.create("1a2"), StringType("UTF8_BINARY")),
-          Cast(Literal.create("a"), StringType("UTF8_LCASE")))
+          Literal.create("1a2", StringType("UTF8_BINARY")),
+          Literal.create("a", StringType("UTF8_LCASE")))
         CollationTypeCasts.transform(expr)
       },
       condition = "COLLATION_MISMATCH.IMPLICIT",
@@ -193,11 +194,14 @@ class CollationStringExpressionsSuite
         "implicitTypes" -> """"STRING", "STRING COLLATE UTF8_LCASE""""
       )
     )
+
     checkError(
       exception = intercept[AnalysisException] {
         val expr = StringSplitSQL(
-          Collate(Literal.create("1a2"), "UTF8_BINARY"),
-          Collate(Literal.create("a"), "UTF8_LCASE"))
+          Collate(Literal.create("1a2", StringType("UTF8_BINARY")),
+            ResolvedCollation("UTF8_BINARY")),
+          Collate(Literal.create("a", StringType("UTF8_BINARY")),
+            ResolvedCollation("UTF8_LCASE")))
         CollationTypeCasts.transform(expr)
       },
       condition = "COLLATION_MISMATCH.EXPLICIT",

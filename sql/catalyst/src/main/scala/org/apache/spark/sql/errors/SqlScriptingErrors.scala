@@ -18,15 +18,25 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLConf
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLStmt
 import org.apache.spark.sql.exceptions.SqlScriptingException
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Object for grouping error messages thrown during parsing/interpreting phase
  * of the SQL Scripting Language interpreter.
  */
 private[sql] object SqlScriptingErrors {
+
+  def duplicateLabels(origin: Origin, label: String): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "LABEL_ALREADY_EXISTS",
+      cause = null,
+      messageParameters = Map("label" -> toSQLId(label)))
+  }
 
   def labelsMismatch(origin: Origin, beginLabel: String, endLabel: String): Throwable = {
     new SqlScriptingException(
@@ -74,6 +84,15 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
   }
 
+  def sqlScriptingNotEnabled(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING",
+      cause = null,
+      origin = origin,
+      messageParameters = Map(
+        "sqlScriptingEnabled" -> toSQLConf(SQLConf.SQL_SCRIPTING_ENABLED.key)))
+  }
+
   def booleanStatementWithEmptyRow(
       origin: Origin,
       stmt: String): Throwable = {
@@ -82,6 +101,14 @@ private[sql] object SqlScriptingErrors {
       errorClass = "BOOLEAN_STATEMENT_WITH_EMPTY_ROW",
       cause = null,
       messageParameters = Map("invalidStatement" -> toSQLStmt(stmt)))
+  }
+
+  def positionalParametersAreNotSupportedWithSqlScripting(): Throwable = {
+    new SqlScriptingException(
+      origin = null,
+      errorClass = "UNSUPPORTED_FEATURE.SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS",
+      cause = null,
+      messageParameters = Map.empty)
   }
 
   def labelDoesNotExist(
