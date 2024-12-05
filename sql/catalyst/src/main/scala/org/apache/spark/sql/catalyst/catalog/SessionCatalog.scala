@@ -19,18 +19,18 @@ package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
 import java.util.Locale
-import java.util.concurrent.Callable
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import com.google.common.cache.{Cache, CacheBuilder}
+import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -210,7 +210,13 @@ class SessionCatalog(
 
   /** This method provides a way to get a cached plan. */
   def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
-    tableRelationCache.get(t, c)
+    try {
+      tableRelationCache.get(t, c)
+    } catch {
+      case e @ (_: ExecutionException | _: UncheckedExecutionException)
+          if e.getCause != null && e.getCause.isInstanceOf[SparkThrowable] =>
+        throw e.getCause
+    }
   }
 
   /** This method provides a way to get a cached plan if the key exists. */

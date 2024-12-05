@@ -178,7 +178,7 @@ class TimerStateImpl(
           val rowPair = iter.next()
           val keyRow = rowPair.key
           val result = getTimerRowFromSecIndex(keyRow)
-          if (result._2 < expiryTimestampMs) {
+          if (result._2 <= expiryTimestampMs) {
             result
           } else {
             finished = true

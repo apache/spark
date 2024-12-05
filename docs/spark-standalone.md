@@ -60,10 +60,6 @@ Finally, the following configuration options can be passed to the master and wor
     <td>Hostname to listen on</td>
   </tr>
   <tr>
-    <td><code>-i HOST</code>, <code>--ip HOST</code></td>
-    <td>Hostname to listen on (deprecated, use -h or --host)</td>
-  </tr>
-  <tr>
     <td><code>-p PORT</code>, <code>--port PORT</code></td>
     <td>Port for service to listen on (default: 7077 for master, random for worker)</td>
   </tr>
@@ -376,7 +372,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>
     The pattern for app ID generation based on Java `String.format` method.
     The default value is `app-%s-%04d` which represents the existing app id string, e.g.,
-    `app-20231031224509-0008`. Plesae be careful to generate unique IDs.
+    `app-20231031224509-0008`. Please be careful to generate unique IDs.
   </td>
   <td>4.0.0</td>
 </tr>

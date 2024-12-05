@@ -2549,7 +2549,7 @@ class DataFrame:
         pyspark.errors.exceptions.captured.AnalysisException: Column name#0 are ambiguous...
 
         A better approach is to assign aliases to the dataframes, and then reference
-        the ouptut columns from the join operation using these aliases:
+        the output columns from the join operation using these aliases:
 
         >>> df.alias("a").join(
         ...     df.alias("b"), sf.col("a.name") == sf.col("b.name"), "outer"
@@ -3907,7 +3907,7 @@ class DataFrame:
         groupingSets : sequence of sequence of columns or str
             Individual set of columns to group on.
         cols : :class:`Column` or str
-            Addional grouping columns specified by users.
+            Additional grouping columns specified by users.
             Those columns are shown as the output columns after aggregation.
 
         Returns
@@ -6522,10 +6522,11 @@ class DataFrame:
         in their department.
 
         >>> from pyspark.sql import functions as sf
-        >>> employees.where(
+        >>> employees.alias("e1").where(
         ...     sf.col("salary")
-        ...     > employees.where(sf.col("department_id") == sf.col("department_id").outer())
-        ...         .select(sf.avg("salary")).scalar()
+        ...     > employees.alias("e2").where(
+        ...         sf.col("e2.department_id") == sf.col("e1.department_id").outer()
+        ...     ).select(sf.avg("salary")).scalar()
         ... ).select("name", "salary", "department_id").show()
         +-----+------+-------------+
         | name|salary|department_id|
@@ -6538,12 +6539,13 @@ class DataFrame:
         department.
 
         >>> from pyspark.sql import functions as sf
-        >>> employees.select(
+        >>> employees.alias("e1").select(
         ...     "name", "salary", "department_id",
         ...     sf.format_number(
         ...         sf.lit(100) * sf.col("salary") /
-        ...             employees.where(sf.col("department_id") == sf.col("department_id").outer())
-        ...             .select(sf.sum("salary")).scalar().alias("avg_salary"),
+        ...             employees.alias("e2").where(
+        ...                 sf.col("e2.department_id") == sf.col("e1.department_id").outer()
+        ...             ).select(sf.sum("salary")).scalar().alias("avg_salary"),
         ...         1
         ...     ).alias("salary_proportion_in_department")
         ... ).show()
@@ -6595,8 +6597,10 @@ class DataFrame:
         Example 1: Filter for customers who have placed at least one order.
 
         >>> from pyspark.sql import functions as sf
-        >>> customers.where(
-        ...     orders.where(sf.col("customer_id") == sf.col("customer_id").outer()).exists()
+        >>> customers.alias("c").where(
+        ...     orders.alias("o").where(
+        ...         sf.col("o.customer_id") == sf.col("c.customer_id").outer()
+        ...     ).exists()
         ... ).orderBy("customer_id").show()
         +-----------+-------------+-------+
         |customer_id|customer_name|country|
@@ -6609,8 +6613,10 @@ class DataFrame:
         Example 2: Filter for customers who have never placed an order.
 
         >>> from pyspark.sql import functions as sf
-        >>> customers.where(
-        ...     ~orders.where(sf.col("customer_id") == sf.col("customer_id").outer()).exists()
+        >>> customers.alias("c").where(
+        ...     ~orders.alias("o").where(
+        ...         sf.col("o.customer_id") == sf.col("c.customer_id").outer()
+        ...     ).exists()
         ... ).orderBy("customer_id").show()
         +-----------+-------------+---------+
         |customer_id|customer_name|  country|
@@ -6621,9 +6627,9 @@ class DataFrame:
         Example 3: Find Orders from Customers in the USA.
 
         >>> from pyspark.sql import functions as sf
-        >>> orders.where(
-        ...     customers.where(
-        ...         (sf.col("customer_id") == sf.col("customer_id").outer())
+        >>> orders.alias("o").where(
+        ...     customers.alias("c").where(
+        ...         (sf.col("c.customer_id") == sf.col("o.customer_id").outer())
         ...         & (sf.col("country") == "USA")
         ...     ).exists()
         ... ).orderBy("order_id").show()

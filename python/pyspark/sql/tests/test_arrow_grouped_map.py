@@ -255,6 +255,16 @@ class GroupedMapInArrowTestsMixin:
                 self.assertEqual(r.a, "hi")
                 self.assertEqual(r.b, 1)
 
+    def test_self_join(self):
+        df = self.spark.createDataFrame([(1, 1)], ("k", "v"))
+
+        def arrow_func(key, table):
+            return pa.Table.from_pydict({"x": [2], "y": [2]})
+
+        df2 = df.groupby("k").applyInArrow(arrow_func, schema="x long, y long")
+
+        self.assertEqual(df2.join(df2).count(), 1)
+
 
 class GroupedMapInArrowTests(GroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod

@@ -18,6 +18,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.connect.proto.{ConfigRequest, ConfigResponse, KeyValue}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{ConfigEntry, ConfigReader, OptionalConfigEntry}
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.connect.client.SparkConnectClient
 
@@ -28,13 +29,20 @@ import org.apache.spark.sql.connect.client.SparkConnectClient
  */
 class ConnectRuntimeConfig private[sql] (client: SparkConnectClient)
     extends RuntimeConfig
-    with Logging {
+    with Logging { self =>
 
   /** @inheritdoc */
   def set(key: String, value: String): Unit = {
     executeConfigRequest { builder =>
       builder.getSetBuilder.addPairsBuilder().setKey(key).setValue(value)
     }
+  }
+
+  /** @inheritdoc */
+  override private[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
+    require(entry != null, "entry cannot be null")
+    require(value != null, s"value cannot be null for key: ${entry.key}")
+    set(entry.key, entry.stringConverter(value))
   }
 
   /** @inheritdoc */
@@ -45,9 +53,37 @@ class ConnectRuntimeConfig private[sql] (client: SparkConnectClient)
 
   /** @inheritdoc */
   def get(key: String, default: String): String = {
-    executeConfigRequestSingleValue { builder =>
-      builder.getGetWithDefaultBuilder.addPairsBuilder().setKey(key).setValue(default)
+    val kv = executeConfigRequestSinglePair { builder =>
+      val pairsBuilder = builder.getGetWithDefaultBuilder
+        .addPairsBuilder()
+        .setKey(key)
+      if (default != null) {
+        pairsBuilder.setValue(default)
+      }
     }
+    if (kv.hasValue) {
+      kv.getValue
+    } else {
+      default
+    }
+  }
+
+  /** @inheritdoc */
+  override private[sql] def get[T](entry: ConfigEntry[T]): T = {
+    require(entry != null, "entry cannot be null")
+    entry.readFrom(reader)
+  }
+
+  /** @inheritdoc */
+  override private[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] = {
+    require(entry != null, "entry cannot be null")
+    entry.readFrom(reader)
+  }
+
+  /** @inheritdoc */
+  override private[sql] def get[T](entry: ConfigEntry[T], default: T): T = {
+    require(entry != null, "entry cannot be null")
+    Option(get(entry.key, null)).map(entry.valueConverter).getOrElse(default)
   }
 
   /** @inheritdoc */
@@ -65,11 +101,11 @@ class ConnectRuntimeConfig private[sql] (client: SparkConnectClient)
 
   /** @inheritdoc */
   def getOption(key: String): Option[String] = {
-    val pair = executeConfigRequestSinglePair { builder =>
+    val kv = executeConfigRequestSinglePair { builder =>
       builder.getGetOptionBuilder.addKeys(key)
     }
-    if (pair.hasValue) {
-      Option(pair.getValue)
+    if (kv.hasValue) {
+      Option(kv.getValue)
     } else {
       None
     }
@@ -84,17 +120,11 @@ class ConnectRuntimeConfig private[sql] (client: SparkConnectClient)
 
   /** @inheritdoc */
   def isModifiable(key: String): Boolean = {
-    val modifiable = executeConfigRequestSingleValue { builder =>
+    val kv = executeConfigRequestSinglePair { builder =>
       builder.getIsModifiableBuilder.addKeys(key)
     }
-    java.lang.Boolean.valueOf(modifiable)
-  }
-
-  private def executeConfigRequestSingleValue(
-      f: ConfigRequest.Operation.Builder => Unit): String = {
-    val pair = executeConfigRequestSinglePair(f)
-    require(pair.hasValue, "The returned pair does not have a value set")
-    pair.getValue
+    require(kv.hasValue, "The returned pair does not have a value set")
+    java.lang.Boolean.valueOf(kv.getValue)
   }
 
   private def executeConfigRequestSinglePair(
@@ -113,4 +143,6 @@ class ConnectRuntimeConfig private[sql] (client: SparkConnectClient)
     }
     response
   }
+
+  private val reader = new ConfigReader((key: String) => Option(self.get(key, null)))
 }
