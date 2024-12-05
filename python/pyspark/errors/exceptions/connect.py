@@ -86,10 +86,6 @@ def convert_exception(
             "Please see the stack trace below.\n%s" % message
         )
 
-    # Add stacktrace to message if it exists
-    if stacktrace:
-        message += f"\n\nJVM stacktrace:\n{stacktrace}"
-
     # Return exception based on class mapping
     for error_class_name in classes:
         ExceptionClass = EXCEPTION_CLASS_MAPPING.get(error_class_name)
