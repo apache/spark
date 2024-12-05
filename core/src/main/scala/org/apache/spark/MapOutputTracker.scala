@@ -899,7 +899,8 @@ private[spark] class MapOutputTrackerMaster(
                 unregisterAllMapAndMergeOutput(shuffleId)
               } catch {
                 case NonFatal(e) =>
-                  logError(s"Error ${e} removing shuffle ${shuffleId} with TTL cleaner")
+                  logError(
+                    log"Error removing shuffle ${MDC(SHUFFLE_ID, shuffleId)} with TTL cleaner", e)
               }
             }
             // Wait until the next possible element to be removed
