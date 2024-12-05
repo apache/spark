@@ -1075,7 +1075,7 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       // Read the changelog for one of the partitions at version 3 and
       // ensure that we have two entries
       // For this test - keys 9 and 12 are written at version 3 for partition 4
-      val changelogReader = fileManager.getChangelogReader(3, true)
+      val changelogReader = fileManager.getChangelogReader(3)
       val entries = changelogReader.toSeq
       assert(entries.size == 2)
       val retainEntry = entries.head
@@ -1085,13 +1085,13 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       Utils.deleteRecursively(new File(changelogFilePath))
 
       // Write the retained entry back to the changelog
-      val changelogWriter = fileManager.getChangeLogWriter(3, true)
+      val changelogWriter = fileManager.getChangeLogWriter(3)
       changelogWriter.put(retainEntry._2, retainEntry._3)
       changelogWriter.commit()
 
       // Ensure that we have only one entry in the changelog for version 3
       // For this test - key 9 is retained and key 12 is deleted
-      val changelogReader1 = fileManager.getChangelogReader(3, true)
+      val changelogReader1 = fileManager.getChangelogReader(3)
       val entries1 = changelogReader1.toSeq
       assert(entries1.size == 1)
 

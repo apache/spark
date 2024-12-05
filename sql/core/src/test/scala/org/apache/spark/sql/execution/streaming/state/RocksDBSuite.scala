@@ -84,8 +84,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
   def isChangelogCheckpointingEnabled: Boolean =
     SQLConf.get.getConfString(rocksdbChangelogCheckpointingConfKey) == "true"
 
-  def snapshotVersionsPresent(
-      dir: File, enableStateStoreCheckpointIds: Boolean = false): Seq[Long] = {
+  def snapshotVersionsPresent(dir: File): Seq[Long] = {
     dir.listFiles.filter(_.getName.endsWith(".zip"))
       .map(_.getName.stripSuffix(".zip").split("_"))
       .map {
@@ -347,6 +346,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           if ((version + 1) % 5 == 0) db.doMaintenance()
         }
       }
+  }
 
   testWithColumnFamilies(
     "RocksDB: check changelog and snapshot version",
@@ -364,14 +364,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
 
       if (isChangelogCheckpointingEnabled) {
-        assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) ===
-          (1 to 50))
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) ===
-          Range.inclusive(5, 50, 5))
+        assert(changelogVersionsPresent(remoteDir) === (1 to 50))
+        assert(snapshotVersionsPresent(remoteDir) === Range.inclusive(5, 50, 5))
       } else {
-        assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq.empty)
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) ===
-          (1 to 50))
+        assert(changelogVersionsPresent(remoteDir) === Seq.empty)
+        assert(snapshotVersionsPresent(remoteDir) === (1 to 50))
       }
   }
 
@@ -432,30 +429,30 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit()
           db.doMaintenance()
         }
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(2, 3))
-        assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == Seq(1, 2, 3))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+        assert(changelogVersionsPresent(remoteDir) == Seq(1, 2, 3))
 
         for (version <- 3 to 4) {
           db.load(version)
           db.commit()
         }
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(2, 3))
-        assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == (1 to 5))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(2, 3))
+        assert(changelogVersionsPresent(remoteDir) == (1 to 5))
         db.doMaintenance()
         // 3 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(3, 5))
-        assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == (3 to 5))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 5))
+        assert(changelogVersionsPresent(remoteDir) == (3 to 5))
 
         for (version <- 5 to 7) {
           db.load(version)
           db.commit()
         }
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(3, 5))
-        assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == (3 to 8))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 5))
+        assert(changelogVersionsPresent(remoteDir) == (3 to 8))
         db.doMaintenance()
         // 5 is the latest snapshot <= maxSnapshotVersionPresent - minVersionsToRetain + 1
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(5, 8))
-        assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == (5 to 8))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(5, 8))
+        assert(changelogVersionsPresent(remoteDir) == (5 to 8))
       }
   }
 
@@ -488,10 +485,10 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
 
         // Checkpoint directory before maintenance
         if (isChangelogCheckpointingEnabled) {
-          assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == (1 to 5))
-          assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == (1 to 6))
+          assert(snapshotVersionsPresent(remoteDir) == (1 to 5))
+          assert(changelogVersionsPresent(remoteDir) == (1 to 6))
         } else {
-          assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == (1 to 6))
+          assert(snapshotVersionsPresent(remoteDir) == (1 to 6))
         }
 
         // Should delete stale versions for zip files and change log files
@@ -499,9 +496,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.doMaintenance()
 
         // Checkpoint directory after maintenance
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == Seq(4, 5, 6))
+        assert(snapshotVersionsPresent(remoteDir) == Seq(4, 5, 6))
         if (isChangelogCheckpointingEnabled) {
-          assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == Seq(4, 5, 6))
+          assert(changelogVersionsPresent(remoteDir) == Seq(4, 5, 6))
         }
       }
   }
@@ -523,12 +520,12 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.doMaintenance()
         }
         // Snapshot should not be created because minDeltasForSnapshot = 3
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq.empty)
-        assert(changelogVersionsPresent(remoteDir, enableStateStoreCheckpointIds) == Seq(1, 2))
+        assert(snapshotVersionsPresent(remoteDir) === Seq.empty)
+        assert(changelogVersionsPresent(remoteDir) == Seq(1, 2))
         db.load(2)
         db.commit()
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(3))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(3))
         db.load(3)
 
         for (version <- 3 to 7) {
@@ -536,13 +533,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit()
           db.doMaintenance()
         }
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(3, 6))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6))
         for (version <- 8 to 17) {
           db.load(version)
           db.commit()
         }
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(3, 6, 18))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
       }
 
       // pick up from the last snapshot and the next upload will be for version 21
@@ -552,15 +549,14 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         db.load(18)
         db.commit()
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) === Seq(3, 6, 18))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18))
 
         for (version <- 19 to 20) {
           db.load(version)
           db.commit()
         }
         db.doMaintenance()
-        assert(snapshotVersionsPresent(remoteDir, enableStateStoreCheckpointIds) ===
-          Seq(3, 6, 18, 21))
+        assert(snapshotVersionsPresent(remoteDir) === Seq(3, 6, 18, 21))
       }
   }
 

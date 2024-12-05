@@ -346,22 +346,31 @@ class RocksDBFileManager(
     }
   }
 
-  // Get latest snapshot version <= version
-  def getLatestSnapshotVersionAndUniqueId(version: Long): Array[(Long, Option[String])] = {
+  /**
+   * Based on the ground truth lineage loaded from changelog file (lineage), this function
+   * does file listing to find all snapshot (version, uniqueId) pairs, and finds
+   * the ground truth latest snapshot (version, uniqueId) the db instance needs to load.
+   *
+   * @param lineage the ground truth lineage loaded from changelog file
+   * @return the ground truth latest snapshot (version, uniqueId) the db instance needs to load
+   */
+  def getLatestSnapshotVersionAndUniqueIdFromLineage(
+      lineage: Array[LineageItem]): Option[(Long, Option[String])] = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
-      val versionAndUniqueIds = fm.list(path, onlyZipFiles)
+      fm.list(path, onlyZipFiles)
         .map(_.getPath.getName.stripSuffix(".zip").split("_"))
         .filter {
-          case Array(ver, _) => ver.toLong <= version
+          case Array(ver, id) => lineage.contains(LineageItem(ver.toLong, id))
         }
         .map {
           case Array(version, uniqueId) => (version.toLong, Option(uniqueId))
         }
-      val maxVersion = versionAndUniqueIds.map(_._1).foldLeft(0L)(math.max)
-      versionAndUniqueIds.filter(_._1 == maxVersion)
+        .sortBy(_._1)
+        .reverse
+        .headOption
     } else {
-      Array((0, None))
+      Some(0, None)
     }
   }
 
@@ -429,7 +438,6 @@ class RocksDBFileManager(
         fm.delete(dfsChangelogFile(version, uniqueId))
         logInfo(log"Deleted changelog file ${MDC(LogKeys.VERSION_NUM, version)} uniqueId: " +
           log"${MDC(LogKeys.UUID, uniqueId.getOrElse(""))}")
-        println(s"Deleted changelog file ${version} uniqueId: ${uniqueId.getOrElse("")}")
       } catch {
         case e: Exception =>
           logWarning(

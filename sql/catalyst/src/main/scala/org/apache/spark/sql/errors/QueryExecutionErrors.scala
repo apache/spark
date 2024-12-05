@@ -2602,14 +2602,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
-  def cannotFindBaseSnapshotCheckpoint(
-    lineage: String, snapshotVersionAndUniqueIds: String): Throwable = {
+  def cannotFindBaseSnapshotCheckpoint(lineage: String): Throwable = {
     new SparkException (
       errorClass =
         "CANNOT_LOAD_STATE_STORE.CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT",
-      messageParameters = Map(
-        "lineage" -> lineage,
-        "snapshotVersionAndUniqueIds" -> snapshotVersionAndUniqueIds),
+      messageParameters = Map("lineage" -> lineage),
       cause = null)
   }
 

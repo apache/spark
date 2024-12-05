@@ -281,32 +281,6 @@ class RocksDB(
   private val snapshotsToUploadQueue = new ConcurrentLinkedQueue[RocksDBSnapshot]()
 
   /**
-   * Based on the ground truth lineage loaded from changelog file (lineage) and
-   * the latest snapshot (version, uniqueId) pair from file listing, this function finds
-   * the ground truth latest snapshot (version, uniqueId) the db instance needs to load.
-   *
-   * @param lineage the ground truth lineage loaded from changelog file
-   * @param latestSnapshotVersionsAndUniqueIds
-   *   (version, uniqueId) pair of the latest snapshot version. In case of task re-execution,
-   *   the array could have more than one element.
-   * @return the ground truth latest snapshot (version, uniqueId) the db instance needs to load
-   */
-  private def getLatestSnapshotVersionAndUniqueIdFromLineage(
-      lineage: Array[LineageItem],
-      latestSnapshotVersionsAndUniqueIds: Array[(Long, Option[String])]):
-      (Long, Option[String]) = {
-    lineage.foreach {
-      case LineageItem(version, uniqueId) =>
-        if (latestSnapshotVersionsAndUniqueIds.contains((version, Some(uniqueId)))) {
-          return (version, Some(uniqueId))
-        }
-    }
-    throw QueryExecutionErrors.cannotFindBaseSnapshotCheckpoint(
-      printLineageItems(lineage), printLineage(latestSnapshotVersionsAndUniqueIds)
-    )
-  }
-
-  /**
    * Read the lineage from the changelog files. It first get the changelog reader
    * of the correct changelog version and then read the lineage information from the file.
    * The changelog file is named as version_stateStoreCkptId.changelog
@@ -365,18 +339,19 @@ class RocksDB(
           lineageManager.resetLineage(currVersionLineage)
           (version, stateStoreCkptId)
         } else {
-          val latestSnapshotVersionsAndUniqueIds =
-            fileManager.getLatestSnapshotVersionAndUniqueId(version)
           currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
             LineageItem(version, stateStoreCkptId.get)
+          currVersionLineage = currVersionLineage.sortBy(_.version)
           lineageManager.resetLineage(currVersionLineage)
-          if (latestSnapshotVersionsAndUniqueIds.length == 0) {
-            (0L, None)
-          } else {
-            logInfo(log"Latest snapshot version and uniqueId found: " +
-              log"${MDC(LogKeys.LINEAGE, printLineage(latestSnapshotVersionsAndUniqueIds))}.")
-            getLatestSnapshotVersionAndUniqueIdFromLineage(
-              currVersionLineage, latestSnapshotVersionsAndUniqueIds)
+
+          val latestSnapshotVersionsAndUniqueId =
+            fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(currVersionLineage)
+          latestSnapshotVersionsAndUniqueId match {
+            case Some(pair) => pair
+            case None =>
+              logWarning("Cannot find latest snapshot based on lineage: "
+                + printLineageItems(currVersionLineage))
+              (0L, None)
           }
         }
       }
@@ -396,10 +371,12 @@ class RocksDB(
       // Initialize maxVersion upon successful load from DFS
       fileManager.setMaxSeenVersion(version)
 
-      init(version, latestSnapshotVersion, metadata)
+      init(metadata)
 
       if (loadedVersion != version) {
         val versionsAndUniqueIds = currVersionLineage
+          .filter(_.version > loadedVersion)
+          .filter(_.version <= version)
           .map(i => (i.version, Option(i.checkpointUniqueId)))
         replayChangelog(versionsAndUniqueIds)
         loadedVersion = version
@@ -464,7 +441,7 @@ class RocksDB(
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
-        init(version, latestSnapshotVersion, metadata)
+        init(metadata)
 
         if (loadedVersion != version) {
           val versionsAndUniqueIds: Array[(Long, Option[String])] =
@@ -494,10 +471,11 @@ class RocksDB(
     this
   }
 
-  private def init(
-      version: Long,
-      latestSnapshotVersion: Long,
-      metadata: RocksDBCheckpointMetadata): Unit = {
+  /**
+   * Initialize in memory values based on the metadata loaded from DFS.
+   * @param metadata: metadata loaded from DFS
+   */
+  private def init(metadata: RocksDBCheckpointMetadata): Unit = {
 
     setInitialCFInfo()
     metadata.columnFamilyMapping.foreach { mapping =>
