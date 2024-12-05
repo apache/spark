@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.IOException
 import java.util.{HashMap => JHashMap}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ThreadPoolExecutor, TimeUnit}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future, TimeoutException}
@@ -86,7 +86,7 @@ class BlockManagerMasterEndpoint(
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
   // Keep track of last access times if we're using block TTLs
-  private[spark] val blockAccessTime = new JHashMap[BlockId, Long]
+  private[spark] val rddAccessTime = new JHashMap[Int, Long]
 
   // Mapping from task id to the set of rdd blocks which are generated from the task.
   private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
@@ -106,6 +106,17 @@ class BlockManagerMasterEndpoint(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
   private implicit val askExecutionContext: ExecutionContextExecutorService =
     ExecutionContext.fromExecutorService(askThreadPool)
+
+
+  private[spark] val cleanerThreadpool: Option[ThreadPoolExecutor] = {
+    if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined) {
+      val pool = ThreadUtils.newDaemonFixedThreadPool(1, "rdd-ttl-cleaner")
+      pool.execute(new TTLCleaner)
+      Some(pool)
+    } else {
+      None
+    }
+  }
 
   private val topologyMapper = {
     val topologyMapperClassName = conf.get(
@@ -255,13 +266,58 @@ class BlockManagerMasterEndpoint(
   }
 
   private def updateBlockAtime(blockId: BlockId) = {
-    // Only update access times if we have the cleaner enabled.
-    if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined ||
-      blockId.isShuffle && conf.get(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
-      // Note: we don't _really_ care about concurrency here too much, if we have
-      // conflicting updates in time they're going to "close enough" to be a wash
-      // so we don't bother checking the return value here.
-      blockAccessTime.put(blockId, System.currentTimeMillis())
+    // First handle "regular" blocks
+    if (!blockId.isShuffle) {
+      // Only update access times if we have the cleaner enabled.
+      if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined) {
+        // Note: we don't _really_ care about concurrency here too much, if we have
+        // conflicting updates in time they're going to "close enough" to be a wash
+        // so we don't bother checking the return value here.
+        // For now we only do RDD blocks, because I'm not convinced it's safe to TTL
+        // clean Broadcast blocks, but maybe we can revisit that.
+        blockId.asRDDId.map { r => rddAccessTime.put(r.rddId, System.currentTimeMillis()) }
+      }
+    } else if (conf.get(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
+      // We track shuffles in the mapoutput tracker.
+      blockId.asShuffleId.map(s => mapOutputTracker.updateShuffleAtime(s.shuffleId))
+    }
+  }
+
+
+  private class TTLCleaner extends Runnable {
+    override def run(): Unit = {
+      // Poll the shuffle access times if we're configured for it.
+      conf.get(config.SPARK_TTL_BLOCK_CLEANER) match {
+        case Some(ttl) =>
+          while (true) {
+            val maxAge = System.currentTimeMillis() - ttl
+            // Find the elements to be removed & update oldest remaining time (if any)
+            var oldest = System.currentTimeMillis()
+            val toBeRemoved = rddAccessTime.asScala.flatMap { case (rddId, atime) =>
+              if (atime < maxAge) {
+                Some(rddId)
+              } else {
+                if (atime < oldest) {
+                  oldest = atime
+                }
+                None
+              }
+            }.toList
+            toBeRemoved.map { rddId =>
+              try {
+                removeRdd(rddId)
+              } catch {
+                case NonFatal(e) =>
+                  logWarning(s"Error ${e} removing rdd ${rddId} with TTL cleaner")
+              }
+            }
+            // Wait until the next possible element to be removed
+            val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 1)
+            Thread.sleep(delay)
+          }
+        case None =>
+          logDebug("Tried to start TTL cleaner when not configured.")
+      }
     }
   }
 
@@ -361,7 +417,17 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
-    // First remove the metadata for the given RDD, and then asynchronously remove the blocks
+    // Drop the RDD from TTL tracking.
+    try {
+      if (conf.get(config.SPARK_TTL_BLOCK_CLEANER).isDefined) {
+        rddAccessTime.remove(rddId)
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Error ${e} removing $rddId from RDD TTL tracking")
+    }
+
+    // Then remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the storage endpoints.
 
     // The message sent to the storage endpoints to remove the RDD
@@ -426,6 +492,9 @@ class BlockManagerMasterEndpoint(
 
     Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
   }
+
+  // For testing.
+  private[spark] def getMapOutputTrackerMaster(): MapOutputTrackerMaster = mapOutputTracker
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
     // Start with removing shuffle blocks without an associated executor (e.g. ESS only).
@@ -1007,6 +1076,7 @@ class BlockManagerMasterEndpoint(
 
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
+    cleanerThreadpool.map(_.shutdown())
   }
 }
 

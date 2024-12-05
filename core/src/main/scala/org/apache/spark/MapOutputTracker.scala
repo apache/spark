@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.{ByteArrayInputStream, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
+import java.util.{HashMap => JHashMap}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -711,6 +712,10 @@ private[spark] class MapOutputTrackerMaster(
     private[spark] val isLocal: Boolean)
   extends MapOutputTracker(conf) {
 
+  // Keep track of last access times for shuffle based TTL. Note: we don't use concurrent
+  // here because we don't care about overwriting times that are "close."
+  private[spark] val shuffleAccessTime = new JHashMap[Int, Long]
+
   // The size at which we use Broadcast to send the map output statuses to the executors
   private val minSizeForBroadcast = conf.get(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
 
@@ -745,6 +750,16 @@ private[spark] class MapOutputTrackerMaster(
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf, isDriver = true)
 
+  private[spark] val cleanerThreadpool: Option[ThreadPoolExecutor] = {
+    if (conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
+      val pool = ThreadUtils.newDaemonFixedThreadPool(1, "map-output-ttl-cleaner")
+      pool.execute(new TTLCleaner)
+      Some(pool)
+    } else {
+      None
+    }
+  }
+
   // Thread pool used for handling map output status requests. This is a separate thread pool
   // to ensure we don't block the normal dispatcher threads.
   private val threadpool: ThreadPoolExecutor = {
@@ -757,6 +772,49 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   private val availableProcessors = Runtime.getRuntime.availableProcessors()
+
+  def updateShuffleAtime(shuffleId: Int): Unit = {
+    if (conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
+      shuffleAccessTime.put(shuffleId, System.currentTimeMillis())
+    }
+  }
+
+  private class TTLCleaner extends Runnable {
+    override def run(): Unit = {
+      // Poll the shuffle access times if we're configured for it.
+      conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER) match {
+        case Some(ttl) =>
+          while (true) {
+            val maxAge = System.currentTimeMillis() - ttl
+            // Find the elements to be removed & update oldest remaining time (if any)
+            var oldest = System.currentTimeMillis()
+            val toBeRemoved = shuffleAccessTime.asScala.flatMap { case (shuffleId, atime) =>
+              if (atime < maxAge) {
+                Some(shuffleId)
+              } else {
+                if (atime < oldest) {
+                  oldest = atime
+                }
+                None
+              }
+            }.toList
+            toBeRemoved.map { shuffleId =>
+              try {
+                unregisterAllMapAndMergeOutput(shuffleId)
+              } catch {
+                case NonFatal(e) =>
+                  logError(s"Error ${e} removing shuffle ${shuffleId} with TTL cleaner")
+              }
+            }
+            // Wait until the next possible element to be removed
+            val delay = math.max((oldest + ttl) - System.currentTimeMillis(), 1)
+            Thread.sleep(delay)
+          }
+        case None =>
+          logDebug("Tried to start TTL cleaner when not configured.")
+      }
+    }
+  }
 
   // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
@@ -783,6 +841,7 @@ private[spark] class MapOutputTrackerMaster(
       val shuffleStatus = shuffleStatuses.get(shuffleId).head
       logDebug(s"Handling request to send ${if (needMergeOutput) "map/merge" else "map"}" +
         s" output locations for shuffle $shuffleId to $hostPort")
+      updateShuffleAtime(shuffleId)
       if (needMergeOutput) {
         context.reply(
           shuffleStatus.
@@ -834,6 +893,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
+    updateShuffleAtime(shuffleId)
     if (pushBasedShuffleEnabled) {
       if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps, numReduces)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
@@ -874,6 +934,14 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Unregister all map and merge output information of the given shuffle. */
   def unregisterAllMapAndMergeOutput(shuffleId: Int): Unit = {
+    try {
+      if (conf.get(SPARK_TTL_SHUFFLE_BLOCK_CLEANER).isDefined) {
+        shuffleAccessTime.remove(shuffleId)
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Error ${e} removing $shuffleId from Shuffle TTL tracking")
+    }
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.removeOutputsByFilter(x => true)
@@ -1268,12 +1336,14 @@ private[spark] class MapOutputTrackerMaster(
 
   // This method is only called in local-mode.
   override def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
+    updateShuffleAtime(shuffleId)
     shuffleStatuses.get(shuffleId).map(_.getShufflePushMergerLocations).getOrElse(Seq.empty)
   }
 
   override def stop(): Unit = {
     mapOutputTrackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
+    cleanerThreadpool.map(_.shutdown())
     try {
       sendTracker(StopMapOutputTracker)
     } catch {
