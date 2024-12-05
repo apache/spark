@@ -479,7 +479,7 @@ struct<array_except(array(collate(aaa, utf8_lcase)), array(collate(AAA, utf8_lca
 -- !query
 select 'a' collate unicode < 'A'
 -- !query schema
-struct<(collate(a, unicode) < A):boolean>
+struct<(collate(a, unicode) < 'A' collate UNICODE):boolean>
 -- !query output
 true
 
@@ -487,7 +487,7 @@ true
 -- !query
 select 'a' collate unicode_ci = 'A'
 -- !query schema
-struct<(collate(a, unicode_ci) = A):boolean>
+struct<(collate(a, unicode_ci) = 'A' collate UNICODE_CI):boolean>
 -- !query output
 true
 
@@ -495,7 +495,7 @@ true
 -- !query
 select 'a' collate unicode_ai = 'å'
 -- !query schema
-struct<(collate(a, unicode_ai) = å):boolean>
+struct<(collate(a, unicode_ai) = 'å' collate UNICODE_AI):boolean>
 -- !query output
 true
 
@@ -503,7 +503,7 @@ true
 -- !query
 select 'a' collate unicode_ci_ai = 'Å'
 -- !query schema
-struct<(collate(a, unicode_ci_ai) = Å):boolean>
+struct<(collate(a, unicode_ci_ai) = 'Å' collate UNICODE_CI_AI):boolean>
 -- !query output
 true
 
@@ -511,7 +511,7 @@ true
 -- !query
 select 'a' collate en < 'A'
 -- !query schema
-struct<(collate(a, en) < A):boolean>
+struct<(collate(a, en) < 'A' collate en):boolean>
 -- !query output
 true
 
@@ -519,7 +519,7 @@ true
 -- !query
 select 'a' collate en_ci = 'A'
 -- !query schema
-struct<(collate(a, en_ci) = A):boolean>
+struct<(collate(a, en_ci) = 'A' collate en_CI):boolean>
 -- !query output
 true
 
@@ -527,7 +527,7 @@ true
 -- !query
 select 'a' collate en_ai = 'å'
 -- !query schema
-struct<(collate(a, en_ai) = å):boolean>
+struct<(collate(a, en_ai) = 'å' collate en_AI):boolean>
 -- !query output
 true
 
@@ -535,7 +535,7 @@ true
 -- !query
 select 'a' collate en_ci_ai = 'Å'
 -- !query schema
-struct<(collate(a, en_ci_ai) = Å):boolean>
+struct<(collate(a, en_ci_ai) = 'Å' collate en_CI_AI):boolean>
 -- !query output
 true
 
@@ -543,7 +543,7 @@ true
 -- !query
 select 'Kypper' collate sv < 'Köpfe'
 -- !query schema
-struct<(collate(Kypper, sv) < Köpfe):boolean>
+struct<(collate(Kypper, sv) < 'Köpfe' collate sv):boolean>
 -- !query output
 true
 
@@ -551,7 +551,7 @@ true
 -- !query
 select 'Kypper' collate de > 'Köpfe'
 -- !query schema
-struct<(collate(Kypper, de) > Köpfe):boolean>
+struct<(collate(Kypper, de) > 'Köpfe' collate de):boolean>
 -- !query output
 true
 
@@ -559,7 +559,7 @@ true
 -- !query
 select 'I' collate tr_ci = 'ı'
 -- !query schema
-struct<(collate(I, tr_ci) = ı):boolean>
+struct<(collate(I, tr_ci) = 'ı' collate tr_CI):boolean>
 -- !query output
 true
 
@@ -1109,7 +1109,7 @@ kitten
 -- !query
 select elt(1, utf8_binary, 'word'), elt(1, utf8_lcase, 'word') from t5
 -- !query schema
-struct<elt(1, utf8_binary, word):string,elt(1, utf8_lcase, word):string collate UTF8_LCASE>
+struct<elt(1, utf8_binary, word):string,elt(1, utf8_lcase, 'word' collate UTF8_LCASE):string collate UTF8_LCASE>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -2492,7 +2492,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"STRING COLLATE UNICODE_AI\"",
     "paramIndex" : "first",
     "requiredType" : "\"STRING\"",
-    "sqlExpr" : "\"replace(collate(utf8_binary, unicode_ai), collate(utf8_lcase, unicode_ai), abc)\""
+    "sqlExpr" : "\"replace(collate(utf8_binary, unicode_ai), collate(utf8_lcase, unicode_ai), 'abc' collate UNICODE_AI)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3342,7 +3342,7 @@ ksitTing
 -- !query
 select overlay(utf8_binary, 'a', 2), overlay(utf8_lcase, 'a', 2) from t5
 -- !query schema
-struct<overlay(utf8_binary, a, 2, -1):string,overlay(utf8_lcase, a, 2, -1):string collate UTF8_LCASE>
+struct<overlay(utf8_binary, a, 2, -1):string,overlay(utf8_lcase, 'a' collate UTF8_LCASE, 2, -1):string collate UTF8_LCASE>
 -- !query output
 Hallo, world! Nice day.	Hallo, world! Nice day.
 Saark	SaL
@@ -3584,6 +3584,28 @@ struct<octet_length(collate(utf8_binary, utf8_lcase)):int,octet_length(collate(u
 
 
 -- !query
+select octet_length(utf8_binary collate utf8_lcase_rtrim), octet_length(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<octet_length(collate(utf8_binary, utf8_lcase_rtrim)):int,octet_length(collate(utf8_lcase, utf8_binary_rtrim)):int>
+-- !query output
+23	23
+29	29
+3	3
+3	3
+3	4
+3	4
+4	3
+4	4
+5	3
+6	7
+7	7
+8	1
+8	24
+8	8
+8	8
+
+
+-- !query
 select luhn_check(num) from t9
 -- !query schema
 struct<luhn_check(num):boolean>
@@ -3777,6 +3799,28 @@ true	true
 
 
 -- !query
+select is_valid_utf8(utf8_binary collate utf8_lcase_rtrim), is_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<is_valid_utf8(collate(utf8_binary, utf8_lcase_rtrim)):boolean,is_valid_utf8(collate(utf8_lcase, utf8_binary_rtrim)):boolean>
+-- !query output
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+true	true
+
+
+-- !query
 select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t5
 -- !query schema
 struct<make_valid_utf8(utf8_binary):string,make_valid_utf8(utf8_lcase):string collate UTF8_LCASE>
@@ -3802,6 +3846,28 @@ kitten	sitTing
 select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<make_valid_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,make_valid_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select make_valid_utf8(utf8_binary collate utf8_lcase_rtrim), make_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<make_valid_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,make_valid_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.
@@ -3865,6 +3931,28 @@ kitten	sitTing
 
 
 -- !query
+select validate_utf8(utf8_binary collate utf8_lcase_rtrim), validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<validate_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,validate_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
 select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t5
 -- !query schema
 struct<try_validate_utf8(utf8_binary):string,try_validate_utf8(utf8_lcase):string collate UTF8_LCASE>
@@ -3890,6 +3978,28 @@ kitten	sitTing
 select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t5
 -- !query schema
 struct<try_validate_utf8(collate(utf8_binary, utf8_lcase)):string collate UTF8_LCASE,try_validate_utf8(collate(utf8_lcase, utf8_binary)):string>
+-- !query output
+Hello, world! Nice day.	Hello, world! Nice day.
+Something else. Nothing here.	Something else. Nothing here.
+Spark	SQL
+aaAaAAaA	aaAaAAaA
+aaAaAAaA	aaAaaAaA
+aaAaAAaA	aaAaaAaAaaAaaAaAaaAaaAaA
+abc	abc
+abcdcba	aBcDCbA
+bbAbAAbA	a
+efd2	efd2
+kitten	sitTing
+İo	i̇o
+İo	İo
+İo	İo 
+İo 	İo
+
+
+-- !query
+select try_validate_utf8(utf8_binary collate utf8_lcase_rtrim), try_validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5
+-- !query schema
+struct<try_validate_utf8(collate(utf8_binary, utf8_lcase_rtrim)):string collate UTF8_LCASE_RTRIM,try_validate_utf8(collate(utf8_lcase, utf8_binary_rtrim)):string collate UTF8_BINARY_RTRIM>
 -- !query output
 Hello, world! Nice day.	Hello, world! Nice day.
 Something else. Nothing here.	Something else. Nothing here.

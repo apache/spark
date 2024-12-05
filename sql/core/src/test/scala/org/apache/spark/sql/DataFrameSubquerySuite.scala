@@ -53,23 +53,15 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     r.createOrReplaceTempView("r")
   }
 
-  test("unanalyzable expression") {
-    val sub = spark.range(1).select($"id" === $"id".outer())
-
+  test("noop outer()") {
+    checkAnswer(spark.range(1).select($"id".outer()), Row(0))
     checkError(
-      intercept[AnalysisException](sub.schema),
-      condition = "UNANALYZABLE_EXPRESSION",
-      parameters = Map("expr" -> "\"outer(id)\""),
-      queryContext =
-        Array(ExpectedContext(fragment = "outer", callSitePattern = getCurrentClassCallSitePattern))
-    )
-
-    checkError(
-      intercept[AnalysisException](sub.encoder),
-      condition = "UNANALYZABLE_EXPRESSION",
-      parameters = Map("expr" -> "\"outer(id)\""),
-      queryContext =
-        Array(ExpectedContext(fragment = "outer", callSitePattern = getCurrentClassCallSitePattern))
+      intercept[AnalysisException](spark.range(1).select($"outer_col".outer()).collect()),
+      "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`outer_col`", "proposal" -> "`id`"),
+      context = ExpectedContext(
+        fragment = "$",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
   }
 
@@ -148,6 +140,64 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("correlated scalar subquery in SELECT with outer() function") {
+    val df1 = spark.table("l").as("t1")
+    val df2 = spark.table("l").as("t2")
+    // We can use the `.outer()` function to wrap either the outer column, or the entire condition,
+    // or the SQL string of the condition.
+    Seq(
+      $"t1.a" === $"t2.a".outer(),
+      ($"t1.a" === $"t2.a").outer(),
+      expr("t1.a = t2.a").outer()).foreach { cond =>
+      checkAnswer(
+        df1.select(
+          $"a",
+          df2.where(cond).select(sum($"b")).scalar().as("sum_b")
+        ),
+        sql("select a, (select sum(b) from l t1 where t1.a = t2.a) sum_b from l t2")
+      )
+    }
+  }
+
+  test("correlated scalar subquery in WHERE with outer() function") {
+    // We can use the `.outer()` function to wrap either the outer column, or the entire condition,
+    // or the SQL string of the condition.
+    Seq(
+      $"a".outer() === $"c",
+      ($"a" === $"c").outer(),
+      expr("a = c").outer()).foreach { cond =>
+      checkAnswer(
+        spark.table("l").where(
+          $"b" < spark.table("r").where(cond).select(max($"d")).scalar()
+        ),
+        sql("select * from l where b < (select max(d) from r where a = c)")
+      )
+    }
+  }
+
+  test("EXISTS predicate subquery with outer() function") {
+    // We can use the `.outer()` function to wrap either the outer column, or the entire condition,
+    // or the SQL string of the condition.
+    Seq(
+      $"a".outer() === $"c",
+      ($"a" === $"c").outer(),
+      expr("a = c").outer()).foreach { cond =>
+      checkAnswer(
+        spark.table("l").where(
+          spark.table("r").where(cond).exists()
+        ),
+        sql("select * from l where exists (select * from r where l.a = r.c)")
+      )
+
+      checkAnswer(
+        spark.table("l").where(
+          spark.table("r").where(cond).exists() && $"a" <= lit(2)
+        ),
+        sql("select * from l where exists (select * from r where l.a = r.c) and l.a <= 2")
+      )
+    }
+  }
+
   test("SPARK-15677: Queries against local relations with scalar subquery in Select list") {
     withTempView("t1", "t2") {
       Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
@@ -192,22 +242,6 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("EXISTS predicate subquery") {
-    checkAnswer(
-      spark.table("l").where(
-        spark.table("r").where($"a".outer() === $"c").exists()
-      ),
-      sql("select * from l where exists (select * from r where l.a = r.c)")
-    )
-
-    checkAnswer(
-      spark.table("l").where(
-        spark.table("r").where($"a".outer() === $"c").exists() && $"a" <= lit(2)
-      ),
-      sql("select * from l where exists (select * from r where l.a = r.c) and l.a <= 2")
-    )
-  }
-
   test("NOT EXISTS predicate subquery") {
     checkAnswer(
       spark.table("l").where(
@@ -244,32 +278,15 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("correlated scalar subquery in where") {
+  test("correlated scalar subquery in select (null safe equal)") {
+    val df1 = spark.table("l").as("t1")
+    val df2 = spark.table("l").as("t2")
     checkAnswer(
-      spark.table("l").where(
-        $"b" < spark.table("r").where($"a".outer() === $"c").select(max($"d")).scalar()
-      ),
-      sql("select * from l where b < (select max(d) from r where a = c)")
-    )
-  }
-
-  test("correlated scalar subquery in select") {
-    checkAnswer(
-      spark.table("l").select(
+      df1.select(
         $"a",
-        spark.table("l").where($"a" === $"a".outer()).select(sum($"b")).scalar().as("sum_b")
+        df2.where($"t2.a" <=> $"t1.a".outer()).select(sum($"b")).scalar().as("sum_b")
       ),
-      sql("select a, (select sum(b) from l l2 where l2.a = l1.a) sum_b from l l1")
-    )
-  }
-
-  test("correlated scalar subquery in select (null safe)") {
-    checkAnswer(
-      spark.table("l").select(
-        $"a",
-        spark.table("l").where($"a" <=> $"a".outer()).select(sum($"b")).scalar().as("sum_b")
-      ),
-      sql("select a, (select sum(b) from l l2 where l2.a <=> l1.a) sum_b from l l1")
+      sql("select a, (select sum(b) from l t2 where t2.a <=> t1.a) sum_b from l t1")
     )
   }
 
@@ -300,10 +317,12 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("non-aggregated correlated scalar subquery") {
+    val df1 = spark.table("l").as("t1")
+    val df2 = spark.table("l").as("t2")
     val exception1 = intercept[SparkRuntimeException] {
-      spark.table("l").select(
+      df1.select(
         $"a",
-        spark.table("l").where($"a" === $"a".outer()).select($"b").scalar().as("sum_b")
+        df2.where($"t1.a" === $"t2.a".outer()).select($"b").scalar().as("sum_b")
       ).collect()
     }
     checkError(
@@ -313,12 +332,14 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("non-equal correlated scalar subquery") {
+    val df1 = spark.table("l").as("t1")
+    val df2 = spark.table("l").as("t2")
     checkAnswer(
-      spark.table("l").select(
+      df1.select(
         $"a",
-        spark.table("l").where($"a" < $"a".outer()).select(sum($"b")).scalar().as("sum_b")
+        df2.where($"t2.a" < $"t1.a".outer()).select(sum($"b")).scalar().as("sum_b")
       ),
-      sql("select a, (select sum(b) from l l2 where l2.a < l1.a) sum_b from l l1")
+      sql("select a, (select sum(b) from l t2 where t2.a < t1.a) sum_b from l t1")
     )
   }
 
@@ -346,42 +367,12 @@ class DataFrameSubquerySuite extends QueryTest with SharedSparkSession {
       spark.table("l").select(
         $"a",
         spark.table("r").where($"c" === $"a").select(sum($"d")).scalar()
-      ).collect()
+      )
     }
     checkError(
       exception1,
       condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
       parameters = Map("objectName" -> "`a`", "proposal" -> "`c`, `d`"),
-      queryContext =
-        Array(ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
-    )
-
-    // Extra `outer()`
-    val exception2 = intercept[AnalysisException] {
-      spark.table("l").select(
-        $"a",
-        spark.table("r").where($"c".outer() === $"a".outer()).select(sum($"d")).scalar()
-      ).collect()
-    }
-    checkError(
-      exception2,
-      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
-      queryContext =
-        Array(ExpectedContext(fragment = "outer", callSitePattern = getCurrentClassCallSitePattern))
-    )
-
-    // Missing `outer()` for another outer
-    val exception3 = intercept[AnalysisException] {
-      spark.table("l").select(
-        $"a",
-        spark.table("r").where($"b" === $"a".outer()).select(sum($"d")).scalar()
-      ).collect()
-    }
-    checkError(
-      exception3,
-      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-      parameters = Map("objectName" -> "`b`", "proposal" -> "`c`, `d`"),
       queryContext =
         Array(ExpectedContext(fragment = "$", callSitePattern = getCurrentClassCallSitePattern))
     )

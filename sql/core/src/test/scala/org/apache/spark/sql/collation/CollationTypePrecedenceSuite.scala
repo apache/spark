@@ -19,11 +19,17 @@ package org.apache.spark.sql.collation
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
 
 class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
   val dataSource: String = "parquet"
+  val UNICODE_COLLATION_NAME = "SYSTEM.BUILTIN.UNICODE"
+  val UNICODE_CI_COLLATION_NAME = "SYSTEM.BUILTIN.UNICODE_CI"
+  val UTF8_BINARY_COLLATION_NAME = "SYSTEM.BUILTIN.UTF8_BINARY"
+  val UTF8_LCASE_COLLATION_NAME = "SYSTEM.BUILTIN.UTF8_LCASE"
 
   private def assertThrowsError(df: => DataFrame, errorClass: String): Unit = {
     val exception = intercept[SparkThrowable] {
@@ -38,22 +44,27 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   private def assertImplicitMismatch(df: => DataFrame): Unit =
     assertThrowsError(df, "COLLATION_MISMATCH.IMPLICIT")
 
+  private def assertQuerySchema(df: => DataFrame, expectedSchema: DataType): Unit = {
+    val querySchema = df.schema.fields.head.dataType
+    assert(DataType.equalsIgnoreNullability(querySchema, expectedSchema))
+  }
+
   test("explicit collation propagates up") {
     checkAnswer(
       sql(s"SELECT COLLATION('a' collate unicode)"),
-      Row("UNICODE"))
+      Row(UNICODE_COLLATION_NAME))
 
     checkAnswer(
       sql(s"SELECT COLLATION('a' collate unicode || 'b')"),
-      Row("UNICODE"))
+      Row(UNICODE_COLLATION_NAME))
 
     checkAnswer(
       sql(s"SELECT COLLATION(SUBSTRING('a' collate unicode, 0, 1))"),
-      Row("UNICODE"))
+      Row(UNICODE_COLLATION_NAME))
 
     checkAnswer(
       sql(s"SELECT COLLATION(SUBSTRING('a' collate unicode, 0, 1) || 'b')"),
-      Row("UNICODE"))
+      Row(UNICODE_COLLATION_NAME))
 
     assertExplicitMismatch(
       sql(s"SELECT COLLATION('a' collate unicode || 'b' collate utf8_lcase)"))
@@ -68,9 +79,9 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
   test("implicit collation in columns") {
     val tableName = "implicit_coll_tbl"
-    val c1Collation = "UNICODE"
-    val c2Collation = "UNICODE_CI"
-    val structCollation = "UTF8_LCASE"
+    val c1Collation = UNICODE_COLLATION_NAME
+    val c2Collation = UNICODE_CI_COLLATION_NAME
+    val structCollation = UTF8_LCASE_COLLATION_NAME
     withTable(tableName) {
       sql(s"""
            |CREATE TABLE $tableName (
@@ -100,8 +111,8 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   }
 
   test("variables have implicit collation") {
-    val v1Collation = "UTF8_BINARY"
-    val v2Collation = "UTF8_LCASE"
+    val v1Collation = UTF8_BINARY_COLLATION_NAME
+    val v2Collation = UTF8_LCASE_COLLATION_NAME
     sql(s"DECLARE v1 = 'a'")
     sql(s"DECLARE v2 = 'b' collate $v2Collation")
 
@@ -115,7 +126,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       sql(s"SELECT COLLATION(v2 || 'a' COLLATE UTF8_BINARY)"),
-      Row("UTF8_BINARY"))
+      Row(UTF8_BINARY_COLLATION_NAME))
 
     checkAnswer(
       sql(s"SELECT COLLATION(SUBSTRING(v2, 0, 1) || 'a')"),
@@ -137,30 +148,30 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
     // Simple subquery with explicit collation
     checkAnswer(
       sql(s"SELECT COLLATION((SELECT 'text' COLLATE UTF8_BINARY) || 'suffix')"),
-      Row("UTF8_BINARY")
+      Row(UTF8_BINARY_COLLATION_NAME)
     )
 
     checkAnswer(
       sql(s"SELECT COLLATION((SELECT 'text' COLLATE UTF8_LCASE) || 'suffix')"),
-      Row("UTF8_LCASE")
+      Row(UTF8_LCASE_COLLATION_NAME)
     )
 
     // Nested subquery should retain the collation of the deepest expression
     checkAnswer(
       sql(s"SELECT COLLATION((SELECT (SELECT 'inner' COLLATE UTF8_LCASE) || 'outer'))"),
-      Row("UTF8_LCASE")
+      Row(UTF8_LCASE_COLLATION_NAME)
     )
 
     checkAnswer(
       sql(s"SELECT COLLATION((SELECT (SELECT 'inner' COLLATE UTF8_BINARY) || 'outer'))"),
-      Row("UTF8_BINARY")
+      Row(UTF8_BINARY_COLLATION_NAME)
     )
 
     // Subqueries with mixed collations should follow collation precedence rules
     checkAnswer(
       sql(s"SELECT COLLATION((SELECT 'string1' COLLATE UTF8_LCASE || " +
         s"(SELECT 'string2' COLLATE UTF8_BINARY)))"),
-      Row("UTF8_LCASE")
+      Row(UTF8_LCASE_COLLATION_NAME)
     )
   }
 
@@ -180,28 +191,28 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         sql(s"SELECT COLLATION(c2.col1.col1 || 'a') FROM $tableName"),
-        Seq(Row(c2Collation)))
+        Seq(Row(UNICODE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1.col1 || 'a') FROM $tableName"),
-        Seq(Row(c1Collation)))
+        Seq(Row(UNICODE_CI_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1.col1 || 'a' collate UNICODE) FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(UNICODE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(struct('a').col1 || 'a' collate UNICODE) FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(UNICODE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(struct('a' collate UNICODE).col1 || 'a') FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(UNICODE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(struct('a').col1 collate UNICODE || 'a' collate UNICODE) " +
           s"FROM $tableName"),
-        Seq(Row("UNICODE")))
+        Seq(Row(UNICODE_COLLATION_NAME)))
 
       assertExplicitMismatch(
         sql(s"SELECT COLLATION(struct('a').col1 collate UNICODE || 'a' collate UTF8_LCASE) " +
@@ -229,7 +240,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         sql(s"SELECT collation(element_at(array('a', 'b' collate utf8_lcase), 1))"),
-        Seq(Row("UTF8_LCASE")))
+        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
 
       assertExplicitMismatch(
         sql(s"SELECT collation(element_at(array('a' collate unicode, 'b' collate utf8_lcase), 1))")
@@ -238,17 +249,17 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql(s"SELECT collation(element_at(array('a', 'b' collate utf8_lcase), 1) || c1)" +
           s"from $tableName"),
-        Seq(Row("UTF8_LCASE")))
+        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT collation(element_at(array_append(c2, 'd'), 1)) FROM $tableName"),
-        Seq(Row(arrayCollation))
+        Seq(Row(UNICODE_CI_COLLATION_NAME))
       )
 
       checkAnswer(
         sql(s"SELECT collation(element_at(array_append(c2, 'd' collate utf8_lcase), 1))" +
           s"FROM $tableName"),
-        Seq(Row("UTF8_LCASE"))
+        Seq(Row(UTF8_LCASE_COLLATION_NAME))
       )
     }
   }
@@ -262,21 +273,21 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1[0]) FROM $tableName"),
-        Seq(Row(columnCollation)))
+        Seq(Row(UNICODE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(cast(c1 AS ARRAY<STRING>)[0]) FROM $tableName"),
-        Seq(Row("UTF8_BINARY")))
+        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(cast(c1 AS ARRAY<STRING COLLATE UTF8_LCASE>)[0]) FROM $tableName"),
-        Seq(Row("UTF8_LCASE")))
+        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
     }
   }
 
   test("user defined cast") {
     val tableName = "dflt_coll_tbl"
-    val columnCollation = "UNICODE"
+    val columnCollation = UNICODE_COLLATION_NAME
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (c1 STRING COLLATE $columnCollation) USING $dataSource")
       sql(s"INSERT INTO $tableName VALUES ('a')")
@@ -290,12 +301,12 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         sql(s"SELECT COLLATION(CAST(to_char(DATE'2016-04-08', 'y') AS STRING)) " +
           s"FROM $tableName"),
-        Seq(Row("UTF8_BINARY")))
+        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
 
       // for string inputs collation is of the child expression
       checkAnswer(
         sql(s"SELECT COLLATION(CAST('a' AS STRING)) FROM $tableName"),
-        Seq(Row("UTF8_BINARY")))
+        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(CAST(c1 AS STRING)) FROM $tableName"),
@@ -303,7 +314,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         sql(s"SELECT COLLATION(CAST(c1 collate UTF8_LCASE AS STRING)) FROM $tableName"),
-        Seq(Row("UTF8_LCASE")))
+        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST('a' AS STRING)) FROM $tableName"),
@@ -311,7 +322,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST('a' collate UTF8_LCASE AS STRING)) FROM $tableName"),
-        Seq(Row("UTF8_LCASE")))
+        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || CAST(c1 AS STRING)) FROM $tableName"),
@@ -332,26 +343,26 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(
         sql(s"SELECT COLLATION('a' collate utf8_lcase || current_database()) FROM $tableName"),
-        Seq(Row("UTF8_LCASE")))
+        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || current_database()) FROM $tableName"),
-        Seq(Row(columnCollation)))
+        Seq(Row(UNICODE_COLLATION_NAME)))
 
       checkAnswer(
         sql(s"SELECT COLLATION('a' || current_database()) FROM $tableName"),
-        Seq(Row("UTF8_BINARY")))
+        Seq(Row(UTF8_BINARY_COLLATION_NAME)))
     }
   }
 
   test("functions that contain both string and non string params") {
     checkAnswer(
       sql(s"SELECT COLLATION(elt(2, 'a', 'b'))"),
-      Row("UTF8_BINARY"))
+      Row(UTF8_BINARY_COLLATION_NAME))
 
     checkAnswer(
       sql(s"SELECT COLLATION(elt(2, 'a' collate UTF8_LCASE, 'b'))"),
-      Row("UTF8_LCASE"))
+      Row(UTF8_LCASE_COLLATION_NAME))
 
     assertExplicitMismatch(
       sql(s"SELECT COLLATION(elt(2, 'a' collate UTF8_LCASE, 'b' collate UNICODE))"))
@@ -377,13 +388,157 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
         s"'name2' collate utf8_lcase, 'value2' collate unicode)"),
       Row(Row("value1", "value2")))
 
-    assertExplicitMismatch(
+    checkAnswer(
       sql(s"SELECT named_struct" +
-        s"('name1' collate unicode, 'value1', 'name2' collate utf8_lcase, 'value2')"))
+        s"('name1' collate unicode, 'value1', 'name2' collate utf8_lcase, 'value2')"),
+      Row(Row("value1", "value2")))
+
+    checkAnswer(
+      sql(s"SELECT named_struct" +
+        s"('name1', 'value1' collate unicode, 'name2', 'value2' collate utf8_lcase)"),
+      Row(Row("value1", "value2")))
+  }
+
+  test("coercing structs") {
+    assertQuerySchema(
+      sql(s"SELECT array(struct(1, 'a'), struct(2, 'b' collate utf8_lcase))"),
+      ArrayType(
+        StructType(
+          Seq(StructField("col1", IntegerType), StructField("col2", StringType("UTF8_LCASE"))))))
+
+    assertQuerySchema(
+      sql(s"SELECT array(struct(1, 'a' collate utf8_lcase), struct(2, 'b' collate utf8_lcase))"),
+      ArrayType(
+        StructType(
+          Seq(StructField("col1", IntegerType), StructField("col2", StringType("UTF8_LCASE"))))))
 
     assertExplicitMismatch(
-      sql(s"SELECT named_struct" +
-        s"('name1', 'value1' collate unicode, 'name2', 'value2' collate utf8_lcase)"))
+      sql(s"SELECT array(struct(1, 'a' collate utf8_lcase), struct(2, 'b' collate unicode))"))
+
+    assertImplicitMismatch(sql(s"""
+           |SELECT array(struct(1, c1), struct(2, c2))
+           |FROM VALUES ('a' collate unicode, 'b' collate utf8_lcase) AS t(c1, c2)
+           |""".stripMargin))
+  }
+
+  test("coercing maps") {
+    assertQuerySchema(
+      sql(s"SELECT map('key1', 'val1', 'key2', 'val2')"),
+      MapType(StringType, StringType))
+
+    assertQuerySchema(
+      sql(s"SELECT map('key1' collate utf8_lcase, 'val1', 'key2', 'val2' collate unicode)"),
+      MapType(StringType("UTF8_LCASE"), StringType("UNICODE")))
+
+    assertQuerySchema(
+      sql(s"SELECT ARRAY(map('key1', 'val1'), map('key2' collate UNICODE, 'val2'))"),
+      ArrayType(MapType(StringType("UNICODE"), StringType)))
+
+    assertExplicitMismatch(
+      sql(s"SELECT map('key1', 'val1' collate utf8_lcase, 'key2', 'val2' collate unicode)"))
+  }
+
+  test("maps of structs") {
+    assertQuerySchema(
+      sql(s"SELECT map('key1', struct(1, 'a' collate unicode), 'key2', struct(2, 'b'))"),
+      MapType(
+        StringType,
+        StructType(
+          Seq(StructField("col1", IntegerType), StructField("col2", StringType("UNICODE"))))))
+
+    checkAnswer(
+      sql(
+        s"SELECT map('key1', struct(1, 'a' collate unicode_ci)," +
+          s"'key2', struct(2, 'b'))['key1'].col2 = 'A'"),
+      Seq(Row(true)))
+  }
+
+  test("coercing arrays") {
+    assertQuerySchema(sql(s"SELECT array('a', 'b')"), ArrayType(StringType))
+
+    assertQuerySchema(
+      sql(s"SELECT array('a' collate utf8_lcase, 'b')"),
+      ArrayType(StringType("UTF8_LCASE")))
+
+    assertQuerySchema(
+      sql(s"SELECT array('a' collate utf8_lcase, 'b' collate utf8_lcase)"),
+      ArrayType(StringType("UTF8_LCASE")))
+
+    assertExplicitMismatch(sql(s"SELECT array('a' collate utf8_lcase, 'b' collate unicode)"))
+
+    assertQuerySchema(
+      sql(s"SELECT array(array('a', 'b'), array('c' collate utf8_lcase, 'd'))"),
+      ArrayType(ArrayType(StringType("UTF8_LCASE"))))
+
+    checkAnswer(
+      sql(s"SELECT array('a', 'b') = array('A' collate utf8_lcase, 'B')"),
+      Seq(Row(true)))
+
+    checkAnswer(
+      sql(s"SELECT array('a', 'b')[0] = array('A' collate utf8_lcase, 'B')[1]"),
+      Seq(Row(false)))
+
+    assertExplicitMismatch(
+      sql(s"SELECT array('a', 'b' collate unicode) = array('A' collate utf8_lcase, 'B')"))
+  }
+
+  test("array of structs") {
+    assertQuerySchema(
+      sql(s"SELECT array(struct(1, 'a' collate unicode), struct(2, 'b'))[0]"),
+      StructType(
+        Seq(StructField("col1", IntegerType), StructField("col2", StringType("UNICODE")))))
+
+    checkAnswer(
+      sql(s"SELECT array(struct(1, 'a' collate unicode_ci), struct(2, 'b'))[0].col2 = 'A'"),
+      Seq(Row(true)))
+  }
+
+  test("coercing deeply nested complex types") {
+    assertQuerySchema(
+      sql(s"""
+           |SELECT struct(
+           |  struct(1, 'nested' collate unicode),
+           |  array(
+           |    struct(1, 'a' collate utf8_lcase),
+           |    struct(2, 'b' collate utf8_lcase)
+           |  )
+           |)
+           |""".stripMargin),
+      StructType(
+        Seq(
+          StructField(
+            "col1",
+            StructType(
+              Seq(StructField("col1", IntegerType), StructField("col2", StringType("UNICODE"))))),
+          StructField(
+            "col2",
+            ArrayType(
+              StructType(Seq(
+                StructField("col1", IntegerType),
+                StructField("col2", StringType("UTF8_LCASE")))))))))
+
+    assertQuerySchema(
+      sql(s"""
+           |SELECT struct(
+           |  struct(
+           |    array(
+           |      map('key1' collate utf8_lcase, 'val1',
+           |          'key2', 'val2'),
+           |      map('key3', 'val3' collate unicode)
+           |    )
+           |  ),
+           |  42
+           |)
+           |""".stripMargin),
+      StructType(
+        Seq(
+          StructField(
+            "col1",
+            StructType(
+              Seq(StructField(
+                "col1",
+                ArrayType(MapType(StringType("UTF8_LCASE"), StringType("UNICODE"))))))),
+          StructField("col2", IntegerType))))
   }
 
   test("access collated map via literal") {
@@ -393,27 +548,30 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"SELECT c1 FROM $tableName WHERE $condition = 'B'")
 
     withTable(tableName) {
-      sql(s"""
-           |CREATE TABLE $tableName (
-           |  c1 MAP<STRING COLLATE UNICODE_CI, STRING COLLATE UNICODE_CI>,
-           |  c2 STRING
-           |) USING $dataSource
-           |""".stripMargin)
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  c1 MAP<STRING COLLATE UNICODE_CI, STRING COLLATE UNICODE_CI>,
+             |  c2 STRING
+             |) USING $dataSource
+             |""".stripMargin)
 
-      sql(s"INSERT INTO $tableName VALUES (map('a', 'b'), 'a')")
+        sql(s"INSERT INTO $tableName VALUES (map('a', 'b'), 'a')")
 
-      Seq("c1['A']",
-        "c1['A' COLLATE UNICODE_CI]",
-        "c1[c2 COLLATE UNICODE_CI]").foreach { condition =>
-        checkAnswer(selectQuery(condition), Seq(Row(Map("a" -> "b"))))
-      }
+        Seq("c1['A']",
+          "c1['A' COLLATE UNICODE_CI]",
+          "c1[c2 COLLATE UNICODE_CI]").foreach { condition =>
+          checkAnswer(selectQuery(condition), Seq(Row(Map("a" -> "b"))))
+        }
 
-      Seq(
-        // different explicit collation
-        "c1['A' COLLATE UNICODE]",
-        // different implicit collation
-        "c1[c2]").foreach { condition =>
-        assertThrowsError(selectQuery(condition), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+        Seq(
+          // different explicit collation
+          "c1['A' COLLATE UNICODE]",
+          // different implicit collation
+          "c1[c2]").foreach { condition =>
+          assertThrowsError(selectQuery(condition), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
+        }
       }
     }
   }

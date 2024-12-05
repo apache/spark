@@ -2268,7 +2268,6 @@ class SparkSession(SparkConversionMixin):
             messageParameters={"feature": "SparkSession.interruptOperation"},
         )
 
-    @remote_only
     def addTag(self, tag: str) -> None:
         """
         Add a tag to be assigned to all the operations started by this thread in this session.
@@ -2283,17 +2282,16 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         tag : str
             The tag to be added. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.addTag"},
-        )
+        self._jsparkSession.addTag(tag)
 
-    @remote_only
     def removeTag(self, tag: str) -> None:
         """
         Remove a tag previously added to be assigned to all the operations started by this thread in
@@ -2301,17 +2299,16 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Parameters
         ----------
         tag : list of str
             The tag to be removed. Cannot contain ',' (comma) character or be an empty string.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.removeTag"},
-        )
+        self._jsparkSession.removeTag(tag)
 
-    @remote_only
     def getTags(self) -> Set[str]:
         """
         Get the tags that are currently set to be assigned to all the operations started by this
@@ -2319,27 +2316,34 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 3.5.0
 
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
+
         Returns
         -------
         set of str
             Set of tags of interrupted operations.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.getTags"},
-        )
+        java_set = self._jsparkSession.getTags()
+        python_set = set()
 
-    @remote_only
+        # Use iterator to manually iterate through Java Set
+        java_iterator = java_set.iterator()
+        while java_iterator.hasNext():
+            python_set.add(str(java_iterator.next()))
+
+        return python_set
+
     def clearTags(self) -> None:
         """
         Clear the current thread's operation tags.
 
         .. versionadded:: 3.5.0
+
+        .. versionchanged:: 4.0.0
+            Supports Spark Classic.
         """
-        raise PySparkRuntimeError(
-            errorClass="ONLY_SUPPORTED_WITH_SPARK_CONNECT",
-            messageParameters={"feature": "SparkSession.clearTags"},
-        )
+        self._jsparkSession.clearTags()
 
 
 def _test() -> None:

@@ -14,39 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.internal.config
 
 import java.util.{Map => JMap}
 
 import org.apache.spark.SparkConf
-
-/**
- * A source of configuration values.
- */
-private[spark] trait ConfigProvider {
-
-  def get(key: String): Option[String]
-
-}
-
-private[spark] class EnvProvider extends ConfigProvider {
-
-  override def get(key: String): Option[String] = sys.env.get(key)
-
-}
-
-private[spark] class SystemProvider extends ConfigProvider {
-
-  override def get(key: String): Option[String] = sys.props.get(key)
-
-}
-
-private[spark] class MapProvider(conf: JMap[String, String]) extends ConfigProvider {
-
-  override def get(key: String): Option[String] = Option(conf.get(key))
-
-}
 
 /**
  * A config provider that only reads Spark config keys.
@@ -60,5 +32,4 @@ private[spark] class SparkConfigProvider(conf: JMap[String, String]) extends Con
       None
     }
   }
-
 }

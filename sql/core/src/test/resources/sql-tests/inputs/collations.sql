@@ -328,6 +328,7 @@ select bit_length(utf8_binary), bit_length(utf8_lcase) from t5;
 select bit_length(utf8_binary collate utf8_lcase), bit_length(utf8_lcase collate utf8_binary) from t5;
 select octet_length(utf8_binary), octet_length(utf8_lcase) from t5;
 select octet_length(utf8_binary collate utf8_lcase), octet_length(utf8_lcase collate utf8_binary) from t5;
+select octet_length(utf8_binary collate utf8_lcase_rtrim), octet_length(utf8_lcase collate utf8_binary_rtrim) from t5;
 
 -- Luhncheck
 select luhn_check(num) from t9;
@@ -344,18 +345,22 @@ select levenshtein(utf8_binary, 'AaAA' collate utf8_lcase, 3), levenshtein(utf8_
 -- IsValidUTF8
 select is_valid_utf8(utf8_binary), is_valid_utf8(utf8_lcase) from t5;
 select is_valid_utf8(utf8_binary collate utf8_lcase), is_valid_utf8(utf8_lcase collate utf8_binary) from t5;
+select is_valid_utf8(utf8_binary collate utf8_lcase_rtrim), is_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5;
 
 -- MakeValidUTF8
 select make_valid_utf8(utf8_binary), make_valid_utf8(utf8_lcase) from t5;
 select make_valid_utf8(utf8_binary collate utf8_lcase), make_valid_utf8(utf8_lcase collate utf8_binary) from t5;
+select make_valid_utf8(utf8_binary collate utf8_lcase_rtrim), make_valid_utf8(utf8_lcase collate utf8_binary_rtrim) from t5;
 
 -- ValidateUTF8
 select validate_utf8(utf8_binary), validate_utf8(utf8_lcase) from t5;
 select validate_utf8(utf8_binary collate utf8_lcase), validate_utf8(utf8_lcase collate utf8_binary) from t5;
+select validate_utf8(utf8_binary collate utf8_lcase_rtrim), validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5;
 
 -- TryValidateUTF8
 select try_validate_utf8(utf8_binary), try_validate_utf8(utf8_lcase) from t5;
 select try_validate_utf8(utf8_binary collate utf8_lcase), try_validate_utf8(utf8_lcase collate utf8_binary) from t5;
+select try_validate_utf8(utf8_binary collate utf8_lcase_rtrim), try_validate_utf8(utf8_lcase collate utf8_binary_rtrim) from t5;
 
 -- Left/Right/Substr
 select substr(utf8_binary, 2, 2), substr(utf8_lcase, 2, 2) from t5;
