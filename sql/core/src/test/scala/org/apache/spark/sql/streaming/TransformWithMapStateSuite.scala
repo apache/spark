@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, RocksDBStateStoreProvider}
+import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithChangelogCheckpointingEnabled, AlsoTestWithEncodingTypes, RocksDBStateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 
 case class InputMapRow(key: String, action: String, value: (String, String))
@@ -33,14 +33,14 @@ class TestMapStateProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING)
+    _mapState = getHandle.getMapState("sessionState", Encoders.STRING, Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputMapRow],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
 
     var output = List[(String, String, String)]()
 
@@ -74,8 +74,6 @@ class TestMapStateProcessor
     }
     output.iterator
   }
-
-  override def close(): Unit = {}
 }
 
 /**
@@ -83,7 +81,8 @@ class TestMapStateProcessor
  * operators such as transformWithState.
  */
 class TransformWithMapStateSuite extends StreamTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithChangelogCheckpointingEnabled
+  with AlsoTestWithEncodingTypes  {
   import testImplicits._
 
   private def testMapStateWithNullUserKey(inputMapRow: InputMapRow): Unit = {
@@ -209,9 +208,13 @@ class TransformWithMapStateSuite extends StreamTest
         AddData(inputData, InputMapRow("k2", "iterator", ("", ""))),
         CheckNewAnswer(),
         AddData(inputData, InputMapRow("k2", "exists", ("", ""))),
+        AddData(inputData, InputMapRow("k1", "clear", ("", ""))),
+        AddData(inputData, InputMapRow("k3", "updateValue", ("v7", "11"))),
         CheckNewAnswer(("k2", "exists", "false")),
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numMapStateVars") > 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
         }
       )
     }

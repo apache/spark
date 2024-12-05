@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{MapData, RandomUUIDGenerator}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors.raiseError
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -85,7 +85,12 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, MapType(StringType, StringType))
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      AbstractMapType(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true)
+      ))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms
@@ -202,8 +207,7 @@ object AssertTrue {
 case class CurrentDatabase() extends LeafExpression with Unevaluable {
   override def dataType: DataType = SQLConf.get.defaultStringType
   override def nullable: Boolean = false
-  override def prettyName: String =
-    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("current_database")
+  override def prettyName: String = "current_schema"
   final override val nodePatterns: Seq[TreePattern] = Seq(CURRENT_LIKE)
 }
 
@@ -417,8 +421,8 @@ case class AesEncrypt(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(BinaryType, BinaryType,
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity,
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
       BinaryType, BinaryType)
 
   override def children: Seq[Expression] = Seq(input, key, mode, padding, iv, aad)
@@ -494,8 +498,8 @@ case class AesDecrypt(
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(BinaryType,
       BinaryType,
-      StringTypeWithCaseAccentSensitivity,
-      StringTypeWithCaseAccentSensitivity, BinaryType)
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true), BinaryType)
   }
 
   override def prettyName: String = "aes_decrypt"

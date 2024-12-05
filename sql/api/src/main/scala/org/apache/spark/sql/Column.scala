@@ -1382,6 +1382,28 @@ class Column(val node: ColumnNode) extends Logging {
    */
   def over(): Column = over(Window.spec)
 
+  /**
+   * Mark this column as an outer column if its expression refers to columns from an outer query.
+   * This is used to trigger lazy analysis of Spark Classic DataFrame, so that we can use it to
+   * build subquery expressions. Spark Connect DataFrame is always lazily analyzed and does not
+   * need to use this function.
+   *
+   * {{{
+   *   // Spark can't analyze this `df` now as it doesn't know how to resolve `t1.col`.
+   *   val df = spark.table("t2").where($"t2.col" === $"t1.col".outer())
+   *
+   *   // Since this `df` is lazily analyzed, you won't see any error until you try to execute it.
+   *   df.collect()  // Fails with UNRESOLVED_COLUMN error.
+   *
+   *   // Now Spark can resolve `t1.col` with the outer plan `spark.table("t1")`.
+   *   spark.table("t1").where(df.exists())
+   * }}}
+   *
+   * @group expr_ops
+   * @since 4.0.0
+   */
+  def outer(): Column = Column(internal.LazyExpression(node))
+
 }
 
 /**

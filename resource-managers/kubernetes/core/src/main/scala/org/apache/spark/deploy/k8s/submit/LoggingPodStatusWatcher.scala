@@ -70,7 +70,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   override def onClose(e: WatcherException): Unit = {
     logDebug(s"Stopping watching application $appId with last-observed phase $phase")
-    if(e != null && e.isHttpGone) {
+    if (e != null && e.isHttpGone) {
       resourceTooOldReceived = true
       logDebug(s"Got HTTP Gone code, resource version changed in k8s api: $e")
     } else {
@@ -108,7 +108,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
       }
     }
 
-    if(podCompleted) {
+    if (podCompleted) {
       logInfo(
         pod.map { p => log"Container final statuses:\n\n${MDC(STATUS, containersDescription(p))}" }
           .getOrElse(log"No containers were found in the driver pod."))

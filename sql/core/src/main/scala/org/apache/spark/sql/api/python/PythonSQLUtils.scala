@@ -33,10 +33,11 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRe
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
+import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
@@ -143,9 +144,6 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column =
-    Column.internalFn("timestamp_ntz_to_long", c)
-
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
 
@@ -155,13 +153,8 @@ private[sql] object PythonSQLUtils extends Logging {
     Column(internal.LambdaFunction(function.node, arguments))
   }
 
-  def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
-
-  def distributedIndex(): Column = {
-    val expr = MonotonicallyIncreasingID()
-    expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
-    expr
-  }
+  def namedArgumentExpression(name: String, e: Column): Column =
+    Column(NamedArgumentExpression(name, expression(e)))
 
   @scala.annotation.varargs
   def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)

@@ -146,7 +146,7 @@
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
-                  <includeStdTypes>true</includeStdTypes>
+                  <includeMavenTypes>direct</includeMavenTypes>
                   <outputTargets>
                     <outputTarget>
                       <type>java</type>

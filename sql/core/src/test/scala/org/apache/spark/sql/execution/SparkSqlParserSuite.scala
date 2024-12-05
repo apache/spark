@@ -252,7 +252,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql1 = "RESET spark.sql.key1 key2"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql1,
@@ -262,7 +262,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql2 = "RESET spark.  sql.key1 key2"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql2,
@@ -272,7 +272,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql3 = "RESET spark.sql.key1 key2 key3"
     checkError(
       exception = parseException(sql3),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql3,
@@ -282,7 +282,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql4 = "RESET spark:   sql:key"
     checkError(
       exception = parseException(sql4),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql4,
@@ -292,7 +292,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql5 = "RESET spark   .sql.key"
     checkError(
       exception = parseException(sql5),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql5,
@@ -302,7 +302,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql6 = "RESET spark :  sql:key"
     checkError(
       exception = parseException(sql6),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql6,
@@ -312,7 +312,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql7 = "RESET spark.sql:   key"
     checkError(
       exception = parseException(sql7),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql7,
@@ -322,7 +322,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql8 = "RESET spark.sql   .key"
     checkError(
       exception = parseException(sql8),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql8,
@@ -332,7 +332,7 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
     val sql9 = "RESET spark.sql :  key"
     checkError(
       exception = parseException(sql9),
-      condition = "_LEGACY_ERROR_TEMP_0043",
+      condition = "INVALID_RESET_COMMAND_FORMAT",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = sql9,
@@ -673,7 +673,9 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
                   UnresolvedFunction("max", Seq(UnresolvedAttribute("c")), isDistinct = false),
                   WindowSpecReference("w")), None)
             ),
-            UnresolvedRelation(TableIdentifier("testData")))),
+            UnresolvedRelation(TableIdentifier("testData"))),
+          forPipeSQL = false
+        ),
         ioSchema))
 
     assertEqual(
@@ -889,13 +891,16 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       // inline table.
       def check(query: String, patterns: Seq[TreePattern]): Unit = {
         val plan: LogicalPlan = parser.parsePlan(query)
-        assert(patterns.exists(plan.containsPattern))
+        assert(patterns.exists(plan.containsPattern), s"Failed to parse $query, plan: $plan")
         assert(plan.containsAnyPattern(UNRESOLVED_RELATION, LOCAL_RELATION))
       }
       def checkPipeSelect(query: String): Unit = check(query, Seq(PROJECT))
       checkPipeSelect("TABLE t |> SELECT 1 AS X")
       checkPipeSelect("TABLE t |> SELECT 1 AS X, 2 AS Y |> SELECT X + Y AS Z")
       checkPipeSelect("VALUES (0), (1) tab(col) |> SELECT col * 2 AS result")
+      checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y")
+      checkPipeSelect("TABLE t |> EXTEND X + 1 AS Y, X + 2 Z")
+      checkPipeSelect("TABLE t |> EXTEND 1 AS z, 2 AS Z |> SET z = 1, Z = 2")
       // Basic WHERE operators.
       def checkPipeWhere(query: String): Unit = check(query, Seq(FILTER))
       checkPipeWhere("TABLE t |> WHERE X = 1")
@@ -955,6 +960,31 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
       checkExcept("TABLE t |> MINUS DISTINCT TABLE t")
       checkIntersect("TABLE t |> INTERSECT ALL TABLE t")
       checkUnion("TABLE t |> UNION ALL TABLE t")
+      // Sorting and distributing operators.
+      def checkSort(query: String): Unit = check(query, Seq(SORT))
+      def checkRepartition(query: String): Unit = check(query, Seq(REPARTITION_OPERATION))
+      def checkLimit(query: String): Unit = check(query, Seq(LIMIT))
+      checkSort("TABLE t |> ORDER BY x")
+      checkSort("TABLE t |> SELECT x |> SORT BY x")
+      checkLimit("TABLE t |> LIMIT 1")
+      checkLimit("TABLE t |> LIMIT 2 OFFSET 1")
+      checkRepartition("TABLE t |> DISTRIBUTE BY x |> WHERE x = 1")
+      checkRepartition("TABLE t |> CLUSTER BY x |> TABLESAMPLE (100 PERCENT)")
+      checkRepartition("TABLE t |> SORT BY x DISTRIBUTE BY x")
+      // Aggregation
+      def checkAggregate(query: String): Unit = check(query, Seq(AGGREGATE))
+      checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a)")
+      checkAggregate("SELECT a, b FROM t |> AGGREGATE SUM(a) AS result GROUP BY b")
+      checkAggregate("SELECT a, b FROM t |> AGGREGATE GROUP BY b")
+      checkAggregate("SELECT a, b FROM t |> AGGREGATE COUNT(*) AS result GROUP BY b")
+      // Window
+      def checkWindow(query: String): Unit = check(query, Seq(WITH_WINDOW_DEFINITION))
+      checkWindow(
+        """
+          |TABLE windowTestData
+          ||> SELECT cate, SUM(val) OVER w
+          |   WINDOW w AS (PARTITION BY cate ORDER BY val)
+          |""".stripMargin)
     }
   }
 }

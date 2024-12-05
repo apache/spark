@@ -70,6 +70,7 @@ from pyspark.errors import PySparkValueError
 from pyspark import StorageLevel
 from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
@@ -105,7 +106,6 @@ from pyspark.pandas.correlation import (
     CORRELATION_CORR_OUTPUT_COLUMN,
     CORRELATION_COUNT_OUTPUT_COLUMN,
 )
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkFrameMethods, CachedSparkFrameMethods
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -7686,7 +7686,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        # Mapper: Get a spark colum
+        # Mapper: Get a spark column
         # n function for (ascending, na_position) combination
         mapper = {
             (True, "first"): PySparkColumn.asc_nulls_first,
@@ -9808,7 +9808,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if is_all_string_type:
             # Handling string type columns
-            # We will retrive the `count`, `unique`, `top` and `freq`.
+            # We will retrieve the `count`, `unique`, `top` and `freq`.
             internal = self._internal.resolved_copy
             exprs_string = [
                 internal.spark_column_for(psser._column_label) for psser in psser_string

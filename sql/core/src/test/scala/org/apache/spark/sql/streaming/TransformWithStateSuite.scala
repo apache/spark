@@ -26,7 +26,7 @@ import org.scalatest.matchers.must.Matchers.be
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, Encoders, Row}
 import org.apache.spark.sql.catalyst.util.stringToFile
@@ -50,14 +50,14 @@ class RunningCountStatefulProcessor extends StatefulProcessor[String, String, (S
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState",
+      Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.clear()
@@ -77,15 +77,14 @@ class RunningCountStatefulProcessorWithTTL
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState",
-      Encoders.scalaLong, TTLConfig(Duration.ofMillis(1000)))
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig(Duration.ofMillis(1000)))
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     if (count == 3) {
       _countState.clear()
@@ -108,14 +107,13 @@ class RunningCountListStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _countState = getHandle.getListState[Long](
-      "countState", Encoders.scalaLong)
+      "countState", Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     Iterator.empty
   }
 }
@@ -127,14 +125,14 @@ class RunningCountStatefulProcessorInt
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt)
+    _countState = getHandle.getValueState[Int]("countState", Encoders.scalaInt,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val count = _countState.getOption().getOrElse(0) + 1
     if (count == 3) {
       _countState.clear()
@@ -148,37 +146,33 @@ class RunningCountStatefulProcessorInt
 
 // Class to verify stateful processor usage with adding processing time timers
 class RunningCountStatefulProcessorWithProcTimeTimer extends RunningCountStatefulProcessor {
-  private def handleProcessingTimeBasedTimers(
-      key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _countState.clear()
-    Iterator((key, "-1"))
-  }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    if (currCount == 0 && (key == "a" || key == "c")) {
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
+        + 5000)
+    }
+
+    val count = currCount + 1
+    if (count == 3) {
+      _countState.clear()
+      Iterator.empty
+    } else {
+      _countState.update(count)
+      Iterator((key, count.toString))
+    }
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      if (currCount == 0 && (key == "a" || key == "c")) {
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs()
-          + 5000)
-      }
-
-      val count = currCount + 1
-      if (count == 3) {
-        _countState.clear()
-        Iterator.empty
-      } else {
-        _countState.update(count)
-        Iterator((key, count.toString))
-      }
-    }
+    _countState.clear()
+    Iterator((key, "-1"))
   }
 }
 
@@ -191,14 +185,8 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
       outputMode: OutputMode,
       timeMode: TimeMode) : Unit = {
     super.init(outputMode, timeMode)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
-  }
-
-  private def handleProcessingTimeBasedTimers(
-      key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
-    _timerState.clear()
-    Iterator((key, "-1"))
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   protected def processUnexpiredRows(
@@ -225,50 +213,50 @@ class RunningCountStatefulProcessorWithProcTimeTimerUpdates
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    val count = currCount + inputRows.size
+    processUnexpiredRows(key, currCount, count, timerValues)
+    Iterator((key, count.toString))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      val count = currCount + inputRows.size
-      processUnexpiredRows(key, currCount, count, timerValues)
-      Iterator((key, count.toString))
-    }
+    _timerState.clear()
+    Iterator((key, "-1"))
   }
 }
 
 class RunningCountStatefulProcessorWithMultipleTimers
   extends RunningCountStatefulProcessor {
-  private def handleProcessingTimeBasedTimers(
+
+  override def handleInputRows(
       key: String,
-      expiryTimestampMs: Long): Iterator[(String, String)] = {
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
+    val currCount = _countState.getOption().getOrElse(0L)
+    val count = currCount + inputRows.size
+    _countState.update(count)
+    if (getHandle.listTimers().isEmpty) {
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
+      getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 15000)
+      assert(getHandle.listTimers().size == 3)
+    }
+    Iterator.empty
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val currCount = _countState.getOption().getOrElse(0L)
     if (getHandle.listTimers().size == 1) {
       _countState.clear()
     }
     Iterator((key, currCount.toString))
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    if (expiredTimerInfo.isValid()) {
-      handleProcessingTimeBasedTimers(key, expiredTimerInfo.getExpiryTimeInMs())
-    } else {
-      val currCount = _countState.getOption().getOrElse(0L)
-      val count = currCount + inputRows.size
-      _countState.update(count)
-      if (getHandle.listTimers().isEmpty) {
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 10000)
-        getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 15000)
-        assert(getHandle.listTimers().size == 3)
-      }
-      Iterator.empty
-    }
   }
 }
 
@@ -282,8 +270,9 @@ class MaxEventTimeStatefulProcessor
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     _maxEventTimeState = getHandle.getValueState[Long]("maxEventTimeState",
-      Encoders.scalaLong)
-    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong)
+      Encoders.scalaLong, TTLConfig.NONE)
+    _timerState = getHandle.getValueState[Long]("timerState", Encoders.scalaLong,
+      TTLConfig.NONE)
   }
 
   protected def processUnexpiredRows(maxEventTimeSec: Long): Unit = {
@@ -302,18 +291,20 @@ class MaxEventTimeStatefulProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, Long)],
+      timerValues: TimerValues): Iterator[(String, Int)] = {
+    val valuesSeq = inputRows.toSeq
+    val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
+      _maxEventTimeState.getOption().getOrElse(0L))
+    processUnexpiredRows(maxEventTimeSec)
+    Iterator((key, maxEventTimeSec.toInt))
+  }
+
+  override def handleExpiredTimer(
+      key: String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, Int)] = {
-    if (expiredTimerInfo.isValid()) {
-      _maxEventTimeState.clear()
-      Iterator((key, -1))
-    } else {
-      val valuesSeq = inputRows.toSeq
-      val maxEventTimeSec = math.max(valuesSeq.map(_._2).max,
-        _maxEventTimeState.getOption().getOrElse(0L))
-      processUnexpiredRows(maxEventTimeSec)
-      Iterator((key, maxEventTimeSec.toInt))
-    }
+    _maxEventTimeState.clear()
+    Iterator((key, -1))
   }
 }
 
@@ -326,15 +317,16 @@ class RunningCountMostRecentStatefulProcessor
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
-    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig.NONE)
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String, String)] = {
     val count = _countState.getOption().getOrElse(0L) + 1
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
@@ -357,14 +349,14 @@ class MostRecentStatefulProcessorWithDeletion
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
     getHandle.deleteIfExists("countState")
-    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING)
+    _mostRecent = getHandle.getValueState[String]("mostRecent", Encoders.STRING,
+      TTLConfig.NONE)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val mostRecent = _mostRecent.getOption().getOrElse("")
 
     var output = List[(String, String)]()
@@ -383,10 +375,10 @@ class RunningCountStatefulProcessorWithError extends RunningCountStatefulProcess
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     // Trying to create value state here should fail
-    _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong)
+    _tempState = getHandle.getValueState[Long]("tempState", Encoders.scalaLong,
+      TTLConfig.NONE)
     Iterator.empty
   }
 }
@@ -399,11 +391,37 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
   override def init(
       outputMode: OutputMode,
       timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong)
+    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong,
+      TTLConfig.NONE)
     _listState = getHandle.getListState[TestClass](
-      "listState", Encoders.product[TestClass])
+      "listState", Encoders.product[TestClass], TTLConfig.NONE)
     _mapState = getHandle.getMapState[POJOTestClass, String](
-      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING)
+      "mapState", Encoders.bean(classOf[POJOTestClass]), Encoders.STRING,
+      TTLConfig.NONE)
+  }
+}
+
+// For each record, creates a timer to fire in 10 seconds that sleeps for 1 second.
+class SleepingTimerProcessor extends StatefulProcessor[String, String, String] {
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {}
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[String] = {
+    inputRows.flatMap { _ =>
+      val currentTime = timerValues.getCurrentProcessingTimeInMs()
+      getHandle.registerTimer(currentTime + 10000)
+      None
+    }
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[String] = {
+    Thread.sleep(1000)
+    Iterator.single(key)
   }
 }
 
@@ -411,11 +429,12 @@ class StatefulProcessorWithCompositeTypes extends RunningCountStatefulProcessor 
  * Class that adds tests for transformWithState stateful streaming operator
  */
 class TransformWithStateSuite extends StateStoreMetricsTest
-  with AlsoTestWithChangelogCheckpointingEnabled {
+  with AlsoTestWithChangelogCheckpointingEnabled with AlsoTestWithEncodingTypes {
 
   import testImplicits._
 
-  test("transformWithState - streaming with rocksdb and invalid processor should fail") {
+  test("transformWithState - streaming with rocksdb and" +
+    " invalid processor should fail") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -437,6 +456,9 @@ class TransformWithStateSuite extends StateStoreMetricsTest
   }
 
   test("transformWithState - lazy iterators can properly get/set keyed state") {
+    val spark = this.spark
+    import spark.implicits._
+
     class ProcessorWithLazyIterators
       extends StatefulProcessor[Long, Long, Long] {
       @transient protected var _myValueState: ValueState[Long] = _
@@ -445,41 +467,42 @@ class TransformWithStateSuite extends StateStoreMetricsTest
       override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
         _myValueState = getHandle.getValueState[Long](
           "myValueState",
-          Encoders.scalaLong
+          TTLConfig.NONE
         )
       }
 
       override def handleInputRows(
           key: Long,
           inputRows: Iterator[Long],
-          timerValues: TimerValues,
-          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
+          timerValues: TimerValues): Iterator[Long] = {
         // Eagerly get/set a state variable
         _myValueState.get()
         _myValueState.update(1)
 
         // Create a timer (but only once) so that we can test timers have their implicit key set
         if (!hasSetTimer) {
-            getHandle.registerTimer(0)
-            hasSetTimer = true
+          getHandle.registerTimer(0)
+          hasSetTimer = true
         }
 
         // In both of these cases, we return a lazy iterator that gets/sets state variables.
         // This is to test that the stateful processor can handle lazy iterators.
-        //
+        inputRows.map { r =>
+          _myValueState.get()
+          _myValueState.update(r)
+          r
+        }
+      }
+
+      override def handleExpiredTimer(
+          key: Long,
+          timerValues: TimerValues,
+          expiredTimerInfo: ExpiredTimerInfo): Iterator[Long] = {
         // The timer uses a Seq(42L) since when the timer fires, inputRows is empty.
-        if (expiredTimerInfo.isValid()) {
-          Seq(42L).iterator.map { r =>
-            _myValueState.get()
-            _myValueState.update(r)
-            r
-          }
-        } else {
-          inputRows.map { r =>
-            _myValueState.get()
-            _myValueState.update(r)
-            r
-          }
+        Seq(42L).iterator.map { r =>
+          _myValueState.get()
+          _myValueState.update(r)
+          r
         }
       }
     }
@@ -528,6 +551,7 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         Execute { q =>
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numValueStateVars") > 0)
           assert(q.lastProgress.stateOperators(0).customMetrics.get("numRegisteredTimers") == 0)
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
         },
         AddData(inputData, "a", "b"),
         CheckNewAnswer(("a", "2"), ("b", "1")),
@@ -536,6 +560,10 @@ class TransformWithStateSuite extends StateStoreMetricsTest
         AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
         CheckNewAnswer(("b", "2")),
         StopStream,
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        },
         StartStream(),
         AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
         CheckNewAnswer(("a", "1"), ("c", "1"))
@@ -661,7 +689,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - streaming with rocksdb and event time based timer") {
+  test("transformWithState - streaming with rocksdb and event " +
+  "time based timer") {
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS()
@@ -705,7 +734,54 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     )
   }
 
-  test("Use statefulProcessor without transformWithState - handle should be absent") {
+  test("transformWithState - timer duration should be reflected in metrics") {
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS()
+      .groupByKey(x => x)
+      .transformWithState(
+        new SleepingTimerProcessor, TimeMode.ProcessingTime(), OutputMode.Update())
+
+    testStream(result, OutputMode.Update())(
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
+      AddData(inputData, "a"),
+      AdvanceManualClock(1 * 1000),
+      // Side effect: timer scheduled for t = 1 + 10 = 11.
+      CheckNewAnswer(),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+        assert(metrics.get("timerProcessingTimeMs") < 2000)
+      },
+
+      AddData(inputData, "b"),
+      AdvanceManualClock(1 * 1000),
+      // Side effect: timer scheduled for t = 2 + 10 = 12.
+      CheckNewAnswer(),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+        assert(metrics.get("timerProcessingTimeMs") < 2000)
+      },
+
+      AddData(inputData, "c"),
+      // Time is currently 2 and we need to advance past 12. So, advance by 11 seconds.
+      AdvanceManualClock(11 * 1000),
+      CheckNewAnswer("a", "b"),
+      Execute { q =>
+        val metrics = q.lastProgress.stateOperators(0).customMetrics
+        assert(metrics.get("numRegisteredTimers") === 1)
+
+        // Both timers should have fired and taken 1 second each to process.
+        assert(metrics.get("timerProcessingTimeMs") >= 2000)
+      },
+
+      StopStream
+    )
+  }
+
+  test("Use statefulProcessor without transformWithState -" +
+    " handle should be absent") {
     val processor = new RunningCountStatefulProcessor()
     val ex = intercept[Exception] {
       processor.getHandle
@@ -961,7 +1037,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify StateSchemaV3 writes correct SQL schema of key/value") {
+  test("transformWithState - verify StateSchemaV3 writes " +
+    "correct SQL schema of key/value") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1532,7 +1609,8 @@ class TransformWithStateSuite extends StateStoreMetricsTest
     }
   }
 
-  test("transformWithState - verify that schema file is kept after metadata is purged") {
+  test("transformWithState - verify that schema file " +
+    "is kept after metadata is purged") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->
@@ -1958,5 +2036,25 @@ class TransformWithStateValidationSuite extends StateStoreMetricsTest {
         }
       }
     )
+  }
+
+  test("transformWithState - validate timeModes") {
+    // validation tests should pass for TimeMode.None
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.None(), None)
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.None(), Some(10L))
+
+    // validation tests should fail for TimeMode.ProcessingTime and TimeMode.EventTime
+    // when time values are not provided
+    val ex = intercept[SparkException] {
+      TransformWithStateVariableUtils.validateTimeMode(TimeMode.ProcessingTime(), None)
+    }
+    assert(ex.getMessage.contains("Failed to find time values"))
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.ProcessingTime(), Some(10L))
+
+    val ex1 = intercept[SparkException] {
+      TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), None)
+    }
+    assert(ex1.getMessage.contains("Failed to find time values"))
+    TransformWithStateVariableUtils.validateTimeMode(TimeMode.EventTime(), Some(10L))
   }
 }

@@ -133,7 +133,8 @@ abstract class PercentileBase
       if (frqLong > 0) {
         buffer.changeValue(key, frqLong, _ + frqLong)
       } else if (frqLong < 0) {
-        throw QueryExecutionErrors.negativeValueUnexpectedError(frequencyExpression)
+        throw QueryExecutionErrors.negativeValueUnexpectedError(
+          frequencyExpression, frqLong)
       }
     }
     buffer
@@ -377,7 +378,7 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
 
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
-      throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+      throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
         nodeName, 1, orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
@@ -389,6 +390,10 @@ case class PercentileCont(left: Expression, right: Expression, reverse: Boolean 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): PercentileCont =
     this.copy(left = newLeft, right = newRight)
+
+  override def orderingFilled: Boolean = left != UnresolvedWithinGroup
+  override def isOrderingMandatory: Boolean = true
+  override def isDistinctSupported: Boolean = false
 }
 
 /**
@@ -431,7 +436,7 @@ case class PercentileDisc(
 
   override def withOrderingWithinGroup(orderingWithinGroup: Seq[SortOrder]): AggregateFunction = {
     if (orderingWithinGroup.length != 1) {
-      throw QueryCompilationErrors.wrongNumOrderingsForInverseDistributionFunctionError(
+      throw QueryCompilationErrors.wrongNumOrderingsForFunctionError(
         nodeName, 1, orderingWithinGroup.length)
     }
     orderingWithinGroup.head match {
@@ -466,6 +471,10 @@ case class PercentileDisc(
       toDoubleValue(higherKey)
     }
   }
+
+  override def orderingFilled: Boolean = left != UnresolvedWithinGroup
+  override def isOrderingMandatory: Boolean = true
+  override def isDistinctSupported: Boolean = false
 }
 
 // scalastyle:off line.size.limit

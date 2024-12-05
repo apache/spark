@@ -11,7 +11,7 @@ FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1
 
 -- Type Coerced Union
 SELECT udf(c1) as c1, udf(c2) as c2
-FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1
+FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1 WHERE c2 = 'a'
         UNION ALL
         SELECT udf(c1) as c1, udf(c2) as c2 FROM t2
         UNION ALL
