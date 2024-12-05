@@ -5377,7 +5377,7 @@
       },
       "PARTITION_BY_VARIANT" : {
         "message" : [
-          "Cannot use VARIANT type expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
+          "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {

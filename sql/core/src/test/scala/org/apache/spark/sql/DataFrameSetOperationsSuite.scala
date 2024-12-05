@@ -378,6 +378,20 @@ class DataFrameSetOperationsSuite extends QueryTest
         "expr" -> "parse_json(CAST(id AS STRING))",
         "dataType" -> "\"VARIANT\"")
     )
+    withTempView("tv") {
+      df.createOrReplaceTempView("tv")
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY v")),
+        condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+        parameters = Map(
+          "expr" -> "tv.v",
+          "dataType" -> "\"VARIANT\""),
+        context = ExpectedContext(
+          fragment = "DISTRIBUTE BY v",
+          start = 17,
+          stop = 31)
+      )
+    }
   }
 
   test("SPARK-50373 - cannot run set operations with variant type") {
