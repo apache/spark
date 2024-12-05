@@ -378,6 +378,7 @@ class DataFrameSetOperationsSuite extends QueryTest
         "expr" -> "parse_json(CAST(id AS STRING))",
         "dataType" -> "\"VARIANT\"")
     )
+    // SQL
     withTempView("tv") {
       df.createOrReplaceTempView("tv")
       checkError(
@@ -388,6 +389,17 @@ class DataFrameSetOperationsSuite extends QueryTest
           "dataType" -> "\"VARIANT\""),
         context = ExpectedContext(
           fragment = "DISTRIBUTE BY v",
+          start = 17,
+          stop = 31)
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql("SELECT * FROM tv DISTRIBUTE BY s")),
+        condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+        parameters = Map(
+          "expr" -> "tv.s",
+          "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\""),
+        context = ExpectedContext(
+          fragment = "DISTRIBUTE BY s",
           start = 17,
           stop = 31)
       )
