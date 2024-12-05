@@ -62,11 +62,11 @@ import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, FileTable}
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
-import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, ExpressionColumnNode, MergeIntoWriterImpl, SQLConf}
+import org.apache.spark.sql.internal.{DataFrameWriterImpl, DataFrameWriterV2Impl, MergeIntoWriterImpl, SQLConf}
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.util.{ExpressionColumnNode, SchemaUtils}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.ArrayImplicits._

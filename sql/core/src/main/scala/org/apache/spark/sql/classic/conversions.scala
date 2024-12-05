@@ -21,8 +21,7 @@ import scala.language.implicitConversions
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Expression, NamedExpression}
-import org.apache.spark.sql.internal.ExpressionUtils
-import org.apache.spark.sql.utils.ColumnNodeToExpressionConverter
+import org.apache.spark.sql.util.{ColumnNodeToExpressionConverter, ExpressionUtils}
 
 /**
  * Conversions from sql interfaces to the Classic specific implementation.

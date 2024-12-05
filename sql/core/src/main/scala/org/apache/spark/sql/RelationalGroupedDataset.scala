@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.internal.ExpressionUtils.generateAlias
 import org.apache.spark.sql.internal.TypedAggUtils.withInputType
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
+import org.apache.spark.sql.util.ExpressionUtils.generateAlias
 import org.apache.spark.util.ArrayImplicits._
 
 /**

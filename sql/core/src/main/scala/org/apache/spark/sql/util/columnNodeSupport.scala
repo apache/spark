@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.util
 
-import UserDefinedFunctionUtils.toScalaUDF
-
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.{Column, Dataset, SparkSession}
@@ -33,6 +31,8 @@ import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF, TypedAggregateExpression}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregateFunction, UserDefinedAggregator}
+import org.apache.spark.sql.internal._
+import org.apache.spark.sql.internal.UserDefinedFunctionUtils.toScalaUDF
 import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
@@ -285,7 +285,7 @@ private[sql] object ExpressionColumnNode {
   }
 }
 
-private[internal] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
+private[sql] case class ColumnNodeExpression private(node: ColumnNode) extends Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
   override def children: Seq[Expression] = Nil

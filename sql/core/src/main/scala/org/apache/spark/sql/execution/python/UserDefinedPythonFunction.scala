@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.util.ExpressionUtils.expression
 
 /**
  * A user-defined Python function. This is used by the Python API.

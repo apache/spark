@@ -31,8 +31,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggreg
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.ExpressionUtils.expression
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ExpressionUtils.expression
 import org.apache.spark.util.Utils
 
 /**
