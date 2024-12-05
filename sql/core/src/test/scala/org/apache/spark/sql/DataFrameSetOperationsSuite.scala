@@ -378,6 +378,13 @@ class DataFrameSetOperationsSuite extends QueryTest
         "expr" -> "parse_json(CAST(id AS STRING))",
         "dataType" -> "\"VARIANT\"")
     )
+    // Partitioning by non-variant column works
+    try {
+      df.repartition(5, col("id")).collect()
+    } catch {
+      case e: Exception =>
+        fail(s"Expected no exception to be thrown but an exception was thrown: ${e.getMessage}")
+    }
     // SQL
     withTempView("tv") {
       df.createOrReplaceTempView("tv")
