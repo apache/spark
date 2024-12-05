@@ -69,11 +69,7 @@ ARG BASIC_PIP_PKGS="numpy pyarrow>=18.0.0 six==1.16.0 pandas==2.2.3 scipy plotly
 # Python deps for Spark Connect
 ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.28.3 googleapis-common-protos==1.65.0 graphviz==0.20.3"
 
-# Install Python 3.9
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt-get update && apt-get install -y \
-    python3.9 python3.9-distutils \
-    && rm -rf /var/lib/apt/lists/*
+# Install Python 3.9 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
 RUN python3.9 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
 RUN python3.9 -m pip install --force $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
