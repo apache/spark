@@ -350,6 +350,36 @@ class DataFrameSetOperationsSuite extends QueryTest
     dates.intersect(widenTypedRows).collect()
   }
 
+  test("SPARK-50503 - cannot partition by variant columns") {
+    val df = sql("select parse_json(case when id = 0 then 'null' else '1' end)" +
+      " as v, id % 5 as id, named_struct('v', parse_json(id::string)) s from range(0, 100, 1, 5)")
+    // variant column
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, col("v"))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "v",
+        "dataType" -> "\"VARIANT\"")
+    )
+    // nested variant column
+    checkError(
+      exception = intercept[AnalysisException](df.repartition(5, col("s"))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "s",
+        "dataType" -> "\"STRUCT<v: VARIANT NOT NULL>\"")
+    )
+    // variant producing expression
+    checkError(
+      exception =
+        intercept[AnalysisException](df.repartition(5, parse_json(col("id").cast("string")))),
+      condition = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+      parameters = Map(
+        "expr" -> "parse_json(CAST(id AS STRING))",
+        "dataType" -> "\"VARIANT\"")
+    )
+  }
+
   test("SPARK-50373 - cannot run set operations with variant type") {
     val df = sql("select parse_json(case when id = 0 then 'null' else '1' end)" +
       " as v, id % 5 as id from range(0, 100, 1, 5)")

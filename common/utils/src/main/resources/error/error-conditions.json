@@ -5375,6 +5375,11 @@
           "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
+      "PARTITION_BY_VARIANT" : {
+        "message" : [
+          "Cannot use VARIANT type expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
+        ]
+      },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
         "message" : [
           "set PROPERTIES and DBPROPERTIES at the same time."
