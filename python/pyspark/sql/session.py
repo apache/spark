@@ -511,7 +511,7 @@ class SparkSession(SparkConversionMixin):
                             if is_api_mode_connect:
                                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
                             else:
-                                url = opts.get("spark.master", os.environ.get("MASTER"))
+                                url = opts.get("spark.master", os.environ.get("MASTER", "local[*]"))
 
                             if url is None:
                                 raise PySparkRuntimeError(
