@@ -462,6 +462,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "UNANALYZABLE_EXPRESSION",
               messageParameters = Map("expr" -> toSQLExpr(l)))
 
+          case ma@MultiAlias(child, names) if child.resolved && !child.isInstanceOf[Generator] =>
+            ma.failAnalysis(
+              errorClass = "MULTI_ALIAS_WITHOUT_GENERATOR",
+              messageParameters = Map("expr" -> toSQLExpr(child), "names" -> names.mkString(", ")))
           case _ =>
         })
 
