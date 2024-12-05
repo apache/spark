@@ -2014,7 +2014,7 @@ case class Deduplicate(
 }
 
 case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
-  // Ensure that references include watermarking columns so they are not pruned away.
+  // Ensure that references include event time columns so they are not pruned away.
   override def references: AttributeSet = AttributeSet(keys) ++
     AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
   override def maxRows: Option[Long] = child.maxRows
