@@ -13786,7 +13786,10 @@ def _test() -> None:
     globs = pyspark.pandas.frame.__dict__.copy()
     globs["ps"] = pyspark.pandas
     spark = (
-        SparkSession.builder.master("local[4]").appName("pyspark.pandas.frame tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("pyspark.pandas.frame tests")
+        .getOrCreate()
     )
     globs["spark"] = spark
 

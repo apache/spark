@@ -180,7 +180,11 @@ class EvaluationTestsMixin:
 )
 class EvaluationTests(EvaluationTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
+        self.spark = (
+            SparkSession.builder.config("spark.api.mode", "classic")
+            .master("local[2]")
+            .getOrCreate()
+        )
 
     def tearDown(self) -> None:
         self.spark.stop()

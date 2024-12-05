@@ -45,7 +45,11 @@ class HiveContextSQLTests(ReusedSQLTestCase):
             cls.tearDownClass()
             cls.hive_available = False
         if cls.hive_available:
-            cls.spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+            cls.spark = (
+                SparkSession.builder.config("spark.api.mode", "classic")
+                .enableHiveSupport()
+                .getOrCreate()
+            )
 
         os.unlink(cls.tempdir.name)
         if cls.hive_available:
