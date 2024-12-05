@@ -1293,11 +1293,6 @@ class RocksDB(
 }
 
 object RocksDB extends Logging {
-
-  private def printLineage(lineage: Array[(Long, Option[String])]): String = lineage.map {
-    case (l, optStr) => s"$l:${optStr.getOrElse("")}"
-  }.mkString(" ")
-
   private def printLineageItems(lineage: Array[LineageItem]): String = lineage.map {
     case LineageItem(l, optStr) => s"$l:$optStr"
   }.mkString(" ")
