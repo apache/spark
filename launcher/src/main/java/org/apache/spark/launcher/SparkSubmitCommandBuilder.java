@@ -512,10 +512,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     protected boolean handle(String opt, String value) {
       switch (opt) {
         case MASTER -> master = value;
-        case REMOTE -> {
-          isRemote = true;
-          remote = value;
-        }
+        case REMOTE -> remote = value;
         case DEPLOY_MODE -> deployMode = value;
         case PROPERTIES_FILE -> propertiesFile = value;
         case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
@@ -528,8 +525,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-          if (!(setConf[0].equals("spark.api.mode") && setConf[1].equals("classic"))) {
-            isRemote = true;
+          if (setConf[0].equals("spark.api.mode") && setConf[1].equals("classic")) {
+            isRemote = false;
           }
           conf.put(setConf[0], setConf[1]);
         }
