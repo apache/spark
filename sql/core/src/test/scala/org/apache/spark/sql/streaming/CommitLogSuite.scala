@@ -67,23 +67,6 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
     )
   }
 
-  private def testCommitLogV1CrossVersionFilePath: Path = {
-    getWorkspaceFilePath(
-      "sql",
-      "core",
-      "src",
-      "test",
-      "scala",
-      "org",
-      "apache",
-      "spark",
-      "sql",
-      "streaming",
-      "resources",
-      "testCommitLogV1CrossVersion"
-    )
-  }
-
   private def testSerde(commitMetadata: CommitMetadata, path: Path): Unit = {
     if (regenerateGoldenFiles) {
       val commitLog = new CommitLog(spark, path.toString)
@@ -136,28 +119,18 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
   // Test an old version of Spark can ser-de the new version of commit log,
   // but running under V1 (i.e. no stateUniqueIds)
   test("v1 Serde backward compatibility") {
-    // json looks like: {"nextBatchWatermarkMs":1,"stateUniqueIds":{}}
-    val commitMetadata = CommitMetadata(1)
-    val path = testCommitLogV1CrossVersionFilePath
-
-    if (regenerateGoldenFiles) {
-      // Generate the commit log file using the most up-to-date CommitLog
-      // that has the empty stateUniqueIds field
-      val commitLog = new CommitLog(spark, path.toString)
-      val outputStream = new FileOutputStream(path.resolve("testCommitLog").toFile)
-      commitLog.serialize(commitMetadata, outputStream)
-    } else {
-      // Load the generated commit log file using the old CommitLog
-      val commitLog = new CommitLogLegacy(spark, path.toString)
-      val inputStream = new FileInputStream(path.resolve("testCommitLog").toFile)
-      // json looks like: {"nextBatchWatermarkMs":1}
-      val metadata = commitLog.deserialize(inputStream)
-      // Array comparison are reference based, so we need to compare the elements
-      assert(metadata.nextBatchWatermarkMs == commitMetadata.nextBatchWatermarkMs)
-    }
+    // This is the json created by a V1 commit log
+    val commitLogV1WithStateUniqueId = """v1
+                        |{"nextBatchWatermarkMs":1,"stateUniqueIds":{}}""".stripMargin
+    val inputStream: ByteArrayInputStream =
+      new ByteArrayInputStream(commitLogV1WithStateUniqueId.getBytes("UTF-8"))
+    val commitMetadata: CommitMetadataLegacy = new CommitLogLegacy(
+      spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
+    assert(commitMetadata.nextBatchWatermarkMs === 233)
   }
 }
 
+// DO-NOT-MODIFY-THE-CODE-BELOW
 // Below are the legacy commit log code carbon copied from Spark branch-3.5, except
 // adding a "Legacy" to the class names.
 case class CommitMetadataLegacy(nextBatchWatermarkMs: Long = 0) {
