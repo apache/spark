@@ -24,12 +24,12 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 
-object Serializer {
+private[ml] object Serializer {
 
   /**
    * Serialize the ML parameters, currently only support Vector/Matrix and literals
    * @param data
-   *   the paramter values
+   *   the value of parameter
    * @return
    *   proto.Param
    */
@@ -79,7 +79,7 @@ object Serializer {
           .setLiteral(LiteralValueProtoConverter.toLiteralProto(data))
           .build()
 
-      case _ => throw new RuntimeException("Unsupported parameter type")
+      case other => throw MlUnsupportedException(s"$other not supported")
     }
   }
 
@@ -101,8 +101,8 @@ object Serializer {
               (param.getLiteral.getDouble.asInstanceOf[Object], classOf[Double])
             case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
               (param.getLiteral.getBoolean.asInstanceOf[Object], classOf[Boolean])
-            case _ =>
-              throw new UnsupportedOperationException(param.getLiteral.getLiteralTypeCase.name())
+            case other =>
+              throw MlUnsupportedException(s"$other not supported")
           }
         } else if (param.hasVector) {
           val vector = MLUtils.deserializeVector(param.getVector)
@@ -121,12 +121,12 @@ object Serializer {
           }
           (matrix, matrixType)
         } else {
-          throw new UnsupportedOperationException("Unsupported parameter type")
+          throw MlUnsupportedException(s"$param not supported")
         }
       } else if (arg.hasInput) {
         (MLUtils.parseRelationProto(arg.getInput, sessionHolder), classOf[Dataset[_]])
       } else {
-        throw new UnsupportedOperationException("DeserializeMethodArguments")
+        throw MlUnsupportedException(s"$arg not supported")
       }
     }
   }

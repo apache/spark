@@ -31,11 +31,6 @@ import org.apache.spark.sql.connect.service.SessionHolder
 
 /**
  * Helper function to get the attribute from an object by reflection
- * @param sessionHolder
- * @param objIdentifier
- * @param method
- * @param argValues
- * @param argClasses
  */
 private class AttributeHelper(
     val sessionHolder: SessionHolder,
@@ -185,7 +180,7 @@ object MLHandler extends Logging {
 
             copiedModel match {
               case m: MLWritable => MLUtils.write(m, mlCommand.getWrite)
-              case _ => throw new RuntimeException("Failed to handle model.save")
+              case other => throw MlUnsupportedException(s"$other is not writable")
             }
 
           // save an estimator/evaluator/transformer
@@ -195,14 +190,13 @@ object MLHandler extends Logging {
               val estimator = MLUtils.getEstimator(writer.getOperator, Some(writer.getParams))
               estimator match {
                 case m: MLWritable => MLUtils.write(m, mlCommand.getWrite)
-                case _ => throw new RuntimeException("Failed to handle Estimator.save")
+                case other => throw MlUnsupportedException(s"Estimator $other is not writable")
               }
             } else {
-              throw new RuntimeException(
-                s"Unsupported writting for ${writer.getOperator.getName}")
+              throw MlUnsupportedException(s"${writer.getOperator.getName} not supported")
             }
 
-          case _ => throw new RuntimeException("Unsupported operator")
+          case other => throw MlUnsupportedException(s"$other not supported")
         }
         proto.MlCommandResult.newBuilder().build()
 
@@ -236,10 +230,10 @@ object MLHandler extends Logging {
                 .setParams(Serializer.serializeParams(estimator)))
             .build()
         } else {
-          throw new UnsupportedOperationException(s"Unsupported reading for ${name}")
+          throw MlUnsupportedException(s"${operator.getType} not supported")
         }
 
-      case _ => throw new UnsupportedOperationException("Unsupported ML command")
+      case other => throw MlUnsupportedException(s"$other not supported")
     }
   }
 
@@ -264,10 +258,10 @@ object MLHandler extends Logging {
               ModelAttributeHelper(sessionHolder, relation.getTransform.getObjRef.getId, None)
             helper.transform(relation.getTransform)
 
-          case _ => throw new IllegalArgumentException("Unsupported ml operator")
+          case other => throw new IllegalArgumentException(s"$other not supported")
         }
 
-      // Get the model attribute
+      // Get the attribute from a cached object which could be a model or summary
       case proto.MlRelation.MlTypeCase.FETCH_ATTR =>
         val helper = AttributeHelper(
           sessionHolder,
@@ -275,8 +269,7 @@ object MLHandler extends Logging {
           Option(relation.getFetchAttr.getMethod))
         helper.getAttribute.asInstanceOf[DataFrame]
 
-      case _ =>
-        throw new IllegalArgumentException("Unsupported ml relation")
+      case other => throw MlUnsupportedException(s"$other not supported")
     }
   }
 

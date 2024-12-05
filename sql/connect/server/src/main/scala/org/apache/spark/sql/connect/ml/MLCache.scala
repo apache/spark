@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 /**
  * MLCache is for caching ML objects, typically for models and summaries evaluated by a model.
  */
-class MLCache extends Logging {
+private[connect] class MLCache extends Logging {
   private val cachedModel: ConcurrentHashMap[String, Object] =
     new ConcurrentHashMap[String, Object]()
 
