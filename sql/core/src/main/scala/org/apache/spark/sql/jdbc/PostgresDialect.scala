@@ -264,6 +264,17 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     }
   }
 
+  override def compileExpression(expr: Expression): Option[String] = {
+    val postgresSQLBuilder = new PostgresSQLBuilder()
+    try {
+      Some(postgresSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
