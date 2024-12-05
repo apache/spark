@@ -388,10 +388,21 @@ class RocksDB(
       val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
         workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
 
+      loadedVersion = latestSnapshotVersion
+
+      // reset the last snapshot version to the latest available snapshot version
+      lastSnapshotVersion = latestSnapshotVersion
+
+      // Initialize maxVersion upon successful load from DFS
+      fileManager.setMaxSeenVersion(version)
+
       init(version, latestSnapshotVersion, metadata)
 
       if (loadedVersion != version) {
-        replayChangelog(version, Some(currVersionLineage))
+        val versionsAndUniqueIds = currVersionLineage
+          .map(i => (i.version, Option(i.checkpointUniqueId)))
+        replayChangelog(versionsAndUniqueIds)
+        loadedVersion = version
       }
       // After changelog replay the numKeysOnWritingVersion will be updated to
       // the correct number of keys in the loaded version.
@@ -445,9 +456,22 @@ class RocksDB(
         val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
           workingDir, rocksDBFileMapping)
 
+        loadedVersion = latestSnapshotVersion
+
+        // reset the last snapshot version to the latest available snapshot version
+        lastSnapshotVersion = latestSnapshotVersion
+
+        // Initialize maxVersion upon successful load from DFS
+        fileManager.setMaxSeenVersion(version)
+
         init(version, latestSnapshotVersion, metadata)
 
-        if (loadedVersion != version) replayChangelog(version)
+        if (loadedVersion != version) {
+          val versionsAndUniqueIds: Array[(Long, Option[String])] =
+            (loadedVersion + 1 to version).map((_, None)).toArray
+          replayChangelog(versionsAndUniqueIds)
+          loadedVersion = version
+        }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
@@ -474,13 +498,6 @@ class RocksDB(
       version: Long,
       latestSnapshotVersion: Long,
       metadata: RocksDBCheckpointMetadata): Unit = {
-    loadedVersion = latestSnapshotVersion
-
-    // reset the last snapshot version to the latest available snapshot version
-    lastSnapshotVersion = latestSnapshotVersion
-
-    // Initialize maxVersion upon successful load from DFS
-    fileManager.setMaxSeenVersion(version)
 
     setInitialCFInfo()
     metadata.columnFamilyMapping.foreach { mapping =>
@@ -578,7 +595,12 @@ class RocksDB(
     } else {
       metadata.numKeys
     }
-    if (loadedVersion != endVersion) replayChangelog(endVersion)
+    if (loadedVersion != endVersion) {
+      val versionsAndUniqueIds: Array[(Long, Option[String])] =
+        (loadedVersion + 1 to endVersion).map((_, None)).toArray
+      replayChangelog(versionsAndUniqueIds)
+      loadedVersion = endVersion
+    }
     // After changelog replay the numKeysOnWritingVersion will be updated to
     // the correct number of keys in the loaded version.
     numKeysOnLoadedVersion = numKeysOnWritingVersion
@@ -592,19 +614,10 @@ class RocksDB(
   /**
    * Replay change log from the loaded version to the target version.
    */
-  private def replayChangelog(
-      endVersion: Long,
-      stateStoreCkptIdLineage: Option[Array[LineageItem]] = None): Unit = {
-
-    val versionsAndUniqueIds = stateStoreCkptIdLineage match {
-      // First entry of lineage corresponds to loadedVersion
-      case Some(lineage) => lineage.map(i => (i.version, Some(i.checkpointUniqueId)))
-      case None => (loadedVersion + 1 to endVersion).map((_, None)).toArray
-    }
-
+  private def replayChangelog(versionsAndUniqueIds: Array[(Long, Option[String])]): Unit = {
     logInfo(log"Replaying changelog from version " +
       log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)} -> " +
-      log"${MDC(LogKeys.END_VERSION, endVersion)}")
+      log"${MDC(LogKeys.END_VERSION, versionsAndUniqueIds.lastOption.map(_._1))}")
 
     versionsAndUniqueIds.foreach { case (v, uniqueId) =>
       logInfo(log"replaying changelog from version ${MDC(LogKeys.VERSION_NUM, v)} with " +
@@ -629,7 +642,6 @@ class RocksDB(
         if (changelogReader != null) changelogReader.closeIfNeeded()
       }
     }
-    loadedVersion = endVersion
   }
 
   /**
