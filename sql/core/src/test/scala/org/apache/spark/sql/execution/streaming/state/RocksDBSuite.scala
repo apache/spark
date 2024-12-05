@@ -96,8 +96,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .toImmutableArraySeq
   }
 
-  def changelogVersionsPresent(
-      dir: File, enableStateStoreCheckpointIds: Boolean = false): Seq[Long] = {
+  def changelogVersionsPresent(dir: File): Seq[Long] = {
     dir.listFiles.filter(_.getName.endsWith(".changelog"))
       .map(_.getName.stripSuffix(".changelog").split("_"))
       .map {
@@ -122,7 +121,6 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
   }
 }
 
-trait AlsoTestWithChangelogCheckpointingEnabled
 trait AlsoTestWithRocksDBFeatures
   extends SQLTestUtils with RocksDBStateStoreChangelogCheckpointingTestUtil {
 
@@ -335,7 +333,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       TestWithChangelogCheckpointingEnabled) {
     case (enableStateStoreCheckpointIds, colFamiliesEnabled) =>
       val remoteDir = Utils.createTempDir().toString
-      val  = dbConf.copy(minDeltasForSnapshot = 1)
+      val conf = dbConf.copy(minDeltasForSnapshot = 1)
       new File(remoteDir).delete() // to make sure that the directory gets created
       val versionToUniqueId = new mutable.HashMap[Long, String]()
       withDB(remoteDir, conf = conf,
