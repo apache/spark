@@ -188,7 +188,6 @@ object NestedColumnAliasing {
     // withNewChildren is dangerous for Generate; one has to adjust unrequiredChildIndex accordingly in this case
     val withNewChildren= plan match {
       case g: Generate => {
-        // child.output.zipWithIndex.filterNot(t => unrequiredSet.contains(t._2)).map(_._1)
         val unrequiredSet = g.unrequiredChildIndex.toSet
         val flagRes= g.child.output.zipWithIndex.flatMap( t =>
           attrToAliases.getOrElse(t._1, Seq(t._1)).map( e => ( e, unrequiredSet.contains(t._2) ) )
