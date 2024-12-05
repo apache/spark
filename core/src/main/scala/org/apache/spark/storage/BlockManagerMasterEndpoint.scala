@@ -329,7 +329,7 @@ class BlockManagerMasterEndpoint(
                 removeRdd(rddId)
               } catch {
                 case NonFatal(e) =>
-                  logWarning(s"Error ${e} removing rdd ${rddId} with TTL cleaner")
+                  logWarning(log"Error removing rdd ${MDC(RDD_ID, rddId)} with TTL cleaner", e)
               }
             }
             // Wait until the next possible element to be removed
@@ -445,7 +445,7 @@ class BlockManagerMasterEndpoint(
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Error ${e} removing $rddId from RDD TTL tracking")
+        logWarning(log"Error removing ${MDC(RDD_ID, rddId)} from RDD TTL tracking", e)
     }
 
     // Then remove the metadata for the given RDD, and then asynchronously remove the blocks
