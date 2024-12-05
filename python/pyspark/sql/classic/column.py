@@ -179,6 +179,9 @@ class Column(ParentColumn):
         cls,
         jc: "JavaObject",
     ) -> "Column":
+        # We apply `with_origin_to_class` decorator here instead of top of the class definition
+        # to prevent circular import issue when initializing the SparkSession.
+        # See https://github.com/apache/spark/pull/49054 for more detail.
         from pyspark.errors.utils import with_origin_to_class
 
         if not hasattr(cls, "_with_origin_applied"):
