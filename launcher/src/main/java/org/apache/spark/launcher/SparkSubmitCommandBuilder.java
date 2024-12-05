@@ -137,6 +137,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
         case SPARKR_SHELL:
           this.allowsMixedArguments = true;
+          // SparkR does not support Spark Connect
+          this.isRemote = false;
           appResource = SPARKR_SHELL;
           submitArgs = args.subList(1, args.size());
           break;

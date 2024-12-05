@@ -417,6 +417,8 @@ sparkR.session <- function(
     overrideEnvs(sparkConfigMap, paramMap)
   }
 
+  sparkConfigMap[["spark.api.mode"]] = "classic"
+
   deployMode <- ""
   if (exists("spark.submit.deployMode", envir = sparkConfigMap)) {
     deployMode <- sparkConfigMap[["spark.submit.deployMode"]]
@@ -735,7 +737,7 @@ getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
     }
   })
   # --option must be before the application class "sparkr-shell" in submitOps
-  paste0(paste0(envirToOps, " --conf spark.api.mode=classic ", collapse = ""), submitOps)
+  paste0(paste0(envirToOps, collapse = ""), submitOps)
 }
 
 # Utility function that handles sparkJars argument, and normalize paths
