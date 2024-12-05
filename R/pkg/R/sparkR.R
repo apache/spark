@@ -426,8 +426,6 @@ sparkR.session <- function(
     sparkConfigMap[["spark.r.sql.derby.temp.dir"]] <- tempdir()
   }
 
-  sparkConfigMap[["spark.api.mode"]] <- "classic"
-
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
     retHome <- sparkCheckInstall(sparkHome, master, deployMode)
     if (!is.null(retHome)) sparkHome <- retHome
@@ -737,7 +735,7 @@ getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
     }
   })
   # --option must be before the application class "sparkr-shell" in submitOps
-  paste0(paste0(envirToOps, collapse = ""), submitOps)
+  paste0(paste0(envirToOps, "--conf spark.api.mode=classic", collapse = ""), submitOps)
 }
 
 # Utility function that handles sparkJars argument, and normalize paths
