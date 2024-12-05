@@ -194,7 +194,10 @@ object NestedColumnAliasing {
           attrToAliases.getOrElse(t._1, Seq(t._1)).map( e => ( e, unrequiredSet.contains(t._2) ) )
         )
         val unrequiredChildIndex = flagRes.map(_._2).zipWithIndex.filter(t => t._1).map(_._2)
-        g.copy(child = Project(flagRes.map(_._1), g.child), unrequiredChildIndex = unrequiredChildIndex)
+        g.copy(
+          child = Project(flagRes.map(_._1), g.child),
+          unrequiredChildIndex = unrequiredChildIndex
+        )
       case _ => plan.withNewChildren(plan.children.map { plan =>
         Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)})
     }
