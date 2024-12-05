@@ -258,6 +258,12 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     }
   }
 
+  class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override def visitBinaryArithmetic(name: String, l: String, r: String): String = {
+      l + " " + name.replace('^', '#') + " " + r
+    }
+  }
+
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
