@@ -381,8 +381,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         remoteStr != null && (masterStr != null || deployStr != null)) {
       throw new IllegalStateException("Remote cannot be specified with master and/or deploy mode.");
     }
+
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
+      env.put("SPARK_CONNECT_MODE_ENABLED", "1");
+    } else if (masterStr != null && conf.getOrDefault(
+        SparkLauncher.SPARK_API_MODE, "connect").equals("connect")) {
+      env.put("SPARK_REMOTE", masterStr);
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
