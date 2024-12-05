@@ -2116,7 +2116,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.storage.replication.proactive</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
     executor failures are replenished if there are any existing available replicas. This tries
