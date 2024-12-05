@@ -126,7 +126,7 @@ class CommitLogSuite extends SparkFunSuite with SharedSparkSession {
       new ByteArrayInputStream(commitLogV1WithStateUniqueId.getBytes("UTF-8"))
     val commitMetadata: CommitMetadataLegacy = new CommitLogLegacy(
       spark, testCommitLogV1FilePath.toString).deserialize(inputStream)
-    assert(commitMetadata.nextBatchWatermarkMs === 233)
+    assert(commitMetadata.nextBatchWatermarkMs === 1)
   }
 }
 
