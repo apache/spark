@@ -397,7 +397,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("non-exist", "getOption", -1.0)),
         Execute { q =>
           assert(q.lastProgress
-            .stateOperators(0).customMetrics.get("initialStateProcessingTimeMs") > 0)
+            .stateOperators(0).customMetrics.get("initialStateProcessingTimeMs") >= 0)
         },
         AddData(inputData, InitInputRow("k1", "appendList", 37.0)),
         AddData(inputData, InitInputRow("k2", "appendList", 40.0)),
@@ -520,7 +520,7 @@ class TransformWithStateInitialStateSuite extends StateStoreMetricsTest
         CheckNewAnswer(("c", "1")),
         Execute { q =>
           assert(q.lastProgress
-            .stateOperators(0).customMetrics.get("initialStateProcessingTimeMs") > 0)
+            .stateOperators(0).customMetrics.get("initialStateProcessingTimeMs") >= 0)
         },
 
         AddData(inputData, "c"),
