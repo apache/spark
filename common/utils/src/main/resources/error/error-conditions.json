@@ -5303,6 +5303,11 @@
           "Parameter markers are not allowed in <statement>."
         ]
       },
+      "PARTITION_BY_VARIANT" : {
+        "message" : [
+          "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
+        ]
+      },
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
         "message" : [
           "Invalid partitioning: <cols> is missing or is in a map or array."
@@ -5373,11 +5378,6 @@
       "SET_OPERATION_ON_VARIANT_TYPE" : {
         "message" : [
           "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
-        ]
-      },
-      "PARTITION_BY_VARIANT" : {
-        "message" : [
-          "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
