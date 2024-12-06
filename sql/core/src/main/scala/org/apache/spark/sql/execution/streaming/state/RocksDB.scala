@@ -1305,7 +1305,7 @@ object RocksDBConf {
     override def fullName: String =
       s"$ROCKSDB_SQL_CONF_NAME_PREFIX.${name}".toLowerCase(Locale.ROOT)
   }
-
+  "sql", "core", "src", "test", "resources", "structured-streaming"
   private case class ExtraConfEntry(name: String, override val default: String)
     extends ConfEntry(name, default)
 
