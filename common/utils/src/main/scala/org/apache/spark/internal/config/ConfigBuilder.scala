@@ -24,7 +24,7 @@ import scala.util.matching.Regex
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.SparkStringUtils
 
 private object ConfigHelpers {
 
@@ -47,7 +47,7 @@ private object ConfigHelpers {
   }
 
   def stringToSeq[T](str: String, converter: String => T): Seq[T] = {
-    Utils.stringToSeq(str).map(converter)
+    SparkStringUtils.stringToSeq(str).map(converter)
   }
 
   def seqToString[T](v: Seq[T], stringConverter: T => String): String = {

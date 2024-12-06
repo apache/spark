@@ -33,6 +33,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, TableAlreadyExistsException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
@@ -1006,8 +1007,12 @@ class ClientE2ETestSuite
   test("RuntimeConfig") {
     intercept[NoSuchElementException](spark.conf.get("foo.bar"))
     assert(spark.conf.getOption("foo.bar").isEmpty)
+    assert(spark.conf.get("foo.bar", "nope") == "nope")
+    assert(spark.conf.get("foo.bar", null) == null)
     spark.conf.set("foo.bar", value = true)
     assert(spark.conf.getOption("foo.bar") === Option("true"))
+    assert(spark.conf.get("foo.bar", "nope") === "true")
+    assert(spark.conf.get("foo.bar", null) === "true")
     spark.conf.set("foo.bar.numBaz", 100L)
     assert(spark.conf.get("foo.bar.numBaz") === "100")
     spark.conf.set("foo.bar.name", "donkey")
@@ -1020,6 +1025,24 @@ class ClientE2ETestSuite
     assert(spark.conf.isModifiable("spark.sql.ansi.enabled"))
     assert(!spark.conf.isModifiable("spark.sql.globalTempDatabase"))
     intercept[Exception](spark.conf.set("spark.sql.globalTempDatabase", "/dev/null"))
+
+    val entry = ConfigBuilder("my.simple.conf").intConf.createOptional
+    intercept[NoSuchElementException](spark.conf.get(entry.key))
+    assert(spark.conf.get(entry).isEmpty)
+    assert(spark.conf.get(entry, Option(55)) === Option(55))
+    spark.conf.set(entry, Option(33))
+    assert(spark.conf.get(entry.key) === "33")
+    assert(spark.conf.get(entry) === Option(33))
+    assert(spark.conf.get(entry, Option(55)) === Option(33))
+
+    val entryWithDefault = ConfigBuilder("my.important.conf").intConf.createWithDefault(10)
+    intercept[NoSuchElementException](spark.conf.get(entryWithDefault.key))
+    assert(spark.conf.get(entryWithDefault) === 10)
+    assert(spark.conf.get(entryWithDefault, 11) === 11)
+    spark.conf.set(entryWithDefault, 12)
+    assert(spark.conf.get(entryWithDefault.key) === "12")
+    assert(spark.conf.get(entryWithDefault) === 12)
+    assert(spark.conf.get(entryWithDefault, 11) === 12)
   }
 
   test("SparkVersion") {
