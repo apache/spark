@@ -14,21 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
-from pyspark.sql.tests.pandas.test_pandas_udf_window import WindowPandasUDFTestsMixin
+from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class PandasUDFWindowParityTests(
-    WindowPandasUDFTestsMixin,
-    ReusedConnectTestCase,
-):
+class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_pandas_udf_window import *  # noqa: F401
+    import unittest
+    from pyspark.sql.tests.connect.pandas.test_parity_pandas_udf import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

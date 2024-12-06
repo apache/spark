@@ -709,6 +709,38 @@ class Dataset[T] private[sql](
     new Dataset(sparkSession, joinWith, joinEncoder)
   }
 
+  private[sql] def lateralJoin(
+      right: DS[_], joinExprs: Option[Column], joinType: JoinType): DataFrame = {
+    withPlan {
+      LateralJoin(
+        logicalPlan,
+        LateralSubquery(right.logicalPlan),
+        joinType,
+        joinExprs.map(_.expr)
+      )
+    }
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_]): DataFrame = {
+    lateralJoin(right, None, Inner)
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column): DataFrame = {
+    lateralJoin(right, Some(joinExprs), Inner)
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinType: String): DataFrame = {
+    lateralJoin(right, None, JoinType(joinType))
+  }
+
+  /** @inheritdoc */
+  def lateralJoin(right: DS[_], joinExprs: Column, joinType: String): DataFrame = {
+    lateralJoin(right, Some(joinExprs), JoinType(joinType))
+  }
+
   // TODO(SPARK-22947): Fix the DataFrame API.
   private[sql] def joinAsOf(
       other: Dataset[_],

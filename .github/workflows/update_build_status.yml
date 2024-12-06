@@ -72,7 +72,7 @@ jobs:
                       } catch (error) {
                         console.error(error)
                         // Run not found. This can happen when the PR author removes GitHub Actions runs or
-                        // disalbes GitHub Actions.
+                        // disables GitHub Actions.
                         continue
                       }
 

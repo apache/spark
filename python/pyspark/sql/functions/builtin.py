@@ -15832,7 +15832,7 @@ def split_part(src: "ColumnOrName", delimiter: "ColumnOrName", partNum: "ColumnO
     Parameters
     ----------
     src : :class:`~pyspark.sql.Column` or column name
-        A column of string to be splited.
+        A column of string to be split.
     delimiter : :class:`~pyspark.sql.Column` or column name
         A column of string, the delimiter used for split.
     partNum : :class:`~pyspark.sql.Column` or column name
@@ -19618,7 +19618,7 @@ def from_json(
     """
     Parses a column containing a JSON string into a :class:`MapType` with :class:`StringType`
     as keys type, :class:`StructType` or :class:`ArrayType` with
-    the specified schema. Returns `null`, in the case of an unparseable string.
+    the specified schema. Returns `null`, in the case of an unparsable string.
 
     .. versionadded:: 2.1.0
 
@@ -20230,7 +20230,7 @@ def from_xml(
 ) -> Column:
     """
     Parses a column containing a XML string to a row with
-    the specified schema. Returns `null`, in the case of an unparseable string.
+    the specified schema. Returns `null`, in the case of an unparsable string.
 
     .. versionadded:: 4.0.0
 
@@ -22624,7 +22624,7 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a new map of enties where new keys were calculated by applying given function to
+        a new map of entries where new keys were calculated by applying given function to
         each key value argument.
 
     Examples
@@ -22664,7 +22664,7 @@ def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column])
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        a new map of enties where new values were calculated by applying given function to
+        a new map of entries where new values were calculated by applying given function to
         each key value argument.
 
     Examples

@@ -108,4 +108,26 @@ class RuntimeConfigSuite extends SparkFunSuite {
     // this set should not fail
     conf.set(DEFAULT_PARALLELISM.key, "1")
   }
+
+  test("config entry") {
+    val conf = newConf()
+
+    val entry = SQLConf.FILES_MAX_PARTITION_NUM
+    assert(conf.get(entry.key) === null)
+    assert(conf.get(entry).isEmpty)
+    assert(conf.get(entry, Option(55)) === Option(55))
+    conf.set(entry, Option(33))
+    assert(conf.get(entry.key) === "33")
+    assert(conf.get(entry) === Option(33))
+    assert(conf.get(entry, Option(55)) === Option(33))
+
+    val entryWithDefault = SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD
+    assert(conf.get(entryWithDefault.key) === "10")
+    assert(conf.get(entryWithDefault) === 10)
+    assert(conf.get(entryWithDefault, 11) === 11)
+    conf.set(entryWithDefault, 12)
+    assert(conf.get(entryWithDefault.key) === "12")
+    assert(conf.get(entryWithDefault) === 12)
+    assert(conf.get(entryWithDefault, 11) === 12)
+  }
 }
