@@ -27,8 +27,8 @@ import org.apache.spark.sql.errors.ExecutionErrors
  * Represents the arbitrary stateful logic that needs to be provided by the user to perform
  * stateful manipulations on keyed streams.
  *
- * Users can also explicitly use `import implicits._` to access the EncoderImplicits and use
- * the state variable APIs relying on implicit encoders.
+ * Users can also explicitly use `import implicits._` to access the EncoderImplicits and use the
+ * state variable APIs relying on implicit encoders.
  */
 @Experimental
 @Evolving
@@ -36,9 +36,7 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
-  object implicits extends EncoderImplicits {
-
-  }
+  object implicits extends EncoderImplicits {}
   // scalastyle:on
 
   /**

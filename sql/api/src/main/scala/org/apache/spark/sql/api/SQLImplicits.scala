@@ -75,8 +75,8 @@ abstract class SQLImplicits extends EncoderImplicits with Serializable {
 }
 
 /**
- * EncoderImplicits used to implicitly generate SQL Encoders. Note that these functions
- * don't rely on or expose `SparkSession`.
+ * EncoderImplicits used to implicitly generate SQL Encoders. Note that these functions don't rely
+ * on or expose `SparkSession`.
  */
 trait EncoderImplicits extends LowPrioritySQLImplicits with Serializable {
   // Primitives
