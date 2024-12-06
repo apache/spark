@@ -49,6 +49,8 @@ class FilePartitionReader[T](
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles =>
             throw QueryExecutionErrors.fileNotFoundError(e)
+          case e: BlockMissingException =>
+            throw FileDataSourceV2.attachFilePath(file.urlEncodedPath, e)
           case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
             logWarning(
               s"Skipped the rest of the content in the corrupted file.", e)
@@ -68,6 +70,8 @@ class FilePartitionReader[T](
         throw QueryExecutionErrors.unsupportedSchemaColumnConvertError(
           currentReader.file.urlEncodedPath,
           e.getColumn, e.getLogicalType, e.getPhysicalType, e)
+      case e: BlockMissingException =>
+        throw FileDataSourceV2.attachFilePath(currentReader.file.urlEncodedPath, e)
       case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
         logWarning(
           s"Skipped the rest of the content in the corrupted file: $currentReader", e)
