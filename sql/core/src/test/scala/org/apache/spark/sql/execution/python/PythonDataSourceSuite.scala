@@ -22,8 +22,10 @@ import java.io.{File, FileWriter}
 import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.python.PythonCustomMetric
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -583,10 +585,13 @@ class PythonDataSourceSuite extends PythonDataSourceSuiteBase {
     val metrics = statusStore.executionMetrics(execId)
     val pythonDataSent = executedPlan.get.metrics("pythonDataSent")
     val pythonDataReceived = executedPlan.get.metrics("pythonDataReceived")
+    val pythonTotalTime = executedPlan.get.metrics("pythonTotalTime")
     assert(metrics.contains(pythonDataSent.id))
     assert(metrics(pythonDataSent.id).asInstanceOf[String].endsWith("B"))
     assert(metrics.contains(pythonDataReceived.id))
     assert(metrics(pythonDataReceived.id).asInstanceOf[String].endsWith("B"))
+    assert(metrics.contains(pythonTotalTime.id))
+    assert(metrics(pythonTotalTime.id).asInstanceOf[String].endsWith("ms"))
   }
 
   test("simple data source write") {
