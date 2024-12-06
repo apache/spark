@@ -2244,7 +2244,6 @@ class AdaptiveQueryExecSuite
           case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => s
         }.size == 1)
     }
-
     checkSinglePartitioning(sql("SELECT /*+ REBALANCE(1) */ * FROM VALUES(1),(2),(3) AS t(c)"))
     checkSinglePartitioning(sql("SELECT /*+ REBALANCE(1, c) */ * FROM VALUES(1),(2),(3) AS t(c)"))
   }
