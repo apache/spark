@@ -624,11 +624,14 @@ abstract class SQLContext private[sql] (val sparkSession: SparkSession)
   private def mapTableDatasetOutput(tables: Dataset[Table]): Dataset[Row] = {
     tables
       .select(
-        // Re-implement `org.apache.spark.sql.catalog.Table.database` method
-        when(coalesce(array_size(col("namespace")), lit(0)).equalTo(lit(1)), col("namespace")(0))
+        // Re-implement `org.apache.spark.sql.catalog.Table.database` method.
+        // Abusing `coalesce` to tell Spark all these columns are not nullable.
+        when(
+          coalesce(array_size(col("namespace")), lit(0)).equalTo(lit(1)),
+          coalesce(col("namespace")(0), lit("")))
           .otherwise(lit(""))
-          .as("database"),
-        col("name").as("tableName"),
+          .as("namespace"),
+        coalesce(col("name"), lit("")).as("tableName"),
         col("isTemporary"))
   }
 

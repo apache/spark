@@ -117,6 +117,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
       assert(sqlContext.tableNames().sameElements(Array("temp_table_1")))
       assert(sqlContext.tables().collect().toSeq == Row("temp_db_1", "temp_table_1", false) :: Nil)
     } finally {
+      sqlContext.sql("USE default")
       sqlContext.sql("DROP DATABASE IF EXISTS temp_db_1 CASCADE")
     }
   }
