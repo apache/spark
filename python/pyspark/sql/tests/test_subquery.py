@@ -484,6 +484,338 @@ class SubqueryTestsMixin:
                     fragment="col",
                 )
 
+    def table1(self):
+        t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
+        t1.createOrReplaceTempView("t1")
+        return self.spark.table("t1")
+
+    def table2(self):
+        t2 = self.spark.sql("VALUES (0, 2), (0, 3) AS t2(c1, c2)")
+        t2.createOrReplaceTempView("t2")
+        return self.spark.table("t2")
+
+    def table3(self):
+        t3 = self.spark.sql(
+            "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4)) AS t3(c1, c2)"
+        )
+        t3.createOrReplaceTempView("t3")
+        return self.spark.table("t3")
+
+    def test_lateral_join_with_single_column_select(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(self.spark.range(1).select(sf.col("c1").outer())),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT c1)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.select(sf.col("t1.c1").outer())),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT t1.c1 FROM t2)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.select(sf.col("t1.c1").outer() + sf.col("t2.c1"))),
+                self.spark.sql("""SELECT * FROM t1, LATERAL (SELECT t1.c1 + t2.c1 FROM t2)"""),
+            )
+
+    def test_lateral_join_with_different_join_types(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1).select(
+                        (sf.col("c1").outer() + sf.col("c2").outer()).alias("c3")
+                    ),
+                    sf.col("c2") == sf.col("c3"),
+                ),
+                self.spark.sql(
+                    """SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"""
+                ),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1).select(
+                        (sf.col("c1").outer() + sf.col("c2").outer()).alias("c3")
+                    ),
+                    sf.col("c2") == sf.col("c3"),
+                    "left",
+                ),
+                self.spark.sql(
+                    """SELECT * FROM t1 LEFT JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3"""
+                ),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1).select(
+                        (sf.col("c1").outer() + sf.col("c2").outer()).alias("c3")
+                    ),
+                    how="cross",
+                ),
+                self.spark.sql("""SELECT * FROM t1 CROSS JOIN LATERAL (SELECT c1 + c2 AS c3)"""),
+            )
+
+    def test_lateral_join_with_correlated_predicates(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    t2.where(sf.col("t1.c1").outer() == sf.col("t2.c1")).select(sf.col("c2"))
+                ),
+                self.spark.sql(
+                    """SELECT * FROM t1, LATERAL (SELECT c2 FROM t2 WHERE t1.c1 = t2.c1)"""
+                ),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    t2.where(sf.col("t1.c1").outer() < sf.col("t2.c1")).select(sf.col("c2"))
+                ),
+                self.spark.sql(
+                    """SELECT * FROM t1, LATERAL (SELECT c2 FROM t2 WHERE t1.c1 < t2.c1)"""
+                ),
+            )
+
+    def test_lateral_join_with_aggregation_and_correlated_predicates(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    t2.where(sf.col("t1.c2").outer() < sf.col("t2.c2")).select(
+                        sf.max(sf.col("c2")).alias("m")
+                    )
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM t1, LATERAL (SELECT max(c2) AS m FROM t2 WHERE t1.c2 < t2.c2)
+                    """
+                ),
+            )
+
+    def test_lateral_join_reference_preceding_from_clause_items(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.join(t2).lateralJoin(
+                    self.spark.range(1).select(sf.col("t1.c2").outer() + sf.col("t2.c2").outer())
+                ),
+                self.spark.sql("""SELECT * FROM t1 JOIN t2 JOIN LATERAL (SELECT t1.c2 + t2.c2)"""),
+            )
+
+    def test_multiple_lateral_joins(self):
+        with self.tempView("t1"):
+            t1 = self.table1()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1).select(
+                        (sf.col("c1").outer() + sf.col("c2").outer()).alias("a")
+                    )
+                )
+                .lateralJoin(
+                    self.spark.range(1).select(
+                        (sf.col("c1").outer() - sf.col("c2").outer()).alias("b")
+                    )
+                )
+                .lateralJoin(
+                    self.spark.range(1).select(
+                        (sf.col("a").outer() * sf.col("b").outer()).alias("c")
+                    )
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM t1,
+                    LATERAL (SELECT c1 + c2 AS a),
+                    LATERAL (SELECT c1 - c2 AS b),
+                    LATERAL (SELECT a * b AS c)
+                    """
+                ),
+            )
+
+    def test_lateral_join_in_between_regular_joins(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    t2.where(sf.col("t1.c1").outer() == sf.col("t2.c1")).select(sf.col("c2")),
+                    how="left",
+                ).join(t1.alias("t3"), sf.col("t2.c2") == sf.col("t3.c2"), how="left"),
+                self.spark.sql(
+                    """
+                    SELECT * FROM t1
+                    LEFT OUTER JOIN LATERAL (SELECT c2 FROM t2 WHERE t1.c1 = t2.c1) s
+                    LEFT OUTER JOIN t1 t3 ON s.c2 = t3.c2
+                    """
+                ),
+            )
+
+    def test_nested_lateral_joins(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(t2.lateralJoin(self.spark.range(1).select(sf.col("c1").outer()))),
+                self.spark.sql(
+                    """SELECT * FROM t1, LATERAL (SELECT * FROM t2, LATERAL (SELECT c1))"""
+                ),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1)
+                    .select((sf.col("c1").outer() + sf.lit(1)).alias("c1"))
+                    .lateralJoin(self.spark.range(1).select(sf.col("c1").outer()))
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM t1,
+                    LATERAL (SELECT * FROM (SELECT c1 + 1 AS c1), LATERAL (SELECT c1))
+                    """
+                ),
+            )
+
+    def test_scalar_subquery_inside_lateral_join(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1).select(
+                        sf.col("c2").outer(), t2.select(sf.min(sf.col("c2"))).scalar()
+                    )
+                ),
+                self.spark.sql(
+                    """SELECT * FROM t1, LATERAL (SELECT c2, (SELECT MIN(c2) FROM t2))"""
+                ),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.range(1)
+                    .select(sf.col("c1").outer().alias("a"))
+                    .select(
+                        t2.where(sf.col("c1") == sf.col("a").outer())
+                        .select(sf.sum(sf.col("c2")))
+                        .scalar()
+                    )
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM t1, LATERAL (
+                        SELECT (SELECT SUM(c2) FROM t2 WHERE c1 = a) FROM (SELECT c1 AS a)
+                    )
+                    """
+                ),
+            )
+
+    def test_lateral_join_inside_subquery(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.table1()
+            t2 = self.table2()
+
+            assertDataFrameEqual(
+                t1.where(
+                    sf.col("c1")
+                    == (
+                        t2.lateralJoin(self.spark.range(1).select(sf.col("c1").outer().alias("a")))
+                        .select(sf.min(sf.col("a")))
+                        .scalar()
+                    )
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM t1 WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a))
+                    """
+                ),
+            )
+            assertDataFrameEqual(
+                t1.where(
+                    sf.col("c1")
+                    == (
+                        t2.lateralJoin(self.spark.range(1).select(sf.col("c1").outer().alias("a")))
+                        .where(sf.col("c1") == sf.col("t1.c1").outer())
+                        .select(sf.min(sf.col("a")))
+                        .scalar()
+                    )
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM t1
+                    WHERE c1 = (SELECT MIN(a) FROM t2, LATERAL (SELECT c1 AS a) WHERE c1 = t1.c1)
+                    """
+                ),
+            )
+
+    def test_lateral_join_with_table_valued_functions(self):
+        with self.tempView("t1", "t3"):
+            t1 = self.table1()
+            t3 = self.table3()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(self.spark.tvf.range(3)),
+                self.spark.sql("""SELECT * FROM t1, LATERAL RANGE(3)"""),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.tvf.explode(sf.array(sf.col("c1").outer(), sf.col("c2").outer()))
+                ).toDF("c1", "c2", "c3"),
+                self.spark.sql("""SELECT * FROM t1, LATERAL EXPLODE(ARRAY(c1, c2)) t2(c3)"""),
+            )
+            assertDataFrameEqual(
+                t3.lateralJoin(self.spark.tvf.explode_outer(sf.col("c2").outer())).toDF(
+                    "c1", "c2", "v"
+                ),
+                self.spark.sql("""SELECT * FROM t3, LATERAL EXPLODE_OUTER(c2) t2(v)"""),
+            )
+            assertDataFrameEqual(
+                self.spark.tvf.explode(sf.array(sf.lit(1), sf.lit(2)))
+                .toDF("v")
+                .lateralJoin(self.spark.range(1).select((sf.col("v").outer() + 1).alias("v"))),
+                self.spark.sql(
+                    """SELECT * FROM EXPLODE(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1 AS v)"""
+                ),
+            )
+
+    def test_lateral_join_with_table_valued_functions_and_join_conditions(self):
+        with self.tempView("t1", "t3"):
+            t1 = self.table1()
+            t3 = self.table3()
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.tvf.explode(sf.array(sf.col("c1").outer(), sf.col("c2").outer())),
+                    sf.col("c1") == sf.col("col"),
+                ).toDF("c1", "c2", "c3"),
+                self.spark.sql(
+                    """SELECT * FROM t1 JOIN LATERAL EXPLODE(ARRAY(c1, c2)) t(c3) ON t1.c1 = c3"""
+                ),
+            )
+            assertDataFrameEqual(
+                t3.lateralJoin(
+                    self.spark.tvf.explode(sf.col("c2").outer()),
+                    sf.col("c1") == sf.col("col"),
+                ).toDF("c1", "c2", "c3"),
+                self.spark.sql("""SELECT * FROM t3 JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3"""),
+            )
+            assertDataFrameEqual(
+                t3.lateralJoin(
+                    self.spark.tvf.explode(sf.col("c2").outer()),
+                    sf.col("c1") == sf.col("col"),
+                    "left",
+                ).toDF("c1", "c2", "c3"),
+                self.spark.sql(
+                    """SELECT * FROM t3 LEFT JOIN LATERAL EXPLODE(c2) t(c3) ON t3.c1 = c3"""
+                ),
+            )
+
 
 class SubqueryTests(SubqueryTestsMixin, ReusedSQLTestCase):
     pass
