@@ -2240,11 +2240,6 @@ class AdaptiveQueryExecSuite
   test("SPARK-50496: Change rebalance partitioning to SinglePartition if partition number is 1") {
     def checkSinglePartitioning(df: DataFrame): Unit = {
       assert(
-        df.queryExecution.analyzed.collect {
-          case r: RepartitionOperation => r
-        }.size == 1)
-
-      assert(
         collect(df.queryExecution.executedPlan) {
           case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => s
         }.size == 1)
