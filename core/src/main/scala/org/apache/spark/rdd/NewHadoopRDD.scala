@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred.JobConf
@@ -242,10 +243,12 @@ class NewHadoopRDD[K, V](
       private var finished = false
       private var reader =
         try {
-          val _reader = format.createRecordReader(
-            split.serializableHadoopSplit.value, hadoopAttemptContext)
-          _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-          _reader
+          Utils.tryInitializeResource(
+            format.createRecordReader(split.serializableHadoopSplit.value, hadoopAttemptContext)
+          ) { reader =>
+            reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+            reader
+          }
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(log"Skipped missing file: ${MDC(PATH, split.serializableHadoopSplit)}", e)
@@ -253,6 +256,7 @@ class NewHadoopRDD[K, V](
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e: BlockMissingException => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(
               log"Skipped the rest content in the corrupted file: " +
@@ -282,6 +286,7 @@ class NewHadoopRDD[K, V](
               finished = true
             // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
             case e: FileNotFoundException if !ignoreMissingFiles => throw e
+            case e: BlockMissingException => throw e
             case e: IOException if ignoreCorruptFiles =>
               logWarning(
                 log"Skipped the rest content in the corrupted file: " +

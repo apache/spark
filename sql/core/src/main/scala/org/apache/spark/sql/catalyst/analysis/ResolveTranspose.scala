@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, A
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LogicalPlan, Project, Sort, Transpose}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -57,8 +58,8 @@ class ResolveTranspose(sparkSession: SparkSession) extends Rule[LogicalPlan] {
           throw new AnalysisException(
             errorClass = "TRANSPOSE_NO_LEAST_COMMON_TYPE",
             messageParameters = Map(
-              "dt1" -> dt1.sql,
-              "dt2" -> dt2.sql)
+              "dt1" -> toSQLType(dt1),
+              "dt2" -> toSQLType(dt2))
           )
         }
       }

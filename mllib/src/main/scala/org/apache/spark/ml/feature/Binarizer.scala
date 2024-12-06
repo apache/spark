@@ -204,7 +204,7 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       val inputType = try {
         SchemaUtils.getSchemaFieldType(schema, inputColName)
       } catch {
-        case e: SparkIllegalArgumentException if e.getErrorClass == "FIELD_NOT_FOUND" =>
+        case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
           throw new SparkException(s"Input column $inputColName does not exist.")
         case e: Exception =>
           throw e
@@ -214,7 +214,9 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case DoubleType =>
           BinaryAttribute.defaultAttr.withName(outputColName).toStructField()
         case _: VectorUDT =>
-          val size = AttributeGroup.fromStructField(schema(inputColName)).size
+          val size = AttributeGroup.fromStructField(
+            SchemaUtils.getSchemaField(schema, inputColName)
+          ).size
           if (size < 0) {
             StructField(outputColName, new VectorUDT)
           } else {

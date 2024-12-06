@@ -26,6 +26,7 @@ import org.scalatest.matchers.must.Matchers.the
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
@@ -620,6 +621,41 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
+  test("listagg function") {
+    // normal case
+    val df = Seq(("a", "b"), ("b", "c"), ("c", "d")).toDF("a", "b")
+    checkAnswer(
+      df.selectExpr("listagg(a)", "listagg(b)"),
+      Seq(Row("abc", "bcd"))
+    )
+    checkAnswer(
+      df.select(listagg($"a"), listagg($"b")),
+      Seq(Row("abc", "bcd"))
+    )
+
+    // distinct case
+    val df2 = Seq(("a", "b"), ("a", "b"), ("b", "d")).toDF("a", "b")
+    checkAnswer(
+      df2.select(listagg_distinct($"a"), listagg_distinct($"b")),
+      Seq(Row("ab", "bd"))
+    )
+
+    // null case
+    val df3 = Seq(("a", "b", null), ("a", "b", null), (null, null, null)).toDF("a", "b", "c")
+    checkAnswer(
+      df3.select(listagg_distinct($"a"), listagg($"a"), listagg_distinct($"b"), listagg($"b"),
+        listagg($"c")),
+      Seq(Row("a", "aa", "b", "bb", null))
+    )
+
+    // custom delimiter
+    val df4 = Seq(("a", "b"), ("b", "c"), ("c", "d")).toDF("a", "b")
+    checkAnswer(
+      df4.selectExpr("listagg(a, '|')", "listagg(b, '|')"),
+      Seq(Row("a|b|c", "b|c|d"))
+    )
+  }
+
   test("SPARK-31500: collect_set() of BinaryType returns duplicate elements") {
     val bytesTest1 = "test1".getBytes
     val bytesTest2 = "test2".getBytes
@@ -648,7 +684,7 @@ class DataFrameAggregateSuite extends QueryTest
       condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
         "functionName" -> "`collect_set`",
-        "dataType" -> "\"MAP\"",
+        "dataType" -> "\"MAP\" or \"COLLATED STRING\"",
         "sqlExpr" -> "\"collect_set(b)\""
       ),
       context = ExpectedContext(
@@ -1485,15 +1521,22 @@ class DataFrameAggregateSuite extends QueryTest
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))
       .toDF("year-month", "day")
-    val error = intercept[SparkArithmeticException] {
-      checkAnswer(df2.select(sum($"year-month")), Nil)
-    }
-    assert(error.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow")
 
-    val error2 = intercept[SparkArithmeticException] {
-      checkAnswer(df2.select(sum($"day")), Nil)
-    }
-    assert(error2.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW] long overflow")
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        checkAnswer(df2.select(sum($"year-month")), Nil)
+      },
+      condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+      parameters = Map("functionName" -> toSQLId("try_add"))
+    )
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        checkAnswer(df2.select(sum($"day")), Nil)
+      },
+      condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+      parameters = Map("functionName" -> toSQLId("try_add"))
+    )
   }
 
   test("SPARK-34837: Support ANSI SQL intervals by the aggregate function `avg`") {
@@ -1620,15 +1663,22 @@ class DataFrameAggregateSuite extends QueryTest
     val df2 = Seq((Period.ofMonths(Int.MaxValue), Duration.ofDays(106751991)),
       (Period.ofMonths(10), Duration.ofDays(10)))
       .toDF("year-month", "day")
-    val error = intercept[SparkArithmeticException] {
-      checkAnswer(df2.select(avg($"year-month")), Nil)
-    }
-    assert(error.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW] integer overflow")
 
-    val error2 = intercept[SparkArithmeticException] {
-      checkAnswer(df2.select(avg($"day")), Nil)
-    }
-    assert(error2.getMessage contains "[INTERVAL_ARITHMETIC_OVERFLOW] long overflow")
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        checkAnswer(df2.select(avg($"year-month")), Nil)
+      },
+      condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+      parameters = Map("functionName" -> toSQLId("try_add"))
+    )
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        checkAnswer(df2.select(avg($"day")), Nil)
+      },
+      condition = "INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION",
+      parameters = Map("functionName" -> toSQLId("try_add"))
+    )
 
     val df3 = intervalData.filter($"class" > 4)
     val avgDF3 = df3.select(avg($"year-month"), avg($"day"))
@@ -2270,7 +2320,7 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   private def assertDecimalSumOverflow(
-      df: DataFrame, ansiEnabled: Boolean, expectedAnswer: Row): Unit = {
+      df: DataFrame, ansiEnabled: Boolean, fnName: String, expectedAnswer: Row): Unit = {
     if (!ansiEnabled) {
       checkAnswer(df, expectedAnswer)
     } else {
@@ -2278,11 +2328,12 @@ class DataFrameAggregateSuite extends QueryTest
         df.collect()
       }
       assert(e.getMessage.contains("cannot be represented as Decimal") ||
-        e.getMessage.contains("Overflow in sum of decimals"))
+        e.getMessage.contains(s"Overflow in sum of decimals. Use 'try_$fnName' to tolerate " +
+          s"overflow and return NULL instead."))
     }
   }
 
-  def checkAggResultsForDecimalOverflow(aggFn: Column => Column): Unit = {
+  def checkAggResultsForDecimalOverflow(aggFn: Column => Column, fnName: String): Unit = {
     Seq("true", "false").foreach { wholeStageEnabled =>
       withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
         Seq(true, false).foreach { ansiEnabled =>
@@ -2306,27 +2357,27 @@ class DataFrameAggregateSuite extends QueryTest
               join(df, "intNum").agg(aggFn($"decNum"))
 
             val expectedAnswer = Row(null)
-            assertDecimalSumOverflow(df2, ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(df2, ansiEnabled, fnName, expectedAnswer)
 
             val decStr = "1" + "0" * 19
             val d1 = spark.range(0, 12, 1, 1)
             val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
-            assertDecimalSumOverflow(d2, ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(d2, ansiEnabled, fnName, expectedAnswer)
 
             val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
             val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
-            assertDecimalSumOverflow(d4, ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(d4, ansiEnabled, fnName, expectedAnswer)
 
             val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
               lit(1).as("key")).groupBy("key").agg(aggFn($"d").alias("aggd")).select($"aggd")
-            assertDecimalSumOverflow(d5, ansiEnabled, expectedAnswer)
+            assertDecimalSumOverflow(d5, ansiEnabled, fnName, expectedAnswer)
 
             val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
 
             val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
               toDF("d")
             assertDecimalSumOverflow(
-              nullsDf.union(largeDecimals).agg(aggFn($"d")), ansiEnabled, expectedAnswer)
+              nullsDf.union(largeDecimals).agg(aggFn($"d")), ansiEnabled, fnName, expectedAnswer)
 
             val df3 = Seq(
               (BigDecimal("10000000000000000000"), 1),
@@ -2344,9 +2395,9 @@ class DataFrameAggregateSuite extends QueryTest
               (BigDecimal("20000000000000000000"), 2)).toDF("decNum", "intNum")
 
             val df6 = df3.union(df4).union(df5)
-            val df7 = df6.groupBy("intNum").agg(sum("decNum"), countDistinct("decNum")).
+            val df7 = df6.groupBy("intNum").agg(aggFn($"decNum"), countDistinct("decNum")).
               filter("intNum == 1")
-            assertDecimalSumOverflow(df7, ansiEnabled, Row(1, null, 2))
+            assertDecimalSumOverflow(df7, ansiEnabled, fnName, Row(1, null, 2))
           }
         }
       }
@@ -2354,11 +2405,11 @@ class DataFrameAggregateSuite extends QueryTest
   }
 
   test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
-    checkAggResultsForDecimalOverflow(c => sum(c))
+    checkAggResultsForDecimalOverflow(c => sum(c), "sum")
   }
 
   test("SPARK-35955: Aggregate avg should not return wrong results for decimal overflow") {
-    checkAggResultsForDecimalOverflow(c => avg(c))
+    checkAggResultsForDecimalOverflow(c => avg(c), "avg")
   }
 
   test("SPARK-28224: Aggregate sum big decimal overflow") {
@@ -2369,7 +2420,7 @@ class DataFrameAggregateSuite extends QueryTest
     Seq(true, false).foreach { ansiEnabled =>
       withSQLConf((SQLConf.ANSI_ENABLED.key, ansiEnabled.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
-        assertDecimalSumOverflow(structDf, ansiEnabled, Row(null))
+        assertDecimalSumOverflow(structDf, ansiEnabled, "sum", Row(null))
       }
     }
   }

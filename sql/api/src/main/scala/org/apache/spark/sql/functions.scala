@@ -1148,6 +1148,77 @@ object functions {
   def sum_distinct(e: Column): Column = Column.fn("sum", isDistinct = true, e)
 
   /**
+   * Aggregate function: returns the concatenation of non-null input values.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg(e: Column): Column = Column.fn("listagg", e)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values, separated by the
+   * delimiter.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg(e: Column, delimiter: Column): Column = Column.fn("listagg", e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg_distinct(e: Column): Column = Column.fn("listagg", isDistinct = true, e)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values, separated by
+   * the delimiter.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def listagg_distinct(e: Column, delimiter: Column): Column =
+    Column.fn("listagg", isDistinct = true, e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg(e: Column): Column = Column.fn("string_agg", e)
+
+  /**
+   * Aggregate function: returns the concatenation of non-null input values, separated by the
+   * delimiter. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg(e: Column, delimiter: Column): Column = Column.fn("string_agg", e, delimiter)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values. Alias for
+   * `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg_distinct(e: Column): Column = Column.fn("string_agg", isDistinct = true, e)
+
+  /**
+   * Aggregate function: returns the concatenation of distinct non-null input values, separated by
+   * the delimiter. Alias for `listagg`.
+   *
+   * @group agg_funcs
+   * @since 4.0.0
+   */
+  def string_agg_distinct(e: Column, delimiter: Column): Column =
+    Column.fn("string_agg", isDistinct = true, e, delimiter)
+
+  /**
    * Aggregate function: alias for `var_samp`.
    *
    * @group agg_funcs
@@ -1901,7 +1972,8 @@ object functions {
    * @group string_funcs
    * @since 4.0.0
    */
-  def randstr(length: Column): Column = Column.fn("randstr", length)
+  def randstr(length: Column): Column =
+    randstr(length, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a string of the specified length whose characters are chosen uniformly at random from
@@ -3767,7 +3839,8 @@ object functions {
    * @group math_funcs
    * @since 4.0.0
    */
-  def uniform(min: Column, max: Column): Column = Column.fn("uniform", min, max)
+  def uniform(min: Column, max: Column): Column =
+    uniform(min, max, lit(SparkClassUtils.random.nextLong))
 
   /**
    * Returns a random value with independent and identically distributed (i.i.d.) values with the
@@ -3912,6 +3985,44 @@ object functions {
     Column.fn("encode", value, lit(charset))
 
   /**
+   * Returns true if the input is a valid UTF-8 string, otherwise returns false.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def is_valid_utf8(str: Column): Column =
+    Column.fn("is_valid_utf8", str)
+
+  /**
+   * Returns a new string in which all invalid UTF-8 byte sequences, if any, are replaced by the
+   * Unicode replacement character (U+FFFD).
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def make_valid_utf8(str: Column): Column =
+    Column.fn("make_valid_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or emits a
+   * SparkIllegalArgumentException exception otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def validate_utf8(str: Column): Column =
+    Column.fn("validate_utf8", str)
+
+  /**
+   * Returns the input value if it corresponds to a valid UTF-8 string, or NULL otherwise.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def try_validate_utf8(str: Column): Column =
+    Column.fn("try_validate_utf8", str)
+
+  /**
    * Formats numeric column x to a format like '#,###,###.##', rounded to d decimal places with
    * HALF_EVEN round mode, and returns the result as a string column.
    *
@@ -3955,7 +4066,20 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def instr(str: Column, substring: String): Column = Column.fn("instr", str, lit(substring))
+  def instr(str: Column, substring: String): Column = instr(str, lit(substring))
+
+  /**
+   * Locate the position of the first occurrence of substr column in the given string. Returns
+   * null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def instr(str: Column, substring: Column): Column = Column.fn("instr", str, substring)
 
   /**
    * Computes the character length of a given string or number of bytes of a binary string. The
@@ -4035,8 +4159,7 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def lpad(str: Column, len: Int, pad: String): Column =
-    Column.fn("lpad", str, lit(len), lit(pad))
+  def lpad(str: Column, len: Int, pad: String): Column = lpad(str, lit(len), lit(pad))
 
   /**
    * Left-pad the binary column with pad to a byte length of len. If the binary column is longer
@@ -4045,8 +4168,16 @@ object functions {
    * @group string_funcs
    * @since 3.3.0
    */
-  def lpad(str: Column, len: Int, pad: Array[Byte]): Column =
-    Column.fn("lpad", str, lit(len), lit(pad))
+  def lpad(str: Column, len: Int, pad: Array[Byte]): Column = lpad(str, lit(len), lit(pad))
+
+  /**
+   * Left-pad the string column with pad to a length of len. If the string column is longer than
+   * len, the return value is shortened to len characters.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def lpad(str: Column, len: Column, pad: Column): Column = Column.fn("lpad", str, len, pad)
 
   /**
    * Trim the spaces from left end for the specified string value.
@@ -4223,8 +4354,7 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def rpad(str: Column, len: Int, pad: String): Column =
-    Column.fn("rpad", str, lit(len), lit(pad))
+  def rpad(str: Column, len: Int, pad: String): Column = rpad(str, lit(len), lit(pad))
 
   /**
    * Right-pad the binary column with pad to a byte length of len. If the binary column is longer
@@ -4233,8 +4363,16 @@ object functions {
    * @group string_funcs
    * @since 3.3.0
    */
-  def rpad(str: Column, len: Int, pad: Array[Byte]): Column =
-    Column.fn("rpad", str, lit(len), lit(pad))
+  def rpad(str: Column, len: Int, pad: Array[Byte]): Column = rpad(str, lit(len), lit(pad))
+
+  /**
+   * Right-pad the string column with pad to a length of len. If the string column is longer than
+   * len, the return value is shortened to len characters.
+   *
+   * @group string_funcs
+   * @since 4.0.0
+   */
+  def rpad(str: Column, len: Column, pad: Column): Column = Column.fn("rpad", str, len, pad)
 
   /**
    * Repeats a string column n times, and returns it as a new string column.
@@ -4637,6 +4775,24 @@ object functions {
    * @since 3.5.0
    */
   def substr(str: Column, pos: Column): Column = Column.fn("substr", str, pos)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column, key: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract, key)
+
+  /**
+   * Extracts a part from a URL.
+   *
+   * @group url_funcs
+   * @since 4.0.0
+   */
+  def try_parse_url(url: Column, partToExtract: Column): Column =
+    Column.fn("try_parse_url", url, partToExtract)
 
   /**
    * Extracts a part from a URL.
@@ -6737,7 +6893,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_json(e: Column, schema: DataType, options: Map[String, String]): Column = {
-    from_json(e, lit(schema.sql), options.iterator)
+    from_json(e, lit(schema.json), options.iterator)
   }
 
   // scalastyle:off line.size.limit
@@ -7573,7 +7729,7 @@ object functions {
    */
   // scalastyle:on line.size.limit
   def from_xml(e: Column, schema: StructType, options: java.util.Map[String, String]): Column =
-    from_xml(e, lit(schema.sql), options.asScala.iterator)
+    from_xml(e, lit(schema.json), options.asScala.iterator)
 
   // scalastyle:off line.size.limit
   /**
@@ -7921,6 +8077,23 @@ object functions {
     Column.fn("make_dt_interval")
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
    * Make interval from years, months, weeks, days, hours, mins and secs.
    *
    * @group datetime_funcs
@@ -7935,6 +8108,22 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("make_interval", years, months, weeks, days, hours, mins, secs)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column,
+      mins: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours, mins)
 
   /**
    * Make interval from years, months, weeks, days, hours and mins.
@@ -7952,6 +8141,21 @@ object functions {
     Column.fn("make_interval", years, months, weeks, days, hours, mins)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(
+      years: Column,
+      months: Column,
+      weeks: Column,
+      days: Column,
+      hours: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days, hours)
+
+  /**
    * Make interval from years, months, weeks, days and hours.
    *
    * @group datetime_funcs
@@ -7966,6 +8170,16 @@ object functions {
     Column.fn("make_interval", years, months, weeks, days, hours)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks, days)
+
+  /**
    * Make interval from years, months, weeks and days.
    *
    * @group datetime_funcs
@@ -7973,6 +8187,16 @@ object functions {
    */
   def make_interval(years: Column, months: Column, weeks: Column, days: Column): Column =
     Column.fn("make_interval", years, months, weeks, days)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column, weeks: Column): Column =
+    Column.fn("try_make_interval", years, months, weeks)
 
   /**
    * Make interval from years, months and weeks.
@@ -7984,6 +8208,16 @@ object functions {
     Column.fn("make_interval", years, months, weeks)
 
   /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column, months: Column): Column =
+    Column.fn("try_make_interval", years, months)
+
+  /**
    * Make interval from years and months.
    *
    * @group datetime_funcs
@@ -7991,6 +8225,16 @@ object functions {
    */
   def make_interval(years: Column, months: Column): Column =
     Column.fn("make_interval", years, months)
+
+  /**
+   * This is a special version of `make_interval` that performs the same operation, but returns a
+   * NULL value instead of raising an error if interval cannot be created.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_interval(years: Column): Column =
+    Column.fn("try_make_interval", years)
 
   /**
    * Make interval from years.
@@ -8048,6 +8292,41 @@ object functions {
     Column.fn("make_timestamp", years, months, days, hours, mins, secs)
 
   /**
+   * Try to create a timestamp from years, months, days, hours, mins, secs and timezone fields.
+   * The result data type is consistent with the value of configuration `spark.sql.timestampType`.
+   * The function returns NULL on invalid inputs.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
+    Column.fn("try_make_timestamp", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Try to create a timestamp from years, months, days, hours, mins, and secs fields. The result
+   * data type is consistent with the value of configuration `spark.sql.timestampType`. The
+   * function returns NULL on invalid inputs.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_timestamp(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("try_make_timestamp", years, months, days, hours, mins, secs)
+
+  /**
    * Create the current timestamp with local time zone from years, months, days, hours, mins, secs
    * and timezone fields. If the configuration `spark.sql.ansi.enabled` is false, the function
    * returns NULL on invalid inputs. Otherwise, it will throw an error instead.
@@ -8083,6 +8362,39 @@ object functions {
     Column.fn("make_timestamp_ltz", years, months, days, hours, mins, secs)
 
   /**
+   * Try to create the current timestamp with local time zone from years, months, days, hours,
+   * mins, secs and timezone fields. The function returns NULL on invalid inputs.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column,
+      timezone: Column): Column =
+    Column.fn("try_make_timestamp_ltz", years, months, days, hours, mins, secs, timezone)
+
+  /**
+   * Try to create the current timestamp with local time zone from years, months, days, hours,
+   * mins and secs fields. The function returns NULL on invalid inputs.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_timestamp_ltz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("try_make_timestamp_ltz", years, months, days, hours, mins, secs)
+
+  /**
    * Create local date-time from years, months, days, hours, mins, secs fields. If the
    * configuration `spark.sql.ansi.enabled` is false, the function returns NULL on invalid inputs.
    * Otherwise, it will throw an error instead.
@@ -8098,6 +8410,22 @@ object functions {
       mins: Column,
       secs: Column): Column =
     Column.fn("make_timestamp_ntz", years, months, days, hours, mins, secs)
+
+  /**
+   * Try to create a local date-time from years, months, days, hours, mins, secs fields. The
+   * function returns NULL on invalid inputs.
+   *
+   * @group datetime_funcs
+   * @since 4.0.0
+   */
+  def try_make_timestamp_ntz(
+      years: Column,
+      months: Column,
+      days: Column,
+      hours: Column,
+      mins: Column,
+      secs: Column): Column =
+    Column.fn("try_make_timestamp_ntz", years, months, days, hours, mins, secs)
 
   /**
    * Make year-month interval from years, months.

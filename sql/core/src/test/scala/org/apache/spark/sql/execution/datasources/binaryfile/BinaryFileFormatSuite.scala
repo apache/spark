@@ -168,7 +168,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
             .format(BINARY_FILE)
             .save(s"$tmpDir/test_save")
         },
-        condition = "_LEGACY_ERROR_TEMP_2075",
+        condition = "UNSUPPORTED_FEATURE.WRITE_FOR_BINARY_SOURCE",
         parameters = Map.empty)
     }
   }
@@ -368,7 +368,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
           checkAnswer(readContent(), expected)
         }
       }
-      assert(caught.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(caught.getCondition.startsWith("FAILED_READ_FILE"))
       assert(caught.getCause.getMessage.contains("exceeds the max length allowed"))
     }
   }

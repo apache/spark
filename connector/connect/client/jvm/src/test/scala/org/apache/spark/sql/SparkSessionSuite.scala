@@ -22,6 +22,7 @@ import scala.util.control.NonFatal
 
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, MethodDescriptor}
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.test.ConnectFunSuite
 import org.apache.spark.util.SparkSerDeUtils
 
@@ -113,7 +114,7 @@ class SparkSessionSuite extends ConnectFunSuite {
     SparkSession.clearActiveSession()
     assert(SparkSession.getDefaultSession.isEmpty)
     assert(SparkSession.getActiveSession.isEmpty)
-    intercept[IllegalStateException](SparkSession.active)
+    intercept[SparkException](SparkSession.active)
 
     // Create a session
     val session1 = SparkSession.builder().remote(connectionString1).getOrCreate()

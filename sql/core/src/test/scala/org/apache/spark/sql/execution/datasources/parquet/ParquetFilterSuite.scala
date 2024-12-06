@@ -45,11 +45,11 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.execution.ExplainMode
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.{ExpressionUtils, LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1958,7 +1958,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           val ex = intercept[SparkException] {
             sql(s"select a from $tableName where b > 0").collect()
           }
-          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
           assert(ex.getCause.isInstanceOf[SparkRuntimeException])
           assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))
@@ -2233,6 +2233,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
 @ExtendedSQLTest
 class ParquetV1FilterSuite extends ParquetFilterSuite {
+  import testImplicits.ColumnConstructorExt
+
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
@@ -2260,8 +2262,8 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
         SQLConf.NESTED_PREDICATE_PUSHDOWN_FILE_SOURCE_LIST.key -> pushdownDsList) {
         val query = df
-          .select(output.map(ExpressionUtils.column): _*)
-          .where(ExpressionUtils.column(predicate))
+          .select(output.map(Column(_)): _*)
+          .where(Column(predicate))
 
         val nestedOrAttributes = predicate.collectFirst {
           case g: GetStructField => g
@@ -2277,7 +2279,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
           case PhysicalOperation(_, filters,
-          LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+            LogicalRelationWithTable(relation: HadoopFsRelation, _)) =>
             maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)
@@ -2313,6 +2315,8 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
 
 @ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
+  import testImplicits.ColumnConstructorExt
+
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
     super
@@ -2339,8 +2343,8 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
       SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> InferFiltersFromConstraints.ruleName,
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
       val query = df
-        .select(output.map(ExpressionUtils.column): _*)
-        .where(ExpressionUtils.column(predicate))
+        .select(output.map(Column(_)): _*)
+        .where(Column(predicate))
 
       query.queryExecution.optimizedPlan.collectFirst {
         case PhysicalOperation(_, filters,

@@ -40,7 +40,6 @@ from pyspark.sql.types import (
     BooleanType,
 )
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
@@ -61,6 +60,7 @@ if should_test_connect:
         JVM_LONG_MIN,
         JVM_LONG_MAX,
     )
+    from pyspark.errors.exceptions.connect import SparkConnectException
 
 
 class SparkConnectColumnTests(SparkConnectSQLTestCase):

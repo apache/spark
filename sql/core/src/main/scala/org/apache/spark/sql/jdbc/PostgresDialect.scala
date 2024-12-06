@@ -23,6 +23,7 @@ import java.util
 import java.util.Locale
 
 import scala.util.Using
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
@@ -30,7 +31,7 @@ import org.apache.spark.internal.MDC
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -300,6 +301,32 @@ private case class PostgresDialect()
     }
   }
 
+  class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override def visitExtract(field: String, source: String): String = {
+      field match {
+        case "DAY_OF_YEAR" => s"EXTRACT(DOY FROM $source)"
+        case "YEAR_OF_WEEK" => s"EXTRACT(YEAR FROM $source)"
+        case "DAY_OF_WEEK" => s"EXTRACT(DOW FROM $source)"
+        case _ => super.visitExtract(field, source)
+      }
+    }
+
+    override def visitBinaryArithmetic(name: String, l: String, r: String): String = {
+      l + " " + name.replace('^', '#') + " " + r
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val postgresSQLBuilder = new PostgresSQLBuilder()
+    try {
+      Some(postgresSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
@@ -370,7 +397,9 @@ private case class PostgresDialect()
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
-              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
+              // Metadata can return 0 for CTAS tables. For such tables, we are always reading
+              // them as 1D array
+              if (rs.next()) metadata.putLong("arrayDimension", Math.max(1L, rs.getLong(1)))
             }
           }
         } catch {

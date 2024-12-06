@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.DEFAULT_PARALLELISM
 import org.apache.spark.sql.internal.{RuntimeConfigImpl, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.CHECKPOINT_LOCATION
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -100,5 +101,33 @@ class RuntimeConfigSuite extends SparkFunSuite {
     conf.unset(key)
     // Get the unset config entry, which should return its defaultValue again.
     assert(conf.get(key) == SQLConf.SESSION_LOCAL_TIMEZONE.defaultValue.get)
+  }
+
+  test("SPARK-48773: set spark.default.parallelism does not fail") {
+    val conf = newConf()
+    // this set should not fail
+    conf.set(DEFAULT_PARALLELISM.key, "1")
+  }
+
+  test("config entry") {
+    val conf = newConf()
+
+    val entry = SQLConf.FILES_MAX_PARTITION_NUM
+    assert(conf.get(entry.key) === null)
+    assert(conf.get(entry).isEmpty)
+    assert(conf.get(entry, Option(55)) === Option(55))
+    conf.set(entry, Option(33))
+    assert(conf.get(entry.key) === "33")
+    assert(conf.get(entry) === Option(33))
+    assert(conf.get(entry, Option(55)) === Option(33))
+
+    val entryWithDefault = SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD
+    assert(conf.get(entryWithDefault.key) === "10")
+    assert(conf.get(entryWithDefault) === 10)
+    assert(conf.get(entryWithDefault, 11) === 11)
+    conf.set(entryWithDefault, 12)
+    assert(conf.get(entryWithDefault.key) === "12")
+    assert(conf.get(entryWithDefault) === 12)
+    assert(conf.get(entryWithDefault, 11) === 12)
   }
 }

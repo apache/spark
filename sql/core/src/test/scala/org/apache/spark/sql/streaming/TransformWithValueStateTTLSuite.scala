@@ -55,10 +55,12 @@ object TTLInputProcessFunction {
     } else if (row.action == "put") {
       valueState.update(row.value)
     } else if (row.action == "get_values_in_ttl_state") {
-      val ttlValues = valueState.getValuesInTTLState()
+      val ttlValues = valueState.getValueInTTLState()
       ttlValues.foreach { v =>
         results = OutputEvent(key, -1, isTTLValue = true, ttlValue = v) :: results
       }
+    } else if (row.action == "clear") {
+      valueState.clear()
     }
 
     results.iterator
@@ -76,6 +78,8 @@ object TTLInputProcessFunction {
       }
     } else if (row.action == "put") {
       valueState.update(row.value)
+    } else if (row.action == "clear") {
+      valueState.clear()
     }
 
     results.iterator
@@ -99,8 +103,7 @@ class ValueStateTTLProcessor(ttlConfig: TTLConfig)
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     inputRows.foreach { row =>
@@ -131,15 +134,14 @@ class MultipleValueStatesTTLProcessor(
       .getValueState("valueStateTTL", Encoders.scalaInt, ttlConfig)
       .asInstanceOf[ValueStateImplWithTTL[Int]]
     _valueStateWithoutTTL = getHandle
-      .getValueState("valueState", Encoders.scalaInt)
+      .getValueState[Int]("valueState", Encoders.scalaInt, TTLConfig.NONE)
       .asInstanceOf[ValueStateImpl[Int]]
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[InputEvent],
-      timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[OutputEvent] = {
+      timerValues: TimerValues): Iterator[OutputEvent] = {
     var results = List[OutputEvent]()
 
     if (key == ttlKey) {
@@ -247,12 +249,25 @@ class TransformWithValueStateTTLSuite extends TransformWithStateTTLTest {
         // validate ttl value is removed in the value state column family
         AddData(inputStream, InputEvent(ttlKey, "get_ttl_value_from_state", -1)),
         AdvanceManualClock(1 * 1000),
-        CheckNewAnswer()
+        CheckNewAnswer(),
+        AddData(inputStream, InputEvent(ttlKey, "put", 3)),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsUpdated === 1)
+        },
+        AddData(inputStream, InputEvent(noTtlKey, "get", -1)),
+        AdvanceManualClock(60 * 1000),
+        CheckNewAnswer(OutputEvent(noTtlKey, 2, isTTLValue = false, -1)),
+        Execute { q =>
+          assert(q.lastProgress.stateOperators(0).numRowsRemoved === 1)
+        }
       )
     }
   }
 
-  test("verify StateSchemaV3 writes correct SQL schema of key/value and with TTL") {
+  test("verify StateSchemaV3 writes correct SQL " +
+    "schema of key/value and with TTL") {
     withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
       classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key ->

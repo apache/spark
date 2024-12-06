@@ -32,6 +32,7 @@ import scala.util.control.NonFatal
 import scala.xml.SAXException
 
 import org.apache.commons.lang3.exception.ExceptionUtils
+import org.apache.hadoop.hdfs.BlockMissingException
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
@@ -655,6 +656,10 @@ class XmlTokenizer(
             e)
         case NonFatal(e) =>
           ExceptionUtils.getRootCause(e) match {
+            case _: BlockMissingException =>
+              reader.close()
+              reader = null
+              throw e
             case _: RuntimeException | _: IOException if options.ignoreCorruptFiles =>
               logWarning(
                 "Skipping the rest of" +

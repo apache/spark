@@ -37,21 +37,21 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select make_date(2019, 1, 1), make_date(12, 12, 12)
 -- !query analysis
-Project [make_date(2019, 1, 1, false) AS make_date(2019, 1, 1)#x, make_date(12, 12, 12, false) AS make_date(12, 12, 12)#x]
+Project [make_date(2019, 1, 1, true) AS make_date(2019, 1, 1)#x, make_date(12, 12, 12, true) AS make_date(12, 12, 12)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_date(2000, 13, 1)
 -- !query analysis
-Project [make_date(2000, 13, 1, false) AS make_date(2000, 13, 1)#x]
+Project [make_date(2000, 13, 1, true) AS make_date(2000, 13, 1)#x]
 +- OneRowRelation
 
 
 -- !query
 select make_date(2000, 1, 33)
 -- !query analysis
-Project [make_date(2000, 1, 33, false) AS make_date(2000, 1, 33)#x]
+Project [make_date(2000, 1, 33, true) AS make_date(2000, 1, 33)#x]
 +- OneRowRelation
 
 
@@ -148,21 +148,21 @@ select UNIX_DATE(DATE('1970-01-01')), UNIX_DATE(DATE('2020-12-04')), UNIX_DATE(n
 -- !query
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd')
 -- !query analysis
-Project [to_date(cast(null as string), None, Some(America/Los_Angeles), false) AS to_date(NULL)#x, to_date(2016-12-31, None, Some(America/Los_Angeles), false) AS to_date(2016-12-31)#x, to_date(2016-12-31, Some(yyyy-MM-dd), Some(America/Los_Angeles), false) AS to_date(2016-12-31, yyyy-MM-dd)#x]
+Project [to_date(cast(null as string), None, Some(America/Los_Angeles), true) AS to_date(NULL)#x, to_date(2016-12-31, None, Some(America/Los_Angeles), true) AS to_date(2016-12-31)#x, to_date(2016-12-31, Some(yyyy-MM-dd), Some(America/Los_Angeles), true) AS to_date(2016-12-31, yyyy-MM-dd)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date("16", "dd")
 -- !query analysis
-Project [to_date(16, Some(dd), Some(America/Los_Angeles), false) AS to_date(16, dd)#x]
+Project [to_date(16, Some(dd), Some(America/Los_Angeles), true) AS to_date(16, dd)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_date("02-29", "MM-dd")
 -- !query analysis
-Project [to_date(02-29, Some(MM-dd), Some(America/Los_Angeles), false) AS to_date(02-29, MM-dd)#x]
+Project [to_date(02-29, Some(MM-dd), Some(America/Los_Angeles), true) AS to_date(02-29, MM-dd)#x]
 +- OneRowRelation
 
 
@@ -201,21 +201,21 @@ select dayOfYear('1500-01-01'), dayOfYear('1582-10-15 13:10:15'), dayOfYear(time
 -- !query
 select next_day("2015-07-23", "Mon")
 -- !query analysis
-Project [next_day(cast(2015-07-23 as date), Mon, false) AS next_day(2015-07-23, Mon)#x]
+Project [next_day(cast(2015-07-23 as date), Mon, true) AS next_day(2015-07-23, Mon)#x]
 +- OneRowRelation
 
 
 -- !query
 select next_day("2015-07-23", "xx")
 -- !query analysis
-Project [next_day(cast(2015-07-23 as date), xx, false) AS next_day(2015-07-23, xx)#x]
+Project [next_day(cast(2015-07-23 as date), xx, true) AS next_day(2015-07-23, xx)#x]
 +- OneRowRelation
 
 
 -- !query
 select next_day("2015-07-23 12:12:12", "Mon")
 -- !query analysis
-Project [next_day(cast(2015-07-23 12:12:12 as date), Mon, false) AS next_day(2015-07-23 12:12:12, Mon)#x]
+Project [next_day(cast(2015-07-23 12:12:12 as date), Mon, true) AS next_day(2015-07-23 12:12:12, Mon)#x]
 +- OneRowRelation
 
 
@@ -228,28 +228,28 @@ select next_day(timestamp_ltz"2015-07-23 12:12:12", "Mon")
 -- !query
 select next_day(timestamp_ntz"2015-07-23 12:12:12", "Mon")
 -- !query analysis
-Project [next_day(cast(2015-07-23 12:12:12 as date), Mon, false) AS next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', Mon)#x]
+Project [next_day(cast(2015-07-23 12:12:12 as date), Mon, true) AS next_day(TIMESTAMP_NTZ '2015-07-23 12:12:12', Mon)#x]
 +- OneRowRelation
 
 
 -- !query
 select next_day("xx", "Mon")
 -- !query analysis
-Project [next_day(cast(xx as date), Mon, false) AS next_day(xx, Mon)#x]
+Project [next_day(cast(xx as date), Mon, true) AS next_day(xx, Mon)#x]
 +- OneRowRelation
 
 
 -- !query
 select next_day(null, "Mon")
 -- !query analysis
-Project [next_day(cast(null as date), Mon, false) AS next_day(NULL, Mon)#x]
+Project [next_day(cast(null as date), Mon, true) AS next_day(NULL, Mon)#x]
 +- OneRowRelation
 
 
 -- !query
 select next_day(null, "xx")
 -- !query analysis
-Project [next_day(cast(null as date), xx, false) AS next_day(NULL, xx)#x]
+Project [next_day(cast(null as date), xx, true) AS next_day(NULL, xx)#x]
 +- OneRowRelation
 
 
@@ -355,21 +355,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 select date_add('2011-11-11', '1')
 -- !query analysis
-Project [date_add(cast(2011-11-11 as date), 1) AS date_add(2011-11-11, 1)#x]
+Project [date_add(cast(2011-11-11 as date), cast(1 as int)) AS date_add(2011-11-11, 1)#x]
 +- OneRowRelation
 
 
 -- !query
 select date_add('2011-11-11', '1.2')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-  "sqlState" : "22023",
-  "messageParameters" : {
-    "functionName" : "date_add"
-  }
-}
+Project [date_add(cast(2011-11-11 as date), cast(1.2 as int)) AS date_add(2011-11-11, 1.2)#x]
++- OneRowRelation
 
 
 -- !query
@@ -505,14 +499,7 @@ select date_sub(date'2011-11-11', '1')
 -- !query
 select date_sub(date'2011-11-11', '1.2')
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-  "sqlState" : "22023",
-  "messageParameters" : {
-    "functionName" : "date_sub"
-  }
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -543,49 +530,23 @@ Project [date_sub(cast(2011-11-11 12:12:12 as date), 1) AS date_sub(TIMESTAMP_NT
 -- !query
 select date_add('2011-11-11', int_str) from date_view
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"int_str\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_add(2011-11-11, int_str)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 38,
-    "fragment" : "date_add('2011-11-11', int_str)"
-  } ]
-}
+Project [date_add(cast(2011-11-11 as date), cast(int_str#x as int)) AS date_add(2011-11-11, int_str)#x]
++- SubqueryAlias date_view
+   +- View (`date_view`, [date_str#x, int_str#x])
+      +- Project [cast(date_str#x as string) AS date_str#x, cast(int_str#x as string) AS int_str#x]
+         +- Project [2011-11-11 AS date_str#x, 1 AS int_str#x]
+            +- OneRowRelation
 
 
 -- !query
 select date_sub('2011-11-11', int_str) from date_view
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"int_str\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_sub(2011-11-11, int_str)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 38,
-    "fragment" : "date_sub('2011-11-11', int_str)"
-  } ]
-}
+Project [date_sub(cast(2011-11-11 as date), cast(int_str#x as int)) AS date_sub(2011-11-11, int_str)#x]
++- SubqueryAlias date_view
+   +- View (`date_view`, [date_str#x, int_str#x])
+      +- Project [cast(date_str#x as string) AS date_str#x, cast(int_str#x as string) AS int_str#x]
+         +- Project [2011-11-11 AS date_str#x, 1 AS int_str#x]
+            +- OneRowRelation
 
 
 -- !query
@@ -661,25 +622,7 @@ select date '2001-10-01' - date '2001-09-28'
 -- !query
 select date '2001-10-01' - '2001-09-28'
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"2001-09-28\"",
-    "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_sub(DATE '2001-10-01', 2001-09-28)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 39,
-    "fragment" : "date '2001-10-01' - '2001-09-28'"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -709,25 +652,7 @@ select date_str - date '2001-09-28' from date_view
 -- !query
 select date '2001-09-28' - date_str from date_view
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"date_str\"",
-    "inputType" : "\"DOUBLE\"",
-    "paramIndex" : "second",
-    "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_sub(DATE '2001-09-28', date_str)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 35,
-    "fragment" : "date '2001-09-28' - date_str"
-  } ]
-}
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -739,7 +664,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
-    "inputType" : "\"DOUBLE\"",
+    "inputType" : "\"DATE\"",
     "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
     "sqlExpr" : "\"date_add(DATE '2011-11-11', 1)\""
@@ -762,11 +687,11 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"DOUBLE\"",
+    "inputSql" : "\"DATE '2011-11-11'\"",
+    "inputType" : "\"DATE\"",
     "paramIndex" : "second",
     "requiredType" : "(\"INT\" or \"SMALLINT\" or \"TINYINT\")",
-    "sqlExpr" : "\"date_add(DATE '2011-11-11', 1)\""
+    "sqlExpr" : "\"date_add(1, DATE '2011-11-11')\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -804,7 +729,7 @@ select date '2012-01-01' - interval '2-2' year to month,
 -- !query
 select to_date('26/October/2015', 'dd/MMMMM/yyyy')
 -- !query analysis
-Project [to_date(26/October/2015, Some(dd/MMMMM/yyyy), Some(America/Los_Angeles), false) AS to_date(26/October/2015, dd/MMMMM/yyyy)#x]
+Project [to_date(26/October/2015, Some(dd/MMMMM/yyyy), Some(America/Los_Angeles), true) AS to_date(26/October/2015, dd/MMMMM/yyyy)#x]
 +- OneRowRelation
 
 

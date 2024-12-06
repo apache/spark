@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.api.java.function._
-import org.apache.spark.sql.catalyst.analysis.{EliminateEventTimeWatermark, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, ProductEncoder}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -39,7 +39,7 @@ import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode
 class KeyValueGroupedDataset[K, V] private[sql](
     kEncoder: Encoder[K],
     vEncoder: Encoder[V],
-    @transient val queryExecution: QueryExecution,
+    @transient private[sql] val queryExecution: QueryExecution,
     private val dataAttributes: Seq[Attribute],
     private val groupingAttributes: Seq[Attribute])
   extends api.KeyValueGroupedDataset[K, V] {
@@ -289,11 +289,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
       transformWithState
     )
 
-    Dataset[U](sparkSession, EliminateEventTimeWatermark(
+    Dataset[U](sparkSession,
       UpdateEventTimeWatermarkColumn(
         UnresolvedAttribute(eventTimeColumnName),
         None,
-        transformWithStateDataset.logicalPlan)))
+        transformWithStateDataset.logicalPlan))
   }
 
   /** @inheritdoc */
