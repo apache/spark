@@ -36,7 +36,7 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
 
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
-  object implicits extends EncoderImplicits {}
+  object implicits extends EncoderImplicits
   // scalastyle:on
 
   /**
