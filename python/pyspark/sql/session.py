@@ -2378,7 +2378,10 @@ def _test() -> None:
 
     globs = pyspark.sql.session.__dict__.copy()
     globs["spark"] = (
-        SparkSession.builder.master("local[4]").appName("sql.session tests").getOrCreate()
+        SparkSession.builder.config("spark.api.mode", "connect")
+        .master("local[4]")
+        .appName("sql.session tests")
+        .getOrCreate()
     )
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.session,

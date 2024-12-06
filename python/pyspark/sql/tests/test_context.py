@@ -181,7 +181,7 @@ class SQLContextTests(unittest.TestCase):
         sql_context = None
         try:
             sc = SparkContext("local[4]", "SQLContextTests")
-            sql_context = SQLContext.getOrCreate(sc)
+            sql_context = SQLContext._get_or_create(sc, {"spark.api.mode": "connect"})
             assert isinstance(sql_context, SQLContext)
         finally:
             if sql_context is not None:
