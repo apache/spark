@@ -86,9 +86,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           .map(varName => DropVariable(varName, ifExists = true))
           .map(new SingleStatementExec(_, Origin(), args, isInternal = true))
           .reverse
-        var statements =
-          collection.map(st => transformTreeIntoExecutable(st, args)) ++ dropVariables
-        if (statements.isEmpty) statements = Seq(new NoOpStatementExec)
+
+        val statements =
+          collection.map(st => transformTreeIntoExecutable(st, args)) ++ dropVariables match {
+            case Nil => Seq(new NoOpStatementExec)
+            case s => s
+          }
 
         new CompoundBodyExec(statements, label)
 
