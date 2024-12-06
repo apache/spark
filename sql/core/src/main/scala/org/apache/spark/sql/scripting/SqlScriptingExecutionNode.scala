@@ -18,12 +18,14 @@
 package org.apache.spark.sql.scripting
 
 import java.util
+import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NameParameterizedQuery, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.HandlerType.HandlerType
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, DefaultValueExpression, DropVariable, LogicalPlan, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.{Origin, WithOrigin}
 import org.apache.spark.sql.errors.SqlScriptingErrors
@@ -115,12 +117,15 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  *   Whether the statement originates from the SQL script or it is created during the
  *   interpretation. Example: DropVariable statements are automatically created at the end of each
  *   compound.
+ * @param context
+ *   SqlScriptingExecutionContext keeps the execution state of current script.
  */
 class SingleStatementExec(
     var parsedPlan: LogicalPlan,
     override val origin: Origin,
     val args: Map[String, Expression],
-    override val isInternal: Boolean)
+    override val isInternal: Boolean,
+    context: SqlScriptingExecutionContext)
   extends LeafStatementExec with WithOrigin {
 
   /**
@@ -169,12 +174,43 @@ class SingleStatementExec(
  *   Executable nodes for nested statements within the CompoundBody.
  * @param label
  *   Label set by user to CompoundBody or None otherwise.
+ * @param isScope
+ *   Flag that indicates whether Compound Body
+ * @param context
+ *   SqlScriptingExecutionContext keeps the execution state of current script.
  */
-class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[String] = None)
+class CompoundBodyExec(
+    statements: Seq[CompoundStatementExec],
+    label: Option[String] = None,
+    isScope: Boolean,
+    context: SqlScriptingExecutionContext,
+    conditionHandlerMap: HashMap[String, ErrorHandlerExec] = HashMap())
   extends NonLeafStatementExec {
 
   private var localIterator = statements.iterator
   private var curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+  private var scopeEntered = false
+  private var scopeExited = false
+
+  // Enter scope represented by this compound statement.
+  protected def enterScope(): Unit = {
+    // This check makes this operation idempotent.
+    if (isScope && !scopeEntered) {
+      scopeEntered = true
+      scopeExited = false
+      context.enterScope(label.get, conditionHandlerMap)
+    }
+  }
+
+  // Exit scope represented by this compound statement.
+  protected def exitScope(): Unit = {
+    // This check makes this operation idempotent.
+    if (isScope && !scopeExited) {
+      scopeExited = true
+      scopeEntered = false
+      context.exitScope(label.get)
+    }
+  }
 
   /** Used to stop the iteration in cases when LEAVE statement is encountered. */
   private var stopIteration = false
@@ -210,6 +246,10 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[Str
             statement
           case Some(body: NonLeafStatementExec) =>
             if (body.getTreeIterator.hasNext) {
+              body match {
+                case exec: CompoundBodyExec => exec.enterScope()
+                case _ => // pass
+              }
               body.getTreeIterator.next() match {
                 case leaveStatement: LeaveStatementExec =>
                   handleLeaveStatement(leaveStatement)
@@ -220,6 +260,10 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[Str
                 case other => other
               }
             } else {
+              body match {
+                case exec: CompoundBodyExec => exec.exitScope()
+                case _ => // pass
+              }
               curr = if (localIterator.hasNext) Some(localIterator.next()) else None
               next()
             }
@@ -236,6 +280,8 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[Str
     localIterator = statements.iterator
     curr = if (localIterator.hasNext) Some(localIterator.next()) else None
     stopIteration = false
+    scopeEntered = false
+    scopeExited = false
   }
 
   /** Actions to do when LEAVE statement is encountered, to stop the execution of this compound. */
@@ -243,6 +289,9 @@ class CompoundBodyExec(statements: Seq[CompoundStatementExec], label: Option[Str
     if (!leaveStatement.hasBeenMatched) {
       // Stop the iteration.
       stopIteration = true
+
+      // Exit scope if leave statement is encountered.
+      exitScope()
 
       // TODO: Variable cleanup (once we add SQL script execution logic).
       // TODO: Add interpreter tests as well.
@@ -672,13 +721,15 @@ class LoopStatementExec(
  * @param body Executable node for the body.
  * @param label Label set to ForStatement by user or None otherwise.
  * @param session Spark session that SQL script is executed within.
+ * @param context SqlScriptingExecutionContext keeps the execution state of current script.
  */
 class ForStatementExec(
     query: SingleStatementExec,
     variableName: Option[String],
     body: CompoundBodyExec,
     val label: Option[String],
-    session: SparkSession) extends NonLeafStatementExec {
+    session: SparkSession,
+    context: SqlScriptingExecutionContext) extends NonLeafStatementExec {
 
   private object ForState extends Enumeration {
     val VariableAssignment, Body, VariableCleanup = Value
@@ -840,7 +891,10 @@ class ForStatementExec(
     else {
       // create compound body for dropping nodes after execution is complete
       dropVariablesExec = new CompoundBodyExec(
-        variablesMap.keys.toSeq.map(colName => createDropVarExec(colName))
+        variablesMap.keys.toSeq.map(colName => createDropVarExec(colName)),
+        None,
+        isScope = false,
+        context
       )
       ForState.VariableCleanup
     }
@@ -853,7 +907,7 @@ class ForStatementExec(
       defaultExpression,
       replace = true
     )
-    new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true)
+    new SingleStatementExec(declareVariable, Origin(), Map.empty, isInternal = true, context)
   }
 
   private def createSetVarExec(varName: String, variable: Expression): SingleStatementExec = {
@@ -863,12 +917,17 @@ class ForStatementExec(
     )
     val setIdentifierToCurrentRow =
       SetVariable(Seq(UnresolvedAttribute(varName)), projectNamedStruct)
-    new SingleStatementExec(setIdentifierToCurrentRow, Origin(), Map.empty, isInternal = true)
+    new SingleStatementExec(
+      setIdentifierToCurrentRow,
+      Origin(),
+      Map.empty,
+      isInternal = true,
+      context)
   }
 
   private def createDropVarExec(varName: String): SingleStatementExec = {
     val dropVar = DropVariable(UnresolvedIdentifier(Seq(varName)), ifExists = true)
-    new SingleStatementExec(dropVar, Origin(), Map.empty, isInternal = true)
+    new SingleStatementExec(dropVar, Origin(), Map.empty, isInternal = true, context)
   }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
@@ -882,4 +941,18 @@ class ForStatementExec(
     interrupted = false
     body.reset()
   }
+}
+
+/**
+ * Executable node for ErrorHandlerStatement.
+ * @param body Executable CompoundBody of the error handler.
+ */
+class ErrorHandlerExec(
+    val body: CompoundBodyExec,
+    val handlerType: HandlerType,
+    val scopeToExit: Option[String]) extends NonLeafStatementExec {
+
+  override def getTreeIterator: Iterator[CompoundStatementExec] = body.getTreeIterator
+
+  override def reset(): Unit = body.reset()
 }

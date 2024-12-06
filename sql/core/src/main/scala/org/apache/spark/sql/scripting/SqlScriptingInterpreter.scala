@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.scripting
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
-import org.apache.spark.sql.catalyst.trees.Origin
+import org.apache.spark.sql.catalyst.plans.logical.{CaseStatement, CompoundBody, CompoundPlanStatement, CreateVariable, DropVariable, ForStatement, HandlerType, IfElseStatement, IterateStatement, LeaveStatement, LogicalPlan, LoopStatement, RepeatStatement, SingleStatement, WhileStatement}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.SqlScriptingErrors
 
 /**
  * SQL scripting interpreter - builds SQL script execution plan.
@@ -44,8 +47,9 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    */
   def buildExecutionPlan(
       compound: CompoundBody,
-      args: Map[String, Expression]): Iterator[CompoundStatementExec] = {
-    transformTreeIntoExecutable(compound, args)
+      args: Map[String, Expression],
+      context: SqlScriptingExecutionContext): Iterator[CompoundStatementExec] = {
+    transformTreeIntoExecutable(compound, args, context)
       .asInstanceOf[CompoundBodyExec].getTreeIterator
   }
 
@@ -63,6 +67,94 @@ case class SqlScriptingInterpreter(session: SparkSession) {
     }
 
   /**
+   * Transform [[CompoundBody]] into [[CompoundBodyExec]].
+   * @param compoundBody
+   *   CompoundBody to be transformed into CompoundBodyExec.
+   * @param isExitHandler
+   *   Flag to indicate if the body is an exit handler body to add leave statement at the end.
+   * @param exitHandlerLabel
+   *   If body is an exit handler body, this is the label of surrounding CompoundBody
+   *   that should be exited.
+   * @return
+   *   Executable version of the CompoundBody .
+   */
+  private def transformBodyIntoExec(
+      compoundBody: CompoundBody,
+      args: Map[String, Expression],
+      context: SqlScriptingExecutionContext,
+      isExitHandler: Boolean = false,
+      exitHandlerLabel: String = ""): CompoundBodyExec = {
+    val variables = compoundBody.collection.flatMap {
+      case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
+      case _ => None
+    }
+    val dropVariables = variables
+      .map(varName => DropVariable(varName, ifExists = true))
+      .map(new SingleStatementExec(_, Origin(), args, isInternal = true, context))
+      .reverse
+
+    // Create a map of conditions (SqlStates) to their respective handlers.
+    val conditionHandlerMap = HashMap[String, ErrorHandlerExec]()
+    compoundBody.handlers.foreach(handler => {
+      val handlerBodyExec =
+        transformBodyIntoExec(
+          handler.body,
+          args,
+          context,
+          handler.handlerType == HandlerType.EXIT,
+          compoundBody.label.get)
+
+      // Execution node of handler.
+      val scopeToExit = if (handler.handlerType == HandlerType.EXIT) {
+        Some(compoundBody.label.get)
+      } else {
+        None
+      }
+
+      val handlerExec = new ErrorHandlerExec(
+        handlerBodyExec,
+        handler.handlerType,
+        scopeToExit)
+
+      // For each condition handler is defined for, add corresponding key value pair
+      // to the conditionHandlerMap.
+      handler.conditions.foreach(condition => {
+        // Condition can either be the key in conditions map or SqlState.
+        val conditionValue = compoundBody.conditions.getOrElse(condition, condition)
+        if (conditionHandlerMap.contains(conditionValue)) {
+          throw SqlScriptingErrors.duplicateHandlerForSameSqlState(
+            CurrentOrigin.get, conditionValue)
+        } else {
+          conditionHandlerMap.put(conditionValue, handlerExec)
+        }
+      })
+    })
+
+    if (isExitHandler) {
+      // Create leave statement to exit the surrounding CompoundBody after handler execution.
+      val leave = new LeaveStatementExec(exitHandlerLabel)
+      val statements = compoundBody.collection.map(st =>
+        transformTreeIntoExecutable(st, args, context)) ++
+        dropVariables :+ leave
+
+      return new CompoundBodyExec(
+        statements,
+        compoundBody.label,
+        isScope = false,
+        context,
+        conditionHandlerMap)
+    }
+
+    new CompoundBodyExec(
+      compoundBody.collection
+        .map(st => transformTreeIntoExecutable(st, args, context)) ++ dropVariables,
+      compoundBody.label,
+      compoundBody.isScope,
+      context,
+      conditionHandlerMap)
+  }
+
+  /**
    * Transform the parsed tree to the executable node.
    *
    * @param node
@@ -74,21 +166,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
    */
   private def transformTreeIntoExecutable(
       node: CompoundPlanStatement,
-      args: Map[String, Expression]): CompoundStatementExec =
+      args: Map[String, Expression],
+      context: SqlScriptingExecutionContext): CompoundStatementExec =
     node match {
-      case CompoundBody(collection, label) =>
+      case body: CompoundBody =>
         // TODO [SPARK-48530]: Current logic doesn't support scoped variables and shadowing.
-        val variables = collection.flatMap {
-          case st: SingleStatement => getDeclareVarNameFromPlan(st.parsedPlan)
-          case _ => None
-        }
-        val dropVariables = variables
-          .map(varName => DropVariable(varName, ifExists = true))
-          .map(new SingleStatementExec(_, Origin(), args, isInternal = true))
-          .reverse
-        new CompoundBodyExec(
-          collection.map(st => transformTreeIntoExecutable(st, args)) ++ dropVariables,
-          label)
+        transformBodyIntoExec(body, args, context)
 
       case IfElseStatement(conditions, conditionalBodies, elseBody) =>
         val conditionsExec = conditions.map(condition =>
@@ -96,11 +179,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
             condition.parsedPlan,
             condition.origin,
             args,
-            isInternal = false))
+            isInternal = false,
+            context))
         val conditionalBodiesExec = conditionalBodies.map(body =>
-          transformTreeIntoExecutable(body, args).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
-          transformTreeIntoExecutable(body, args).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         new IfElseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
 
@@ -110,11 +194,12 @@ case class SqlScriptingInterpreter(session: SparkSession) {
             condition.parsedPlan,
             condition.origin,
             args,
-            isInternal = false))
+            isInternal = false,
+            context))
         val conditionalBodiesExec = conditionalBodies.map(body =>
-          transformTreeIntoExecutable(body, args).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         val unconditionalBodiesExec = elseBody.map(body =>
-          transformTreeIntoExecutable(body, args).asInstanceOf[CompoundBodyExec])
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec])
         new CaseStatementExec(
           conditionsExec, conditionalBodiesExec, unconditionalBodiesExec, session)
 
@@ -124,9 +209,10 @@ case class SqlScriptingInterpreter(session: SparkSession) {
             condition.parsedPlan,
             condition.origin,
             args,
-            isInternal = false)
+            isInternal = false,
+            context)
         val bodyExec =
-          transformTreeIntoExecutable(body, args).asInstanceOf[CompoundBodyExec]
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec]
         new WhileStatementExec(conditionExec, bodyExec, label, session)
 
       case RepeatStatement(condition, body, label) =>
@@ -135,13 +221,14 @@ case class SqlScriptingInterpreter(session: SparkSession) {
             condition.parsedPlan,
             condition.origin,
             args,
-            isInternal = false)
+            isInternal = false,
+            context)
         val bodyExec =
-          transformTreeIntoExecutable(body, args).asInstanceOf[CompoundBodyExec]
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec]
         new RepeatStatementExec(conditionExec, bodyExec, label, session)
 
       case LoopStatement(body, label) =>
-        val bodyExec = transformTreeIntoExecutable(body, args)
+        val bodyExec = transformTreeIntoExecutable(body, args, context)
           .asInstanceOf[CompoundBodyExec]
         new LoopStatementExec(bodyExec, label)
 
@@ -151,10 +238,11 @@ case class SqlScriptingInterpreter(session: SparkSession) {
             query.parsedPlan,
             query.origin,
             args,
-            isInternal = false)
+            isInternal = false,
+            context)
         val bodyExec =
-          transformTreeIntoExecutable(body, args).asInstanceOf[CompoundBodyExec]
-        new ForStatementExec(queryExec, variableNameOpt, bodyExec, label, session)
+          transformTreeIntoExecutable(body, args, context).asInstanceOf[CompoundBodyExec]
+        new ForStatementExec(queryExec, variableNameOpt, bodyExec, label, session, context)
 
       case leaveStatement: LeaveStatement =>
         new LeaveStatementExec(leaveStatement.label)
@@ -167,6 +255,11 @@ case class SqlScriptingInterpreter(session: SparkSession) {
           sparkStatement.parsedPlan,
           sparkStatement.origin,
           args,
-          isInternal = false)
+          isInternal = false,
+          context)
+
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Unsupported operation in the execution plan.")
     }
 }

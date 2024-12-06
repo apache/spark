@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.scripting
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, CompoundBody}
@@ -35,27 +35,42 @@ class SqlScriptingExecution(
     session: SparkSession,
     args: Map[String, Expression]) extends Iterator[DataFrame] {
 
-  // Build the execution plan for the script.
-  private val executionPlan: Iterator[CompoundStatementExec] =
-    SqlScriptingInterpreter(session).buildExecutionPlan(sqlScript, args)
+  private val interpreter = SqlScriptingInterpreter(session)
 
-  private var current = getNextResult
+  // Frames to keep what is being executed.
+  private val context: SqlScriptingExecutionContext = {
+    val ctx = new SqlScriptingExecutionContext()
+    val executionPlan = interpreter.buildExecutionPlan(sqlScript, args, ctx)
+    ctx.frames.addOne(new SqlScriptingExecutionFrame(executionPlan))
+    ctx
+  }
+
+  private var current: Option[DataFrame] = getNextResult
 
   override def hasNext: Boolean = current.isDefined
 
   override def next(): DataFrame = {
-    if (!hasNext) throw SparkException.internalError("No more elements to iterate through.")
-    val nextDataFrame = current.get
-    current = getNextResult
-    nextDataFrame
+    current match {
+      case None => throw SparkException.internalError("No more elements to iterate through.")
+      case Some(result) =>
+        current = getNextResult
+        result
+    }
+  }
+
+  /** Helper method to iterate get next statements from the first available frame. */
+  private def getNextStatement: Option[CompoundStatementExec] = {
+    while (context.frames.nonEmpty && !context.frames.last.hasNext) {
+      context.frames.remove(context.frames.size - 1)
+    }
+    if (context.frames.nonEmpty) {
+      return Some(context.frames.last.next())
+    }
+    None
   }
 
   /** Helper method to iterate through statements until next result statement is encountered. */
   private def getNextResult: Option[DataFrame] = {
-
-    def getNextStatement: Option[CompoundStatementExec] =
-      if (executionPlan.hasNext) Some(executionPlan.next()) else None
-
     var currentStatement = getNextStatement
     // While we don't have a result statement, execute the statements.
     while (currentStatement.isDefined) {
@@ -75,18 +90,25 @@ class SqlScriptingExecution(
     None
   }
 
-  private def handleException(e: Throwable): Unit = {
-    // Rethrow the exception.
-    // TODO: SPARK-48353 Add error handling for SQL scripts
-    throw e
+  private def handleException(e: SparkThrowable): Unit = {
+    context.findHandler(e.getSqlState) match {
+      case Some(handler) =>
+        context.frames.addOne(new SqlScriptingExecutionFrame(handler.getTreeIterator))
+      case None =>
+        throw e.asInstanceOf[Throwable]
+    }
   }
 
   def withErrorHandling(f: => Unit): Unit = {
     try {
       f
     } catch {
-      case e: Throwable =>
+      case e: SparkThrowable =>
+        // Try to find a handler for the exception.
         handleException(e)
+      case exception: Exception =>
+        // Throw the exception as is.
+        throw exception
     }
   }
 }
