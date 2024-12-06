@@ -24,17 +24,24 @@ class SQLExpressionsSuite extends QueryTest with RemoteSparkSession {
 
   test("variants") {
     val topLevelVariants = spark.sql("select parse_json(id::string) from range(10)")
-    checkAnswer(topLevelVariants, (0 until 10)
-      .map(i =>
-        Row(new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0)))))
+    checkAnswer(
+      topLevelVariants,
+      (0 until 10)
+        .map(i => Row(new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0)))))
     val structsOfVariants = spark.sql("select struct(parse_json(id::string)) from range(10)")
-    checkAnswer(structsOfVariants, (0 until 10)
-      .map(i => Row(Row(new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0))))))
+    checkAnswer(
+      structsOfVariants,
+      (0 until 10)
+        .map(i => Row(Row(new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0))))))
     val arraysOfVariants = spark.sql("select array(parse_json(id::string)) from range(10)")
-    checkAnswer(arraysOfVariants, (0 until 10)
-      .map(i => Row(Seq(new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0))))))
+    checkAnswer(
+      arraysOfVariants,
+      (0 until 10)
+        .map(i => Row(Seq(new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0))))))
     val mapsOfVariants = spark.sql("select map(id, parse_json(id::string)) from range(10)")
-    checkAnswer(mapsOfVariants, (0 until 10)
-      .map(i => Row(Map((i, new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0)))))))
+    checkAnswer(
+      mapsOfVariants,
+      (0 until 10)
+        .map(i => Row(Map((i, new VariantVal(Array[Byte](12, i.toByte), Array[Byte](1, 0, 0)))))))
   }
 }
