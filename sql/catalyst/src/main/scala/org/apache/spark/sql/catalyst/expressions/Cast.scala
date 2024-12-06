@@ -281,7 +281,7 @@ object Cast extends QueryErrorsBase {
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
     case (_: StringType, TimestampType) => true
-    case (TimestampType, StringType) => true
+    case (TimestampType, _: StringType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
     case (TimestampType, TimestampNTZType) => true

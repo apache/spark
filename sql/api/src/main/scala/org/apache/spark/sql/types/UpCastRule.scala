@@ -40,8 +40,8 @@ private[sql] object UpCastRule {
     case (DateType, TimestampNTZType) => true
     case (TimestampNTZType, TimestampType) => true
     case (TimestampType, TimestampNTZType) => true
-    case (_: AtomicType, StringType) => true
-    case (_: CalendarIntervalType, StringType) => true
+    case (_: AtomicType, _: StringType) => true
+    case (_: CalendarIntervalType, _: StringType) => true
     case (NullType, _) => true
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
