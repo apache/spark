@@ -1,6 +1,7 @@
 # From 4.0.0
 
 - [SPARK-48392][CORE] Also load `spark-defaults.conf` when provided `--properties-file
+- [SPARK-49259][SS] Size based partition creation during kafka read
 
 # From 3.5.x
 
