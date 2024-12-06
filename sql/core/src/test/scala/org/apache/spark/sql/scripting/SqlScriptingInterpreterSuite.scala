@@ -134,6 +134,21 @@ class SqlScriptingInterpreterSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
+  test("empty begin end blocks with single statement") {
+    val sqlScript =
+      """
+        |BEGIN
+        | BEGIN
+        | END;
+        | SELECT 1;
+        | BEGIN
+        | END;
+        |END
+        |""".stripMargin
+    val expected = Seq(Seq(Row(1)))
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   test("empty begin end blocks - nested") {
     val sqlScript =
       """
