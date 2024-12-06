@@ -35,10 +35,6 @@ generate_supported_api(output_rst_file_path)
 # generate development/errors.rst
 from pyspark.errors_doc_gen import generate_errors_doc
 
-# Creates a Classic session once so it can be reused
-from pyspark.sql import SparkSession
-SparkSession.builder.config("spark.api.mode", "classic").master("local[*]").getOrCreate()
-
 output_rst_file_path = (
     "%s/development/errors.rst"
     % os.path.dirname(os.path.abspath(__file__))
