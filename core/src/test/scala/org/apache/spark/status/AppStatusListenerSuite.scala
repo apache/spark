@@ -1930,6 +1930,76 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     assert(job.numActiveStages == 0)
   }
 
+  test("Handle shared stages across multiple jobs") {
+    val listener = new AppStatusListener(store, conf, live = true)
+
+    // This will be a shared stage in PENDING state which gets SKIPPED status
+    // when first job is completed
+    val sharedStageId = 1
+    val sharedPendingStage = new StageInfo(sharedStageId, 0, "sharedStage", 10,
+      Seq.empty, Seq.empty, "", resourceProfileId = 0)
+
+    // These dummy stages will be unique to their respective jobs
+    val job1Stage = new StageInfo(2, 0, "job1Stage", 2,
+      Seq.empty, Seq.empty, "", resourceProfileId = 0)
+    val job2Stage = new StageInfo(3, 0, "job2Stage", 2,
+      Seq.empty, Seq.empty, "", resourceProfileId = 0)
+
+    val job1Id = 1
+    val job1StartEvent = SparkListenerJobStart(job1Id, 0L, Seq(sharedPendingStage, job1Stage))
+    val job2Id = 2
+    val job2StartEvent = SparkListenerJobStart(job2Id, 0L, Seq(sharedPendingStage, job2Stage))
+
+    listener.onApplicationStart(SparkListenerApplicationStart("app", Some("app"), 0L, "none", None))
+    listener.onJobStart(job1StartEvent)
+    listener.onJobStart(job2StartEvent)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(job1Stage))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(job2Stage))
+
+    check[StageDataWrapper](Array(sharedStageId, 0)) { stage =>
+      assert(stage.info.status === v1.StageStatus.PENDING)
+      assert(stage.info.numActiveTasks === 0)
+      assert(stage.info.numCompleteTasks === 0)
+    }
+
+    listener.onStageCompleted(SparkListenerStageCompleted(job1Stage))
+    listener.onJobEnd(SparkListenerJobEnd(job1Id, 1L, JobSucceeded))
+
+    check[JobDataWrapper](1) { job =>
+      assert(job.info.stageIds == Seq(sharedStageId, 2))
+    }
+
+    check[StageDataWrapper](Array(sharedStageId, 0)) { stage =>
+      assert(stage.info.status === v1.StageStatus.SKIPPED)
+      assert(stage.info.numActiveTasks === 0)
+      assert(stage.info.numCompleteTasks === 0)
+    }
+
+    listener.onStageCompleted(SparkListenerStageCompleted(job2Stage))
+    listener.onJobEnd(SparkListenerJobEnd(job2Id, 1L, JobSucceeded))
+
+    check[StageDataWrapper](Array(sharedStageId, 0)) { stage =>
+      assert(stage.info.status === v1.StageStatus.SKIPPED)
+      assert(stage.info.numActiveTasks === 0)
+      assert(stage.info.numCompleteTasks === 0)
+    }
+
+    check[JobDataWrapper](2) { job =>
+      assert(job.info.stageIds == Seq(sharedStageId, 3))
+    }
+
+    listener.onApplicationEnd(SparkListenerApplicationEnd(1L))
+
+    val jobs = KVUtils.mapToSeq(store.view(classOf[JobDataWrapper]))(_.info)
+    assert(jobs.length == 2)
+    jobs.foreach { job =>
+      assert(job.numActiveStages == 0)
+      assert(job.numSkippedStages == 2)
+      assert(job.numSkippedTasks == 12)
+    }
+  }
+
+
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber())
 
   private def check[T: ClassTag](key: Any)(fn: T => Unit): Unit = {
