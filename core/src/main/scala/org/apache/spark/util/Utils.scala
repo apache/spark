@@ -2524,7 +2524,7 @@ private[spark] object Utils
    *   - IO encryption disabled
    *   - serializer(such as KryoSerializer) supports relocation of serialized objects
    */
-  def isPushBasedShuffleEnabled(conf: SparkConf,
+  def isPushBasedShuffleEnabled(conf: ReadOnlySparkConf,
       isDriver: Boolean,
       checkSerializer: Boolean = true): Boolean = {
     val pushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED)
@@ -2596,7 +2596,7 @@ private[spark] object Utils
   /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
-  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+  def isDynamicAllocationEnabled(conf: ReadOnlySparkConf): Boolean = {
     val dynamicAllocationEnabled = conf.get(DYN_ALLOCATION_ENABLED)
     dynamicAllocationEnabled &&
       (!isLocalMaster(conf) || conf.get(DYN_ALLOCATION_TESTING))
