@@ -152,7 +152,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
             failed = sparkJob.numFailedTasks,
             skipped = sparkJob.numSkippedTasks,
             reasonToNumKilled = sparkJob.killedTasksSummary,
-            total = sparkJob.numTasks - sparkJob.numSkippedTasks)
+            total = sparkJob.totalTasks - sparkJob.numSkippedTasks)
         }
       </td>
       {UIUtils.failureReasonCell(lastFailureReason)}

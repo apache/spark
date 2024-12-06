@@ -202,6 +202,7 @@ class JobData private[spark](
     val jobTags: collection.Seq[String],
     val status: JobExecutionStatus,
     val numTasks: Int,
+    val totalTasks: Int,
     val numActiveTasks: Int,
     val numCompletedTasks: Int,
     val numSkippedTasks: Int,

@@ -68,6 +68,7 @@ private class LiveJob(
     jobGroup: Option[String],
     jobTags: Seq[String],
     numTasks: Int,
+    totalTasks: Int,
     sqlExecutionId: Option[Long]) extends LiveEntity {
 
   var activeTasks = 0
@@ -102,6 +103,7 @@ private class LiveJob(
       jobTags,
       status,
       numTasks,
+      totalTasks,
       activeTasks,
       completedTasks,
       skippedTasks,

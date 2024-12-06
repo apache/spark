@@ -80,6 +80,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
           jobTags = jobTags,
           status = JobExecutionStatus.UNKNOWN,
           numTasks = 2,
+          totalTasks = 13,
           numActiveTasks = 3,
           numCompletedTasks = 4,
           numSkippedTasks = 5,
