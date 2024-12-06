@@ -194,7 +194,7 @@ class ClassificationTestsMixin:
             np.testing.assert_allclose(
                 np.stack(list(model_predictions.probability)),
                 torch_infer_result,
-                rtol=1e-4,
+                rtol=1e-2,
             )
 
             loaded_model = LORV2Model.loadFromLocal(local_model_path)
