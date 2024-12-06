@@ -351,11 +351,12 @@ class RocksDBFileManager(
    * does file listing to find all snapshot (version, uniqueId) pairs, and finds
    * the ground truth latest snapshot (version, uniqueId) the db instance needs to load.
    *
-   * @param lineage the ground truth lineage loaded from changelog file
-   * @return the ground truth latest snapshot (version, uniqueId) the db instance needs to load
+   * @param lineage The ground truth lineage loaded from changelog file, sorted by id
+   * @return The ground truth latest snapshot (version, uniqueId) the db instance needs to load,
+   *         when the return value is None it means ther is no such snapshot found.
    */
   def getLatestSnapshotVersionAndUniqueIdFromLineage(
-      lineage: Array[LineageItem]): Option[(Long, Option[String])] = {
+      lineage: Array[LineageItem]): Option[(Long, String)] = {
     val path = new Path(dfsRootDir)
     if (fm.exists(path)) {
       fm.list(path, onlyZipFiles)
@@ -364,13 +365,13 @@ class RocksDBFileManager(
           case Array(ver, id) => lineage.contains(LineageItem(ver.toLong, id))
         }
         .map {
-          case Array(version, uniqueId) => (version.toLong, Option(uniqueId))
+          case Array(version, uniqueId) => (version.toLong, uniqueId)
         }
         .sortBy(_._1)
         .reverse
         .headOption
     } else {
-      Some(0, None)
+      None
     }
   }
 

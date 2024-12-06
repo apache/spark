@@ -347,7 +347,7 @@ class RocksDB(
           val latestSnapshotVersionsAndUniqueId =
             fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(currVersionLineage)
           latestSnapshotVersionsAndUniqueId match {
-            case Some(pair) => pair
+            case Some(pair) => (pair._1, Option(pair._2))
             case None =>
               logWarning("Cannot find latest snapshot based on lineage: "
                 + printLineageItems(currVersionLineage))
@@ -472,8 +472,7 @@ class RocksDB(
   }
 
   /**
-   * Initialize in memory values based on the metadata loaded from DFS.
-   * @param metadata: metadata loaded from DFS
+   * Initialize key metrics based on the metadata loaded from DFS and open local RocksDB.
    */
   private def init(metadata: RocksDBCheckpointMetadata): Unit = {
 
@@ -1228,6 +1227,9 @@ class RocksDB(
         // have been uploaded to DFS. We don't touch the file mapping here to avoid corrupting it.
         snapshotsPendingUpload.remove(snapshotInfo)
       }
+      // This is relative aggressive because that even if the uploading succeeds,
+      // it is not necessarily the one written to the commit log. But we can always load lineage
+      // from commit log so it is fine.
       lineageManager.resetLineage(lineageManager.getLineage()
         .filter(i => i.version >= snapshot.version))
       logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: " +
