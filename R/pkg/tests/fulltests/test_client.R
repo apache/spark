@@ -22,13 +22,14 @@ test_that("adding spark-testing-base as a package works", {
                                   "holdenk:spark-testing-base:1.3.0_0.0.5")
   expect_equal(gsub("[[:space:]]", "", args),
                gsub("[[:space:]]", "",
+                    "--conf spark.api.mode=classic " +
                     "--packages holdenk:spark-testing-base:1.3.0_0.0.5"))
 })
 
 test_that("no package specified doesn't add packages flag", {
   args <- generateSparkSubmitArgs("", "", "", "", "")
   expect_equal(gsub("[[:space:]]", "", args),
-               "")
+               "--confspark.api.mode=classic")
 })
 
 test_that("multiple packages don't produce a warning", {
