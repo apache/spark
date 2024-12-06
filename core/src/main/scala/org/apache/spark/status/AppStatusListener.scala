@@ -496,22 +496,27 @@ private[spark] class AppStatusListener(
       val now = System.nanoTime()
 
       // Check if there are any pending stages that match this job; mark those as skipped.
-      val it = liveStages.entrySet.iterator()
-      while (it.hasNext()) {
-        val e = it.next()
-        if (job.stageIds.contains(e.getKey()._1)) {
-          val stage = e.getValue()
+      liveStages.forEach { (key, stage) =>
+        val stageId = key._1
+        if (job.stageIds.contains(stageId)) {
           if (v1.StageStatus.PENDING.equals(stage.status)) {
             stage.status = v1.StageStatus.SKIPPED
             job.skippedStages += stage.info.stageId
             job.skippedTasks += stage.info.numTasks
+
+            // Before removing stage we need to update skipped data
+            // for all jobs referencing this stage
+            liveJobs.values.filter(_.stageIds.contains(stageId)).foreach { otherJob =>
+                otherJob.skippedStages += stage.info.stageId
+                otherJob.skippedTasks += stage.info.numTasks
+              }
 
             pools.get(stage.schedulingPool).foreach { pool =>
               pool.stageIds = pool.stageIds - stage.info.stageId
               update(pool, now)
             }
 
-            it.remove()
+            liveStages.remove(key)
             update(stage, now, last = true)
           }
         }
