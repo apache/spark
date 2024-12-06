@@ -32,7 +32,8 @@ import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row, SparkSession, S
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, RepartitionOperation}
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryTableScanLike}
@@ -2235,6 +2236,25 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-50496: Change rebalance partitioning to SinglePartition if partition number is 1") {
+    def checkSinglePartitioning(df: DataFrame): Unit = {
+      assert(
+        df.queryExecution.analyzed.collect {
+          case r: RepartitionOperation => r
+        }.size == 1)
+
+      assert(
+        collect(df.queryExecution.executedPlan) {
+          case s: ShuffleExchangeExec if s.outputPartitioning == SinglePartition => s
+        }.size == 1)
+    }
+
+    checkSinglePartitioning(sql("SELECT /*+ REBALANCE(1) */ * FROM VALUES(1),(2),(3) AS t(c)"))
+    checkSinglePartitioning(sql("SELECT /*+ REBALANCE(1, c) */ * FROM VALUES(1),(2),(3) AS t(c)"))
+  }
+
+
 
   test("SPARK-35725: Support optimize skewed partitions in RebalancePartitions") {
     withTempView("v") {
