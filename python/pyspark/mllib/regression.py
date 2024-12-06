@@ -1055,7 +1055,12 @@ def _test() -> None:
     import pyspark.mllib.regression
 
     globs = pyspark.mllib.regression.__dict__.copy()
-    spark = SparkSession.builder.master("local[2]").appName("mllib.regression tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[2]")
+        .config("spark.api.mode", "classic")
+        .appName("mllib.regression tests")
+        .getOrCreate()
+    )
     globs["sc"] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()

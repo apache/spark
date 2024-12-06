@@ -1058,7 +1058,12 @@ def _test() -> None:
     import pyspark.sql.pandas.group_ops
 
     globs = pyspark.sql.pandas.group_ops.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("sql.pandas.group tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.pandas.group tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.pandas.group_ops,

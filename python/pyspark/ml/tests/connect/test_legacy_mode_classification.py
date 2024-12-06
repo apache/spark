@@ -226,7 +226,7 @@ class ClassificationTestsMixin:
 
 
 @unittest.skipIf(
-    True and not should_test_connect or not have_torch or is_remote_only(),  # TBD
+    not should_test_connect or not have_torch or is_remote_only(),
     connect_requirement_message
     or torch_requirement_message
     or "pyspark-connect cannot test classic Spark",

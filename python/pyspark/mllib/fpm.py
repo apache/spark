@@ -209,7 +209,12 @@ def _test() -> None:
     import pyspark.mllib.fpm
 
     globs = pyspark.mllib.fpm.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("mllib.fpm tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("mllib.fpm tests")
+        .getOrCreate()
+    )
     globs["sc"] = spark.sparkContext
     import tempfile
 

@@ -1943,7 +1943,10 @@ def _test() -> None:
     # the parent classe's doctests here directly.
     globs = pyspark.sql.dataframe.__dict__.copy()
     spark = (
-        SparkSession.builder.master("local[4]").appName("sql.classic.dataframe tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.classic.dataframe tests")
+        .getOrCreate()
     )
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(

@@ -203,7 +203,11 @@ class FeatureTestsMixin:
 )
 class FeatureTests(FeatureTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
+        self.spark = (
+            SparkSession.builder.master("local[2]")
+            .config("spark.api.mode", "classic")
+            .getOrCreate()
+        )
 
     def tearDown(self) -> None:
         self.spark.stop()

@@ -493,7 +493,10 @@ def _test() -> None:
 
     globs = globals().copy()
     globs["spark"] = (
-        SparkSession.builder.master("local[2]").appName("taskcontext tests").getOrCreate()
+        SparkSession.builder.master("local[2]")
+        .config("spark.api.mode", "classic")
+        .appName("taskcontext tests")
+        .getOrCreate()
     )
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs["spark"].stop()

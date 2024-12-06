@@ -636,7 +636,10 @@ def _test() -> None:
     # the parent classe's doctests here directly.
     globs = pyspark.sql.column.__dict__.copy()
     spark = (
-        SparkSession.builder.master("local[4]").appName("sql.classic.column tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.classic.column tests")
+        .getOrCreate()
     )
     globs["spark"] = spark
 

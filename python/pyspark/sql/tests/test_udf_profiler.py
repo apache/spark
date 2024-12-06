@@ -61,6 +61,7 @@ class UDFProfilerTests(unittest.TestCase):
         conf = SparkConf().set("spark.python.profile", "true")
         self.spark = (
             SparkSession.builder.master("local[4]")
+            .config("spark.api.mode", "classic")
             .config(conf=conf)
             .appName(class_name)
             .getOrCreate()

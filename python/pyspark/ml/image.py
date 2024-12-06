@@ -252,7 +252,12 @@ def _test() -> None:
     import pyspark.ml.image
 
     globs = pyspark.ml.image.__dict__.copy()
-    spark = SparkSession.builder.master("local[2]").appName("ml.image tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[2]")
+        .config("spark.api.mode", "classic")
+        .appName("ml.image tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
 
     (failure_count, test_count) = doctest.testmod(

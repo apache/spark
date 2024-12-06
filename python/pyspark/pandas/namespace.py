@@ -3824,6 +3824,7 @@ def _test() -> None:
     globs["sf"] = F
     spark = (
         SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
         .appName("pyspark.pandas.namespace tests")
         .getOrCreate()
     )

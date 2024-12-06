@@ -821,7 +821,10 @@ def _test() -> None:
 
     globs = pyspark.sql.pandas.conversion.__dict__.copy()
     spark = (
-        SparkSession.builder.master("local[4]").appName("sql.pandas.conversion tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.pandas.conversion tests")
+        .getOrCreate()
     )
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(

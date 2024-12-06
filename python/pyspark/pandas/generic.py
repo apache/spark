@@ -3627,6 +3627,7 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]")
         .config("spark.api.mode", "classic")
+        .config("spark.api.mode", "classic")
         .appName("pyspark.pandas.generic tests")
         .getOrCreate()
     )

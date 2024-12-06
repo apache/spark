@@ -1647,6 +1647,7 @@ def _test() -> None:
     globs = pyspark.mllib.linalg.distributed.__dict__.copy()
     spark = (
         SparkSession.builder.master("local[2]")
+        .config("spark.api.mode", "classic")
         .appName("mllib.linalg.distributed tests")
         .getOrCreate()
     )

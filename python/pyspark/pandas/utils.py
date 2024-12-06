@@ -1065,7 +1065,10 @@ def _test() -> None:
     globs["ps"] = pyspark.pandas
     globs["sf"] = F
     spark = (
-        SparkSession.builder.master("local[4]").appName("pyspark.pandas.utils tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("pyspark.pandas.utils tests")
+        .getOrCreate()
     )
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.utils,

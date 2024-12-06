@@ -318,6 +318,7 @@ def _test() -> None:
     globs = pyspark.sql.protobuf.functions.__dict__.copy()
     spark = (
         SparkSession.builder.master("local[2]")
+        .config("spark.api.mode", "classic")
         .appName("sql.protobuf.functions tests")
         .getOrCreate()
     )

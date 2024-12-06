@@ -697,7 +697,12 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.tvf.__dict__.copy()
-    globs["spark"] = SparkSession.builder.master("local[4]").appName("sql.tvf tests").getOrCreate()
+    globs["spark"] = (
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.tvf tests")
+        .getOrCreate()
+    )
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.tvf,
         globs=globs,

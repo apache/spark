@@ -110,7 +110,10 @@ def _test() -> None:
 
     globs = pyspark.sql.pandas.map_ops.__dict__.copy()
     spark = (
-        SparkSession.builder.master("local[4]").appName("sql.pandas.map_ops tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.pandas.map_ops tests")
+        .getOrCreate()
     )
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
