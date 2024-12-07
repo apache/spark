@@ -3687,15 +3687,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def implicitCollationMismatchError(implicitTypes: Seq[StringType]): Throwable = {
-    new AnalysisException(
-      errorClass = "COLLATION_MISMATCH.IMPLICIT",
-      messageParameters = Map(
-        "implicitTypes" -> implicitTypes.map(toSQLType).mkString(", ")
-      )
-    )
-  }
-
   def explicitCollationMismatchError(explicitTypes: Seq[StringType]): Throwable = {
     new AnalysisException(
       errorClass = "COLLATION_MISMATCH.EXPLICIT",
@@ -3705,10 +3696,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def indeterminateCollationError(): Throwable = {
+  def indeterminateCollationInExpressionError(expr: String): Throwable = {
     new AnalysisException(
       errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map.empty
+      messageParameters = Map("expr" -> expr)
+    )
+  }
+
+  def indeterminateCollationInSchemaError(columnPaths: Seq[ColumnPath]): Throwable = {
+    new AnalysisException(
+      errorClass = "INDETERMINATE_COLLATION_IN_SCHEMA",
+      messageParameters = Map(
+        "columnPaths" -> columnPaths.map(_.toString).mkString(", ")
+      )
     )
   }
 
@@ -4192,15 +4192,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "ordinal" -> ordinal.toString,
         "attributesLength" -> attributes.length.toString,
         "attributes" -> attributes.map(attr => toSQLId(attr.name)).mkString(", ")
-      )
-    )
-  }
-
-  def indeterminateCollationInSchemaError(columnPaths: Seq[ColumnPath]): Throwable = {
-    new AnalysisException(
-      errorClass = "INDETERMINATE_COLLATION_IN_SCHEMA",
-      messageParameters = Map(
-        "columnPaths" -> columnPaths.map(_.toString).mkString(", ")
       )
     )
   }

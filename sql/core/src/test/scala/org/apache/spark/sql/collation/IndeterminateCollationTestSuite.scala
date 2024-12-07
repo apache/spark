@@ -89,6 +89,24 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     }
   }
 
+  test("concat ws supports indeterminate collation") {
+    withTestTable {
+      sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
+
+      checkAnswer(
+        sql(s"SELECT concat_ws(' ', c1, c2) FROM $testTableName"),
+        Seq(Row("a b")))
+
+      checkAnswer(
+        sql(s"SELECT concat_ws(' ', c1, c2) as c3 FROM $testTableName"),
+        Seq(Row("a b")))
+
+      checkAnswer(
+        sql(s"SELECT COLLATION(concat_ws(' ', c1, c2)) FROM $testTableName"),
+        Seq(Row("SYSTEM.BUILTIN.NULL")))
+    }
+  }
+
   test("functions that don't support indeterminate collations") {
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")

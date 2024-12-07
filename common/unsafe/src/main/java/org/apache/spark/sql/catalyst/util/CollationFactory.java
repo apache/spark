@@ -281,7 +281,7 @@ public final class CollationFactory {
        * collations.
        */
       protected enum ImplementationProvider {
-        UTF8_BINARY, ICU
+        UTF8_BINARY, ICU, INDETERMINATE
       }
 
       /**
@@ -336,7 +336,11 @@ public final class CollationFactory {
       /**
        * Utility function to retrieve `ImplementationProvider` enum instance from collation ID.
        */
-      private static ImplementationProvider getImplementationProvider(int collationId) {
+      protected static ImplementationProvider getImplementationProvider(int collationId) {
+        if (collationId == INDETERMINATE_COLLATION_ID) {
+          return ImplementationProvider.INDETERMINATE;
+        }
+
         return ImplementationProvider.values()[SpecifierUtils.getSpecValue(collationId,
           IMPLEMENTATION_PROVIDER_OFFSET, IMPLEMENTATION_PROVIDER_MASK)];
       }
@@ -1250,11 +1254,21 @@ public final class CollationFactory {
   }
 
   public static boolean isCaseInsensitive(int collationId) {
+    if (Collation.CollationSpec.getImplementationProvider(collationId) !=
+        Collation.CollationSpec.ImplementationProvider.ICU) {
+      return false;
+    }
+
     return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
             Collation.CollationSpecICU.CaseSensitivity.CI;
   }
 
   public static boolean isAccentInsensitive(int collationId) {
+    if (Collation.CollationSpec.getImplementationProvider(collationId) !=
+        Collation.CollationSpec.ImplementationProvider.ICU) {
+      return false;
+    }
+
     return Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity ==
             Collation.CollationSpecICU.AccentSensitivity.AI;
   }

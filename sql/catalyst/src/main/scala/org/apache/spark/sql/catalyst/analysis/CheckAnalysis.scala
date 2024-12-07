@@ -1662,6 +1662,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
    * collations has indeterminate collation.
    */
   private def shouldFailWithIndeterminateCollation(expression: Expression): Boolean = {
+
+    def getDataType(expression: Expression): DataType = try {
+      expression.dataType
+    } catch {
+      case _: Throwable => NullType
+    }
+
     expression match {
       // expressions that are allowed to produce indeterminate collation
       case _: Alias | _: AttributeReference | _: Cast | _: Concat | _: ConcatWs |
@@ -1669,7 +1676,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
         false
 
       case e =>
-        e.children.exists(child => SchemaUtils.hasIndeterminateCollation(child.dataType))
+        e.children.exists(child => SchemaUtils.hasIndeterminateCollation(getDataType(child)))
     }
   }
 }

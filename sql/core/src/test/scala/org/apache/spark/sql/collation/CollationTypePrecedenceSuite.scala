@@ -41,8 +41,8 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   private def assertExplicitMismatch(df: => DataFrame): Unit =
     assertThrowsError(df, "COLLATION_MISMATCH.EXPLICIT")
 
-  private def assertImplicitMismatch(df: => DataFrame): Unit =
-    assertThrowsError(df, "COLLATION_MISMATCH.IMPLICIT")
+  private def assertIndeterminateCollation(df: => DataFrame): Unit =
+    assertThrowsError(df, "INDETERMINATE_COLLATION")
 
   private def assertQuerySchema(df: => DataFrame, expectedSchema: DataType): Unit = {
     val querySchema = df.schema.fields.head.dataType
@@ -103,10 +103,10 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
         sql(s"SELECT COLLATION(SUBSTRING(c1, 0, 1) || 'a') FROM $tableName"),
         Seq(Row(c1Collation)))
 
-      assertImplicitMismatch(sql(s"SELECT COLLATION(c1 || c2) FROM $tableName"))
-      assertImplicitMismatch(sql(s"SELECT COLLATION(c1 || c3.col1) FROM $tableName"))
-      assertImplicitMismatch(
-        sql(s"SELECT COLLATION(SUBSTRING(c1, 0, 1) || c2) FROM $tableName"))
+      assertIndeterminateCollation(sql(s"SELECT c1 = c2 FROM $tableName"))
+      assertIndeterminateCollation(sql(s"SELECT c1 = c3.col1 FROM $tableName"))
+      assertIndeterminateCollation(
+        sql(s"SELECT SUBSTRING(c1, 0, 1) = c2 FROM $tableName"))
     }
   }
 
@@ -132,8 +132,8 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"SELECT COLLATION(SUBSTRING(v2, 0, 1) || 'a')"),
       Row(v2Collation))
 
-    assertImplicitMismatch(sql(s"SELECT COLLATION(v1 || v2)"))
-    assertImplicitMismatch(sql(s"SELECT COLLATION(SUBSTRING(v1, 0, 1) || v2)"))
+    assertIndeterminateCollation(sql(s"SELECT v1 = v2"))
+    assertIndeterminateCollation(sql(s"SELECT SUBSTRING(v1, 0, 1) || v2"))
   }
 
   test("subqueries have implicit collation strength") {
@@ -141,8 +141,8 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"CREATE TABLE t (c STRING COLLATE UTF8_LCASE) USING $dataSource")
 
       sql(s"SELECT (SELECT 'text' COLLATE UTF8_BINARY) || c collate UTF8_BINARY from t")
-      assertImplicitMismatch(
-        sql(s"SELECT (SELECT 'text' COLLATE UTF8_BINARY) || c from t"))
+      assertIndeterminateCollation(
+        sql(s"SELECT (SELECT 'text' COLLATE UTF8_BINARY) = c from t"))
     }
 
     // Simple subquery with explicit collation
@@ -415,8 +415,8 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
     assertExplicitMismatch(
       sql(s"SELECT array(struct(1, 'a' collate utf8_lcase), struct(2, 'b' collate unicode))"))
 
-    assertImplicitMismatch(sql(s"""
-           |SELECT array(struct(1, c1), struct(2, c2))
+    assertIndeterminateCollation(sql(s"""
+           |SELECT array(struct(1, c1), struct(2, c2 as c1))
            |FROM VALUES ('a' collate unicode, 'b' collate utf8_lcase) AS t(c1, c2)
            |""".stripMargin))
   }
