@@ -253,7 +253,7 @@ class AsyncPythonUDFArrowTests(PythonUDFArrowTests):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_arrow_python_udf import *  # noqa: F401
+    from pyspark.sql.tests.arrow.test_arrow_python_udf import *  # noqa: F401
 
     try:
         import xmlrunner

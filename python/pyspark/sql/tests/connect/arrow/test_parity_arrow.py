@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.sql.tests.test_arrow import ArrowTestsMixin
+from pyspark.sql.tests.arrow.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
@@ -139,7 +139,7 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_arrow import *  # noqa: F401
+    from pyspark.sql.tests.connect.arrow.test_parity_arrow import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
