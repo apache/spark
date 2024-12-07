@@ -22,11 +22,13 @@ import java.time.{LocalDateTime, ZoneOffset}
 import java.util
 import java.util.Locale
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -255,6 +257,23 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
         }
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(message, e)
+    }
+  }
+
+  class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override def visitBinaryArithmetic(name: String, l: String, r: String): String = {
+      l + " " + name.replace('^', '#') + " " + r
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val postgresSQLBuilder = new PostgresSQLBuilder()
+    try {
+      Some(postgresSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
     }
   }
 
