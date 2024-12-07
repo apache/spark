@@ -984,5 +984,16 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         ||> SELECT cate, SUM(val) OVER w
         |   WINDOW w AS (PARTITION BY cate ORDER BY val)
         |""".stripMargin)
+    withSQLConf(SQLConf.OPERATOR_PIPE_SYNTAX_ENABLED.key -> "false") {
+      val sql = s"TABLE t |> SELECT 1 AS X"
+      checkError(
+        exception = parseException(sql),
+        condition = "_LEGACY_ERROR_TEMP_0035",
+        parameters = Map("message" -> "Operator pipe SQL syntax using |>"),
+        context = ExpectedContext(
+          fragment = sql,
+          start = 0,
+          stop = sql.length - 1))
+    }
   }
 }
