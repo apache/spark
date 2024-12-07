@@ -29,6 +29,7 @@ import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkException
@@ -140,6 +141,8 @@ private[sql] object AvroUtils extends Logging {
           try {
             Some(DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]()))
           } catch {
+            case e: BlockMissingException =>
+              throw new SparkException(s"Could not read file: $path", e)
             case e: IOException =>
               if (ignoreCorruptFiles) {
                 logWarning(s"Skipped the footer in the corrupted file: $path", e)
