@@ -16,12 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.expressions.json
 
-import java.io.CharArrayWriter
+import java.io.{ByteArrayOutputStream, CharArrayWriter}
 
-import com.fasterxml.jackson.core.JsonFactory
+import com.fasterxml.jackson.core._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.ExprUtils
+import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, SharedFactory}
 import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonGenerator, JacksonParser, JsonInferSchema, JSONOptions}
 import org.apache.spark.sql.catalyst.util.{ArrayData, FailFastMode, FailureSafeParser, MapData, PermissiveMode}
@@ -158,5 +159,95 @@ case class StructsToJsonEvaluator(
 
   final def evaluate(value: Any): Any = {
     converter(value)
+  }
+}
+
+/**
+ * The expression `JsonTuple` will utilize it to support codegen.
+ */
+case class JsonTupleEvaluator(fieldsLength: Int) {
+
+  import SharedFactory._
+
+  // If processing fails this shared value will be returned.
+  @transient private lazy val nullRow: Seq[InternalRow] =
+    new GenericInternalRow(Array.ofDim[Any](fieldsLength)) :: Nil
+
+  private def parseRow(parser: JsonParser, fieldNames: Seq[String]): Seq[InternalRow] = {
+    // Only objects are supported.
+    if (parser.nextToken() != JsonToken.START_OBJECT) return nullRow
+
+    val row = Array.ofDim[Any](fieldNames.length)
+
+    // Start reading through the token stream, looking for any requested field names.
+    while (parser.nextToken() != JsonToken.END_OBJECT) {
+      if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
+        // Check to see if this field is desired in the output.
+        val jsonField = parser.currentName
+        var idx = fieldNames.indexOf(jsonField)
+        if (idx >= 0) {
+          // It is, copy the child tree to the correct location in the output row.
+          val output = new ByteArrayOutputStream()
+
+          // Write the output directly to UTF8 encoded byte array.
+          if (parser.nextToken() != JsonToken.VALUE_NULL) {
+            Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) {
+              generator => copyCurrentStructure(generator, parser)
+            }
+
+            val jsonValue = UTF8String.fromBytes(output.toByteArray)
+
+            // SPARK-21804: json_tuple returns null values within repeated columns
+            // except the first one; so that we need to check the remaining fields.
+            do {
+              row(idx) = jsonValue
+              idx = fieldNames.indexOf(jsonField, idx + 1)
+            } while (idx >= 0)
+          }
+        }
+      }
+
+      // Always skip children, it's cheap enough to do even if copyCurrentStructure was called.
+      parser.skipChildren()
+    }
+    new GenericInternalRow(row) :: Nil
+  }
+
+  private def copyCurrentStructure(generator: JsonGenerator, parser: JsonParser): Unit = {
+    parser.getCurrentToken match {
+      // If the user requests a string field it needs to be returned without enclosing
+      // quotes which is accomplished via JsonGenerator.writeRaw instead of JsonGenerator.write.
+      case JsonToken.VALUE_STRING if parser.hasTextCharacters =>
+        // Slight optimization to avoid allocating a String instance, though the characters
+        // still have to be decoded... Jackson doesn't have a way to access the raw bytes.
+        generator.writeRaw(parser.getTextCharacters, parser.getTextOffset, parser.getTextLength)
+
+      case JsonToken.VALUE_STRING =>
+        // The normal String case, pass it through to the output without enclosing quotes.
+        generator.writeRaw(parser.getText)
+
+      case JsonToken.VALUE_NULL =>
+        // A special case that needs to be handled outside of this method.
+        // If a requested field is null, the result must be null. The easiest
+        // way to achieve this is just by ignoring null tokens entirely.
+        throw SparkException.internalError("Do not attempt to copy a null field.")
+
+      case _ =>
+        // Handle other types including objects, arrays, booleans and numbers.
+        generator.copyCurrentStructure(parser)
+    }
+  }
+
+  final def evaluate(json: UTF8String, fieldNames: Seq[String]): Seq[InternalRow] = {
+    if (json == null) return nullRow
+    try {
+      /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
+      detect character encoding which could fail for some malformed strings. */
+      Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+        parseRow(parser, fieldNames)
+      }
+    } catch {
+      case _: JsonProcessingException => nullRow
+    }
   }
 }
