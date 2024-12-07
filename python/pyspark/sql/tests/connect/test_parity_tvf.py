@@ -21,45 +21,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class TVFParityTestsMixin(TVFTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_explode_with_lateral_join(self):
-        super().test_explode_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_explode_outer_with_lateral_join(self):
-        super().test_explode_outer_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_inline_with_lateral_join(self):
-        super().test_inline_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_inline_outer_with_lateral_join(self):
-        super().test_inline_outer_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_json_tuple_with_lateral_join(self):
-        super().test_json_tuple_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_posexplode_with_lateral_join(self):
-        super().test_posexplode_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_posexplode_outer_with_lateral_join(self):
-        super().test_posexplode_outer_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_stack_with_lateral_join(self):
-        super().test_stack_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_variant_explode_with_lateral_join(self):
-        super().test_variant_explode_with_lateral_join()
-
-    @unittest.skip("SPARK-50134: Support Spark Connect")
-    def test_variant_explode_outer_with_lateral_join(self):
-        super().test_variant_explode_outer_with_lateral_join()
+    pass
 
 
 if __name__ == "__main__":

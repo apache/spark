@@ -692,10 +692,14 @@ class DataFrame(ParentDataFrame):
         on: Optional[Column] = None,
         how: Optional[str] = None,
     ) -> ParentDataFrame:
-        # TODO(SPARK-50134): Implement this method
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={"feature": "lateralJoin()"},
+        self._check_same_session(other)
+        if how is not None and isinstance(how, str):
+            how = how.lower().replace("_", "")
+        return DataFrame(
+            plan.LateralJoin(
+                left=self._plan, right=cast(plan.LogicalPlan, other._plan), on=on, how=how
+            ),
+            session=self._session,
         )
 
     def _joinAsOf(
@@ -2277,7 +2281,6 @@ def _test() -> None:
     # TODO(SPARK-50134): Support subquery in connect
     del pyspark.sql.dataframe.DataFrame.scalar.__doc__
     del pyspark.sql.dataframe.DataFrame.exists.__doc__
-    del pyspark.sql.dataframe.DataFrame.lateralJoin.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

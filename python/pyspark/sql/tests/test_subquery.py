@@ -556,6 +556,23 @@ class SubqueryTestsMixin:
                 self.spark.sql("""SELECT * FROM t1 CROSS JOIN LATERAL (SELECT c1 + c2 AS c3)"""),
             )
 
+            with self.assertRaises(AnalysisException) as pe:
+                t1.lateralJoin(
+                    self.spark.range(1).select(
+                        (sf.col("c1").outer() + sf.col("c2").outer()).alias("c3")
+                    ),
+                    how="right",
+                ).collect()
+
+            self.check_error(
+                pe.exception,
+                errorClass="UNSUPPORTED_JOIN_TYPE",
+                messageParameters={
+                    "typ": "right",
+                    "supported": "'inner', 'leftouter', 'left', 'left_outer', 'cross'",
+                },
+            )
+
     def test_lateral_join_with_correlated_predicates(self):
         with self.tempView("t1", "t2"):
             t1 = self.table1()
