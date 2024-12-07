@@ -176,8 +176,6 @@ object CheckConnectJvmClientCompatibility {
 
       // Skip unsupported classes
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.ExperimentalMethods"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext"),
-      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$*"),
       ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SparkSessionExtensions"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.SparkSessionExtensionsProvider"),
@@ -330,6 +328,11 @@ object CheckConnectJvmClientCompatibility {
       ),
       ProblemFilters.exclude[DirectMissingMethodProblem](
         "org.apache.spark.sql.SparkSession#Builder.interceptor"),
+
+      // Private case class in SQLContext
+      ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$ListTableRow"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.SQLContext$ListTableRow$"),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.session"),

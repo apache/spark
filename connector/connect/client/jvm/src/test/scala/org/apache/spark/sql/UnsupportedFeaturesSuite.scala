@@ -79,10 +79,6 @@ class UnsupportedFeaturesSuite extends ConnectFunSuite {
     _.listenerManager
   }
 
-  testUnsupportedFeature("SparkSession.sqlContext", "SESSION_SQL_CONTEXT") {
-    _.sqlContext
-  }
-
   testUnsupportedFeature(
     "SparkSession.baseRelationToDataFrame",
     "SESSION_BASE_RELATION_TO_DATAFRAME") {
