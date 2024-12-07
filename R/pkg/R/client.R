@@ -57,6 +57,7 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
   }
 
   combinedArgs <- paste(jars, packages, sparkSubmitOpts, args, sep = " ")
+  combinedArgs <- paste0("--conf spark.api.mode=classic", combinedArgs)
   combinedArgs
 }
 

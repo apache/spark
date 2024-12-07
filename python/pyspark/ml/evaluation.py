@@ -1147,7 +1147,12 @@ if __name__ == "__main__":
     globs = pyspark.ml.evaluation.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder.master("local[2]").appName("ml.evaluation tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[2]")
+        .config("spark.api.mode", "classic")
+        .appName("ml.evaluation tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
     temp_path = tempfile.mkdtemp()
     globs["temp_path"] = temp_path

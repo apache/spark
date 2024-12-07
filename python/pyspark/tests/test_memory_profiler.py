@@ -66,6 +66,7 @@ class MemoryProfilerTests(PySparkTestCase):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.profile.memory", "true")
+        conf.set("spark.api.mode", "classic")
         self.sc = SparkContext("local[4]", class_name, conf=conf)
         self.spark = SparkSession(sparkContext=self.sc)
 

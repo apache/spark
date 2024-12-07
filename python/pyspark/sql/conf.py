@@ -161,7 +161,12 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.conf.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("sql.conf tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("sql.conf tests")
+        .getOrCreate()
+    )
     globs["spark"] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.conf, globs=globs, optionflags=doctest.ELLIPSIS

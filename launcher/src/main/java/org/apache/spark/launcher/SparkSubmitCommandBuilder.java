@@ -137,6 +137,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
         case SPARKR_SHELL:
           this.allowsMixedArguments = true;
+          // SparkR does not support Spark Connect
           appResource = SPARKR_SHELL;
           submitArgs = args.subList(1, args.size());
           break;
@@ -381,8 +382,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         remoteStr != null && (masterStr != null || deployStr != null)) {
       throw new IllegalStateException("Remote cannot be specified with master and/or deploy mode.");
     }
+
     if (remoteStr != null) {
       env.put("SPARK_REMOTE", remoteStr);
+      env.put("SPARK_CONNECT_MODE_ENABLED", "1");
+    } else if (conf.getOrDefault(
+        SparkLauncher.SPARK_API_MODE, "connect").toLowerCase(Locale.ROOT).equals("connect")) {
+      env.put("SPARK_REMOTE", Optional.ofNullable(masterStr).orElse("local[*]"));
       env.put("SPARK_CONNECT_MODE_ENABLED", "1");
     }
 
@@ -507,10 +513,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     protected boolean handle(String opt, String value) {
       switch (opt) {
         case MASTER -> master = value;
-        case REMOTE -> {
-          isRemote = true;
-          remote = value;
-        }
+        case REMOTE -> remote = value;
         case DEPLOY_MODE -> deployMode = value;
         case PROPERTIES_FILE -> propertiesFile = value;
         case DRIVER_MEMORY -> conf.put(SparkLauncher.DRIVER_MEMORY, value);
@@ -523,8 +526,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-          if (setConf[0].equals("spark.remote")) {
-            isRemote = true;
+          if (setConf[0].equals("spark.api.mode") && setConf[1].equals("classic")) {
+            isRemote = false;
           }
           conf.put(setConf[0], setConf[1]);
         }

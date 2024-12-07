@@ -31,6 +31,7 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
             SparkSession.builder.master("local[1]")
+            .config("spark.api.mode", "classic")
             .config("spark.default.parallelism", "1")
             .getOrCreate()
         )

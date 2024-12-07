@@ -849,7 +849,12 @@ def _test() -> None:
         sys.exit(0)
 
     globs = pyspark.ml.functions.__dict__.copy()
-    spark = SparkSession.builder.master("local[2]").appName("ml.functions tests").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[2]")
+        .config("spark.api.mode", "classic")
+        .appName("ml.functions tests")
+        .getOrCreate()
+    )
     sc = spark.sparkContext
     globs["sc"] = sc
     globs["spark"] = spark

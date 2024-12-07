@@ -21,6 +21,7 @@ SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     ?= source
 BUILDDIR      ?= build
 
+export IS_SPHINXBUILD=1
 export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.9.7-src.zip)
 
 # Put it first so that "make" without argument is like "make help".

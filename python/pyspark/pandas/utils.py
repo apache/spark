@@ -479,7 +479,14 @@ def is_testing() -> bool:
 def default_session() -> SparkSession:
     spark = SparkSession.getActiveSession()
     if spark is None:
-        spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
+        if os.environ.get("IS_SPHINXBUILD", None) == "1":
+            spark = (
+                SparkSession.builder.config("spark.api.mode", "classic")
+                .appName("pandas-on-Spark")
+                .getOrCreate()
+            )
+        else:
+            spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
 
     # Turn ANSI off when testing the pandas API on Spark since
     # the behavior of pandas API on Spark follows pandas, not SQL.
@@ -1065,7 +1072,10 @@ def _test() -> None:
     globs["ps"] = pyspark.pandas
     globs["sf"] = F
     spark = (
-        SparkSession.builder.master("local[4]").appName("pyspark.pandas.utils tests").getOrCreate()
+        SparkSession.builder.master("local[4]")
+        .config("spark.api.mode", "classic")
+        .appName("pyspark.pandas.utils tests")
+        .getOrCreate()
     )
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.utils,
