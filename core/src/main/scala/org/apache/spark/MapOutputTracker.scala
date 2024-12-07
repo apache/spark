@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.{ByteArrayInputStream, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.atomic.AtomicLongArray
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection
@@ -39,7 +40,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
+import org.apache.spark.scheduler.{HighlyCompressedMapStatus, MapStatus, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
@@ -698,6 +699,12 @@ private[spark] class MapOutputTrackerMaster(
   /** Whether to compute locality preferences for reduce tasks */
   private val shuffleLocalityEnabled = conf.get(SHUFFLE_REDUCE_LOCALITY_ENABLE)
 
+  private val enableOptimizeCompressedMapStatus = conf.get(
+    SHUFFLE_OPTIMIZE_COMPRESSED_MAP_STATUS)
+
+  private val enableOptimizeCompressedConvertHighly = conf.get(
+    SHUFFLE_OPTIMIZE_COMPRESSED_CONVERT_HIGHLY_MAP_STATUS)
+
   private val shuffleMigrationEnabled = conf.get(DECOMMISSION_ENABLED) &&
     conf.get(STORAGE_DECOMMISSION_ENABLED) && conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)
 
@@ -717,6 +724,8 @@ private[spark] class MapOutputTrackerMaster(
   // Statuses are dropped only by explicit de-registering.
   // Exposed for testing
   val shuffleStatuses = new ConcurrentHashMap[Int, ShuffleStatus]().asScala
+
+  val mapOutputStatisticsCache = new ConcurrentHashMap[Int, AtomicLongArray]()
 
   private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
 
@@ -815,6 +824,9 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int): Unit = {
+    if (enableOptimizeCompressedMapStatus) {
+      mapOutputStatisticsCache.put(shuffleId, new AtomicLongArray(numReduces))
+    }
     if (pushBasedShuffleEnabled) {
       if (shuffleStatuses.put(shuffleId, new ShuffleStatus(numMaps, numReduces)).isDefined) {
         throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
@@ -839,7 +851,26 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus): Unit = {
-    shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
+    if (enableOptimizeCompressedMapStatus && status != null) {
+      val numReducer = shuffleStatuses(shuffleId).mergeStatuses.length
+      val array = mapOutputStatisticsCache.get(shuffleId)
+      val uncompressedSizes = new Array[Long](numReducer)
+      for (i <- 0 until numReducer) {
+        val blockSize = status.getSizeForBlock(i)
+        array.getAndAdd(i, blockSize)
+        uncompressedSizes(i) = blockSize
+      }
+      if (enableOptimizeCompressedConvertHighly) {
+        // Convert to HighlyCompressedMapStatus for reduce Driver Memory
+        val highlyMapStatus =
+          HighlyCompressedMapStatus(status.location, uncompressedSizes, status.mapId)
+        shuffleStatuses(shuffleId).addMapOutput(mapIndex, highlyMapStatus)
+      } else {
+        shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
+      }
+    } else {
+      shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
+    }
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
@@ -1003,6 +1034,15 @@ private[spark] class MapOutputTrackerMaster(
    * Return statistics about all of the outputs for a given shuffle.
    */
   def getStatistics(dep: ShuffleDependency[_, _, _]): MapOutputStatistics = {
+    if (enableOptimizeCompressedMapStatus) {
+      val numReducer = dep.partitioner.numPartitions
+      val statistics = mapOutputStatisticsCache.get(dep.shuffleId)
+      val newArray = new Array[Long](dep.partitioner.numPartitions)
+      for (i <- 0 until numReducer) {
+        newArray(i) = statistics.get(i)
+      }
+      return new MapOutputStatistics(dep.shuffleId, newArray)
+    }
     shuffleStatuses(dep.shuffleId).withMapStatuses { statuses =>
       val totalSizes = new Array[Long](dep.partitioner.numPartitions)
       val parallelAggThreshold = conf.get(
