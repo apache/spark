@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
+import java.io.ByteArrayOutputStream
 import java.math.BigInteger
+import java.nio.channels.Channels
 import java.time.{Duration, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util
@@ -24,10 +26,14 @@ import java.util.{Collections, Objects}
 
 import scala.beans.BeanProperty
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.IterableHasAsJava
 import scala.reflect.classTag
 
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
-import org.apache.arrow.vector.VarBinaryVector
+import org.apache.arrow.vector.{FieldVector, UInt1Vector, UInt2Vector, UInt4Vector, UInt8Vector, VarBinaryVector, VectorSchemaRoot}
+import org.apache.arrow.vector.dictionary.DictionaryProvider
+import org.apache.arrow.vector.ipc.ArrowStreamWriter
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkRuntimeException, SparkUnsupportedOperationException}
@@ -696,6 +702,20 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
           .add("Ca", "array<int>")
           .add("Cb", "binary")))
 
+  private val uintSchemaEncoder = toRowEncoder(
+    new StructType()
+      .add("uint1", "short")
+      .add("uint2", "int")
+      .add("uint4", "long")
+      .add("uint8", "decimal(20, 0)"))
+
+  private val uintArrowSchema = new Schema(
+    List(
+      new Field("uint1", FieldType.nullable(new ArrowType.Int(8, false)), null),
+      new Field("uint2", FieldType.nullable(new ArrowType.Int(8 * 2, false)), null),
+      new Field("uint4", FieldType.nullable(new ArrowType.Int(8 * 4, false)), null),
+      new Field("uint8", FieldType.nullable(new ArrowType.Int(8 * 8, false)), null)).asJava)
+
   test("bind to schema") {
     // Binds to a wider schema. The narrow schema has fewer (nested) fields, has a slightly
     // different field order, and uses different cased names in a couple of places.
@@ -960,6 +980,75 @@ class ArrowEncoderSuite extends ConnectFunSuite with BeforeAndAfterAll {
     withAllocator { allocator =>
       intercept[RuntimeException] {
         ArrowSerializer.serializerFor(StringEncoder, new VarBinaryVector("bytes", allocator))
+      }
+    }
+  }
+
+  test("SPARK-50464: support unsigned integer for arrow") {
+    withAllocator { allocator =>
+      val uint1Vector = new UInt1Vector("uint1", allocator)
+      uint1Vector.allocateNew(1)
+      uint1Vector.set(0, 1 << (8 - 1))
+      uint1Vector.setValueCount(1)
+      val uint2Vector = new UInt2Vector("uint2", allocator)
+      uint2Vector.allocateNew(1)
+      uint2Vector.set(0, 1 << (8 * 2 - 1))
+      uint2Vector.setValueCount(1)
+      val uint4Vector = new UInt4Vector("uint4", allocator)
+      uint4Vector.allocateNew(1)
+      uint4Vector.set(0, 1 << (8 * 4 - 1))
+      uint4Vector.setValueCount(1)
+      val uint8Vector = new UInt8Vector("uint8", allocator)
+      uint8Vector.allocateNew(1)
+      uint8Vector.set(0, 1L << (8 * 8 - 1))
+      uint8Vector.setValueCount(1)
+      val fvList =
+        List(uint1Vector.asInstanceOf[FieldVector], uint2Vector, uint4Vector, uint8Vector).asJava
+
+      val provider = new DictionaryProvider.MapDictionaryProvider()
+      val bytes = {
+        val root = new VectorSchemaRoot(fvList)
+        try {
+          // write data
+          val out = new ByteArrayOutputStream()
+          try {
+            val writer = new ArrowStreamWriter(root, provider, Channels.newChannel(out))
+            try {
+              writer.start()
+              writer.writeBatch()
+              writer.end()
+              out.toByteArray
+            } finally {
+              writer.close()
+            }
+          } finally {
+            out.close()
+          }
+        } finally {
+          root.close()
+        }
+      }
+      val iterator = ArrowDeserializers.deserializeFromArrow(
+        List(bytes).iterator,
+        uintSchemaEncoder,
+        allocator,
+        timeZoneId = "UTC")
+      try {
+        val rows = iterator.toList
+        assert(rows.length == 1)
+        val row = rows.head
+        assert(row.get(0).isInstanceOf[Short])
+        assert(row.get(0).asInstanceOf[Short] == 1 << (8 - 1))
+        assert(row.get(1).isInstanceOf[Int])
+        assert(row.get(1).asInstanceOf[Int] == 1 << (8 * 2 - 1))
+        assert(row.get(2).isInstanceOf[Long])
+        assert(row.get(2).asInstanceOf[Long] == 1L << (8 * 4 - 1))
+        assert(row.get(3).isInstanceOf[java.math.BigDecimal])
+        assert(
+          BigDecimal(row.get(3).asInstanceOf[java.math.BigDecimal])
+            == BigDecimal((1L << (8 * 8 - 1))))
+      } finally {
+        iterator.close()
       }
     }
   }
