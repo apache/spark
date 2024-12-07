@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit}
+import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit, Indeterminate}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, IndeterminateStringType, MapType, StringType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -415,13 +415,12 @@ object CollationTypeCoercion {
   private def getWinningStringType(
       left: StringTypeWithContext,
       right: StringTypeWithContext): StringTypeWithContext = {
-    def handleMismatch(): Nothing = {
+    def handleMismatch(): StringTypeWithContext = {
       if (left.strength == Explicit) {
         throw QueryCompilationErrors.explicitCollationMismatchError(
           Seq(left.stringType, right.stringType))
       } else {
-        throw QueryCompilationErrors.implicitCollationMismatchError(
-          Seq(left.stringType, right.stringType))
+        StringTypeWithContext(IndeterminateStringType, Indeterminate)
       }
     }
 
@@ -448,11 +447,14 @@ private sealed trait CollationStrength {
   case object Explicit extends CollationStrength {
     override val priority: Int = 0
   }
-  case object Implicit extends CollationStrength {
+  case object Indeterminate extends CollationStrength {
     override val priority: Int = 1
   }
-  case object Default extends CollationStrength {
+  case object Implicit extends CollationStrength {
     override val priority: Int = 2
+  }
+  case object Default extends CollationStrength {
+    override val priority: Int = 3
   }
 }
 

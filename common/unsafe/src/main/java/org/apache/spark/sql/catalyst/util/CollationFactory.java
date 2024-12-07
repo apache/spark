@@ -281,7 +281,7 @@ public final class CollationFactory {
        * collations.
        */
       protected enum ImplementationProvider {
-        UTF8_BINARY, ICU
+        UTF8_BINARY, ICU, INDETERMINATE
       }
 
       /**
@@ -325,6 +325,8 @@ public final class CollationFactory {
 
       private static final int INDETERMINATE_COLLATION_ID = -1;
 
+      private static final Collation INDETERMINATE_COLLATION = new IndeterminateCollation();
+
       /**
        * Thread-safe cache mapping collation IDs to corresponding `Collation` instances.
        * We add entries to this cache lazily as new `Collation` instances are requested.
@@ -334,7 +336,11 @@ public final class CollationFactory {
       /**
        * Utility function to retrieve `ImplementationProvider` enum instance from collation ID.
        */
-      private static ImplementationProvider getImplementationProvider(int collationId) {
+      protected static ImplementationProvider getImplementationProvider(int collationId) {
+        if (collationId == INDETERMINATE_COLLATION_ID) {
+          return ImplementationProvider.INDETERMINATE;
+        }
+
         return ImplementationProvider.values()[SpecifierUtils.getSpecValue(collationId,
           IMPLEMENTATION_PROVIDER_OFFSET, IMPLEMENTATION_PROVIDER_MASK)];
       }
@@ -390,9 +396,8 @@ public final class CollationFactory {
        * Main entry point for retrieving `Collation` instance from collation ID.
        */
       private static Collation fetchCollation(int collationId) {
-        // User-defined collations and INDETERMINATE collations cannot produce a `Collation`
-        // instance.
-        assert (collationId >= 0 && getDefinitionOrigin(collationId)
+        // User-defined collations cannot produce a `Collation` instance.
+        assert (collationId >= -1 && getDefinitionOrigin(collationId)
           == DefinitionOrigin.PREDEFINED);
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           // Skip cache.
@@ -400,6 +405,8 @@ public final class CollationFactory {
         } else if (collationMap.containsKey(collationId)) {
           // Already in cache.
           return collationMap.get(collationId);
+        } else if (collationId == INDETERMINATE_COLLATION_ID) {
+          return INDETERMINATE_COLLATION;
         } else {
           // Build `Collation` instance and put into cache.
           CollationSpec spec;
@@ -1083,6 +1090,33 @@ public final class CollationFactory {
     }
 
     /**
+     * Collation that is a result of two different non-explicit collation.
+     */
+    private static class IndeterminateCollation extends Collation {
+
+      public IndeterminateCollation() {
+        super(
+          "NULL",
+          null,
+          null,
+          (s1, s2) -> {
+            throw new RuntimeException("Comparator can't be called on indeterminate collation");
+          },
+          null,
+          s -> {
+            throw new RuntimeException("Hash can't be called on indeterminate collation!");
+          },
+          (s1, s2) -> {
+            throw new RuntimeException("Equals can't be called on indeterminate collation!");
+          },
+          false,
+          false,
+          false
+        );
+      }
+    }
+
+    /**
      * Utility class for manipulating conversions between collation IDs and specifier enums/locale
      * IDs. Scope bitwise operations here to avoid confusion.
      */
@@ -1220,11 +1254,21 @@ public final class CollationFactory {
   }
 
   public static boolean isCaseInsensitive(int collationId) {
+    if (Collation.CollationSpec.getImplementationProvider(collationId) !=
+        Collation.CollationSpec.ImplementationProvider.ICU) {
+      return false;
+    }
+
     return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
             Collation.CollationSpecICU.CaseSensitivity.CI;
   }
 
   public static boolean isAccentInsensitive(int collationId) {
+    if (Collation.CollationSpec.getImplementationProvider(collationId) !=
+        Collation.CollationSpec.ImplementationProvider.ICU) {
+      return false;
+    }
+
     return Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity ==
             Collation.CollationSpecICU.AccentSensitivity.AI;
   }

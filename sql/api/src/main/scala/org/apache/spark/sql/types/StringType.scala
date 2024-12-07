@@ -19,6 +19,7 @@ package org.apache.spark.sql.types
 
 import org.json4s.JsonAST.{JString, JValue}
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.CollationFactory
 
@@ -115,4 +116,15 @@ case object StringType extends StringType(0) {
     val collationId = CollationFactory.collationNameToId(collation)
     new StringType(collationId)
   }
+}
+
+/**
+ * String type that was the result of coercing two different non-explicit collations.
+ */
+private[spark] case object IndeterminateStringType
+    extends StringType(CollationFactory.INDETERMINATE_COLLATION_ID) {
+
+  override def jsonValue: JValue = throw new SparkRuntimeException(
+    "Indeterminate string type can't be serialized to json",
+    Map.empty)
 }
