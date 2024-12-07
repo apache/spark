@@ -471,6 +471,12 @@ class SparkSession(SparkConversionMixin):
             if is_remote_only():
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
+                if "spark.master" in opts:
+                    raise PySparkRuntimeError(
+                        errorClass="CONNECT_URL_NOT_SET",
+                        messageParameters={},
+                    )
+
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
                 if url is None:
@@ -490,6 +496,7 @@ class SparkSession(SparkConversionMixin):
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ
                     or "SPARK_REMOTE" in os.environ
                     or "spark.remote" in opts
+                    or opts.get("spark.api.mode", "connect").lower() == "connect"
                 ):
                     with SparkContext._lock:
                         from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -498,7 +505,13 @@ class SparkSession(SparkConversionMixin):
                             SparkContext._active_spark_context is None
                             and SparkSession._instantiatedSession is None
                         ):
-                            url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                            is_api_mode_connect = (
+                                opts.get("spark.api.mode", "connect").lower() == "connect"
+                            )
+                            if is_api_mode_connect:
+                                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                            else:
+                                url = opts.get("spark.master", os.environ.get("MASTER"))
 
                             if url is None:
                                 raise PySparkRuntimeError(
@@ -506,7 +519,7 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local"):
+                            if url.startswith("local") or is_api_mode_connect:
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
                                 RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
@@ -1212,7 +1225,8 @@ class SparkSession(SparkConversionMixin):
             assert SparkContext._jvm is not None
             if conf.get("spark.sql.catalogImplementation", "hive").lower() == "hive":
                 SparkContext._jvm.org.apache.hadoop.hive.conf.HiveConf()
-                return SparkSession.builder.enableHiveSupport().getOrCreate()
+                return SparkSession.builder.config(
+                    "spark.api.mode", "classic").enableHiveSupport().getOrCreate()
             else:
                 return SparkSession._getActiveSessionOrCreate()
         except (py4j.protocol.Py4JError, TypeError):
