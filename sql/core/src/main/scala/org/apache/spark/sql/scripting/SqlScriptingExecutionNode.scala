@@ -164,6 +164,14 @@ class SingleStatementExec(
 }
 
 /**
+ * NO-OP leaf node, which does nothing when returned to the iterator.
+ * It is emitted by empty BEGIN END blocks.
+ */
+class NoOpStatementExec extends LeafStatementExec {
+  override def reset(): Unit = ()
+}
+
+/**
  * Executable node for CompoundBody.
  * @param statements
  *   Executable nodes for nested statements within the CompoundBody.
