@@ -97,7 +97,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     if (ctx.configKey() != null) {
       val keyStr = ctx.configKey().getText
       if (ctx.EQ() != null) {
-        remainder(ctx.EQ().getSymbol).trim match {
+        remainder(ctx.EQ().getSymbol, ctx).trim match {
           case configValueDef(valueStr) => SetCommand(Some(keyStr -> Option(valueStr)))
           case other => throw QueryParsingErrors.invalidPropertyValueForSetQuotedConfigurationError(
             other, keyStr, ctx)
@@ -106,7 +106,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         SetCommand(Some(keyStr -> None))
       }
     } else {
-      remainder(ctx.SET.getSymbol).trim match {
+      remainder(ctx.SET.getSymbol, ctx).trim match {
         case configKeyValueDef(key, value) =>
           SetCommand(Some(key -> Option(value.trim)))
         case configKeyDef(key) =>
@@ -146,7 +146,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
-    remainder(ctx.RESET.getSymbol).trim match {
+    remainder(ctx.RESET.getSymbol, ctx).trim match {
       case configKeyDef(key) =>
         ResetCommand(Some(key))
       case s if s.trim.isEmpty =>
@@ -244,7 +244,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   private def extractUnquotedResourcePath(ctx: RefreshResourceContext): String = withOrigin(ctx) {
-    val unquotedPath = remainder(ctx.REFRESH.getSymbol).trim
+    val unquotedPath = remainder(ctx.REFRESH.getSymbol, ctx).trim
     validate(
       unquotedPath != null && !unquotedPath.isEmpty,
       "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
@@ -467,7 +467,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val rawArg = remainder(ctx.identifier).trim
+    val rawArg = remainder(ctx.identifier, ctx).trim
     val maybePaths = strLiteralDef.findAllIn(rawArg).toSeq.map {
       case p if p.startsWith("\"") || p.startsWith("'") => unescapeSQLString(p)
       case p => p
