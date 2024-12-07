@@ -893,7 +893,35 @@ class Join(LogicalPlan):
         else:
             raise AnalysisException(
                 errorClass="UNSUPPORTED_JOIN_TYPE",
-                messageParameters={"join_type": how},
+                messageParameters={
+                    "typ": how,
+                    "supported": (
+                        "'"
+                        + "', '".join(
+                            [
+                                "inner",
+                                "outer",
+                                "full",
+                                "fullouter",
+                                "full_outer",
+                                "leftouter",
+                                "left",
+                                "left_outer",
+                                "rightouter",
+                                "right",
+                                "right_outer",
+                                "leftsemi",
+                                "left_semi",
+                                "semi",
+                                "leftanti",
+                                "left_anti",
+                                "anti",
+                                "cross",
+                            ]
+                        )
+                        + "'"
+                    ),
+                },
             )
         self.how = join_type
 
@@ -1051,7 +1079,14 @@ class LateralJoin(LogicalPlan):
         else:
             raise AnalysisException(
                 errorClass="UNSUPPORTED_JOIN_TYPE",
-                messageParameters={"join_type": how},
+                messageParameters={
+                    "typ": how,
+                    "supported": (
+                        "'"
+                        + "', '".join(["inner", "leftouter", "left", "left_outer", "cross"])
+                        + "'"
+                    ),
+                },
             )
         self.how = join_type
 
