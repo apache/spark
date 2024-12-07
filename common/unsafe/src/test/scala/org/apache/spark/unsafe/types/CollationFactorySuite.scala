@@ -37,6 +37,10 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("collationId stability") {
     assert(INDETERMINATE_COLLATION_ID == -1)
+    val indeterminate = fetchCollation(INDETERMINATE_COLLATION_ID)
+    assert(indeterminate.collationName == "NULL")
+    assert(indeterminate.provider == null)
+    assert(indeterminate.version == null)
 
     assert(UTF8_BINARY_COLLATION_ID == 0)
     val utf8Binary = fetchCollation(UTF8_BINARY_COLLATION_ID)
@@ -431,7 +435,6 @@ class CollationFactorySuite extends AnyFunSuite with Matchers { // scalastyle:ig
 
   test("invalid collationId") {
     val badCollationIds = Seq(
-      INDETERMINATE_COLLATION_ID, // Indeterminate collation.
       1 << 30, // User-defined collation range.
       (1 << 30) | 1, // User-defined collation range.
       (1 << 30) | (1 << 29), // User-defined collation range.

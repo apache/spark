@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, ListAgg, Median, PercentileCont, PercentileDisc}
+import org.apache.spark.sql.catalyst.expressions.objects.InvokeLike
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, DecorrelateInnerQuery, InlineCTE}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -481,6 +482,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             p.failAnalysis(
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
+
+          case e if shouldFailWithIndeterminateCollation(e) =>
+            e.failAnalysis(
+              errorClass = "INDETERMINATE_COLLATION",
+              messageParameters = Map(
+                "expr" -> toSQLExpr(e)))
 
           case _ =>
         })
@@ -1647,6 +1654,22 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
       row.exists { expression =>
         expression.exists(_.isInstanceOf[ScalarSubquery])
       }
+    }
+  }
+
+  /**
+   * Returns whether the given expression which isn't allowed to have inputs with indeterminate
+   * collations has indeterminate collation.
+   */
+  private def shouldFailWithIndeterminateCollation(expression: Expression): Boolean = {
+    expression match {
+      // expressions that are allowed to produce indeterminate collation
+      case _: Alias | _: AttributeReference | _: Cast | _: Concat | _: ConcatWs |
+           _: Collation | _: InvokeLike =>
+        false
+
+      case e =>
+        e.children.exists(child => SchemaUtils.hasIndeterminateCollation(child.dataType))
     }
   }
 }
