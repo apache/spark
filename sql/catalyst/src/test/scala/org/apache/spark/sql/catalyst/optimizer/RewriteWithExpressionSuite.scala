@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class RewriteWithExpressionSuite extends PlanTest {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Rewrite With expression", Once,
+    val batches = Batch("Rewrite With expression", FixedPoint(5),
       PullOutGroupingExpressions,
       RewriteWithExpression) :: Nil
   }
@@ -120,26 +119,49 @@ class RewriteWithExpressionSuite extends PlanTest {
     )
   }
 
-  test("correlated nested WITH expression is not supported") {
+  test("correlated nested WITH expression is supported") {
     val Seq(a, b) = testRelation.output
     val outerCommonExprDef = CommonExpressionDef(b + b, CommonExpressionId(0))
     val outerRef = new CommonExpressionRef(outerCommonExprDef)
+    val rewrittenOuterExpr = (b + b).as("_common_expr_0")
 
     // The inner expression definition references the outer expression
     val commonExprDef1 = CommonExpressionDef(a + a + outerRef, CommonExpressionId(1))
     val ref1 = new CommonExpressionRef(commonExprDef1)
     val innerExpr1 = With(ref1 + ref1, Seq(commonExprDef1))
-
     val outerExpr1 = With(outerRef + innerExpr1, Seq(outerCommonExprDef))
-    intercept[SparkException](Optimizer.execute(testRelation.select(outerExpr1.as("col"))))
+    comparePlans(
+      Optimizer.execute(testRelation.select(outerExpr1.as("col"))),
+      testRelation
+        // The first Project contains the common expression of the outer With
+        .select(star(), rewrittenOuterExpr)
+        // The second Project contains the common expression of the inner With, which references
+        // the common expression of the outer With.
+        .select(star(), (a + a + $"_common_expr_0").as("_common_expr_1"))
+        // The final Project contains the final result expression, which references both common
+        // expressions.
+        .select(($"_common_expr_0" + ($"_common_expr_1" + $"_common_expr_1")).as("col"))
+        .analyze
+    )
 
-    val commonExprDef2 = CommonExpressionDef(a + a)
+    val commonExprDef2 = CommonExpressionDef(a + a, CommonExpressionId(2))
     val ref2 = new CommonExpressionRef(commonExprDef2)
     // The inner main expression references the outer expression
-    val innerExpr2 = With(ref2 + outerRef, Seq(commonExprDef1))
-
+    val innerExpr2 = With(ref2 + outerRef, Seq(commonExprDef2))
     val outerExpr2 = With(outerRef + innerExpr2, Seq(outerCommonExprDef))
-    intercept[SparkException](Optimizer.execute(testRelation.select(outerExpr2.as("col"))))
+    comparePlans(
+      Optimizer.execute(testRelation.select(outerExpr2.as("col"))),
+      testRelation
+        // The first Project contains the common expression of the outer With
+        .select(star(), rewrittenOuterExpr)
+        // The second Project contains the common expression of the inner With, which does not
+        // references the common expression of the outer With.
+        .select(star(), (a + a).as("_common_expr_2"))
+        // The final Project contains the final result expression, which references both common
+        // expressions.
+        .select(($"_common_expr_0" + ($"_common_expr_2" + $"_common_expr_0")).as("col"))
+        .analyze
+    )
   }
 
   test("WITH expression in filter") {
