@@ -556,4 +556,10 @@ object DataType {
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
+
+  def udtToSqlType(dataType: DataType): DataType = dataType match {
+    case udt: UserDefinedType[_] => udt.sqlType
+
+    case _ => dataType
+  }
 }
