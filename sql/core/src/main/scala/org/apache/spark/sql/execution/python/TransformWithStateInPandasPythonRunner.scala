@@ -173,7 +173,8 @@ abstract class TransformWithStateInPandasPythonBaseRunner[I](
     groupingKeySchema: StructType,
     batchTimestampMs: Option[Long],
     eventTimeWatermarkForEviction: Option[Long])
-  extends BasePythonRunner[I, ColumnarBatch](funcs.map(_._1), evalType, argOffsets, jobArtifactUUID)
+  extends BasePythonRunner[I, ColumnarBatch](
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with PythonArrowInput[I]
   with BasicPythonArrowOutput
   with Logging {
