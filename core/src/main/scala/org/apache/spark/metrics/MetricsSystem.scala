@@ -69,13 +69,15 @@ import org.apache.spark.util.Utils
  * [options] represent the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (
-    val instance: String, conf: SparkConf) extends Logging {
+    val instance: String,
+    conf: SparkConf,
+    registry: MetricRegistry)
+  extends Logging {
 
   private[this] val metricsConfig = new MetricsConfig(conf)
 
   private val sinks = new mutable.ArrayBuffer[Sink]
   private val sources = new mutable.ArrayBuffer[Source]
-  private val registry = new MetricRegistry()
 
   private var running: Boolean = false
 
@@ -257,8 +259,11 @@ private[spark] object MetricsSystem {
     }
   }
 
-  def createMetricsSystem(instance: String, conf: SparkConf): MetricsSystem = {
-    new MetricsSystem(instance, conf)
+  def createMetricsSystem(
+      instance: String,
+      conf: SparkConf,
+      registry: MetricRegistry = new MetricRegistry): MetricsSystem = {
+    new MetricsSystem(instance, conf, registry)
   }
 }
 
