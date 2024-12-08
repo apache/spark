@@ -129,6 +129,12 @@ function getColumnNameForTaskMetricSummary(columnKey) {
     case "peakExecutionMemory":
       return "Peak Execution Memory";
 
+    case "peakOnHeapExecutionMemory":
+      return "Peak OnHeap Execution Memory";
+
+    case "peakOffHeapExecutionMemory":
+      return "Peak OffHeap Execution Memory";
+
     case "resultSerializationTime":
       return "Result Serialization Time";
 
@@ -201,7 +207,8 @@ function displayRowsForSummaryMetricsTable(row, type, columnIndex) {
  
     default:
       return (row.columnKey == 'peakExecutionMemory' || row.columnKey == 'memoryBytesSpilled'
-        || row.columnKey == 'diskBytesSpilled') ? formatBytes(
+        || row.columnKey == 'diskBytesSpilled' || row.columnKey == 'peakOnHeapExecutionMemory'
+        || row.columnKey == 'peakOffHeapExecutionMemory') ? formatBytes(
           row.data[columnIndex], type) : (formatDuration(row.data[columnIndex]));
 
   }
@@ -326,7 +333,7 @@ function getStageAttemptId() {
 var taskSummaryMetricsTableArray = [];
 var taskSummaryMetricsTableCurrentStateArray = [];
 var taskSummaryMetricsDataTable;
-var optionalColumns = [11, 12, 13, 14, 15, 16, 17, 21];
+var optionalColumns = [11, 12, 13, 14, 15, 16, 17, 21, 26, 27];
 var taskTableSelector;
 
 var executorOptionalColumns = [15, 16, 17, 18];
@@ -350,6 +357,8 @@ $(document).ready(function () {
     "<div id='result_serialization_time' class='result-serialization-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-15' data-column='15' data-metrics-type='task'> Result Serialization Time</div>" +
     "<div id='getting_result_time' class='getting-result-time-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-16' data-column='16' data-metrics-type='task'> Getting Result Time</div>" +
     "<div id='peak_execution_memory' class='peak-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-17' data-column='17' data-metrics-type='task'> Peak Execution Memory</div>" +
+    "<div id='peak_onheap_execution_memory' class='peak-onheap-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-26' data-column='26' data-metrics-type='task'> Peak OnHeap Execution Memory</div>" +
+    "<div id='peak_offheap_execution_memory' class='peak-offheap-execution-memory-checkbox-div'><input type='checkbox' class='toggle-vis' id='box-27' data-column='27' data-metrics-type='task'> Peak OffHeap Execution Memory</div>" +
     "<div id='executor_jvm_on_off_heap_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-15'  data-column='15' data-metrics-type='executor'> Peak JVM Memory OnHeap / OffHeap</div>" +
     "<div id='executor_on_off_heap_execution_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-16' data-column='16' data-metrics-type='executor'> Peak Execution Memory OnHeap / OffHeap</div>" +
     "<div id='executor_on_off_heap_storage_memory' class='executor-jvm-metrics-checkbox-div'><input type='checkbox' class='toggle-vis' id='executor-box-17' data-column='17' data-metrics-type='executor'> Peak Storage Memory OnHeap / OffHeap</div>" +
@@ -385,6 +394,12 @@ $(document).ready(function () {
       "should be approximately the sum of the peak sizes across all such data structures created " +
       "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
       "external sort.");
+  $('#peak_onheap_execution_memory').attr("data-toggle", "tooltip")
+    .attr("data-placement", "top")
+    .attr("title", "Peak OnHeap Execution memory of this stage");
+  $('#peak_offheap_execution_memory').attr("data-toggle", "tooltip")
+    .attr("data-placement", "top")
+    .attr("title", "Peak OffHeap Execution memory of this stage");
   $('[data-toggle="tooltip"]').tooltip();
   var tasksSummary = $("#parent-container");
   getStandAloneAppId(function (appId) {
@@ -747,6 +762,18 @@ $(document).ready(function () {
                   taskSummaryMetricsTableArray.push(row);
                   break;
 
+                case "peakOnHeapExecutionMemory":
+                  row = createRowMetadataForColumn(
+                    columnKey, taskMetricsResponse[columnKey], 26);
+                  taskSummaryMetricsTableArray.push(row);
+                  break;
+
+                case "peakOffHeapExecutionMemory":
+                  row = createRowMetadataForColumn(
+                    columnKey, taskMetricsResponse[columnKey], 27);
+                  taskSummaryMetricsTableArray.push(row);
+                  break;
+
                 case "inputMetrics":
                   row = createRowMetadataForColumn(
                     columnKey, taskMetricsResponse[columnKey], 1);
@@ -1068,6 +1095,26 @@ $(document).ready(function () {
                 }
               },
               name: "Spill (Disk)"
+            },
+            {
+              data : function (row, type) {
+                if (row.taskMetrics && row.taskMetrics.peakOnHeapExecutionMemory) {
+                  return type === 'display' ? formatBytes(row.taskMetrics.peakOnHeapExecutionMemory, type) : row.taskMetrics.peakOnHeapExecutionMemory;
+                } else {
+                  return "";
+                }
+              },
+              name: "Peak OnHeap Execution Memory"
+            },
+            {
+              data : function (row, type) {
+                if (row.taskMetrics && row.taskMetrics.peakOffHeapExecutionMemory) {
+                  return type === 'display' ? formatBytes(row.taskMetrics.peakOffHeapExecutionMemory, type) : row.taskMetrics.peakOffHeapExecutionMemory;
+                } else {
+                  return "";
+                }
+              },
+              name: "Peak OffHeap Execution Memory"
             },
             {
               data : function (row, _ignored_type) {

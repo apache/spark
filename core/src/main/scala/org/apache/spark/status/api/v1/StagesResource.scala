@@ -227,6 +227,8 @@ private[v1] class StagesResource extends BaseAppResource {
         || containsValue(Utils.bytesToString(task.taskMetrics.get.memoryBytesSpilled))
         || containsValue(Utils.bytesToString(task.taskMetrics.get.diskBytesSpilled))
         || containsValue(Utils.bytesToString(task.taskMetrics.get.peakExecutionMemory))
+        || containsValue(Utils.bytesToString(task.taskMetrics.get.peakOnHeapExecutionMemory))
+        || containsValue(Utils.bytesToString(task.taskMetrics.get.peakOffHeapExecutionMemory))
         || containsValue(Utils.bytesToString(task.taskMetrics.get.inputMetrics.bytesRead))
         || containsValue(task.taskMetrics.get.inputMetrics.recordsRead)
         || containsValue(Utils.bytesToString(
