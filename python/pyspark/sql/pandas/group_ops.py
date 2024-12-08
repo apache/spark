@@ -695,27 +695,30 @@ class PandasGroupedOpsMixin:
         Maps each group of the current :class:`DataFrame` using an Arrow udf and returns the result
         as a `DataFrame`.
 
-        The function should take a `pyarrow.Table` and return another
-        `pyarrow.Table`. Alternatively, the user can pass a function that takes
-        a tuple of `pyarrow.Scalar` grouping key(s) and a `pyarrow.Table`.
-        For each group, all columns are passed together as a `pyarrow.Table`
-        to the user-function and the returned `pyarrow.Table` are combined as a
-        :class:`DataFrame`.
+        The function can take one of two forms: It can take a `pyarrow.Table` and return a
+        `pyarrow.Table`, or it can take an iterator of `pyarrow.RecordBatch` and yield
+        `pyarrow.RecordBatch`. Alternatively each form can take a tuple of `pyarrow.Scalar`
+        as the first argument in addition to the input type above. For each group, all columns
+        are passed together in the `pyarrow.Table` or `pyarrow.RecordBatch`, and the returned
+        `pyarrow.Table` or iterator of `pyarrow.RecordBatch` are combined as a :class:`DataFrame`.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
-        `pyarrow.Table`. The column labels of the returned `pyarrow.Table` must either match
-        the field names in the defined schema if specified as strings, or match the
-        field data types by position if not strings, e.g. integer indices.
-        The length of the returned `pyarrow.Table` can be arbitrary.
+        `pyarrow.Table` or `pyarrow.RecordBatch`. The column labels of the returned `pyarrow.Table`
+        or `pyarrow.RecordBatch` must either match the field names in the defined schema if
+        specified as strings, or match the field data types by position if not strings, e.g.
+        integer indices. The length of the returned `pyarrow.Table` or iterator of
+        `pyarrow.RecordBatch` can be arbitrary.
 
         .. versionadded:: 4.0.0
 
         Parameters
         ----------
         func : function
-            a Python native function that takes a `pyarrow.Table` and outputs a
-            `pyarrow.Table`, or that takes one tuple (grouping keys) and a
-            `pyarrow.Table` and outputs a `pyarrow.Table`.
+            a Python native function that either takes a `pyarrow.Table` and outputs a
+            `pyarrow.Table` or takes an iterator of `pyarrow.RecordBatch` and yields
+            `pyarrow.RecordBatch`. Additionally, each form can take a tuple of grouping keys
+            as the first argument, with the `pyarrow.Table` or iterator of `pyarrow.RecordBatch`
+            as the second argument.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -955,27 +958,30 @@ class PandasCogroupedOps:
         Applies a function to each cogroup using Arrow and returns the result
         as a `DataFrame`.
 
-        The function should take two `pyarrow.Table`\\s and return another
-        `pyarrow.Table`. Alternatively, the user can pass a function that takes
-        a tuple of `pyarrow.Scalar` grouping key(s) and the two `pyarrow.Table`\\s.
-        For each side of the cogroup, all columns are passed together as a
-        `pyarrow.Table` to the user-function and the returned `pyarrow.Table` are combined as
-        a :class:`DataFrame`.
+        The function can take one of two forms: It can take two `pyarrow.Table`\\s and return a
+        `pyarrow.Table`, or it can take two iterators of `pyarrow.RecordBatch` and yield
+        `pyarrow.RecordBatch`. Alternatively, each form can take a tuple of `pyarrow.Scalar`
+        as the first argument in addition to the input type above. For each cogroup, all columns
+        are passed together in the `pyarrow.Table` or `pyarrow.RecordBatch`, and the returned
+        `pyarrow.Table` or iterator of `pyarrow.RecordBatch` are combined as a :class:`DataFrame`.
 
         The `schema` should be a :class:`StructType` describing the schema of the returned
-        `pyarrow.Table`. The column labels of the returned `pyarrow.Table` must either match
-        the field names in the defined schema if specified as strings, or match the
-        field data types by position if not strings, e.g. integer indices.
-        The length of the returned `pyarrow.Table` can be arbitrary.
+        `pyarrow.Table` or `pyarrow.RecordBatch`. The column labels of the returned `pyarrow.Table`
+        or `pyarrow.RecordBatch` must either match the field names in the defined schema if
+        specified as strings, or match the field data types by position if not strings, e.g.
+        integer indices. The length of the returned `pyarrow.Table` or `pyarrow.RecordBatch`
+        can be arbitrary.
 
         .. versionadded:: 4.0.0
 
         Parameters
         ----------
         func : function
-            a Python native function that takes two `pyarrow.Table`\\s, and
-            outputs a `pyarrow.Table`, or that takes one tuple (grouping keys) and two
-            ``pyarrow.Table``\\s, and outputs a ``pyarrow.Table``.
+            a Python native function that either takes two `pyarrow.Table`\\s and outputs a
+            `pyarrow.Table` or takes two iterators of `pyarrow.RecordBatch` and yields
+            `pyarrow.RecordBatch`. Additionally, each form can take a tuple of grouping keys
+            as the first argument, with the `pyarrow.Table`\\s or iterators of `pyarrow.RecordBatch`
+            as the second and third argument.
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.

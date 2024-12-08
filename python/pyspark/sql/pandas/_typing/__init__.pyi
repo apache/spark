@@ -20,6 +20,7 @@ from typing import (
     Any,
     Callable,
     Iterable,
+    Iterator,
     NewType,
     Tuple,
     Type,
@@ -348,10 +349,22 @@ PandasCogroupedMapFunction = Union[
 ArrowGroupedMapFunction = Union[
     Callable[[pyarrow.Table], pyarrow.Table],
     Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table], pyarrow.Table],
+    Callable[[Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]],
+    Callable[
+        [Tuple[pyarrow.Scalar, ...], Iterator[pyarrow.RecordBatch]], Iterator[pyarrow.RecordBatch]
+    ],
 ]
 ArrowCogroupedMapFunction = Union[
     Callable[[pyarrow.Table, pyarrow.Table], pyarrow.Table],
     Callable[[Tuple[pyarrow.Scalar, ...], pyarrow.Table, pyarrow.Table], pyarrow.Table],
+    Callable[
+        [Iterator[pyarrow.RecordBatch], Iterator[pyarrow.RecordBatch]],
+        Iterator[pyarrow.RecordBatch],
+    ],
+    Callable[
+        [Tuple[pyarrow.Scalar, ...], Iterator[pyarrow.RecordBatch], Iterator[pyarrow.RecordBatch]],
+        Iterator[pyarrow.RecordBatch],
+    ],
 ]
 
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
