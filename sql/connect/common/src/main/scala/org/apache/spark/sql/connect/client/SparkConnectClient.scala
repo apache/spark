@@ -204,6 +204,8 @@ private[sql] class SparkConnectClient(
             .build())
       case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION =>
         builder.setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_WEB_URL =>
+        builder.setSparkWebUrl(proto.AnalyzePlanRequest.SparkWebUrl.newBuilder().build())
       case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
     }
     analyze(builder)

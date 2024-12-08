@@ -965,6 +965,17 @@ class SparkSession:
 
     version.__doc__ = PySparkSession.version.__doc__
 
+    @functools.cached_property
+    def webUrl(self) -> Optional[str]:
+        spark_web_url = self._client._analyze(method="spark_web_url").spark_web_url
+        if spark_web_url is not None and spark_web_url.HasField(  # type: ignore[attr-defined]
+            "web_url"
+        ):
+            return spark_web_url.web_url  # type: ignore[attr-defined]
+        return None
+
+    webUrl.__doc__ = PySparkSession.webUrl.__doc__
+
     @property
     def client(self) -> "SparkConnectClient":
         return self._client
