@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoI
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
@@ -75,6 +76,7 @@ abstract class FileTable(
     }
     fileIndex match {
       case _: MetadataLogFileIndex => schema
+      case _ if SQLConf.get.respectUserSchemaNullabilityForFileDataSources => schema
       case _ => schema.asNullable
     }
   }
