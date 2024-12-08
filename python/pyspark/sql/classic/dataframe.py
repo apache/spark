@@ -715,6 +715,22 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.join(other._jdf, on, how)
         return DataFrame(jdf, self.sparkSession)
 
+    def lateralJoin(
+        self,
+        other: ParentDataFrame,
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> ParentDataFrame:
+        if on is None and how is None:
+            jdf = self._jdf.lateralJoin(other._jdf)
+        elif on is None:
+            jdf = self._jdf.lateralJoin(other._jdf, how)
+        elif how is None:
+            jdf = self._jdf.lateralJoin(other._jdf, on._jc)
+        else:
+            jdf = self._jdf.lateralJoin(other._jdf, on._jc, how)
+        return DataFrame(jdf, self.sparkSession)
+
     # TODO(SPARK-22947): Fix the DataFrame API.
     def _joinAsOf(
         self,

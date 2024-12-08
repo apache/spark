@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.hdfs.BlockMissingException
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred.JobConf
@@ -255,6 +256,7 @@ class NewHadoopRDD[K, V](
             null
           // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
           case e: FileNotFoundException if !ignoreMissingFiles => throw e
+          case e: BlockMissingException => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(
               log"Skipped the rest content in the corrupted file: " +
@@ -284,6 +286,7 @@ class NewHadoopRDD[K, V](
               finished = true
             // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
             case e: FileNotFoundException if !ignoreMissingFiles => throw e
+            case e: BlockMissingException => throw e
             case e: IOException if ignoreCorruptFiles =>
               logWarning(
                 log"Skipped the rest content in the corrupted file: " +

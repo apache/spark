@@ -85,6 +85,14 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     def _add_file(self, path):
         self.spark.addArtifacts(path, file=True)
 
+    @unittest.skip("SPARK-50134: Support Spark Connect")
+    def test_udtf_with_lateral_join_dataframe(self):
+        super().test_udtf_with_lateral_join_dataframe()
+
+    @unittest.skip("SPARK-50134: Support Spark Connect")
+    def test_udtf_with_conditional_return_dataframe(self):
+        super().test_udtf_with_conditional_return_dataframe()
+
 
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
     @classmethod

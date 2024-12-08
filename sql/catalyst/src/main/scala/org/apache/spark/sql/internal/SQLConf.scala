@@ -3999,7 +3999,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER =
-    buildConf("spark.sql.artifact.isolation.always.apply.classloader")
+    buildConf("spark.sql.artifact.isolation.alwaysApplyClassloader")
       .internal()
       .doc("When enabled, the classloader holding per-session artifacts will always be applied " +
         "during SQL executions (useful for Spark Connect). When disabled, the classloader will " +

@@ -16,22 +16,22 @@
 #
 import unittest
 
-from pyspark.sql.tests.pandas.test_pandas_cogrouped_map import CogroupedApplyInPandasTestsMixin
+from pyspark.sql.tests.pandas.test_pandas_udf_window import WindowPandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class CogroupedApplyInPandasTests(
-    CogroupedApplyInPandasTestsMixin,
+class PandasUDFWindowParityTests(
+    WindowPandasUDFTestsMixin,
     ReusedConnectTestCase,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map import *  # noqa: F401
+    from pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_window import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
 
         testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
