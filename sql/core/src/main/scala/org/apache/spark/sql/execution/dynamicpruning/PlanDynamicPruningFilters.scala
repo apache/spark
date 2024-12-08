@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.DYNAMIC_PRUNING_SUBQUERY
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan, SubqueryBroadcastExec}
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This planner rule aims at rewriting dynamic pruning predicates in order to reuse the
@@ -35,6 +36,8 @@ import org.apache.spark.sql.execution.joins._
  * the fallback mechanism with subquery duplicate.
 */
 case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[SparkPlan] {
+
+  override def conf: SQLConf = sparkSession.sessionState.conf
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.
