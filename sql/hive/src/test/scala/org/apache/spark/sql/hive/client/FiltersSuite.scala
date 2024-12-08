@@ -250,5 +250,24 @@ class FiltersSuite extends SparkFunSuite with PlanTest {
     }
   }
 
+  test("SPARK-49675: Support push down CaseWhen filter to Hive metastore") {
+    val case1 = (EqualTo(a("dt", DateType), Literal(Date.valueOf("2024-09-17"))),
+      GreaterThan(a("hr", IntegerType), 20))
+    val case2 = (EqualTo(a("dt", DateType), Literal(Date.valueOf("2024-09-18"))),
+        LessThan(a("hr", IntegerType), 10))
+    val filter = CaseWhen(Seq(case1, case2), None)
+    val converted = shim.convertFilters(testTable, Seq(filter))
+    assert(converted == "((dt = \"2024-09-17\" and hr > 20) or " +
+      "((dt != \"2024-09-17\" and dt = \"2024-09-18\") and hr < 10))")
+
+    val case3 = (And(EqualTo(a("p1", StringType), "a"), EqualTo(a("p2", IntegerType), 10)),
+      EqualTo(a("p3", IntegerType), 20))
+    val elseValue = EqualTo(a("p3", IntegerType), 30)
+    val filter2 = CaseWhen(Seq(case3), Some(elseValue))
+    val converted2 = shim.convertFilters(testTable, Seq(filter2))
+    assert(converted2 == "(((p1 = \"a\" and p2 = 10) and p3 = 20) or " +
+      "(((p1 != \"a\" or p2 != 10)) and p3 = 30))")
+  }
+
   private def a(name: String, dataType: DataType) = AttributeReference(name, dataType)()
 }
