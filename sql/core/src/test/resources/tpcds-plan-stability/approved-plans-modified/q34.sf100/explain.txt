@@ -23,12 +23,12 @@
          :                       :        +- * Project (10)
          :                       :           +- * Filter (9)
          :                       :              +- * ColumnarToRow (8)
-         :                       :                 +- Scan parquet spark_catalog.default.store (7)
+         :                       :                 +- Scan parquet spark_catalog.default.household_demographics (7)
          :                       +- BroadcastExchange (18)
          :                          +- * Project (17)
          :                             +- * Filter (16)
          :                                +- * ColumnarToRow (15)
-         :                                   +- Scan parquet spark_catalog.default.household_demographics (14)
+         :                                   +- Scan parquet spark_catalog.default.store (14)
          +- * Sort (31)
             +- Exchange (30)
                +- * Filter (29)
@@ -64,69 +64,69 @@ Join condition: None
 Output [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4]
 Input [6]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5, d_date_sk#7]
 
-(7) Scan parquet spark_catalog.default.store
-Output [2]: [s_store_sk#8, s_county#9]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [In(s_county, [Appanoose County,Daviess County,Fairfield County,Raleigh County,Saginaw County,Sumner County,Williamson County,Ziebach County]), IsNotNull(s_store_sk)]
-ReadSchema: struct<s_store_sk:int,s_county:string>
-
-(8) ColumnarToRow [codegen id : 2]
-Input [2]: [s_store_sk#8, s_county#9]
-
-(9) Filter [codegen id : 2]
-Input [2]: [s_store_sk#8, s_county#9]
-Condition : (s_county#9 IN (Saginaw County,Sumner County,Appanoose County,Daviess County,Fairfield County,Raleigh County,Ziebach County,Williamson County) AND isnotnull(s_store_sk#8))
-
-(10) Project [codegen id : 2]
-Output [1]: [s_store_sk#8]
-Input [2]: [s_store_sk#8, s_county#9]
-
-(11) BroadcastExchange
-Input [1]: [s_store_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
-
-(12) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [ss_store_sk#3]
-Right keys [1]: [s_store_sk#8]
-Join type: Inner
-Join condition: None
-
-(13) Project [codegen id : 4]
-Output [3]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4]
-Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, s_store_sk#8]
-
-(14) Scan parquet spark_catalog.default.household_demographics
-Output [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
+(7) Scan parquet spark_catalog.default.household_demographics
+Output [4]: [hd_demo_sk#8, hd_buy_potential#9, hd_dep_count#10, hd_vehicle_count#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_vehicle_count), Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,Unknown        )), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
 
+(8) ColumnarToRow [codegen id : 2]
+Input [4]: [hd_demo_sk#8, hd_buy_potential#9, hd_dep_count#10, hd_vehicle_count#11]
+
+(9) Filter [codegen id : 2]
+Input [4]: [hd_demo_sk#8, hd_buy_potential#9, hd_dep_count#10, hd_vehicle_count#11]
+Condition : ((((isnotnull(hd_vehicle_count#11) AND ((hd_buy_potential#9 = >10000         ) OR (hd_buy_potential#9 = Unknown        ))) AND (hd_vehicle_count#11 > 0)) AND CASE WHEN (hd_vehicle_count#11 > 0) THEN ((cast(hd_dep_count#10 as double) / cast(hd_vehicle_count#11 as double)) > 1.2) END) AND isnotnull(hd_demo_sk#8))
+
+(10) Project [codegen id : 2]
+Output [1]: [hd_demo_sk#8]
+Input [4]: [hd_demo_sk#8, hd_buy_potential#9, hd_dep_count#10, hd_vehicle_count#11]
+
+(11) BroadcastExchange
+Input [1]: [hd_demo_sk#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=1]
+
+(12) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_hdemo_sk#2]
+Right keys [1]: [hd_demo_sk#8]
+Join type: Inner
+Join condition: None
+
+(13) Project [codegen id : 4]
+Output [3]: [ss_customer_sk#1, ss_store_sk#3, ss_ticket_number#4]
+Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, hd_demo_sk#8]
+
+(14) Scan parquet spark_catalog.default.store
+Output [2]: [s_store_sk#12, s_county#13]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [In(s_county, [Appanoose County,Daviess County,Fairfield County,Raleigh County,Saginaw County,Sumner County,Williamson County,Ziebach County]), IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_county:string>
+
 (15) ColumnarToRow [codegen id : 3]
-Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
+Input [2]: [s_store_sk#12, s_county#13]
 
 (16) Filter [codegen id : 3]
-Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
-Condition : ((((isnotnull(hd_vehicle_count#13) AND ((hd_buy_potential#11 = >10000         ) OR (hd_buy_potential#11 = Unknown        ))) AND (hd_vehicle_count#13 > 0)) AND CASE WHEN (hd_vehicle_count#13 > 0) THEN ((cast(hd_dep_count#12 as double) / cast(hd_vehicle_count#13 as double)) > 1.2) END) AND isnotnull(hd_demo_sk#10))
+Input [2]: [s_store_sk#12, s_county#13]
+Condition : (s_county#13 IN (Saginaw County,Sumner County,Appanoose County,Daviess County,Fairfield County,Raleigh County,Ziebach County,Williamson County) AND isnotnull(s_store_sk#12))
 
 (17) Project [codegen id : 3]
-Output [1]: [hd_demo_sk#10]
-Input [4]: [hd_demo_sk#10, hd_buy_potential#11, hd_dep_count#12, hd_vehicle_count#13]
+Output [1]: [s_store_sk#12]
+Input [2]: [s_store_sk#12, s_county#13]
 
 (18) BroadcastExchange
-Input [1]: [hd_demo_sk#10]
+Input [1]: [s_store_sk#12]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=2]
 
 (19) BroadcastHashJoin [codegen id : 4]
-Left keys [1]: [ss_hdemo_sk#2]
-Right keys [1]: [hd_demo_sk#10]
+Left keys [1]: [ss_store_sk#3]
+Right keys [1]: [s_store_sk#12]
 Join type: Inner
 Join condition: None
 
 (20) Project [codegen id : 4]
 Output [2]: [ss_customer_sk#1, ss_ticket_number#4]
-Input [4]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_ticket_number#4, hd_demo_sk#10]
+Input [4]: [ss_customer_sk#1, ss_store_sk#3, ss_ticket_number#4, s_store_sk#12]
 
 (21) HashAggregate [codegen id : 4]
 Input [2]: [ss_customer_sk#1, ss_ticket_number#4]

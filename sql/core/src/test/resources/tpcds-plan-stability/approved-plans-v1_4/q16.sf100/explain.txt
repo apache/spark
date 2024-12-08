@@ -33,12 +33,12 @@
                   :     :        +- * Project (23)
                   :     :           +- * Filter (22)
                   :     :              +- * ColumnarToRow (21)
-                  :     :                 +- Scan parquet spark_catalog.default.customer_address (20)
+                  :     :                 +- Scan parquet spark_catalog.default.call_center (20)
                   :     +- BroadcastExchange (31)
                   :        +- * Project (30)
                   :           +- * Filter (29)
                   :              +- * ColumnarToRow (28)
-                  :                 +- Scan parquet spark_catalog.default.call_center (27)
+                  :                 +- Scan parquet spark_catalog.default.customer_address (27)
                   +- BroadcastExchange (38)
                      +- * Project (37)
                         +- * Filter (36)
@@ -58,7 +58,7 @@ Input [8]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_wareho
 
 (3) Filter [codegen id : 1]
 Input [8]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, cs_sold_date_sk#8]
-Condition : (((((isnotnull(cs_ship_date_sk#1) AND isnotnull(cs_ship_addr_sk#2)) AND isnotnull(cs_call_center_sk#3)) AND might_contain(Subquery scalar-subquery#9, [id=#10], xxhash64(cs_ship_addr_sk#2, 42))) AND might_contain(Subquery scalar-subquery#11, [id=#12], xxhash64(cs_call_center_sk#3, 42))) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(cs_ship_date_sk#1, 42)))
+Condition : (((((isnotnull(cs_ship_date_sk#1) AND isnotnull(cs_ship_addr_sk#2)) AND isnotnull(cs_call_center_sk#3)) AND might_contain(Subquery scalar-subquery#9, [id=#10], xxhash64(cs_call_center_sk#3, 42))) AND might_contain(Subquery scalar-subquery#11, [id=#12], xxhash64(cs_ship_addr_sk#2, 42))) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(cs_ship_date_sk#1, 42)))
 
 (4) Project [codegen id : 1]
 Output [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
@@ -130,69 +130,69 @@ Right keys [1]: [cr_order_number#18]
 Join type: LeftAnti
 Join condition: None
 
-(20) Scan parquet spark_catalog.default.customer_address
-Output [2]: [ca_address_sk#20, ca_state#21]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,GA), IsNotNull(ca_address_sk)]
-ReadSchema: struct<ca_address_sk:int,ca_state:string>
-
-(21) ColumnarToRow [codegen id : 8]
-Input [2]: [ca_address_sk#20, ca_state#21]
-
-(22) Filter [codegen id : 8]
-Input [2]: [ca_address_sk#20, ca_state#21]
-Condition : ((isnotnull(ca_state#21) AND (ca_state#21 = GA)) AND isnotnull(ca_address_sk#20))
-
-(23) Project [codegen id : 8]
-Output [1]: [ca_address_sk#20]
-Input [2]: [ca_address_sk#20, ca_state#21]
-
-(24) BroadcastExchange
-Input [1]: [ca_address_sk#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
-
-(25) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [cs_ship_addr_sk#2]
-Right keys [1]: [ca_address_sk#20]
-Join type: Inner
-Join condition: None
-
-(26) Project [codegen id : 11]
-Output [5]: [cs_ship_date_sk#1, cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
-Input [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, ca_address_sk#20]
-
-(27) Scan parquet spark_catalog.default.call_center
-Output [2]: [cc_call_center_sk#22, cc_county#23]
+(20) Scan parquet spark_catalog.default.call_center
+Output [2]: [cc_call_center_sk#20, cc_county#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/call_center]
 PushedFilters: [IsNotNull(cc_county), EqualTo(cc_county,Williamson County), IsNotNull(cc_call_center_sk)]
 ReadSchema: struct<cc_call_center_sk:int,cc_county:string>
 
+(21) ColumnarToRow [codegen id : 8]
+Input [2]: [cc_call_center_sk#20, cc_county#21]
+
+(22) Filter [codegen id : 8]
+Input [2]: [cc_call_center_sk#20, cc_county#21]
+Condition : ((isnotnull(cc_county#21) AND (cc_county#21 = Williamson County)) AND isnotnull(cc_call_center_sk#20))
+
+(23) Project [codegen id : 8]
+Output [1]: [cc_call_center_sk#20]
+Input [2]: [cc_call_center_sk#20, cc_county#21]
+
+(24) BroadcastExchange
+Input [1]: [cc_call_center_sk#20]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=4]
+
+(25) BroadcastHashJoin [codegen id : 11]
+Left keys [1]: [cs_call_center_sk#3]
+Right keys [1]: [cc_call_center_sk#20]
+Join type: Inner
+Join condition: None
+
+(26) Project [codegen id : 11]
+Output [5]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
+Input [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, cc_call_center_sk#20]
+
+(27) Scan parquet spark_catalog.default.customer_address
+Output [2]: [ca_address_sk#22, ca_state#23]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,GA), IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_state:string>
+
 (28) ColumnarToRow [codegen id : 9]
-Input [2]: [cc_call_center_sk#22, cc_county#23]
+Input [2]: [ca_address_sk#22, ca_state#23]
 
 (29) Filter [codegen id : 9]
-Input [2]: [cc_call_center_sk#22, cc_county#23]
-Condition : ((isnotnull(cc_county#23) AND (cc_county#23 = Williamson County)) AND isnotnull(cc_call_center_sk#22))
+Input [2]: [ca_address_sk#22, ca_state#23]
+Condition : ((isnotnull(ca_state#23) AND (ca_state#23 = GA)) AND isnotnull(ca_address_sk#22))
 
 (30) Project [codegen id : 9]
-Output [1]: [cc_call_center_sk#22]
-Input [2]: [cc_call_center_sk#22, cc_county#23]
+Output [1]: [ca_address_sk#22]
+Input [2]: [ca_address_sk#22, ca_state#23]
 
 (31) BroadcastExchange
-Input [1]: [cc_call_center_sk#22]
+Input [1]: [ca_address_sk#22]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
 
 (32) BroadcastHashJoin [codegen id : 11]
-Left keys [1]: [cs_call_center_sk#3]
-Right keys [1]: [cc_call_center_sk#22]
+Left keys [1]: [cs_ship_addr_sk#2]
+Right keys [1]: [ca_address_sk#22]
 Join type: Inner
 Join condition: None
 
 (33) Project [codegen id : 11]
 Output [4]: [cs_ship_date_sk#1, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
-Input [6]: [cs_ship_date_sk#1, cs_call_center_sk#3, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, cc_call_center_sk#22]
+Input [6]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7, ca_address_sk#22]
 
 (34) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_date_sk#24, d_date#25]
@@ -267,31 +267,31 @@ ObjectHashAggregate (52)
       +- * Project (49)
          +- * Filter (48)
             +- * ColumnarToRow (47)
-               +- Scan parquet spark_catalog.default.customer_address (46)
+               +- Scan parquet spark_catalog.default.call_center (46)
 
 
-(46) Scan parquet spark_catalog.default.customer_address
-Output [2]: [ca_address_sk#20, ca_state#21]
+(46) Scan parquet spark_catalog.default.call_center
+Output [2]: [cc_call_center_sk#20, cc_county#21]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,GA), IsNotNull(ca_address_sk)]
-ReadSchema: struct<ca_address_sk:int,ca_state:string>
+Location [not included in comparison]/{warehouse_dir}/call_center]
+PushedFilters: [IsNotNull(cc_county), EqualTo(cc_county,Williamson County), IsNotNull(cc_call_center_sk)]
+ReadSchema: struct<cc_call_center_sk:int,cc_county:string>
 
 (47) ColumnarToRow [codegen id : 1]
-Input [2]: [ca_address_sk#20, ca_state#21]
+Input [2]: [cc_call_center_sk#20, cc_county#21]
 
 (48) Filter [codegen id : 1]
-Input [2]: [ca_address_sk#20, ca_state#21]
-Condition : ((isnotnull(ca_state#21) AND (ca_state#21 = GA)) AND isnotnull(ca_address_sk#20))
+Input [2]: [cc_call_center_sk#20, cc_county#21]
+Condition : ((isnotnull(cc_county#21) AND (cc_county#21 = Williamson County)) AND isnotnull(cc_call_center_sk#20))
 
 (49) Project [codegen id : 1]
-Output [1]: [ca_address_sk#20]
-Input [2]: [ca_address_sk#20, ca_state#21]
+Output [1]: [cc_call_center_sk#20]
+Input [2]: [cc_call_center_sk#20, cc_county#21]
 
 (50) ObjectHashAggregate
-Input [1]: [ca_address_sk#20]
+Input [1]: [cc_call_center_sk#20]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#20, 42), 17961, 333176, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(cc_call_center_sk#20, 42), 4, 144, 0, 0)]
 Aggregate Attributes [1]: [buf#35]
 Results [1]: [buf#36]
 
@@ -302,9 +302,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=8]
 (52) ObjectHashAggregate
 Input [1]: [buf#36]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#20, 42), 17961, 333176, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#20, 42), 17961, 333176, 0, 0)#37]
-Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#20, 42), 17961, 333176, 0, 0)#37 AS bloomFilter#38]
+Functions [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#20, 42), 4, 144, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#20, 42), 4, 144, 0, 0)#37]
+Results [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#20, 42), 4, 144, 0, 0)#37 AS bloomFilter#38]
 
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#11, [id=#12]
 ObjectHashAggregate (59)
@@ -313,31 +313,31 @@ ObjectHashAggregate (59)
       +- * Project (56)
          +- * Filter (55)
             +- * ColumnarToRow (54)
-               +- Scan parquet spark_catalog.default.call_center (53)
+               +- Scan parquet spark_catalog.default.customer_address (53)
 
 
-(53) Scan parquet spark_catalog.default.call_center
-Output [2]: [cc_call_center_sk#22, cc_county#23]
+(53) Scan parquet spark_catalog.default.customer_address
+Output [2]: [ca_address_sk#22, ca_state#23]
 Batched: true
-Location [not included in comparison]/{warehouse_dir}/call_center]
-PushedFilters: [IsNotNull(cc_county), EqualTo(cc_county,Williamson County), IsNotNull(cc_call_center_sk)]
-ReadSchema: struct<cc_call_center_sk:int,cc_county:string>
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,GA), IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
 (54) ColumnarToRow [codegen id : 1]
-Input [2]: [cc_call_center_sk#22, cc_county#23]
+Input [2]: [ca_address_sk#22, ca_state#23]
 
 (55) Filter [codegen id : 1]
-Input [2]: [cc_call_center_sk#22, cc_county#23]
-Condition : ((isnotnull(cc_county#23) AND (cc_county#23 = Williamson County)) AND isnotnull(cc_call_center_sk#22))
+Input [2]: [ca_address_sk#22, ca_state#23]
+Condition : ((isnotnull(ca_state#23) AND (ca_state#23 = GA)) AND isnotnull(ca_address_sk#22))
 
 (56) Project [codegen id : 1]
-Output [1]: [cc_call_center_sk#22]
-Input [2]: [cc_call_center_sk#22, cc_county#23]
+Output [1]: [ca_address_sk#22]
+Input [2]: [ca_address_sk#22, ca_state#23]
 
 (57) ObjectHashAggregate
-Input [1]: [cc_call_center_sk#22]
+Input [1]: [ca_address_sk#22]
 Keys: []
-Functions [1]: [partial_bloom_filter_agg(xxhash64(cc_call_center_sk#22, 42), 4, 144, 0, 0)]
+Functions [1]: [partial_bloom_filter_agg(xxhash64(ca_address_sk#22, 42), 17961, 333176, 0, 0)]
 Aggregate Attributes [1]: [buf#39]
 Results [1]: [buf#40]
 
@@ -348,9 +348,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=9]
 (59) ObjectHashAggregate
 Input [1]: [buf#40]
 Keys: []
-Functions [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#22, 42), 4, 144, 0, 0)]
-Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#22, 42), 4, 144, 0, 0)#41]
-Results [1]: [bloom_filter_agg(xxhash64(cc_call_center_sk#22, 42), 4, 144, 0, 0)#41 AS bloomFilter#42]
+Functions [1]: [bloom_filter_agg(xxhash64(ca_address_sk#22, 42), 17961, 333176, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(ca_address_sk#22, 42), 17961, 333176, 0, 0)#41]
+Results [1]: [bloom_filter_agg(xxhash64(ca_address_sk#22, 42), 17961, 333176, 0, 0)#41 AS bloomFilter#42]
 
 Subquery:3 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
 ObjectHashAggregate (66)
