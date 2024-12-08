@@ -247,6 +247,59 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
+  val ANALYZER_SINGLE_PASS_RESOLVER_ENABLED =
+    buildConf("spark.sql.analyzer.singlePassResolver.enabled")
+      .internal()
+      .doc(
+        "When true, use the single-pass Resolver instead of the fixed-point Analyzer. " +
+        "This is an alternative Analyzer framework, which resolves the parsed logical plan in a " +
+        "single post-order traversal. It uses ExpressionResolver to resolve expressions and " +
+        "NameScope to control the visibility of names. In contrast to the current fixed-point " +
+        "framework, subsequent in-tree traversals are disallowed. Most of the fixed-point " +
+        "Analyzer code is reused in the form of specific node transformation functions " +
+        "(AliasResolution.resolve, FunctionResolution.resolveFunction, etc)." +
+        "This feature is currently under development."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
+   val ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER =
+     buildConf("spark.sql.analyzer.singlePassResolver.dualRunWithLegacy")
+       .internal()
+       .doc("When true, run both analyzers to check if single-pass Analyzer correctly produces" +
+         " the same analyzed plan as the fixed-point Analyzer for the existing set of features" +
+         " defined in the ResolverGuard")
+        .version("4.0.0")
+       .booleanConf
+       .createWithDefault(false)
+
+  val ANALYZER_SINGLE_PASS_RESOLVER_VALIDATION_ENABLED =
+    buildConf("spark.sql.analyzer.singlePassResolver.validationEnabled")
+      .internal()
+      .doc(
+        "When true, validate the Resolver output with ResolutionValidator. " +
+        "The ResolutionValidator validates the resolved logical plan tree in one pass " +
+        "and asserts the internal contracts. It uses the ExpressionResolutionValidator " +
+        "internally to validate resolved expression trees in the same manner."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ANALYZER_SINGLE_PASS_TRACK_RESOLVED_NODES_ENABLED =
+    buildConf("spark.sql.analyzer.singlePassResolver.trackResolvedNodes.enabled")
+      .internal()
+      .doc(
+        "When true, keep track of resolved nodes in order to assert that the single-pass " +
+        "invariant is never broken. While true, if a resolver attempts to resolve the same node " +
+        "twice, INTERNAL_ERROR exception is thrown. Used only for testing due to memory impact " +
+        "of storing each node in a HashSet."
+      )
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val MULTI_COMMUTATIVE_OP_OPT_THRESHOLD =
     buildConf("spark.sql.analyzer.canonicalization.multiCommutativeOpMemoryOptThreshold")
       .internal()
