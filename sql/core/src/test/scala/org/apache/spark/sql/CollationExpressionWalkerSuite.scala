@@ -729,6 +729,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       // other functions which are not yet supported
       "to_avro",
       "from_avro",
+      "schema_of_avro",
       "to_protobuf",
       "from_protobuf"
     )
