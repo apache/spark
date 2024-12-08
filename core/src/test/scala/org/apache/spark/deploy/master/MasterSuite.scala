@@ -249,4 +249,43 @@ class MasterSuite extends MasterSuiteBase {
         eventLogCodec = None)
     assert(master.invokePrivate(_createApplication(desc, null)).id === "spark-45756")
   }
+
+  test("SPARK-38862: spark.authenticate enabled with default spark.master.rest.auth.mode") {
+    val conf = new SparkConf()
+      .set(MASTER_REST_SERVER_AUTH_MODE, MasterRestAuthMode.NoneOption.toString)
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(MASTER_REST_SERVER_ENABLED, true)
+      .set(AUTH_SECRET, "notempty")
+
+    // Validate this setting is not permitted as it is inseucre.
+    assertThrows[IllegalArgumentException] {
+      val master = makeMaster(conf)
+    }
+  }
+
+  test("SPARK-38862: spark.authenticate enabled with unknown spark.master.rest.auth.mode") {
+    val conf = new SparkConf()
+      .set(MASTER_REST_SERVER_AUTH_MODE, "UnknownSetting")
+      .set(NETWORK_AUTH_ENABLED, true)
+      .set(MASTER_REST_SERVER_ENABLED, true)
+      .set(AUTH_SECRET, "notempty")
+
+    // Validate this setting is not permitted as it defaults to None, which is not accepted.
+    assertThrows[IllegalArgumentException] {
+      val master = makeMaster(conf)
+    }
+  }
+
+  test("SPARK-38862: spark.authenticate with SecureGateway spark.master.rest.auth.mode") {
+    try {
+      val conf = new SparkConf()
+        .set(MASTER_REST_SERVER_AUTH_MODE, MasterRestAuthMode.SecureGatewayOption.toString)
+        .set(NETWORK_AUTH_ENABLED, true)
+        .set(MASTER_REST_SERVER_ENABLED, true)
+        .set(AUTH_SECRET, "notempty")
+      makeMaster(conf)
+    } catch {
+      case _ : Throwable => fail("Should allow SecureGateway with spark.authenticate enabled")
+    }
+  }
 }
