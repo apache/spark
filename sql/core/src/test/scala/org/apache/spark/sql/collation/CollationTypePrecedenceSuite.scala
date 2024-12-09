@@ -542,13 +542,6 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
              |  'A' collate unicode)
              |""".stripMargin),
       Seq(Row(false)))
-
-    assertExplicitMismatch(
-      sql(s"""
-             |SELECT array_contains(
-             |  CAST(array('a', 'b' collate utf8_lcase) AS ARRAY<STRING>),
-             |  'A' collate utf8_lcase)
-             |""".stripMargin))
   }
 
   test("array of structs") {

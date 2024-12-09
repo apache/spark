@@ -360,8 +360,8 @@ object CollationTypeCoercion {
     case cast: Cast =>
       if (isUserDefined(cast) && isComplexType(cast.dataType)) {
         // since we can't use collate clause with complex types
-        // user defined casts should be treated as explicit
-        Some(addContextToStringType(cast.dataType, Explicit))
+        // user defined casts should be treated as implicit
+        Some(addContextToStringType(cast.dataType, Implicit))
       } else {
         Some(addContextToStringType(cast.dataType, Default))
       }
