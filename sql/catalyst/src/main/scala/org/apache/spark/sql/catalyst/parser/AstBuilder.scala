@@ -145,18 +145,18 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
     val labelCtx = new SqlScriptingLabelContext()
     val labelText = labelCtx.enterLabeledScope(None, None)
-    val script = visitCompoundBodyImpl(
-      ctx.compoundBody(),
-      Some(labelText),
-      allowVarDeclare = true,
-      labelCtx,
-      isScope = true
-    )
+
+    val script = Option(ctx.compoundBody())
+      .map(visitCompoundBodyImpl(
+        _,
+        Some(labelText),
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = true
+      )).getOrElse(CompoundBody(Seq.empty, Some(labelText), isScope = true))
+
     labelCtx.exitLabeledScope(None)
     script
-    Option(ctx.compoundBody())
-      .map(visitCompoundBodyImpl(_, None, allowVarDeclare = true, labelCtx))
-      .getOrElse(CompoundBody(Seq.empty, None))
   }
 
   private def visitCompoundBodyImpl(
@@ -204,16 +204,14 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx: SqlScriptingLabelContext): CompoundBody = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    val body = visitCompoundBodyImpl(
-      ctx.compoundBody(),
-      Some(labelText),
-      allowVarDeclare = true,
-      labelCtx,
-      isScope = true
-    )
     val body = Option(ctx.compoundBody())
-      .map(visitCompoundBodyImpl(_, Some(labelText), allowVarDeclare = true, labelCtx))
-      .getOrElse(CompoundBody(Seq.empty, Some(labelText)))
+      .map(visitCompoundBodyImpl(
+        _,
+        Some(labelText),
+        allowVarDeclare = true,
+        labelCtx,
+        isScope = true
+      )).getOrElse(CompoundBody(Seq.empty, Some(labelText), isScope = true))
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
     body
   }
