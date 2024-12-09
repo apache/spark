@@ -334,7 +334,7 @@ class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase)
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_arrow_cogrouped_map import *  # noqa: F401
+    from pyspark.sql.tests.arrow.test_arrow_cogrouped_map import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
