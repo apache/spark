@@ -610,7 +610,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
 
   override def toString: String = {
     if (!child.resolved) {
-      return s"$child INSET " + hset.toSeq.mkString("(", ", ", ")")
+      return s"$child INSET (values with unresolved data types)"
     }
     val listString = hset.toSeq
       .map(elem => Literal(elem, child.dataType).toString)
