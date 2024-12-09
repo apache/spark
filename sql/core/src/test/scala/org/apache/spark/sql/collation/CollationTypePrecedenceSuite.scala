@@ -133,7 +133,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       Row(v2Collation))
 
     assertIndeterminateCollation(sql(s"SELECT v1 = v2"))
-    assertIndeterminateCollation(sql(s"SELECT SUBSTRING(v1, 0, 1) || v2"))
+    assertIndeterminateCollation(sql(s"SELECT SUBSTRING(v1, 0, 1) = v2"))
   }
 
   test("subqueries have implicit collation strength") {
