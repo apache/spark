@@ -275,7 +275,7 @@
       },
       "INVALID_CHANGE_LOG_READER_VERSION" : {
         "message" : [
-          "The change log reader version cannot be <version>."
+          "The change log reader version cannot be <version>. The checkpoint probably is from a future Spark version, please upgrade your Spark."
         ]
       },
       "INVALID_CHANGE_LOG_WRITER_VERSION" : {
@@ -1475,6 +1475,11 @@
       "PARQUET_COLUMN_DATA_TYPE_MISMATCH" : {
         "message" : [
           "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
+        ]
+      },
+      "UNSUPPORTED_FILE_SYSTEM" : {
+        "message" : [
+          "The file system <fileSystemClass> hasn't implemented <method>."
         ]
       }
     },
@@ -5188,6 +5193,11 @@
           "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
       },
+      "COLLATIONS_IN_MAP_KEYS" : {
+        "message" : [
+          "Collated strings for keys of maps"
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5358,6 +5368,11 @@
       "SET_OPERATION_ON_MAP_TYPE" : {
         "message" : [
           "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+        ]
+      },
+      "SET_OPERATION_ON_VARIANT_TYPE" : {
+        "message" : [
+          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {

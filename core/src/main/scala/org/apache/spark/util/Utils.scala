@@ -103,7 +103,8 @@ private[spark] object Utils
   with SparkErrorUtils
   with SparkFileUtils
   with SparkSerDeUtils
-  with SparkStreamUtils {
+  with SparkStreamUtils
+  with SparkStringUtils {
 
   private val sparkUncaughtExceptionHandler = new SparkUncaughtExceptionHandler
   @volatile private var cachedLocalDir: String = ""
@@ -2799,10 +2800,6 @@ private[spark] object Utils
     }
   }
 
-  def stringToSeq(str: String): Seq[String] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty).toImmutableArraySeq
-  }
-
   /**
    * Create instances of extension classes.
    *
@@ -2982,7 +2979,9 @@ private[spark] object Utils
     if (props == null) {
       return props
     }
-    props.clone().asInstanceOf[Properties]
+    val resultProps = new Properties()
+    resultProps.putAll(props.clone().asInstanceOf[Properties])
+    resultProps
   }
 
   /**

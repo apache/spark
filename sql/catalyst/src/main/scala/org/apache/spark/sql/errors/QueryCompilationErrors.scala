@@ -351,6 +351,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def collatedStringsInMapKeysNotSupportedError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.COLLATIONS_IN_MAP_KEYS",
+      messageParameters = Map.empty)
+  }
+
   def trimCollationNotEnabledError(): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",

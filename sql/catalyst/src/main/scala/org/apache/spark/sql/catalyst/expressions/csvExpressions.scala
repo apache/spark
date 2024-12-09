@@ -87,7 +87,8 @@ case class CsvToStructs(
     copy(timeZoneId = Option(timeZoneId))
   }
 
-  override def inputTypes: Seq[AbstractDataType] = StringTypeWithCollation :: Nil
+  override def inputTypes: Seq[AbstractDataType] =
+    StringTypeWithCollation(supportsTrimCollation = true) :: Nil
 
   override def prettyName: String = "from_csv"
 

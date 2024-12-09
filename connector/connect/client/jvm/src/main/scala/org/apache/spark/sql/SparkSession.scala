@@ -34,6 +34,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
@@ -371,13 +372,8 @@ class SparkSession private[sql] (
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
-    val value = client.execute(plan)
-    new SparkResult(
-      value,
-      allocator,
-      encoder,
-      timeZoneId,
-      Some(setMetricsAndUnregisterObservation))
+    val value = executeInternal(plan)
+    new SparkResult(value, allocator, encoder, timeZoneId)
   }
 
   private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {
@@ -386,7 +382,7 @@ class SparkSession private[sql] (
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     // .foreach forces that the iterator is consumed and closed
-    client.execute(plan).foreach(_ => ())
+    executeInternal(plan).foreach(_ => ())
   }
 
   @Since("4.0.0")
@@ -395,11 +391,26 @@ class SparkSession private[sql] (
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toSeq forces that the iterator is consumed and closed. On top, ignore all
     // progress messages.
-    client.execute(plan).filter(!_.hasExecutionProgress).toSeq
+    executeInternal(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
-  private[sql] def execute(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] =
-    client.execute(plan)
+  /**
+   * The real `execute` method that calls into `SparkConnectClient`.
+   *
+   * Here we inject a lazy map to process registered observed metrics, so consumers of the
+   * returned iterator does not need to worry about it.
+   *
+   * Please make sure all `execute` methods call this method.
+   */
+  private[sql] def executeInternal(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] = {
+    client
+      .execute(plan)
+      .map { response =>
+        // Note, this map() is lazy.
+        processRegisteredObservedMetrics(response.getObservedMetricsList)
+        response
+      }
+  }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
@@ -541,10 +552,14 @@ class SparkSession private[sql] (
     observationRegistry.putIfAbsent(planId, observation)
   }
 
-  private[sql] def setMetricsAndUnregisterObservation(planId: Long, metrics: Row): Unit = {
-    val observationOrNull = observationRegistry.remove(planId)
-    if (observationOrNull != null) {
-      observationOrNull.setMetricsAndNotify(metrics)
+  private def processRegisteredObservedMetrics(metrics: java.util.List[ObservedMetrics]): Unit = {
+    metrics.asScala.map { metric =>
+      // Here we only process metrics that belong to a registered Observation object.
+      // All metrics, whether registered or not, will be collected by `SparkResult`.
+      val observationOrNull = observationRegistry.remove(metric.getPlanId)
+      if (observationOrNull != null) {
+        observationOrNull.setMetricsAndNotify(SparkResult.transformObservedMetrics(metric))
+      }
     }
   }
 

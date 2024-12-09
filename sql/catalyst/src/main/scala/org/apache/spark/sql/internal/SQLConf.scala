@@ -767,6 +767,13 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
+  lazy val ALLOW_COLLATIONS_IN_MAP_KEYS =
+    buildConf("spark.sql.collation.allowInMapKeys")
+      .doc("Allow for non-UTF8_BINARY collated strings inside of map's keys")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   lazy val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
@@ -3992,7 +3999,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER =
-    buildConf("spark.sql.artifact.isolation.always.apply.classloader")
+    buildConf("spark.sql.artifact.isolation.alwaysApplyClassloader")
       .internal()
       .doc("When enabled, the classloader holding per-session artifacts will always be applied " +
         "during SQL executions (useful for Spark Connect). When disabled, the classloader will " +
@@ -5584,6 +5591,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
       defaultNumShufflePartitions
     }
   }
+
+  def allowCollationsInMapKeys: Boolean = getConf(ALLOW_COLLATIONS_IN_MAP_KEYS)
 
   def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 

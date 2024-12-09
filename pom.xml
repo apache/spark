@@ -137,7 +137,7 @@
     <kafka.version>3.9.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.14.4</parquet.version>
+    <parquet.version>1.15.0</parquet.version>
     <orc.version>2.0.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.24</jetty.version>
@@ -180,8 +180,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.18.1</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.18.1</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.18.2</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.18.2</fasterxml.jackson.databind.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.7</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
@@ -195,7 +195,7 @@
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.0</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
-    <guava.version>33.2.1-jre</guava.version>
+    <guava.version>33.3.1-jre</guava.version>
     <gson.version>2.11.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.16</jersey.version>
@@ -295,7 +295,7 @@
     <spark.test.docker.removePulledImage>true</spark.test.docker.removePulledImage>
 
     <!-- Version used in Connect -->
-    <connect.guava.version>33.2.1-jre</connect.guava.version>
+    <connect.guava.version>33.3.1-jre</connect.guava.version>
     <guava.failureaccess.version>1.0.2</guava.failureaccess.version>
     <io.grpc.version>1.67.1</io.grpc.version>
     <mima.version>1.1.4</mima.version>
@@ -3225,7 +3225,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.20.0</version>
+            <version>10.20.2</version>
           </dependency>
         </dependencies>
         <executions>

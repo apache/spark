@@ -132,8 +132,22 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         _.output.map(_.exprId.id),
         newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
 
+    case f: FlatMapGroupsInArrow =>
+      deduplicateAndRenew[FlatMapGroupsInArrow](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
     case f: FlatMapCoGroupsInPandas =>
       deduplicateAndRenew[FlatMapCoGroupsInPandas](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
+    case f: FlatMapCoGroupsInArrow =>
+      deduplicateAndRenew[FlatMapCoGroupsInArrow](
         existingRelations,
         f,
         _.output.map(_.exprId.id),
@@ -378,7 +392,19 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
+      case oldVersion @ FlatMapGroupsInArrow(_, _, output, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
       case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
+      case oldVersion @ FlatMapCoGroupsInArrow(_, _, _, output, _, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
