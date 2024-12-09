@@ -20,6 +20,7 @@ import java.sql.Timestamp
 import java.util.Arrays
 
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
 import org.apache.spark.sql.test.{QueryTest, RemoteSparkSession}
@@ -458,6 +459,36 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with RemoteSparkSessi
       ds.groupByKey(_.length).reduceGroups(_ + _),
       (3, "abcxyz"),
       (5, "hello"))
+  }
+
+  object IntSumAgg extends Aggregator[Int, Int, Int] {
+    def zero: Int = 0
+    def reduce(b: Int, a: Int): Int = b + a
+    def merge(b1: Int, b2: Int): Int = b1 + b2
+    def finish(reduction: Int): Int = reduction
+    def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+    def outputEncoder: Encoder[Int] = Encoders.scalaInt
+  }
+
+  test("agg with mapValues") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val values = ds
+      .groupByKey(_._1)
+      .mapValues(_._2 * 2) // value *= 2 to make sure `mapValues` is really applied
+      .agg(count("*"), IntSumAgg.toColumn)
+      .collect()
+    assert(values === Array(("a", 2, 60), ("b", 2, 6), ("c", 1, 2)))
+  }
+
+  test("agg with mapValues (RGDS to KVDS)") {
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDF("k", "v")
+    val values = ds
+      .groupBy($"k")
+      .as[String, (String, Int)]
+      .mapValues(_._2 * 2)
+      .agg(count("*"), IntSumAgg.toColumn)
+      .collect()
+    assert(values === Array(("a", 2, 60), ("b", 2, 6), ("c", 1, 2)))
   }
 
   test("groupby") {

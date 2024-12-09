@@ -2196,14 +2196,52 @@ class SparkConnectPlanner(
     }
   }
 
+  private def transformValueMapFunc(
+      fun: proto.Expression.UnresolvedFunction): (TypedScalaUdf, Seq[Expression]) = {
+    if (fun.getArgumentsCount <= 1) {
+      throw InvalidPlanInput("map_values requires at least two child expressions")
+    }
+
+    // The mapValues fn is defined as: mapValuesUdf, [aggExprs]+.
+    val args = fun.getArgumentsList.asScala.toSeq
+    (TypedScalaUdf(args.head, None), args.drop(1).map(transformExpression))
+  }
+
   private def transformKeyValueGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
     val input = transformRelation(rel.getInput)
-    val ds = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
+    var ds = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
 
     val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
-    val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq
-      .map(expr => transformExpressionWithTypedReduceExpression(expr, input))
-      .map(toNamedExpression)
+
+    val aggExprs: Seq[Expression] = rel.getAggregateExpressionsList.asScala.toSeq match {
+      case Seq(expr)
+          if expr.hasUnresolvedFunction &&
+          expr.getUnresolvedFunction.getFunctionName == "map_values" =>
+        val (valueMapFunc, aggExprs) = transformValueMapFunc(expr.getUnresolvedFunction)
+        // Recompute the dataset's logical plan and data attributes after applying the mapFunc.
+        val withNewData = AppendColumns(
+          valueMapFunc.function,
+          valueMapFunc.inEnc,
+          valueMapFunc.outEnc,
+          ds.analyzed,
+          ds.dataAttributes)
+        val projected = Project(withNewData.newColumns ++ ds.groupingAttributes, withNewData)
+        val analyzed = session.sessionState.executePlan(projected).analyzed
+        ds = ds.copy(
+          vEncoder = valueMapFunc.outEnc,
+          analyzed = analyzed,
+          dataAttributes = withNewData.newColumns)
+        aggExprs
+      case exprs =>
+        exprs.map(transformExpression)
+    }
+
+    val namedColumns = aggExprs.map { expr =>
+      val any = ds.vEncoder
+      val asTyped = Column(expr).as(any).expr
+      val typedColumnExpr = TypedAggUtils.withInputType(asTyped, any, ds.dataAttributes)
+      Column(typedColumnExpr).named
+    }
     logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
   }
 
