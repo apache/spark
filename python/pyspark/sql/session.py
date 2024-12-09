@@ -486,7 +486,7 @@ class SparkSession(SparkConversionMixin):
                     "SPARK_CONNECT_MODE_ENABLED" in os.environ
                     or "SPARK_REMOTE" in os.environ
                     or "spark.remote" in opts
-                    or is_api_mode_connect and "spark.master" in opts
+                    or is_api_mode_connect
                 ):
                     with SparkContext._lock:
                         from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
@@ -498,7 +498,7 @@ class SparkSession(SparkConversionMixin):
                             if is_api_mode_connect:
                                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
                             else:
-                                url = opts.get("spark.master", os.environ.get("MASTER", "local[*]"))
+                                url = opts.get("spark.master", os.environ.get("MASTER"))
 
                             if url is None:
                                 raise PySparkRuntimeError(
