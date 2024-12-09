@@ -1094,10 +1094,10 @@ public final class CollationFactory {
      */
     private static class IndeterminateCollation extends Collation {
 
-      public IndeterminateCollation() {
+      IndeterminateCollation() {
         super(
           "NULL",
-          null,
+          "spark",
           null,
           (s1, s2) -> {
             throw new RuntimeException("Comparator can't be called on indeterminate collation");
