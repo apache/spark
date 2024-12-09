@@ -397,8 +397,8 @@ public final class CollationFactory {
        */
       private static Collation fetchCollation(int collationId) {
         // User-defined collations cannot produce a `Collation` instance.
-        assert (collationId >= INDETERMINATE_COLLATION_ID &&
-                getDefinitionOrigin(collationId) == DefinitionOrigin.PREDEFINED);
+        assert collationId == INDETERMINATE_COLLATION_ID ||
+          getDefinitionOrigin(collationId) == DefinitionOrigin.PREDEFINED;
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           // Skip cache.
           return CollationSpecUTF8.UTF8_BINARY_COLLATION;
