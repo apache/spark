@@ -330,72 +330,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     conf
   }
 
-  test("Run SparkPi with volcano scheduler", k8sTestTag, volcanoTag) {
-    sparkAppConf
-      .set("spark.kubernetes.driver.pod.featureSteps", VOLCANO_FEATURE_STEP)
-      .set("spark.kubernetes.executor.pod.featureSteps", VOLCANO_FEATURE_STEP)
-    runSparkPiAndVerifyCompletion(
-      driverPodChecker = (driverPod: Pod) => {
-        doBasicDriverPodCheck(driverPod)
-        checkScheduler(driverPod)
-        checkAnnotation(driverPod)
-        checkPodGroup(driverPod)
-      },
-      executorPodChecker = (executorPod: Pod) => {
-        doBasicExecutorPodCheck(executorPod)
-        checkScheduler(executorPod)
-        checkAnnotation(executorPod)
-      }
-    )
-  }
-
-  private def verifyJobsSucceededOneByOne(jobNum: Int, groupName: String): Unit = {
-    // Check Pending jobs completed one by one
-    (1 until jobNum).map { completedNum =>
-      Eventually.eventually(TIMEOUT, INTERVAL) {
-        val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
-        assert(pendingPods.size === jobNum - completedNum)
-      }
-    }
-    // All jobs succeeded finally
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-      val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
-      assert(succeededPods.size === jobNum)
-    }
-  }
-
-  test("SPARK-38187: Run SparkPi Jobs with minCPU", k8sTestTag, volcanoTag) {
-    val groupName = generateGroupName("min-cpu")
-    // Create a queue with driver + executor CPU capacity
-    val jobCores = driverCores + executorCores
-    val queueName = s"queue-$jobCores"
-    createOrReplaceQueue(name = queueName, cpu = Some(s"$jobCores"))
-    val testContent =
-      s"""
-         |apiVersion: scheduling.volcano.sh/v1beta1
-         |kind: PodGroup
-         |spec:
-         |  queue: $queueName
-         |  minMember: 1
-         |  minResources:
-         |    cpu: $jobCores
-         |""".stripMargin
-    val file = Utils.createTempFile(testContent, TEMP_DIR)
-    val path = TEMP_DIR + file
-    // Submit 3 jobs with minCPU = 2
-    val jobNum = 3
-    (1 to jobNum).map { i =>
-      Future {
-        runJobAndVerify(
-          i.toString,
-          groupLoc = Option(groupName),
-          driverPodGroupTemplate = Option(path))
-      }
-    }
-    verifyJobsSucceededOneByOne(jobNum, groupName)
-  }
-
   test("SPARK-38187: Run SparkPi Jobs with minMemory", k8sTestTag, volcanoTag) {
+    // scalastyle:off println
+    println("SPARK-38187: Run SparkPi Jobs with minMemory start.")
+    // scalastyle:on println
     val groupName = generateGroupName("min-mem")
     // Create a queue with 3G memory capacity
     createOrReplaceQueue(name = "queue-3g", memory = Some("3Gi"))
@@ -410,6 +348,9 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       }
     }
     verifyJobsSucceededOneByOne(jobNum, groupName)
+    // scalastyle:off println
+    println("SPARK-38187: Run SparkPi Jobs with minMemory end.")
+    // scalastyle:on println
   }
 
   test("SPARK-38188: Run SparkPi jobs with 2 queues (only 1 enabled)", k8sTestTag, volcanoTag) {
@@ -502,13 +443,78 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         assert(pods.size === 1)
         val conditions = pods.head.getStatus.getConditions.asScala
         val scheduledTime
-          = conditions.filter(_.getType === "PodScheduled").head.getLastTransitionTime
+        = conditions.filter(_.getType === "PodScheduled").head.getLastTransitionTime
         m += (p -> Instant.parse(scheduledTime))
       }
       // high --> medium --> low
       assert(m("high").isBefore(m("medium")))
       assert(m("medium").isBefore(m("low")))
     }
+  }
+
+  test("Run SparkPi with volcano scheduler", k8sTestTag, volcanoTag) {
+    sparkAppConf
+      .set("spark.kubernetes.driver.pod.featureSteps", VOLCANO_FEATURE_STEP)
+      .set("spark.kubernetes.executor.pod.featureSteps", VOLCANO_FEATURE_STEP)
+    runSparkPiAndVerifyCompletion(
+      driverPodChecker = (driverPod: Pod) => {
+        doBasicDriverPodCheck(driverPod)
+        checkScheduler(driverPod)
+        checkAnnotation(driverPod)
+        checkPodGroup(driverPod)
+      },
+      executorPodChecker = (executorPod: Pod) => {
+        doBasicExecutorPodCheck(executorPod)
+        checkScheduler(executorPod)
+        checkAnnotation(executorPod)
+      }
+    )
+  }
+
+  private def verifyJobsSucceededOneByOne(jobNum: Int, groupName: String): Unit = {
+    // Check Pending jobs completed one by one
+    (1 until jobNum).map { completedNum =>
+      Eventually.eventually(TIMEOUT, INTERVAL) {
+        val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
+        assert(pendingPods.size === jobNum - completedNum)
+      }
+    }
+    // All jobs succeeded finally
+    Eventually.eventually(TIMEOUT, INTERVAL) {
+      val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
+      assert(succeededPods.size === jobNum)
+    }
+  }
+
+  test("SPARK-38187: Run SparkPi Jobs with minCPU", k8sTestTag, volcanoTag) {
+    val groupName = generateGroupName("min-cpu")
+    // Create a queue with driver + executor CPU capacity
+    val jobCores = driverCores + executorCores
+    val queueName = s"queue-$jobCores"
+    createOrReplaceQueue(name = queueName, cpu = Some(s"$jobCores"))
+    val testContent =
+      s"""
+         |apiVersion: scheduling.volcano.sh/v1beta1
+         |kind: PodGroup
+         |spec:
+         |  queue: $queueName
+         |  minMember: 1
+         |  minResources:
+         |    cpu: $jobCores
+         |""".stripMargin
+    val file = Utils.createTempFile(testContent, TEMP_DIR)
+    val path = TEMP_DIR + file
+    // Submit 3 jobs with minCPU = 2
+    val jobNum = 3
+    (1 to jobNum).map { i =>
+      Future {
+        runJobAndVerify(
+          i.toString,
+          groupLoc = Option(groupName),
+          driverPodGroupTemplate = Option(path))
+      }
+    }
+    verifyJobsSucceededOneByOne(jobNum, groupName)
   }
 }
 

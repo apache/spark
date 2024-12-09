@@ -422,12 +422,18 @@ class KubernetesSuite extends SparkFunSuite
                 logDebug("Waiting for first collect...")
                 try {
                   Eventually.eventually(TIMEOUT, INTERVAL) {
-                    assert(kubernetesTestComponents.kubernetesClient
+                    val log = kubernetesTestComponents.kubernetesClient
                       .pods()
                       .inNamespace(kubernetesTestComponents.namespace)
                       .withName(driverPodName)
                       .getLog
-                      .contains("Waiting to give nodes time to finish migration, decom exec 1."),
+                    // scalastyle:off println
+                    println("-----------------log-------------------")
+                    println(log)
+                    println("-----------------log-------------------")
+                    // scalastyle:on println
+                    assert(
+                      log.contains("Waiting to give nodes time to finish migration, decom exec 1."),
                       "Decommission test did not complete first collect.")
                   }
                 } catch {
