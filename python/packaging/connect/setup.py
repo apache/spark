@@ -101,6 +101,7 @@ if "SPARK_TESTING" in os.environ:
         "pyspark.pandas.tests.connect.groupby",
         "pyspark.pandas.tests.connect.indexes",
         "pyspark.pandas.tests.connect.io",
+        "pyspark.pandas.tests.connect.pandas",
         "pyspark.pandas.tests.connect.plot",
         "pyspark.pandas.tests.connect.resample",
         "pyspark.pandas.tests.connect.reshape",
