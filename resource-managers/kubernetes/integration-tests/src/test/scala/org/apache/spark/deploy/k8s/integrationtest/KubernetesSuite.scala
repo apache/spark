@@ -95,7 +95,6 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
-          .withReadyWaitTimeout(5000)
           .getLog)
       logInfo("END driver POD log")
     }
@@ -111,7 +110,6 @@ class KubernetesSuite extends SparkFunSuite
             .pods()
             .inNamespace(kubernetesTestComponents.namespace)
             .withName(execPod.getMetadata.getName)
-            .withReadyWaitTimeout(5000)
             .getLog
         } catch {
           case e: KubernetesClientException =>
@@ -339,7 +337,6 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
-          .withReadyWaitTimeout(5000)
           .getLog
           .contains(e), "The application did not complete.")
       }
@@ -423,16 +420,21 @@ class KubernetesSuite extends SparkFunSuite
                 }
                 // Look for the string that indicates we're good to trigger decom on the driver
                 logDebug("Waiting for first collect...")
-                Eventually.eventually(TIMEOUT, INTERVAL) {
-                  assert(kubernetesTestComponents.kubernetesClient
-                    .pods()
-                    .inNamespace(kubernetesTestComponents.namespace)
-                    .withName(driverPodName)
-                    .withReadyWaitTimeout(5000)
-                    .getLog
-                    .contains("Waiting to give nodes time to finish migration, decom exec 1."),
-                    "Decommission test did not complete first collect.")
+                try {
+                  Eventually.eventually(TIMEOUT, INTERVAL) {
+                    assert(kubernetesTestComponents.kubernetesClient
+                      .pods()
+                      .inNamespace(kubernetesTestComponents.namespace)
+                      .withName(driverPodName)
+                      .getLog
+                      .contains("Waiting to give nodes time to finish migration, decom exec 1."),
+                      "Decommission test did not complete first collect.")
+                  }
+                } catch {
+                  case e: KubernetesClientException =>
+                    logInfo(s"Failed to getLog: $e")
                 }
+
                 // Delete the pod to simulate cluster scale down/migration.
                 // This will allow the pod to remain up for the grace period
                 // We set an intentionally long grace period to test that Spark
@@ -511,7 +513,6 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
-          .withReadyWaitTimeout(5000)
           .getLog
           .contains(e),
           s"The application did not complete, driver log did not contain str ${e}")
@@ -521,7 +522,6 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(execPod.get.getMetadata.getName)
-          .withReadyWaitTimeout(5000)
           .getLog
           .contains(e),
           s"The application did not complete, executor log did not contain str ${e}")

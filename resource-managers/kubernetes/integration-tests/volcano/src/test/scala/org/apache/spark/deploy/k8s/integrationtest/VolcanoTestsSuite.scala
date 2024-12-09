@@ -214,12 +214,15 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .list()
       .getItems.asScala
     // scalastyle:off println
+    println("---------------------------------------------------")
+    println(s"Pods size: ${res.size}")
     res.foreach(pod => {
       println(pod.getApiVersion)
       println(pod.getStatus)
       println(pod.getStatus.getPhase)
       println(pod)
     })
+    println("---------------------------------------------------")
     // scalastyle:on println
   }
 
