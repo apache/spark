@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NullType, StringType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -40,10 +40,8 @@ object CollationTypeCoercion {
     case cast: Cast if shouldRemoveCast(cast) =>
       cast.child
 
-    case ifExpr: If =>
-      ifExpr.withNewChildren(
-        ifExpr.predicate +: collateToSingleType(Seq(ifExpr.trueValue, ifExpr.falseValue))
-      )
+    case expr if !shouldCoerceTypes(expr) =>
+      expr
 
     case caseWhenExpr: CaseWhen if !haveSameType(caseWhenExpr.inputTypesForMerging) =>
       val outputStringType = findLeastCommonStringType(
@@ -61,41 +59,6 @@ object CollationTypeCoercion {
           caseWhenExpr
       }
 
-    case stringLocate: StringLocate =>
-      stringLocate.withNewChildren(
-        collateToSingleType(Seq(stringLocate.first, stringLocate.second)) :+ stringLocate.third
-      )
-
-    case substringIndex: SubstringIndex =>
-      substringIndex.withNewChildren(
-        collateToSingleType(Seq(substringIndex.first, substringIndex.second)) :+
-        substringIndex.third
-      )
-
-    case eltExpr: Elt =>
-      eltExpr.withNewChildren(eltExpr.children.head +: collateToSingleType(eltExpr.children.tail))
-
-    case overlayExpr: Overlay =>
-      overlayExpr.withNewChildren(
-        collateToSingleType(Seq(overlayExpr.input, overlayExpr.replace))
-        ++ Seq(overlayExpr.pos, overlayExpr.len)
-      )
-
-    case regExpReplace: RegExpReplace =>
-      val Seq(subject, rep) = collateToSingleType(Seq(regExpReplace.subject, regExpReplace.rep))
-      val newChildren = Seq(subject, regExpReplace.regexp, rep, regExpReplace.pos)
-      regExpReplace.withNewChildren(newChildren)
-
-    case stringPadExpr @ (_: StringRPad | _: StringLPad) =>
-      val Seq(str, len, pad) = stringPadExpr.children
-      val Seq(newStr, newPad) = collateToSingleType(Seq(str, pad))
-      stringPadExpr.withNewChildren(Seq(newStr, len, newPad))
-
-    case framelessOffsetWindow @ (_: Lag | _: Lead) =>
-      val Seq(input, offset, default) = framelessOffsetWindow.children
-      val Seq(newInput, newDefault) = collateToSingleType(Seq(input, default))
-      framelessOffsetWindow.withNewChildren(Seq(newInput, offset, newDefault))
-
     case mapCreate: CreateMap if mapCreate.children.size % 2 == 0 =>
       // We only take in mapCreate if it has even number of children, as otherwise it should fail
       // with wrong number of arguments
@@ -107,21 +70,6 @@ object CollationTypeCoercion {
       // since each child is separate we should not coerce them at all
       namedStruct
 
-    case splitPart: SplitPart =>
-      val Seq(str, delimiter, partNum) = splitPart.children
-      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
-      splitPart.withNewChildren(Seq(newStr, newDelimiter, partNum))
-
-    case stringSplitSQL: StringSplitSQL =>
-      val Seq(str, delimiter) = stringSplitSQL.children
-      val Seq(newStr, newDelimiter) = collateToSingleType(Seq(str, delimiter))
-      stringSplitSQL.withNewChildren(Seq(newStr, newDelimiter))
-
-    case levenshtein: Levenshtein =>
-      val Seq(left, right, threshold @ _*) = levenshtein.children
-      val Seq(newLeft, newRight) = collateToSingleType(Seq(left, right))
-      levenshtein.withNewChildren(Seq(newLeft, newRight) ++ threshold)
-
     case getMap @ GetMapValue(child, key) if getMap.keyType != key.dataType =>
       key match {
         case Literal(_, _: StringType) =>
@@ -130,18 +78,9 @@ object CollationTypeCoercion {
           getMap
       }
 
-    case otherExpr @ (_: In | _: InSubquery | _: CreateArray | _: ArrayJoin | _: Concat |
-        _: Greatest | _: Least | _: Coalesce | _: ArrayContains | _: ArrayExcept | _: ConcatWs |
-        _: Mask | _: StringReplace | _: StringTranslate | _: StringTrim | _: StringTrimLeft |
-        _: StringTrimRight | _: ArrayAppend | _: ArrayIntersect | _: ArrayPosition |
-        _: ArrayRemove | _: ArrayUnion | _: ArraysOverlap | _: Contains | _: EndsWith |
-        _: EqualNullSafe | _: EqualTo | _: FindInSet | _: GreaterThan | _: GreaterThanOrEqual |
-        _: LessThan | _: LessThanOrEqual | _: StartsWith | _: StringInstr | _: ToNumber |
-        _: TryToNumber | _: StringToMap) =>
-      val newChildren = collateToSingleType(otherExpr.children)
-      otherExpr.withNewChildren(newChildren)
-
-    case other => other
+    case other =>
+      val newChildren = collateToSingleType(other.children)
+      other.withNewChildren(newChildren)
   }
 
   /**
@@ -157,6 +96,37 @@ object CollationTypeCoercion {
     val targetType = cast.dataType
 
     isUserDefined && isChildTypeCollatedString && targetType == StringType
+  }
+
+  private def shouldCoerceTypes(expression: Expression): Boolean = {
+    def getType(ex: Expression): DataType = try {
+      ex.dataType
+    } catch {
+      case _: Throwable => NullType
+    }
+
+    expression match {
+      case toIgnore @ (_: Collate | _: Like | _: ILike) =>
+        return false
+
+      case _ =>
+    }
+
+    val numCollatedTypes = expression.children.count(
+      child => SchemaUtils.hasNonUTF8BinaryCollation(getType(child)))
+
+    if (numCollatedTypes == 0) {
+      return false
+    }
+
+    val numStringTypes = expression.children.count(
+      child => hasStringType(getType(child)))
+
+    numStringTypes > 1
+  }
+
+  private def hasStringType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[StringType])
   }
 
   /**
@@ -251,11 +221,18 @@ object CollationTypeCoercion {
    * Collates input expressions to a single collation.
    */
   def collateToSingleType(expressions: Seq[Expression]): Seq[Expression] = {
-    val lctOpt = findLeastCommonStringType(expressions)
+    val stringExpressions = expressions.filter(e => hasStringType(e.dataType))
+    val lctOpt = findLeastCommonStringType(stringExpressions)
 
     lctOpt match {
       case Some(lct) =>
-        expressions.map(e => changeType(e, lct))
+        expressions.map {
+          case e if hasStringType(e.dataType) =>
+            changeType(e, lct)
+
+          case e => e
+        }
+
       case _ =>
         expressions
     }
@@ -265,8 +242,7 @@ object CollationTypeCoercion {
    * Tries to find the least common StringType among the given expressions.
    */
   private def findLeastCommonStringType(expressions: Seq[Expression]): Option[DataType] = {
-    if (!expressions.exists(e => SchemaUtils.hasNonUTF8BinaryCollation(e.dataType))) {
-      // if there are no collated types we don't need to do anything
+    if (expressions.isEmpty) {
       return None
     } else if (ResolveDefaultStringTypes.needsResolution(expressions)) {
       // if any of the strings types are still not resolved
