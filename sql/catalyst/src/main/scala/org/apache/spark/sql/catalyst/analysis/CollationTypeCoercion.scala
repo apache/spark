@@ -362,7 +362,7 @@ object CollationTypeCoercion {
     case collate: Collate =>
       Some(addContextToStringType(collate.dataType, Explicit))
 
-    case expr @ (_: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference) =>
+    case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
 
     case lit: Literal =>
