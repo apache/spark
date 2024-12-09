@@ -42,6 +42,7 @@ private[sql] object UpCastRule {
     case (TimestampType, TimestampNTZType) => true
 
     case (_: AtomicType, CharType(_) | VarcharType(_)) => false
+    case (_: CalendarIntervalType, CharType(_) | VarcharType(_)) => false
     case (_: AtomicType, _: StringType) => true
     case (_: CalendarIntervalType, _: StringType) => true
     case (NullType, _) => true
