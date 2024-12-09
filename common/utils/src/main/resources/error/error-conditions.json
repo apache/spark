@@ -3574,6 +3574,12 @@
     ],
     "sqlState" : "42710"
   },
+  "MULTI_ALIAS_WITHOUT_GENERATOR" : {
+    "message" : [
+      "Multi part aliasing (<names>) is not supported with <expr> as it is not a generator function."
+    ],
+    "sqlState" : "42K0E"
+  },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
       "The expression <expr> does not support more than one source."
