@@ -100,6 +100,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPodName)
+          .withReadyWaitTimeout(5000)
           .getLog
           .contains("Pi is roughly 3"), "The application did not complete.")
       }

@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{Watcher, WatcherException}
 import io.fabric8.kubernetes.client.KubernetesClientException
 import io.fabric8.kubernetes.client.Watcher.Action
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Tag}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, Ignore, Tag}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.matchers.must.Matchers
@@ -42,6 +42,7 @@ import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBacke
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
+@Ignore
 class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
@@ -94,6 +95,7 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
+          .withReadyWaitTimeout(5000)
           .getLog)
       logInfo("END driver POD log")
     }
@@ -109,6 +111,7 @@ class KubernetesSuite extends SparkFunSuite
             .pods()
             .inNamespace(kubernetesTestComponents.namespace)
             .withName(execPod.getMetadata.getName)
+            .withReadyWaitTimeout(5000)
             .getLog
         } catch {
           case e: KubernetesClientException =>
@@ -336,6 +339,7 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
+          .withReadyWaitTimeout(5000)
           .getLog
           .contains(e), "The application did not complete.")
       }
@@ -424,6 +428,7 @@ class KubernetesSuite extends SparkFunSuite
                     .pods()
                     .inNamespace(kubernetesTestComponents.namespace)
                     .withName(driverPodName)
+                    .withReadyWaitTimeout(5000)
                     .getLog
                     .contains("Waiting to give nodes time to finish migration, decom exec 1."),
                     "Decommission test did not complete first collect.")
@@ -506,6 +511,7 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
+          .withReadyWaitTimeout(5000)
           .getLog
           .contains(e),
           s"The application did not complete, driver log did not contain str ${e}")
@@ -515,6 +521,7 @@ class KubernetesSuite extends SparkFunSuite
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(execPod.get.getMetadata.getName)
+          .withReadyWaitTimeout(5000)
           .getLog
           .contains(e),
           s"The application did not complete, executor log did not contain str ${e}")

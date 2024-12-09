@@ -192,6 +192,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       role: String,
       groupLocator: String,
       statusPhase: String): mutable.Buffer[Pod] = {
+    getAllPods(role, groupLocator)
     kubernetesTestComponents.kubernetesClient
       .pods()
       .inNamespace(kubernetesTestComponents.namespace)
@@ -200,6 +201,26 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .withField("status.phase", statusPhase)
       .list()
       .getItems.asScala
+  }
+
+  private def getAllPods(
+      role: String,
+      groupLocator: String): Unit = {
+    val res = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .withLabel("spark-group-locator", groupLocator)
+      .withLabel("spark-role", role)
+      .list()
+      .getItems.asScala
+    // scalastyle:off println
+    res.foreach(pod => {
+      println(pod.getApiVersion)
+      println(pod.getStatus)
+      println(pod.getStatus.getPhase)
+      println(pod)
+    })
+    // scalastyle:on println
   }
 
   def runJobAndVerify(
