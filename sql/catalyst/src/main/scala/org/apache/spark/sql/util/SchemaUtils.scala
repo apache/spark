@@ -304,6 +304,17 @@ private[spark] object SchemaUtils {
     }
   }
 
+  def checkNoCollationsInMapKeys(schema: DataType): Unit = schema match {
+    case m: MapType =>
+      if (hasNonUTF8BinaryCollation(m.keyType)) {
+        throw QueryCompilationErrors.collatedStringsInMapKeysNotSupportedError()
+      }
+      checkNoCollationsInMapKeys(m.valueType)
+    case s: StructType => s.fields.foreach(field => checkNoCollationsInMapKeys(field.dataType))
+    case a: ArrayType => checkNoCollationsInMapKeys(a.elementType)
+    case _ =>
+  }
+
   /**
    * Replaces any collated string type with non collated StringType
    * recursively in the given data type.

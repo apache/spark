@@ -43,7 +43,6 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.test.SQLTestData.{ArrayStringWrapper, ContainerStringWrapper, StringWrapper, TestData2}
@@ -1567,7 +1566,7 @@ class DataFrameSuite extends QueryTest
   test("SPARK-46794: exclude subqueries from LogicalRDD constraints") {
     withTempDir { checkpointDir =>
       val subquery =
-        column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
+        Column(ScalarSubquery(spark.range(10).selectExpr("max(id)").logicalPlan))
       val df = spark.range(1000).filter($"id" === subquery)
       assert(df.logicalPlan.constraints.exists(_.exists(_.isInstanceOf[ScalarSubquery])))
 
@@ -2054,18 +2053,18 @@ class DataFrameSuite extends QueryTest
     // the number of keys must match
     val exception1 = intercept[IllegalArgumentException] {
       df1.groupBy($"key1", $"key2").flatMapCoGroupsInPandas(
-        df2.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+        df2.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     }
     assert(exception1.getMessage.contains("Cogroup keys must have same size: 2 != 1"))
     val exception2 = intercept[IllegalArgumentException] {
       df1.groupBy($"key1").flatMapCoGroupsInPandas(
-        df2.groupBy($"key1", $"key2"), flatMapCoGroupsInPandasUDF)
+        df2.groupBy($"key1", $"key2"), Column(flatMapCoGroupsInPandasUDF))
     }
     assert(exception2.getMessage.contains("Cogroup keys must have same size: 1 != 2"))
 
     // but different keys are allowed
     val actual = df1.groupBy($"key1").flatMapCoGroupsInPandas(
-      df2.groupBy($"key2"), flatMapCoGroupsInPandasUDF)
+      df2.groupBy($"key2"), Column(flatMapCoGroupsInPandasUDF))
     // can't evaluate the DataFrame as there is no PythonFunction given
     assert(actual != null)
   }
@@ -2419,7 +2418,7 @@ class DataFrameSuite extends QueryTest
         |  SELECT a, b FROM (SELECT a, b FROM VALUES (1, 2) AS t(a, b))
         |)
         |""".stripMargin)
-    val stringCols = df.logicalPlan.output.map(column(_).cast(StringType))
+    val stringCols = df.logicalPlan.output.map(Column(_).cast(StringType))
     val castedDf = df.select(stringCols: _*)
     checkAnswer(castedDf, Row("1", "1") :: Row("1", "2") :: Nil)
   }

@@ -137,7 +137,7 @@
     <kafka.version>3.9.0</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.14.4</parquet.version>
+    <parquet.version>1.15.0</parquet.version>
     <orc.version>2.0.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.24</jetty.version>
@@ -3225,7 +3225,7 @@
             -->
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>10.20.0</version>
+            <version>10.20.2</version>
           </dependency>
         </dependencies>
         <executions>

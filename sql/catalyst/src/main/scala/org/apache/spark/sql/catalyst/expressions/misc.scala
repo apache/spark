@@ -85,7 +85,12 @@ case class RaiseError(errorClass: Expression, errorParms: Expression, dataType: 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation, AbstractMapType(StringTypeWithCollation, StringTypeWithCollation))
+    Seq(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      AbstractMapType(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true)
+      ))
 
   override def left: Expression = errorClass
   override def right: Expression = errorParms
@@ -416,8 +421,8 @@ case class AesEncrypt(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(BinaryType, BinaryType,
-      StringTypeWithCollation,
-      StringTypeWithCollation,
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true),
       BinaryType, BinaryType)
 
   override def children: Seq[Expression] = Seq(input, key, mode, padding, iv, aad)
@@ -493,8 +498,8 @@ case class AesDecrypt(
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(BinaryType,
       BinaryType,
-      StringTypeWithCollation,
-      StringTypeWithCollation, BinaryType)
+      StringTypeWithCollation(supportsTrimCollation = true),
+      StringTypeWithCollation(supportsTrimCollation = true), BinaryType)
   }
 
   override def prettyName: String = "aes_decrypt"

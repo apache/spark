@@ -52,6 +52,37 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM explode(null :: map<string, int>)""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_explode_with_lateral_join(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
+            t1.createOrReplaceTempView("t1")
+            t3 = self.spark.sql(
+                "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4)) "
+                "AS t3(c1, c2)"
+            )
+            t3.createOrReplaceTempView("t3")
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.tvf.explode(sf.array(sf.col("c1").outer(), sf.col("c2").outer()))
+                ).toDF("c1", "c2", "c3"),
+                self.spark.sql("""SELECT * FROM t1, LATERAL EXPLODE(ARRAY(c1, c2)) t2(c3)"""),
+            )
+            assertDataFrameEqual(
+                t3.lateralJoin(self.spark.tvf.explode(sf.col("c2").outer())).toDF("c1", "c2", "v"),
+                self.spark.sql("""SELECT * FROM t3, LATERAL EXPLODE(c2) t2(v)"""),
+            )
+            assertDataFrameEqual(
+                self.spark.tvf.explode(sf.array(sf.lit(1), sf.lit(2)))
+                .toDF("v")
+                .lateralJoin(
+                    self.spark.range(1).select((sf.col("v").outer() + sf.lit(1)).alias("v2"))
+                ),
+                self.spark.sql(
+                    """SELECT * FROM EXPLODE(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1 AS v2)"""
+                ),
+            )
+
     def test_explode_outer(self):
         actual = self.spark.tvf.explode_outer(sf.array(sf.lit(1), sf.lit(2)))
         expected = self.spark.sql("""SELECT * FROM explode_outer(array(1, 2))""")
@@ -81,6 +112,43 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM explode_outer(null :: map<string, int>)""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_explode_outer_with_lateral_join(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
+            t1.createOrReplaceTempView("t1")
+            t3 = self.spark.sql(
+                "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4)) "
+                "AS t3(c1, c2)"
+            )
+            t3.createOrReplaceTempView("t3")
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.tvf.explode_outer(
+                        sf.array(sf.col("c1").outer(), sf.col("c2").outer())
+                    )
+                ).toDF("c1", "c2", "c3"),
+                self.spark.sql("""SELECT * FROM t1, LATERAL EXPLODE_OUTER(ARRAY(c1, c2)) t2(c3)"""),
+            )
+            assertDataFrameEqual(
+                t3.lateralJoin(self.spark.tvf.explode_outer(sf.col("c2").outer())).toDF(
+                    "c1", "c2", "v"
+                ),
+                self.spark.sql("""SELECT * FROM t3, LATERAL EXPLODE_OUTER(c2) t2(v)"""),
+            )
+            assertDataFrameEqual(
+                self.spark.tvf.explode_outer(sf.array(sf.lit(1), sf.lit(2)))
+                .toDF("v")
+                .lateralJoin(
+                    self.spark.range(1).select((sf.col("v").outer() + sf.lit(1)).alias("v2"))
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM EXPLODE_OUTER(ARRAY(1, 2)) t(v), LATERAL (SELECT v + 1 AS v2)
+                    """
+                ),
+            )
+
     def test_inline(self):
         actual = self.spark.tvf.inline(
             sf.array(sf.struct(sf.lit(1), sf.lit("a")), sf.struct(sf.lit(2), sf.lit("b")))
@@ -106,6 +174,35 @@ class TVFTestsMixin:
             """
         )
         assertDataFrameEqual(actual=actual, expected=expected)
+
+    def test_inline_with_lateral_join(self):
+        with self.tempView("array_struct"):
+            array_struct = self.spark.sql(
+                """
+                VALUES
+                (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
+                (2, ARRAY()),
+                (3, ARRAY(STRUCT(3, 'c'))) AS array_struct(id, arr)
+                """
+            )
+            array_struct.createOrReplaceTempView("array_struct")
+
+            assertDataFrameEqual(
+                array_struct.lateralJoin(self.spark.tvf.inline(sf.col("arr").outer())),
+                self.spark.sql("""SELECT * FROM array_struct JOIN LATERAL INLINE(arr)"""),
+            )
+            assertDataFrameEqual(
+                array_struct.lateralJoin(
+                    self.spark.tvf.inline(sf.col("arr").outer()),
+                    sf.col("id") == sf.col("col1"),
+                    "left",
+                ).toDF("id", "arr", "k", "v"),
+                self.spark.sql(
+                    """
+                    SELECT * FROM array_struct LEFT JOIN LATERAL INLINE(arr) t(k, v) ON id = k
+                    """
+                ),
+            )
 
     def test_inline_outer(self):
         actual = self.spark.tvf.inline_outer(
@@ -137,6 +234,35 @@ class TVFTestsMixin:
         )
         assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_inline_outer_with_lateral_join(self):
+        with self.tempView("array_struct"):
+            array_struct = self.spark.sql(
+                """
+                VALUES
+                (1, ARRAY(STRUCT(1, 'a'), STRUCT(2, 'b'))),
+                (2, ARRAY()),
+                (3, ARRAY(STRUCT(3, 'c'))) AS array_struct(id, arr)
+                """
+            )
+            array_struct.createOrReplaceTempView("array_struct")
+
+            assertDataFrameEqual(
+                array_struct.lateralJoin(self.spark.tvf.inline_outer(sf.col("arr").outer())),
+                self.spark.sql("""SELECT * FROM array_struct JOIN LATERAL INLINE_OUTER(arr)"""),
+            )
+            assertDataFrameEqual(
+                array_struct.lateralJoin(
+                    self.spark.tvf.inline_outer(sf.col("arr").outer()),
+                    sf.col("id") == sf.col("col1"),
+                    "left",
+                ).toDF("id", "arr", "k", "v"),
+                self.spark.sql(
+                    """
+                    SELECT * FROM array_struct LEFT JOIN LATERAL INLINE_OUTER(arr) t(k, v) ON id = k
+                    """
+                ),
+            )
+
     def test_json_tuple(self):
         actual = self.spark.tvf.json_tuple(sf.lit('{"a":1, "b":2}'), sf.lit("a"), sf.lit("b"))
         expected = self.spark.sql("""SELECT json_tuple('{"a":1, "b":2}', 'a', 'b')""")
@@ -150,6 +276,64 @@ class TVFTestsMixin:
             errorClass="CANNOT_BE_EMPTY",
             messageParameters={"item": "field"},
         )
+
+    def test_json_tuple_with_lateral_join(self):
+        with self.tempView("json_table"):
+            json_table = self.spark.sql(
+                """
+                VALUES
+                ('1', '{"f1": "1", "f2": "2", "f3": 3, "f5": 5.23}'),
+                ('2', '{"f1": "1", "f3": "3", "f2": 2, "f4": 4.01}'),
+                ('3', '{"f1": 3, "f4": "4", "f3": "3", "f2": 2, "f5": 5.01}'),
+                ('4', cast(null as string)),
+                ('5', '{"f1": null, "f5": ""}'),
+                ('6', '[invalid JSON string]') AS json_table(key, jstring)
+                """
+            )
+            json_table.createOrReplaceTempView("json_table")
+
+            assertDataFrameEqual(
+                json_table.alias("t1")
+                .lateralJoin(
+                    self.spark.tvf.json_tuple(
+                        sf.col("jstring").outer(),
+                        sf.lit("f1"),
+                        sf.lit("f2"),
+                        sf.lit("f3"),
+                        sf.lit("f4"),
+                        sf.lit("f5"),
+                    )
+                )
+                .select("key", "c0", "c1", "c2", "c3", "c4"),
+                self.spark.sql(
+                    """
+                    SELECT t1.key, t2.* FROM json_table t1,
+                    LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2
+                    """
+                ),
+            )
+            assertDataFrameEqual(
+                json_table.alias("t1")
+                .lateralJoin(
+                    self.spark.tvf.json_tuple(
+                        sf.col("jstring").outer(),
+                        sf.lit("f1"),
+                        sf.lit("f2"),
+                        sf.lit("f3"),
+                        sf.lit("f4"),
+                        sf.lit("f5"),
+                    )
+                )
+                .where(sf.col("c0").isNotNull())
+                .select("key", "c0", "c1", "c2", "c3", "c4"),
+                self.spark.sql(
+                    """
+                    SELECT t1.key, t2.* FROM json_table t1,
+                    LATERAL json_tuple(t1.jstring, 'f1', 'f2', 'f3', 'f4', 'f5') t2
+                    WHERE t2.c0 IS NOT NULL
+                    """
+                ),
+            )
 
     def test_posexplode(self):
         actual = self.spark.tvf.posexplode(sf.array(sf.lit(1), sf.lit(2)))
@@ -180,6 +364,39 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM posexplode(null :: map<string, int>)""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_posexplode_with_lateral_join(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
+            t1.createOrReplaceTempView("t1")
+            t3 = self.spark.sql(
+                "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4)) "
+                "AS t3(c1, c2)"
+            )
+            t3.createOrReplaceTempView("t3")
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.tvf.posexplode(sf.array(sf.col("c1").outer(), sf.col("c2").outer()))
+                ),
+                self.spark.sql("""SELECT * FROM t1, LATERAL POSEXPLODE(ARRAY(c1, c2))"""),
+            )
+            assertDataFrameEqual(
+                t3.lateralJoin(self.spark.tvf.posexplode(sf.col("c2").outer())),
+                self.spark.sql("""SELECT * FROM t3, LATERAL POSEXPLODE(c2)"""),
+            )
+            assertDataFrameEqual(
+                self.spark.tvf.posexplode(sf.array(sf.lit(1), sf.lit(2)))
+                .toDF("p", "v")
+                .lateralJoin(
+                    self.spark.range(1).select((sf.col("v").outer() + sf.lit(1)).alias("v2"))
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM POSEXPLODE(ARRAY(1, 2)) t(p, v), LATERAL (SELECT v + 1 AS v2)
+                    """
+                ),
+            )
+
     def test_posexplode_outer(self):
         actual = self.spark.tvf.posexplode_outer(sf.array(sf.lit(1), sf.lit(2)))
         expected = self.spark.sql("""SELECT * FROM posexplode_outer(array(1, 2))""")
@@ -209,10 +426,92 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM posexplode_outer(null :: map<string, int>)""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_posexplode_outer_with_lateral_join(self):
+        with self.tempView("t1", "t2"):
+            t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
+            t1.createOrReplaceTempView("t1")
+            t3 = self.spark.sql(
+                "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4)) "
+                "AS t3(c1, c2)"
+            )
+            t3.createOrReplaceTempView("t3")
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.tvf.posexplode_outer(
+                        sf.array(sf.col("c1").outer(), sf.col("c2").outer())
+                    )
+                ),
+                self.spark.sql("""SELECT * FROM t1, LATERAL POSEXPLODE_OUTER(ARRAY(c1, c2))"""),
+            )
+            assertDataFrameEqual(
+                t3.lateralJoin(self.spark.tvf.posexplode_outer(sf.col("c2").outer())),
+                self.spark.sql("""SELECT * FROM t3, LATERAL POSEXPLODE_OUTER(c2)"""),
+            )
+            assertDataFrameEqual(
+                self.spark.tvf.posexplode_outer(sf.array(sf.lit(1), sf.lit(2)))
+                .toDF("p", "v")
+                .lateralJoin(
+                    self.spark.range(1).select((sf.col("v").outer() + sf.lit(1)).alias("v2"))
+                ),
+                self.spark.sql(
+                    """
+                    SELECT * FROM POSEXPLODE_OUTER(ARRAY(1, 2)) t(p, v),
+                        LATERAL (SELECT v + 1 AS v2)
+                    """
+                ),
+            )
+
     def test_stack(self):
         actual = self.spark.tvf.stack(sf.lit(2), sf.lit(1), sf.lit(2), sf.lit(3))
         expected = self.spark.sql("""SELECT * FROM stack(2, 1, 2, 3)""")
         assertDataFrameEqual(actual=actual, expected=expected)
+
+    def test_stack_with_lateral_join(self):
+        with self.tempView("t1", "t3"):
+            t1 = self.spark.sql("VALUES (0, 1), (1, 2) AS t1(c1, c2)")
+            t1.createOrReplaceTempView("t1")
+            t3 = self.spark.sql(
+                "VALUES (0, ARRAY(0, 1)), (1, ARRAY(2)), (2, ARRAY()), (null, ARRAY(4)) "
+                "AS t3(c1, c2)"
+            )
+            t3.createOrReplaceTempView("t3")
+
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.tvf.stack(
+                        sf.lit(2),
+                        sf.lit("Key"),
+                        sf.col("c1").outer(),
+                        sf.lit("Value"),
+                        sf.col("c2").outer(),
+                    )
+                ).select("col0", "col1"),
+                self.spark.sql(
+                    """SELECT t.* FROM t1, LATERAL stack(2, 'Key', c1, 'Value', c2) t"""
+                ),
+            )
+            assertDataFrameEqual(
+                t1.lateralJoin(
+                    self.spark.tvf.stack(sf.lit(1), sf.col("c1").outer(), sf.col("c2").outer())
+                ).select("col0", "col1"),
+                self.spark.sql("""SELECT t.* FROM t1 JOIN LATERAL stack(1, c1, c2) t"""),
+            )
+            assertDataFrameEqual(
+                t1.join(t3, sf.col("t1.c1") == sf.col("t3.c1"))
+                .lateralJoin(
+                    self.spark.tvf.stack(
+                        sf.lit(1), sf.col("t1.c2").outer(), sf.col("t3.c2").outer()
+                    )
+                )
+                .select("col0", "col1"),
+                self.spark.sql(
+                    """
+                    SELECT t.* FROM t1 JOIN t3 ON t1.c1 = t3.c1
+                        JOIN LATERAL stack(1, t1.c2, t3.c2) t
+                    """
+                ),
+            )
 
     def test_collations(self):
         actual = self.spark.tvf.collations()
@@ -256,6 +555,31 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM variant_explode(parse_json('1'))""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_variant_explode_with_lateral_join(self):
+        with self.tempView("variant_table"):
+            variant_table = self.spark.sql(
+                """
+                SELECT id, parse_json(v) AS v FROM VALUES
+                    (0, '["hello", "world"]'), (1, '{"a": true, "b": 3.14}'),
+                    (2, '[]'), (3, '{}'),
+                    (4, NULL), (5, '1')
+                    AS t(id, v)
+                """
+            )
+            variant_table.createOrReplaceTempView("variant_table")
+
+            assertDataFrameEqual(
+                variant_table.alias("t1")
+                .lateralJoin(self.spark.tvf.variant_explode(sf.col("v").outer()))
+                .select("id", "pos", "key", "value"),
+                self.spark.sql(
+                    """
+                    SELECT t1.id, t.* FROM variant_table AS t1,
+                        LATERAL variant_explode(v) AS t
+                    """
+                ),
+            )
+
     def test_variant_explode_outer(self):
         actual = self.spark.tvf.variant_explode_outer(sf.parse_json(sf.lit('["hello", "world"]')))
         expected = self.spark.sql(
@@ -289,6 +613,31 @@ class TVFTestsMixin:
         actual = self.spark.tvf.variant_explode_outer(sf.parse_json(sf.lit("1")))
         expected = self.spark.sql("""SELECT * FROM variant_explode_outer(parse_json('1'))""")
         assertDataFrameEqual(actual=actual, expected=expected)
+
+    def test_variant_explode_outer_with_lateral_join(self):
+        with self.tempView("variant_table"):
+            variant_table = self.spark.sql(
+                """
+                SELECT id, parse_json(v) AS v FROM VALUES
+                    (0, '["hello", "world"]'), (1, '{"a": true, "b": 3.14}'),
+                    (2, '[]'), (3, '{}'),
+                    (4, NULL), (5, '1')
+                    AS t(id, v)
+                """
+            )
+            variant_table.createOrReplaceTempView("variant_table")
+
+            assertDataFrameEqual(
+                variant_table.alias("t1")
+                .lateralJoin(self.spark.tvf.variant_explode_outer(sf.col("v").outer()))
+                .select("id", "pos", "key", "value"),
+                self.spark.sql(
+                    """
+                    SELECT t1.id, t.* FROM variant_table AS t1,
+                        LATERAL variant_explode_outer(v) AS t
+                    """
+                ),
+            )
 
 
 class TVFTests(TVFTestsMixin, ReusedSQLTestCase):

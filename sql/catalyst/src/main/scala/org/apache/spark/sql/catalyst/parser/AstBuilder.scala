@@ -154,6 +154,9 @@ class AstBuilder extends DataTypeAstBuilder
     )
     labelCtx.exitLabeledScope(None)
     script
+    Option(ctx.compoundBody())
+      .map(visitCompoundBodyImpl(_, None, allowVarDeclare = true, labelCtx))
+      .getOrElse(CompoundBody(Seq.empty, None))
   }
 
   private def visitCompoundBodyImpl(
@@ -208,6 +211,9 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx,
       isScope = true
     )
+    val body = Option(ctx.compoundBody())
+      .map(visitCompoundBodyImpl(_, Some(labelText), allowVarDeclare = true, labelCtx))
+      .getOrElse(CompoundBody(Seq.empty, Some(labelText)))
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
     body
   }
@@ -6047,6 +6053,14 @@ class AstBuilder extends DataTypeAstBuilder
       Project(projectList, left)
     }.getOrElse(Option(ctx.SET).map { _ =>
       visitOperatorPipeSet(ctx, left)
+    }.getOrElse(Option(ctx.DROP).map { _ =>
+      val ids: Seq[String] = visitIdentifierSeq(ctx.identifierSeq())
+      val projectList: Seq[NamedExpression] =
+        Seq(UnresolvedStarExceptOrReplace(
+          target = None, excepts = ids.map(s => Seq(s)), replacements = None))
+      Project(projectList, left)
+    }.getOrElse(Option(ctx.AS).map { _ =>
+      SubqueryAlias(ctx.errorCapturingIdentifier().getText, left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
         throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
@@ -6073,7 +6087,7 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    ))))))))))
+    ))))))))))))
   }
 
   private def visitOperatorPipeSet(
@@ -6160,7 +6174,8 @@ class AstBuilder extends DataTypeAstBuilder
                 Seq("GROUPING", "GROUPING_ID").foreach { name =>
                   if (f.nameParts.head.equalsIgnoreCase(name)) error(name)
                 }
-              case _: WindowSpec => error("window functions")
+              case _: WindowSpec => error("window functions; please update the query to move " +
+                "the window functions to a subsequent |> SELECT operator instead")
               case _ =>
             }
             e.children.foreach(visit)

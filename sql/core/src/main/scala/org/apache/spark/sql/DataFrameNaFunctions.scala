@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
 @Stable
 final class DataFrameNaFunctions private[sql](df: DataFrame)
   extends api.DataFrameNaFunctions {
-  import df.sparkSession.RichColumn
+  import df.sparkSession.toRichColumn
 
   protected def drop(minNonNulls: Option[Int]): Dataset[Row] = {
     drop0(minNonNulls, outputAttributes)

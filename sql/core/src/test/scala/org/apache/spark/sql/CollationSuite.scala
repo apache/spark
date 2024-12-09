@@ -221,23 +221,54 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       parameters = Map("collationName" -> "UTF8_BS", "proposals" -> "UTF8_LCASE"))
   }
 
+  test("fail on table creation with collated strings as map key") {
+    withTable("table_1", "table_2") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("CREATE TABLE table_1 (col MAP<STRING COLLATE UNICODE, STRING>) USING parquet")
+        },
+        condition = "UNSUPPORTED_FEATURE.COLLATIONS_IN_MAP_KEYS"
+      )
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        sql("CREATE TABLE table_2 (col MAP<STRING COLLATE UNICODE, STRING>) USING parquet")
+      }
+    }
+  }
+
+  test("fail on adding column with collated map key") {
+    withTable("table_1") {
+      sql("CREATE TABLE table_1 (id INTEGER) USING parquet")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("ALTER TABLE table_1 ADD COLUMN col1 MAP<ARRAY<STRING COLLATE UNICODE>, INTEGER>")
+        },
+        condition = "UNSUPPORTED_FEATURE.COLLATIONS_IN_MAP_KEYS"
+      )
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        sql("ALTER TABLE table_1 ADD COLUMN col1 MAP<ARRAY<STRING COLLATE UNICODE>, INTEGER>")
+      }
+    }
+  }
+
   test("disable bucketing on collated string column") {
     def createTable(bucketColumns: String*): Unit = {
       val tableName = "test_partition_tbl"
       withTable(tableName) {
-        sql(
-          s"""
-             |CREATE TABLE $tableName (
-             |  id INT,
-             |  c1 STRING COLLATE UNICODE,
-             |  c2 STRING,
-             |  struct_col STRUCT<col1: STRING COLLATE UNICODE, col2: STRING>,
-             |  array_col ARRAY<STRING COLLATE UNICODE>,
-             |  map_col MAP<STRING COLLATE UNICODE, STRING>
-             |) USING parquet
-             |CLUSTERED BY (${bucketColumns.mkString(",")})
-             |INTO 4 BUCKETS""".stripMargin
-        )
+        withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+          sql(
+            s"""
+               |CREATE TABLE $tableName (
+               |  id INT,
+               |  c1 STRING COLLATE UNICODE,
+               |  c2 STRING,
+               |  struct_col STRUCT<col1: STRING COLLATE UNICODE, col2: STRING>,
+               |  array_col ARRAY<STRING COLLATE UNICODE>,
+               |  map_col MAP<STRING COLLATE UNICODE, STRING>
+               |) USING parquet
+               |CLUSTERED BY (${bucketColumns.mkString(",")})
+               |INTO 4 BUCKETS""".stripMargin
+          )
+        }
       }
     }
     // should work fine on default collated columns
@@ -665,6 +696,11 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         s"IN (COLLATE('aa', 'UTF8_LCASE'))"), Seq(Row("a"), Row("A")))
       checkAnswer(sql(s"SELECT c1 FROM $tableName where (c1 || 'a') " +
         s"IN (COLLATE('aa', 'UTF8_BINARY'))"), Seq(Row("a")))
+      checkAnswer(sql(s"SELECT c1 FROM $tableName where c1 || 'a' " +
+        s"IN (COLLATE('aa', 'UTF8_LCASE_RTRIM'))"), Seq(Row("a"), Row("A")))
+      checkAnswer(sql(s"SELECT c1 FROM $tableName where (c1 || 'a') " +
+        s"IN (COLLATE('aa', 'UTF8_BINARY_RTRIM'))"), Seq(Row("a")))
+
 
       // columns have different collation
       checkError(
@@ -772,6 +808,16 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         condition = "COLLATION_MISMATCH.EXPLICIT",
         parameters = Map(
           "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI""""
+        )
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI_RTRIM)")
+        },
+        condition = "COLLATION_MISMATCH.EXPLICIT",
+        parameters = Map(
+          "explicitTypes" -> """"STRING COLLATE UNICODE", "STRING COLLATE UNICODE_CI_RTRIM""""
         )
       )
 
@@ -1124,7 +1170,9 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
     // map doesn't support aggregation
     withTable(table) {
-      sql(s"create table $table (m map<string collate utf8_lcase, string>) using parquet")
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        sql(s"create table $table (m map<string collate utf8_lcase, string>) using parquet")
+      }
       val query = s"select distinct m from $table"
       checkError(
         exception = intercept[ExtendedAnalysisException](sql(query)),
@@ -1166,8 +1214,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
     // map doesn't support joins
     withTable(tableLeft, tableRight) {
-      Seq(tableLeft, tableRight).map(tab =>
-        sql(s"create table $tab (m map<string collate utf8_lcase, string>) using parquet"))
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        Seq(tableLeft, tableRight).map(tab =>
+          sql(s"create table $tab (m map<string collate utf8_lcase, string>) using parquet"))
+      }
       val query =
         s"select $tableLeft.m from $tableLeft join $tableRight on $tableLeft.m = $tableRight.m"
       val ctx = s"$tableLeft.m = $tableRight.m"
@@ -1418,7 +1468,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         val tableName = "t"
 
         withTable(tableName) {
-          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+          withSQLConf(
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen,
+            SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true"
+          ) {
             sql(s"create table $tableName" +
               s" (m map<string$collationSetup, string$collationSetup>)")
             sql(s"insert into $tableName values (map('aaa', 'AAA'))")
@@ -1443,7 +1496,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         val tableName = "t"
 
         withTable(tableName) {
-          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+          withSQLConf(
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen,
+            SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true"
+          ) {
             sql(s"create table $tableName" +
               s" (m map<struct<fld1: string$collationSetup, fld2: string$collationSetup>, " +
               s"struct<fld1: string$collationSetup, fld2: string$collationSetup>>)")
@@ -1470,7 +1526,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         val tableName = "t"
 
         withTable(tableName) {
-          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+          withSQLConf(
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen,
+            SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true"
+          ) {
             sql(s"create table $tableName " +
               s"(m map<array<string$collationSetup>, array<string$collationSetup>>)")
             sql(s"insert into $tableName values (map(array('aaa', 'bbb'), array('ccc', 'ddd')))")
@@ -1493,7 +1552,10 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       test(s"Check that order by on map with$collationSetup strings fails ($codeGen)") {
         val tableName = "t"
         withTable(tableName) {
-          withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen) {
+          withSQLConf(
+            SQLConf.CODEGEN_FACTORY_MODE.key -> codeGen,
+            SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true"
+          ) {
             sql(s"create table $tableName" +
               s" (m map<string$collationSetup, string$collationSetup>, " +
               s"  c integer)")

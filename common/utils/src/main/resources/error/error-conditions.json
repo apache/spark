@@ -275,7 +275,7 @@
       },
       "INVALID_CHANGE_LOG_READER_VERSION" : {
         "message" : [
-          "The change log reader version cannot be <version>."
+          "The change log reader version cannot be <version>. The checkpoint probably is from a future Spark version, please upgrade your Spark."
         ]
       },
       "INVALID_CHANGE_LOG_WRITER_VERSION" : {
@@ -5191,6 +5191,11 @@
       "CLAUSE_WITH_PIPE_OPERATORS" : {
         "message" : [
           "The SQL pipe operator syntax using |> does not support <clauses>."
+        ]
+      },
+      "COLLATIONS_IN_MAP_KEYS" : {
+        "message" : [
+          "Collated strings for keys of maps"
         ]
       },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
