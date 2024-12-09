@@ -318,8 +318,8 @@ class RocksDB(
         version: Long,
         stateStoreCkptId: Option[String],
         readOnly: Boolean = false): RocksDB = {
-  // An array contains lineage information from [snapShotVersion, version] (inclusive both end)
-  var currVersionLineage: Array[LineageItem] = lineageManager.getLineage()
+  // An array contains lineage information from [snapShotVersion, version] (inclusive in both ends)
+  var currVersionLineage: Array[LineageItem] = lineageManager.getLineageForCurrVersion()
   try {
     if (loadedVersion != version || (loadedStateStoreCkptId.isEmpty ||
         stateStoreCkptId.get != loadedStateStoreCkptId.get)) {
@@ -348,10 +348,13 @@ class RocksDB(
             fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(currVersionLineage)
           latestSnapshotVersionsAndUniqueId match {
             case Some(pair) => (pair._1, Option(pair._2))
-            case None =>
-              logWarning("Cannot find latest snapshot based on lineage: "
-                + printLineageItems(currVersionLineage))
+            case None if currVersionLineage.head.version == 1L =>
+              logWarning(log"Cannot find latest snapshot based on lineage but first version " +
+                log"is 1, use 0 as default. Lineage ${MDC(LogKeys.LINEAGE, lineageManager)}")
               (0L, None)
+            case _ =>
+              throw QueryExecutionErrors.cannotFindBaseSnapshotCheckpoint(
+                printLineageItems(currVersionLineage))
           }
         }
       }
@@ -506,7 +509,7 @@ class RocksDB(
     recordedMetrics = None
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
-    if (enableStateStoreCheckpointIds) {
+    if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
       loadV2(version, stateStoreCkptId, readOnly)
     } else {
       loadV1(version, readOnly)
@@ -1230,7 +1233,7 @@ class RocksDB(
       // This is relative aggressive because that even if the uploading succeeds,
       // it is not necessarily the one written to the commit log. But we can always load lineage
       // from commit log so it is fine.
-      lineageManager.resetLineage(lineageManager.getLineage()
+      lineageManager.resetLineage(lineageManager.getLineageForCurrVersion()
         .filter(i => i.version >= snapshot.version))
       logInfo(log"${MDC(LogKeys.LOG_ID, loggingId)}: " +
         log"Upload snapshot of version ${MDC(LogKeys.VERSION_NUM, snapshot.version)}, " +
@@ -1740,7 +1743,7 @@ private[sql] class RocksDBLineageManager {
     lineage = newLineage
   }
 
-  def getLineage(): Array[LineageItem] = {
+  def getLineageForCurrVersion(): Array[LineageItem] = {
     lineage.clone()
   }
 

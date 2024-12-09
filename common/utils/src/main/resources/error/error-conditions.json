@@ -233,6 +233,11 @@
       "An error occurred during loading state."
     ],
     "subClass" : {
+      "CANNOT_FIND_BASE_SNAPSHOT_CHECKPOINT" : {
+        "message" : [
+          "Cannot find a base snapshot checkpoint. lineage: <lineage>."
+        ]
+      },
       "CANNOT_READ_CHECKPOINT" : {
         "message" : [
           "Cannot read RocksDB checkpoint metadata. Expected <expectedVersion>, but found <actualVersion>."
@@ -275,7 +280,7 @@
       },
       "INVALID_CHANGE_LOG_READER_VERSION" : {
         "message" : [
-          "The change log reader version cannot be <version>. The checkpoint probably is from a future Spark version, please upgrade your Spark."
+          "The change log reader version cannot be <version>."
         ]
       },
       "INVALID_CHANGE_LOG_WRITER_VERSION" : {
