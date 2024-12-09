@@ -46,14 +46,14 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     assert(exception.getCondition === "INDETERMINATE_COLLATION")
   }
 
-  def assertIndeterminateCollationInSchemaError(columnPaths: String*)(query: => DataFrame): Unit = {
+  def assertIndeterminateCollationInSchemaError(columnPaths: String*)(
+      query: => DataFrame): Unit = {
     checkError(
       exception = intercept[SparkThrowable] {
-          query
+        query
       },
       condition = "INDETERMINATE_COLLATION_IN_SCHEMA",
-      parameters = Map("columnPaths" -> columnPaths.mkString(", "))
-    )
+      parameters = Map("columnPaths" -> columnPaths.mkString(", ")))
   }
 
   test("cannot use indeterminate collation name") {
@@ -62,8 +62,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
         sql("SELECT 'a' COLLATE NULL")
       },
       "COLLATION_INVALID_NAME",
-      parameters = Map("proposals" -> "nl", "collationName" -> "NULL")
-    )
+      parameters = Map("proposals" -> "nl", "collationName" -> "NULL"))
 
     intercept[SparkThrowable] {
       StringType("NULL")
@@ -74,13 +73,9 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
 
-      checkAnswer(
-        sql(s"SELECT c1 || c2 FROM $testTableName"),
-        Seq(Row("ab")))
+      checkAnswer(sql(s"SELECT c1 || c2 FROM $testTableName"), Seq(Row("ab")))
 
-      checkAnswer(
-        sql(s"SELECT c1 || c2 as c3 FROM $testTableName"),
-        Seq(Row("ab")))
+      checkAnswer(sql(s"SELECT c1 || c2 as c3 FROM $testTableName"), Seq(Row("ab")))
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || c2) FROM $testTableName"),
@@ -93,9 +88,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
 
-      checkAnswer(
-        sql(s"SELECT concat_ws(' ', c1, c2) FROM $testTableName"),
-        Seq(Row("a b")))
+      checkAnswer(sql(s"SELECT concat_ws(' ', c1, c2) FROM $testTableName"), Seq(Row("a b")))
 
       checkAnswer(
         sql(s"SELECT concat_ws(' ', c1, c2) as c3 FROM $testTableName"),
@@ -111,12 +104,8 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
     withTestTable {
       sql(s"INSERT INTO $testTableName VALUES ('a', 'b')")
 
-      val expressions = Seq(
-        "c1 = c2",
-        "c1 != c2",
-        "substring(c1 || c2, 1, 1)",
-        "length(c1 || c2)",
-      )
+      val expressions =
+        Seq("c1 = c2", "c1 != c2", "substring(c1 || c2, 1, 1)", "length(c1 || c2)")
 
       expressions.foreach { expr =>
         assertIndeterminateCollationInExpressionError {
@@ -134,9 +123,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
            |FROM VALUES ('a', 'b') AS t(c1, c2)
            |""".stripMargin)
 
-      checkAnswer(
-        sql(s"SELECT * FROM $testTableName"),
-        Seq(Row("ab", "ba")))
+      checkAnswer(sql(s"SELECT * FROM $testTableName"), Seq(Row("ab", "ba")))
     }
   }
 
@@ -149,7 +136,11 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
              |""".stripMargin)
       }
 
-      assertIndeterminateCollationInSchemaError("myCol", "arr.element", "map.value", "struct.f1") {
+      assertIndeterminateCollationInSchemaError(
+        "myCol",
+        "arr.element",
+        "map.value",
+        "struct.f1") {
         sql(s"""
              |CREATE TABLE t
              |USING $dataSource
@@ -175,9 +166,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
              |SELECT c1 || c2 as col FROM $testTableName
              |""".stripMargin)
 
-        checkAnswer(
-          sql("SELECT * FROM v"),
-          Seq(Row("ab"), Row("cd")))
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row("ab"), Row("cd")))
       }
     }
   }

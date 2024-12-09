@@ -65,9 +65,8 @@ private[spark] object SchemaUtils {
           findColumnPaths(valueType)(f).map(p => p.prepended("value"))
 
       case StructType(fields) =>
-        fields.flatMap {
-          case StructField(name, dataType, _, _) =>
-            findColumnPaths(dataType)(f).map(p => p.prepended(name))
+        fields.flatMap { case StructField(name, dataType, _, _) =>
+          findColumnPaths(dataType)(f).map(p => p.prepended(name))
         }.toSeq
 
       case _ =>
@@ -312,7 +311,7 @@ private[spark] object SchemaUtils {
               messageParameters = Map(
                 "pos" -> pos.toString,
                 "schema" -> schema.treeString))
-        }
+      }
     }
     field._1
   }
