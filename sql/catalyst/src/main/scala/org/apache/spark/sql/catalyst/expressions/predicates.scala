@@ -994,7 +994,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
-  override lazy val canonicalized: Expression = {
+
+  override lazy val canonicalized: Expression =
     withNewChildren(children.map(_.canonicalized)) match {
       case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
       case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
@@ -1007,7 +1008,7 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
       case other => other
     }
-  }
+
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
@@ -1028,6 +1029,8 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
   }
 
   protected lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(left.dataType)
+
+  def reverseOperands(): BinaryComparison
 }
 
 
@@ -1088,6 +1091,8 @@ case class EqualTo(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): EqualTo = copy(left = newLeft, right = newRight)
+
+  def reverseOperands(): BinaryComparison = this
 }
 
 // TODO: although map type is not orderable, technically map type should be able to be used
@@ -1153,6 +1158,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): EqualNullSafe =
     copy(left = newLeft, right = newRight)
+
+  def reverseOperands(): BinaryComparison = this
 }
 
 @ExpressionDescription(
@@ -1226,6 +1233,8 @@ case class LessThan(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
+
+  def reverseOperands(): BinaryComparison = GreaterThan(right, left)
 }
 
 @ExpressionDescription(
@@ -1261,6 +1270,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
+
+  def reverseOperands(): BinaryComparison = GreaterThanOrEqual(right, left)
 }
 
 @ExpressionDescription(
@@ -1297,6 +1308,8 @@ case class GreaterThan(left: Expression, right: Expression)
 
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Expression = copy(left = newLeft, right = newRight)
+
+  def reverseOperands(): BinaryComparison = LessThan(right, left)
 }
 
 @ExpressionDescription(
@@ -1334,6 +1347,8 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GreaterThanOrEqual =
     copy(left = newLeft, right = newRight)
+
+  def reverseOperands(): BinaryComparison = LessThanOrEqual(right, left)
 }
 
 /**

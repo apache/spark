@@ -238,6 +238,29 @@ class SubquerySuite extends QueryTest
       Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
   }
 
+  test("Constraint bug: independent new filter getting created for a join") {
+    sql("create or replace temp view t0 as select 1 as a_nonnullable")
+    sql("create or replace temp view t1 as select cast(null as int) as b_nullable")
+    sql("create or replace temp view t2 as select 2 as c")
+    val queries = Seq(
+      "select * from t0 left join t2 on (a_nonnullable IN (select b_nullable from t1)) is null",
+      "select * from t0 where a_nonnullable in(select b_nullable from t1)",
+      "select * from t0 where(a_nonnullable in (select b_nullable from t1)) <=> true",
+      "select * from t0 where a_nonnullable not in (select b_nullable from t1)",
+      "select * from t0 where(a_nonnullable not in(select b_nullable from t1)) <=> true",
+      "select * from t0 left join t2 on (a_nonnullable IN (select b_nullable from t1)) <=> true"
+    )
+
+    for (q <- queries) {
+      val expected = withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+        val df = sql(q)
+        df.collect()
+      }
+      val dfAct = sql(q)
+      checkAnswer(dfAct, expected)
+    }
+  }
+
   test("EXISTS predicate subquery within OR") {
     checkAnswer(
       sql("select * from l where exists (select * from r where l.a = r.c)" +
