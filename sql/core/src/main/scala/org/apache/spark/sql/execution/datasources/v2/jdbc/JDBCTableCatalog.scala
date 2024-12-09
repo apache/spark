@@ -66,8 +66,13 @@ class JDBCTableCatalog extends TableCatalog
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     checkNamespace(namespace)
     JdbcUtils.withConnection(options) { conn =>
-      val schemaName = if (namespace.length == 1) namespace.head else null
-      val schemaPattern = this.convertSchemaNameToPattern(schemaName)
+      val schemaNameExists = namespace.length == 1
+      val schemaPattern: Option[String] = if (schemaNameExists) {
+        val schemaName = namespace.head
+        Some(this.convertSchemaNameToPattern(schemaName))
+      } else {
+        None
+      }
       val rs = JdbcUtils.classifyException(
         errorClass = "FAILED_JDBC.GET_TABLES",
         messageParameters = Map(
@@ -76,7 +81,7 @@ class JDBCTableCatalog extends TableCatalog
         dialect,
         description = s"Failed get tables from: ${namespace.mkString(".")}",
         isRuntime = false) {
-        conn.getMetaData.getTables(null, schemaPattern, "%", Array("TABLE"))
+        conn.getMetaData.getTables(null, schemaPattern.orNull, "%", Array("TABLE"))
       }
       new Iterator[Identifier] {
         def hasNext = rs.next()
