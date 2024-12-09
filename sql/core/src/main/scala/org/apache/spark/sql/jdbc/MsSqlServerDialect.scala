@@ -66,6 +66,8 @@ private object MsSqlServerDialect extends JdbcDialect {
     supportedFunctions.contains(funcName)
 
   class MsSqlServerSQLBuilder extends JDBCSQLBuilder {
+    override protected def predicateToIntSQL(input: String): String =
+      "IIF(" + input + ", 1, 0)"
     override def visitSortOrder(
         sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
       (sortDirection, nullOrdering) match {
@@ -93,9 +95,25 @@ private object MsSqlServerDialect extends JdbcDialect {
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
         case e: Predicate => e.name() match {
-          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">="
-              if e.children().exists(_.isInstanceOf[Predicate]) =>
-            super.visitUnexpectedExpr(expr)
+          case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
+            val Array(l, r) = e.children().map(inputToSQLNoBool)
+            visitBinaryComparison(e.name(), l, r)
+          case "CASE_WHEN" =>
+            // Since MsSqlServer cannot handle boolean expressions inside
+            // a CASE WHEN, it is necessary to convert those to another
+            // CASE WHEN expression that will return 1 or 0 depending on
+            // the result.
+            // Example:
+            // In:  ... CASE WHEN a = b THEN c = d ... END
+            // Out: ... CASE WHEN a = b THEN CASE WHEN c = d THEN 1 ELSE 0 END ... END = 1
+            val stringArray = e.children().grouped(2).flatMap {
+              case Array(whenExpression, thenExpression) =>
+                Array(inputToSQL(whenExpression), inputToSQLNoBool(thenExpression))
+              case Array(elseExpression) =>
+                Array(inputToSQLNoBool(elseExpression))
+            }.toArray
+
+            visitCaseWhen(stringArray) + " = 1"
           case _ => super.build(expr)
         }
         case _ => super.build(expr)
