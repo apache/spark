@@ -397,8 +397,8 @@ public final class CollationFactory {
        */
       private static Collation fetchCollation(int collationId) {
         // User-defined collations cannot produce a `Collation` instance.
-        assert (collationId >= -1 && getDefinitionOrigin(collationId)
-          == DefinitionOrigin.PREDEFINED);
+        assert (collationId >= INDETERMINATE_COLLATION_ID &&
+                getDefinitionOrigin(collationId) == DefinitionOrigin.PREDEFINED);
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           // Skip cache.
           return CollationSpecUTF8.UTF8_BINARY_COLLATION;
@@ -1245,6 +1245,10 @@ public final class CollationFactory {
    * Returns the fully qualified collation name for the given collation ID.
    */
   public static String fullyQualifiedName(int collationId) {
+    if (collationId == INDETERMINATE_COLLATION_ID) {
+      return Collation.CollationSpec.INDETERMINATE_COLLATION.collationName;
+    }
+
     Collation.CollationSpec.DefinitionOrigin definitionOrigin =
         Collation.CollationSpec.getDefinitionOrigin(collationId);
     // Currently only predefined collations are supported.

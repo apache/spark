@@ -79,8 +79,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
 
       checkAnswer(
         sql(s"SELECT COLLATION(c1 || c2) FROM $testTableName"),
-        // TODO: probably should be just NULL
-        Seq(Row("SYSTEM.BUILTIN.NULL")))
+        Seq(Row("NULL")))
     }
   }
 
@@ -96,7 +95,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
 
       checkAnswer(
         sql(s"SELECT COLLATION(concat_ws(' ', c1, c2)) FROM $testTableName"),
-        Seq(Row("SYSTEM.BUILTIN.NULL")))
+        Seq(Row("NULL")))
     }
   }
 
@@ -167,6 +166,7 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
              |""".stripMargin)
 
         checkAnswer(sql("SELECT * FROM v"), Seq(Row("ab"), Row("cd")))
+        checkAnswer(sql("SELECT DISTINCT COLLATION(col) FROM v"), Seq(Row("NULL")))
       }
     }
   }
