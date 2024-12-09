@@ -98,6 +98,9 @@ object CollationTypeCoercion {
     isUserDefined && isChildTypeCollatedString && targetType == StringType
   }
 
+  /**
+   * Returns whether we should coerce the string types of the children of the given expression.
+   */
   private def shouldCoerceTypes(expression: Expression): Boolean = {
     def getType(ex: Expression): DataType = try {
       ex.dataType
@@ -106,7 +109,8 @@ object CollationTypeCoercion {
     }
 
     expression match {
-      case toIgnore @ (_: Collate | _: Like | _: ILike) =>
+      // children of certain expressions should never be coerced
+      case toIgnore @ (_: Collate) =>
         return false
 
       case _ =>
@@ -135,12 +139,13 @@ object CollationTypeCoercion {
   private def changeType(expr: Expression, newType: DataType): Expression = {
     mergeTypes(expr.dataType, newType) match {
       case Some(newDataType) if newDataType != expr.dataType =>
+        val ntw = if (newDataType == StringType) StringType(0) else newDataType
         assert(!newDataType.existsRecursively(_.isInstanceOf[StringTypeWithContext]))
 
         val exprWithNewType = expr match {
-          case lit: Literal => lit.copy(dataType = newDataType)
-          case cast: Cast => cast.copy(dataType = newDataType)
-          case _ => Cast(expr, newDataType)
+          case lit: Literal => lit.copy(dataType = ntw)
+          case cast: Cast => cast.copy(dataType = ntw)
+          case _ => Cast(expr, ntw)
         }
 
         // also copy the collation context tag
@@ -220,7 +225,7 @@ object CollationTypeCoercion {
   /**
    * Collates input expressions to a single collation.
    */
-  def collateToSingleType(expressions: Seq[Expression]): Seq[Expression] = {
+  private def collateToSingleType(expressions: Seq[Expression]): Seq[Expression] = {
     val stringExpressions = expressions.filter(e => hasStringType(e.dataType))
     val lctOpt = findLeastCommonStringType(stringExpressions)
 
@@ -338,7 +343,7 @@ object CollationTypeCoercion {
     case collate: Collate =>
       Some(addContextToStringType(collate.dataType, Explicit))
 
-    case expr @ (_: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference) =>
+    case expr @ (_: NamedExpression | _: SubqueryExpression | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
 
     case lit: Literal =>

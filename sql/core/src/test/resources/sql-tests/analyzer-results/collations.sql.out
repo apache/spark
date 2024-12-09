@@ -2058,9 +2058,14 @@ Project [overlay(cast(utf8_binary#x as string collate UTF8_LCASE), collate(AaAA,
 -- !query
 select format_string(format, utf8_binary, utf8_lcase) from t8
 -- !query analysis
-Project [format_string(format#x, utf8_binary#x, utf8_lcase#x) AS format_string(format, utf8_binary, utf8_lcase)#x]
-+- SubqueryAlias spark_catalog.default.t8
-   +- Relation spark_catalog.default.t8[format#x,utf8_binary#x,utf8_lcase#x] parquet
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
+}
 
 
 -- !query
@@ -2074,9 +2079,14 @@ Project [format_string(collate(format#x, utf8_lcase), utf8_lcase#x, collate(utf8
 -- !query
 select format_string(format, utf8_binary, utf8_lcase) from t8
 -- !query analysis
-Project [format_string(format#x, utf8_binary#x, utf8_lcase#x) AS format_string(format, utf8_binary, utf8_lcase)#x]
-+- SubqueryAlias spark_catalog.default.t8
-   +- Relation spark_catalog.default.t8[format#x,utf8_binary#x,utf8_lcase#x] parquet
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
+}
 
 
 -- !query
@@ -2356,7 +2366,7 @@ Project [right(collate(utf8_binary#x, utf8_lcase), 2) AS right(collate(utf8_bina
 -- !query
 select left(utf8_binary, '2' collate utf8_lcase), left(utf8_lcase, 2) from t5
 -- !query analysis
-Project [left(utf8_binary#x, cast(collate(2, utf8_lcase) as int)) AS left(utf8_binary, collate(2, utf8_lcase))#x, left(utf8_lcase#x, 2) AS left(utf8_lcase, 2)#x]
+Project [left(cast(utf8_binary#x as string collate UTF8_LCASE), cast(collate(2, utf8_lcase) as int)) AS left(utf8_binary, collate(2, utf8_lcase))#x, left(utf8_lcase#x, 2) AS left(utf8_lcase, 2)#x]
 +- SubqueryAlias spark_catalog.default.t5
    +- Relation spark_catalog.default.t5[s#x,utf8_binary#x,utf8_lcase#x] parquet
 
