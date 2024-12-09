@@ -11,7 +11,7 @@ Aggregate [listagg(c1#x, null, collate(c1#x, utf8_binary) ASC NULLS FIRST, 0, 0)
 -- !query
 SELECT listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE utf8_lcase) FROM (VALUES ('a'), ('A'), ('b'), ('B')) AS t(c1)
 -- !query analysis
-Aggregate [listagg(c1#x, null, collate(c1#x, utf8_lcase) ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST)#x]
+Aggregate [listagg(cast(c1#x as string collate UTF8_LCASE), null, collate(c1#x, utf8_lcase) ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, utf8_lcase) ASC NULLS FIRST)#x]
 +- SubqueryAlias t
    +- Project [col1#x AS c1#x]
       +- LocalRelation [col1#x]
@@ -65,7 +65,7 @@ Aggregate [listagg(c1#x, null, c1#x ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) 
 -- !query
 SELECT listagg(c1) WITHIN GROUP (ORDER BY c1 COLLATE unicode_rtrim) FROM (VALUES ('abc  '), ('abc '), ('abc\n'), ('abc'), ('x')) AS t(c1)
 -- !query analysis
-Aggregate [listagg(c1#x, null, collate(c1#x, unicode_rtrim) ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, unicode_rtrim) ASC NULLS FIRST)#x]
+Aggregate [listagg(cast(c1#x as string collate UNICODE_RTRIM), null, collate(c1#x, unicode_rtrim) ASC NULLS FIRST, 0, 0) AS listagg(c1, NULL) WITHIN GROUP (ORDER BY collate(c1, unicode_rtrim) ASC NULLS FIRST)#x]
 +- SubqueryAlias t
    +- Project [col1#x AS c1#x]
       +- LocalRelation [col1#x]
@@ -74,13 +74,11 @@ Aggregate [listagg(c1#x, null, collate(c1#x, unicode_rtrim) ASC NULLS FIRST, 0, 
 -- !query
 SELECT listagg(DISTINCT c1 COLLATE utf8_lcase) WITHIN GROUP (ORDER BY c1 COLLATE utf8_binary) FROM (VALUES ('a'), ('b'), ('A'), ('B')) AS t(c1)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT",
-  "sqlState" : "42K0K",
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
   "messageParameters" : {
-    "funcArg" : "\"collate(c1, utf8_lcase)\"",
-    "funcName" : "`listagg`",
-    "orderingExpr" : "\"collate(c1, utf8_binary)\""
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING\""
   }
 }

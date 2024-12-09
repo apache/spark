@@ -3386,9 +3386,16 @@ kAaAAn	sAAaing
 -- !query
 select format_string(format, utf8_binary, utf8_lcase) from t8
 -- !query schema
-struct<format_string(format, utf8_binary, utf8_lcase):string>
+struct<>
 -- !query output
-abCdEabCdE
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
+}
 
 
 -- !query
@@ -3402,9 +3409,16 @@ abCdEabCdE	abCdEabCdE
 -- !query
 select format_string(format, utf8_binary, utf8_lcase) from t8
 -- !query schema
-struct<format_string(format, utf8_binary, utf8_lcase):string>
+struct<>
 -- !query output
-abCdEabCdE
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.IMPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "implicitTypes" : "\"STRING\", \"STRING COLLATE UTF8_LCASE\""
+  }
+}
 
 
 -- !query
@@ -4109,7 +4123,7 @@ y.	y.
 -- !query
 select left(utf8_binary, '2' collate utf8_lcase), left(utf8_lcase, 2) from t5
 -- !query schema
-struct<left(utf8_binary, collate(2, utf8_lcase)):string,left(utf8_lcase, 2):string collate UTF8_LCASE>
+struct<left(utf8_binary, collate(2, utf8_lcase)):string collate UTF8_LCASE,left(utf8_lcase, 2):string collate UTF8_LCASE>
 -- !query output
 He	He
 So	So
