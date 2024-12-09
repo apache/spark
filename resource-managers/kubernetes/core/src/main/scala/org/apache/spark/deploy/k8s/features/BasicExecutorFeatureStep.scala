@@ -85,7 +85,8 @@ private[spark] class BasicExecutorFeatureStep(
     } else {
       execResources.cores.get.toString
     }
-  private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
+  private val executorLimitCores = kubernetesConf
+    .get(KUBERNETES_EXECUTOR_LIMIT_CORES).getOrElse(executorCoresRequest)
 
   private def buildExecutorResourcesQuantities(
       customResources: Set[ExecutorResourceRequest]): Map[String, Quantity] = {
@@ -226,14 +227,12 @@ private[spark] class BasicExecutorFeatureStep(
         .build()
     }
     val containerWithLimitCores = if (isDefaultProfile) {
-      executorLimitCores.map { limitCores =>
-        val executorCpuLimitQuantity = new Quantity(limitCores)
-        new ContainerBuilder(executorContainerWithConfVolume)
-          .editResources()
-          .addToLimits("cpu", executorCpuLimitQuantity)
-          .endResources()
-          .build()
-      }.getOrElse(executorContainerWithConfVolume)
+      val executorCpuLimitQuantity = new Quantity(executorLimitCores)
+      new ContainerBuilder(executorContainerWithConfVolume)
+        .editResources()
+        .addToLimits("cpu", executorCpuLimitQuantity)
+        .endResources()
+        .build()
     } else {
       executorContainerWithConfVolume
     }

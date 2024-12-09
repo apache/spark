@@ -135,7 +135,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       defaultProfile)
     val executor = step.configurePod(SparkPod.initialPod())
 
-    assert(executor.container.getResources.getLimits.size() === 3)
+    assert(executor.container.getResources.getLimits.size() === 4)
     assert(amountAndFormat(executor.container.getResources
       .getLimits.get("memory")) === "1408Mi")
     gpuResources.foreach { case (k8sName, testRInfo) =>
@@ -165,7 +165,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     // Default memory limit is 1024M + 384M (minimum overhead constant).
     assert(executor.container.getImage === EXECUTOR_IMAGE)
     assert(executor.container.getVolumeMounts.size() == 1)
-    assert(executor.container.getResources.getLimits.size() === 1)
+    assert(executor.container.getResources.getLimits.size() === 2)
     assert(amountAndFormat(executor.container.getResources
       .getLimits.get("memory")) === "1408Mi")
 
