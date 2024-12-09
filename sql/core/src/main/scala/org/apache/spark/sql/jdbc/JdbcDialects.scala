@@ -279,14 +279,14 @@ abstract class JdbcDialect extends Serializable with Logging {
     case _ => value
   }
 
-  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+  private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {  
     // Some dialects do not support boolean type and this convenient util function is
     // provided to generate SQL string without boolean values.
     protected def inputToSQLNoBool(input: Expression): String = input match {
       case p: Predicate if p.name() == "ALWAYS_TRUE" => "1"
       case p: Predicate if p.name() == "ALWAYS_FALSE" => "0"
       case p: Predicate => predicateToIntSQL(inputToSQL(p))
-      case _ => inputToSQL(input)
+      case _ => super.inputToSQL(input)
     }
 
     protected def predicateToIntSQL(input: String): String =
