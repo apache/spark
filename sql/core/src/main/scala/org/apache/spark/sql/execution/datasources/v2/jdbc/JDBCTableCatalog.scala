@@ -66,8 +66,7 @@ class JDBCTableCatalog extends TableCatalog
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     checkNamespace(namespace)
     JdbcUtils.withConnection(options) { conn =>
-      val schemaNameExists = namespace.length == 1
-      val schemaPattern: Option[String] = if (schemaNameExists) {
+      val schemaPattern: Option[String] = if (namespace.length == 1) {
         val schemaName = namespace.head
         Some(this.convertSchemaNameToPattern(schemaName))
       } else {
