@@ -54,10 +54,18 @@ def convert_exception(
     resp: Optional[pb2.FetchErrorDetailsResponse],
     display_server_stacktrace: bool = False,
 ) -> SparkConnectException:
-    classes = json.loads(info.metadata.get("classes", "[]"))
+    classes = info.metadata.get("classes")
+    if classes:
+        classes = json.loads(classes)
+    else:
+        classes = []
     sql_state = info.metadata.get("sqlState")
     error_class = info.metadata.get("errorClass")
-    message_parameters = json.loads(info.metadata.get("messageParameters", "{}"))
+    message_parameters = info.metadata.get("messageParameters")
+    if message_parameters:
+        message_parameters = json.loads(message_parameters)
+    else:
+        message_parameters = {}
     stacktrace: Optional[str] = None
 
     if resp is not None and resp.HasField("root_error_idx"):
