@@ -336,13 +336,11 @@ class RocksDB(
         // reconstructing the lineage from changelog file.
         } else if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
           currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
-          lineageManager.resetLineage(currVersionLineage)
           (version, stateStoreCkptId)
         } else {
           currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
             LineageItem(version, stateStoreCkptId.get)
           currVersionLineage = currVersionLineage.sortBy(_.version)
-          lineageManager.resetLineage(currVersionLineage)
 
           val latestSnapshotVersionsAndUniqueId =
             fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(currVersionLineage)
@@ -383,6 +381,7 @@ class RocksDB(
           .map(i => (i.version, Option(i.checkpointUniqueId)))
         replayChangelog(versionsAndUniqueIds)
         loadedVersion = version
+        lineageManager.resetLineage(currVersionLineage)
       }
       // After changelog replay the numKeysOnWritingVersion will be updated to
       // the correct number of keys in the loaded version.

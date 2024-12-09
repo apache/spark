@@ -2937,7 +2937,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     override def commit(): Long = {
       val ret = super.commit()
       // update versionToUniqueId from lineageManager
-      lineageManager.getLineage().foreach {
+      lineageManager.getLineageForCurrVersion().foreach {
         case LineageItem(version, id) => versionToUniqueId.getOrElseUpdate(version, id)
       }
       ret
