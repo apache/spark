@@ -125,6 +125,6 @@ private[spark] case object IndeterminateStringType
     extends StringType(CollationFactory.INDETERMINATE_COLLATION_ID) {
 
   override def jsonValue: JValue = throw new SparkRuntimeException(
-    "Indeterminate string type can't be serialized to json",
-    Map.empty)
+    errorClass = "INDETERMINATE_COLLATION_NOT_SERIALIZABLE",
+    messageParameters = Map.empty)
 }
