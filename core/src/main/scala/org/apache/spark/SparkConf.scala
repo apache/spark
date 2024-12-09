@@ -53,7 +53,7 @@ trait ReadOnlySparkConf {
    * - The return type if defined by the configuration entry.
    * - This will throw an exception is the config is not optional and the value is not set.
    */
-  def get[T](entry: ConfigEntry[T]): T
+  private[spark] def get[T](entry: ConfigEntry[T]): T
 
   /**
    * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
@@ -533,25 +533,6 @@ class SparkConf(loadDefaults: Boolean)
    * in unit tests.
    */
   private[spark] def getenv(name: String): String = System.getenv(name)
-
-  /**
-   * Wrapper method for get() methods which require some specific value format. This catches
-   * any [[NumberFormatException]] or [[IllegalArgumentException]] and re-raises it with the
-   * incorrectly configured key in the exception message.
-   */
-  private def catchIllegalValue[T](key: String)(getValue: => T): T = {
-    try {
-      getValue
-    } catch {
-      case e: NumberFormatException =>
-        // NumberFormatException doesn't have a constructor that takes a cause for some reason.
-        throw new NumberFormatException(s"Illegal value for config key $key: ${e.getMessage}")
-            .initCause(e)
-      case e: IllegalArgumentException =>
-        throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
-    }
-  }
-
 
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
