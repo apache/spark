@@ -97,7 +97,7 @@ private object MsSqlServerDialect extends JdbcDialect {
         case e: Predicate => e.name() match {
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
             val Array(l, r) = e.children().map(inputToSQLNoBool)
-            super.visitUnexpectedExpr(expr)
+            visitBinaryComparison(e.name(), l, r)
           case "CASE_WHEN" =>
             // Since MsSqlServer cannot handle boolean expressions inside
             // a CASE WHEN, it is necessary to convert those to another
