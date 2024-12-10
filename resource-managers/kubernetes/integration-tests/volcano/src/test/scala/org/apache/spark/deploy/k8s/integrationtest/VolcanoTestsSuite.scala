@@ -151,6 +151,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .queues()
       .inNamespace(kubernetesTestComponents.namespace)
       .createOrReplace(resource)
+
     testResources += resource
   }
 
@@ -205,20 +206,29 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
   private def printAllPods(
       role: String,
       groupLocator: String): Unit = {
-    val pods = kubernetesTestComponents.kubernetesClient
+    val rolePods = kubernetesTestComponents.kubernetesClient
       .pods()
       .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-group-locator", groupLocator)
       .withLabel("spark-role", role)
       .list()
       .getItems.asScala
+    val pods = kubernetesTestComponents.kubernetesClient
+      .pods()
+      .inNamespace(kubernetesTestComponents.namespace)
+      .list()
+      .getItems.asScala
     // scalastyle:off println
     println("---------------------------------------------------")
-    println(s"Pods size: ${pods.size}")
+    println(s"Role Pods size: ${rolePods.size}, all Pods size: ${pods.size}.")
     pods.foreach(pod => {
       println(s"pod status: ${pod.getStatus.getPhase}, " +
         s"namespace: ${pod.getMetadata.getNamespace}, " +
-        s"name: ${pod.getMetadata.getName}")
+        s"name: ${pod.getMetadata.getName}, " +
+        s"spark-group-locator: " +
+        s"${pod.getMetadata.getLabels.getOrDefault("spark-group-locator", "N/A")}, " +
+        s"spark-role: " +
+        s"${pod.getMetadata.getLabels.getOrDefault("spark-role", "N/A")}")
     })
     println("---------------------------------------------------")
     // scalastyle:on println
@@ -442,8 +452,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     }
     // There are two `Succeeded` jobs and two `Pending` jobs
     Eventually.eventually(TIMEOUT, INTERVAL) {
+      printAllPods("driver", s"${GROUP_PREFIX}queue1")
       val completedPods = getPods("driver", s"${GROUP_PREFIX}queue1", "Succeeded")
       assert(completedPods.size === jobNum/2)
+      printAllPods("driver", s"${GROUP_PREFIX}queue0")
       val pendingPods = getPods("driver", s"${GROUP_PREFIX}queue0", "Pending")
       assert(pendingPods.size === jobNum/2)
     }
