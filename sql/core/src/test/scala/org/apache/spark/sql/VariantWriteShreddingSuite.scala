@@ -72,9 +72,10 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
     // cases.
     // metadata is always non-nullable.
     assert(SparkShreddingUtils.variantShreddingSchema(IntegerType) ==
-        StructType(Seq(StructField("metadata", BinaryType, nullable = false),
-                       StructField("value", BinaryType, nullable = true),
-                       StructField("typed_value", IntegerType, nullable = true))))
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = true),
+        StructField("typed_value", IntegerType, nullable = true))))
 
     val fieldA = StructType(Seq(
       StructField("value", BinaryType, nullable = true),
@@ -90,9 +91,10 @@ class VariantWriteShreddingSuite extends SparkFunSuite with ExpressionEvalHelper
       StructField("b", fieldB, nullable = false)))
     val structSchema = DataType.fromDDL("a timestamp_ntz, b array<string>")
     assert(SparkShreddingUtils.variantShreddingSchema(structSchema) ==
-        StructType(Seq(StructField("metadata", BinaryType, nullable = false),
-                       StructField("value", BinaryType, nullable = true),
-                       StructField("typed_value", objectType, nullable = true))))
+      StructType(Seq(
+        StructField("metadata", BinaryType, nullable = false),
+        StructField("value", BinaryType, nullable = true),
+        StructField("typed_value", objectType, nullable = true))))
   }
 
   test("shredding as fixed numeric types") {
