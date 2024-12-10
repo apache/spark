@@ -527,7 +527,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
-          if (setConf[0].equals("spark.remote")) {
+          if (setConf[0].equals("spark.remote") ||
+              (setConf[0].equals("spark.api.mode") &&
+                setConf[1].toLowerCase(Locale.ROOT).equals("connect"))) {
             isRemote = true;
           }
           conf.put(setConf[0], setConf[1]);
