@@ -286,7 +286,7 @@ class RocksDB(
    * The changelog file is named as version_stateStoreCkptId.changelog
    * @param version version of the changelog file, used to load changelog file.
    * @param stateStoreCkptId uniqueId of the changelog file, used to load changelog file.
-   * @return
+   * @return the lineage stored in the changelog file
    */
   private def getLineageFromChangelogFile(
       version: Long,
@@ -347,7 +347,7 @@ class RocksDB(
           latestSnapshotVersionsAndUniqueId match {
             case Some(pair) => (pair._1, Option(pair._2))
             case None if currVersionLineage.head.version == 1L =>
-              logWarning(log"Cannot find latest snapshot based on lineage but first version " +
+              logDebug(log"Cannot find latest snapshot based on lineage but first version " +
                 log"is 1, use 0 as default. Lineage ${MDC(LogKeys.LINEAGE, lineageManager)}")
               (0L, None)
             case _ =>
