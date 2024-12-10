@@ -45,6 +45,8 @@ object PythonCustomMetric {
     // See also `UserDefinedPythonDataSource.createPythonMetrics`.
     PythonSQLMetrics.pythonSizeMetricsDesc.keys
       .map(_ -> new SQLMetric("size", -1)).toMap ++
+      PythonSQLMetrics.pythonTimingMetricsDesc.keys
+        .map(_ -> new SQLMetric("timing", -1)).toMap ++
       PythonSQLMetrics.pythonOtherMetricsDesc.keys
         .map(_ -> new SQLMetric("sum", -1)).toMap
   }
