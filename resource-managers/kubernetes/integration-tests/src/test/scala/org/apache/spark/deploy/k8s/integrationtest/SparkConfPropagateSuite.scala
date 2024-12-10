@@ -25,8 +25,8 @@ import scala.io.Source
 private[spark] trait SparkConfPropagateSuite { k8sSuite: KubernetesSuite =>
   import KubernetesSuite.{k8sTestTag, SPARK_PI_MAIN_CLASS}
 
-  ignore("Verify logging configuration is picked from the provided SPARK_CONF_DIR/log4j2.properties",
-    k8sTestTag) {
+  ignore("Verify logging configuration is picked from " +
+    "the provided SPARK_CONF_DIR/log4j2.properties", k8sTestTag) {
     val loggingConfigFileName = "log-config-test-log4j.properties"
     val loggingConfURL: URL = this.getClass.getClassLoader.getResource(loggingConfigFileName)
     assert(loggingConfURL != null, "Logging configuration file not available.")
