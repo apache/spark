@@ -192,7 +192,6 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       role: String,
       groupLocator: String,
       statusPhase: String): mutable.Buffer[Pod] = {
-    getAllPods(role, groupLocator)
     kubernetesTestComponents.kubernetesClient
       .pods()
       .inNamespace(kubernetesTestComponents.namespace)
@@ -218,9 +217,9 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     println(s"Pods size: ${res.size}")
     res.foreach(pod => {
       println(pod.getApiVersion)
-      println(pod.getStatus)
+      // println(pod.getStatus)
       println(pod.getStatus.getPhase)
-      println(pod)
+      // println(pod)
     })
     println("---------------------------------------------------")
     // scalastyle:on println
@@ -354,12 +353,21 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     (1 until jobNum).map { completedNum =>
       Eventually.eventually(TIMEOUT, INTERVAL) {
         val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
+        getAllPods(role = "driver", groupName)
+        // scalastyle:off println
+        println(s"pendingPods size: ${pendingPods.size}, " +
+          s"jobNum - completedNum: ${jobNum - completedNum}")
+        // scalastyle:on println
         assert(pendingPods.size === jobNum - completedNum)
       }
     }
     // All jobs succeeded finally
     Eventually.eventually(TIMEOUT, INTERVAL) {
       val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
+      getAllPods(role = "driver", groupName)
+      // scalastyle:off println
+      println(s"succeededPods size: ${succeededPods.size}, jobNum: $jobNum")
+      // scalastyle:on println
       assert(succeededPods.size === jobNum)
     }
   }

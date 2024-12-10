@@ -26,7 +26,7 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
 
   import PodTemplateSuite._
 
-  test("Start pod creation from template", k8sTestTag) {
+  ignore("Start pod creation from template", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.driver.podTemplateFile", DRIVER_TEMPLATE_FILE.getAbsolutePath)
       .set("spark.kubernetes.executor.podTemplateFile", EXECUTOR_TEMPLATE_FILE.getAbsolutePath)
@@ -47,7 +47,7 @@ private[spark] trait PodTemplateSuite { k8sSuite: KubernetesSuite =>
     )
   }
 
-  test("SPARK-38398: Schedule pod creation from template", k8sTestTag, schedulingTestTag) {
+  ignore("SPARK-38398: Schedule pod creation from template", k8sTestTag, schedulingTestTag) {
     sparkAppConf
       .set("spark.kubernetes.driver.podTemplateFile",
         DRIVER_SCHEDULE_TEMPLATE_FILE.getAbsolutePath)

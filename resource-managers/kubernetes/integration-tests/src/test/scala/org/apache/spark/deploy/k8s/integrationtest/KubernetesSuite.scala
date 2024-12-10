@@ -428,9 +428,9 @@ class KubernetesSuite extends SparkFunSuite
                       .withName(driverPodName)
                       .getLog
                     // scalastyle:off println
-                    println("-----------------log-------------------")
+                    println("-----------------log begin-------------------")
                     println(log)
-                    println("-----------------log-------------------")
+                    println("-----------------log end-------------------")
                     // scalastyle:on println
                     assert(
                       log.contains("Waiting to give nodes time to finish migration, decom exec 1."),

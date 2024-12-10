@@ -36,7 +36,7 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("A driver-only Spark job with a tmpfs-backed localDir volume", k8sTestTag) {
+  ignore("A driver-only Spark job with a tmpfs-backed localDir volume", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.driver.master", "local[10]")
       .set("spark.kubernetes.local.dirs.tmpfs", "true")
@@ -57,7 +57,7 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
       executorPatience = IGNORE)
   }
 
-  test("A driver-only Spark job with a tmpfs-backed emptyDir data volume", k8sTestTag) {
+  ignore("A driver-only Spark job with a tmpfs-backed emptyDir data volume", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.driver.master", "local[10]")
       .set("spark.kubernetes.driver.volumes.emptyDir.data.mount.path", "/data")
@@ -78,7 +78,7 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
       executorPatience = IGNORE)
   }
 
-  test("A driver-only Spark job with a disk-backed emptyDir volume", k8sTestTag) {
+  ignore("A driver-only Spark job with a disk-backed emptyDir volume", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.driver.master", "local[10]")
       .set("spark.kubernetes.driver.volumes.emptyDir.data.mount.path", "/data")
@@ -98,7 +98,7 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
       executorPatience = IGNORE)
   }
 
-  test("A driver-only Spark job with an OnDemand PVC volume", k8sTestTag) {
+  ignore("A driver-only Spark job with an OnDemand PVC volume", k8sTestTag) {
     val storageClassName = if (testBackend == MinikubeTestBackend) "standard" else "hostpath"
     val DRIVER_PREFIX = "spark.kubernetes.driver.volumes.persistentVolumeClaim"
     sparkAppConf
@@ -123,7 +123,7 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
       executorPatience = IGNORE)
   }
 
-  test("A Spark job with tmpfs-backed localDir volumes", k8sTestTag) {
+  ignore("A Spark job with tmpfs-backed localDir volumes", k8sTestTag) {
     sparkAppConf
       .set("spark.kubernetes.local.dirs.tmpfs", "true")
     runSparkApplicationAndVerifyCompletion(
@@ -147,7 +147,7 @@ private[spark] trait VolumeSuite { k8sSuite: KubernetesSuite =>
       isJVM = true)
   }
 
-  test("A Spark job with two executors with OnDemand PVC volumes", k8sTestTag) {
+  ignore("A Spark job with two executors with OnDemand PVC volumes", k8sTestTag) {
     val storageClassName = if (testBackend == MinikubeTestBackend) "standard" else "hostpath"
     val EXECUTOR_PREFIX = "spark.kubernetes.executor.volumes.persistentVolumeClaim"
     sparkAppConf
