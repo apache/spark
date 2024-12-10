@@ -28,6 +28,7 @@ import scala.concurrent.duration._
 import scala.io.Source
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
@@ -339,6 +340,19 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   test("executor env overwrite AM env in cluster mode") {
     testExecutorEnv(false)
+  }
+
+  test("SPARK-22876: Respect Yarn AM failure validity interval") {
+    val result = File.createTempFile("result", null, tempDir)
+    val output = File.createTempFile("output", null, tempDir)
+    val finalState = runSpark(false, mainClassName(YarnAMFailureValidityIntervalApp.getClass),
+      appArgs = Seq(result.getAbsolutePath()),
+      extraConf = Map(AM_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key -> "20s"))
+    assert(finalState === SparkAppHandle.State.FAILED)
+
+    val resultString = Files.toString(result, StandardCharsets.UTF_8)
+    val finalAttemptId = ApplicationAttemptId.fromString(resultString)
+    assert(finalAttemptId.getAttemptId() === 3)
   }
 
   private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
@@ -799,4 +813,21 @@ private object ExecutorEnvTestApp {
     sc.stop()
   }
 
+}
+
+private object YarnAMFailureValidityIntervalApp {
+
+  def main(args: Array[String]): Unit = {
+    val result = new File(args(0))
+
+    val sc = new SparkContext(new SparkConf())
+    val attemptId = YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
+    Files.write(attemptId.toString, result, StandardCharsets.UTF_8)
+    if (attemptId.getAttemptId() == 2) {
+      // Sleep on the second attempt to age out the first failure
+      Thread.sleep(30000)
+    }
+    sc.stop()
+    System.exit(-1)
+  }
 }
