@@ -11,6 +11,8 @@
   "gettingResultTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "schedulerDelay" : [ 4.0, 4.0, 6.0, 7.0, 9.0 ],
   "peakExecutionMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "peakOnHeapExecutionMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
+  "peakOffHeapExecutionMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "memoryBytesSpilled" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "diskBytesSpilled" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "inputMetrics" : {
