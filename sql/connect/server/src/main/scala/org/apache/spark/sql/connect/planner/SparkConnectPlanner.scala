@@ -2196,53 +2196,22 @@ class SparkConnectPlanner(
     }
   }
 
-  private def transformValueMapFunc(
-      fun: proto.Expression.UnresolvedFunction): (TypedScalaUdf, Seq[Expression]) = {
-    if (fun.getArgumentsCount <= 1) {
-      throw InvalidPlanInput("map_values requires at least two child expressions")
-    }
-
-    // The mapValues fn is defined as: mapValuesUdf, [aggExprs]+.
-    val args = fun.getArgumentsList.asScala.toSeq
-    (TypedScalaUdf(args.head, None), args.drop(1).map(transformExpression))
-  }
-
   private def transformKeyValueGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
     val input = transformRelation(rel.getInput)
-    var ds = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
+    val initialDS = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
 
-    val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
+    val keyColumn = TypedAggUtils.aggKeyColumn(initialDS.kEncoder, initialDS.groupingAttributes)
 
-    val aggExprs: Seq[Expression] = rel.getAggregateExpressionsList.asScala.toSeq match {
-      case Seq(expr)
-          if expr.hasUnresolvedFunction &&
-          expr.getUnresolvedFunction.getFunctionName == "map_values" =>
-        val (valueMapFunc, aggExprs) = transformValueMapFunc(expr.getUnresolvedFunction)
-        // Recompute the dataset's logical plan and data attributes after applying the mapFunc.
-        val withNewData = AppendColumns(
-          valueMapFunc.function,
-          valueMapFunc.inEnc,
-          valueMapFunc.outEnc,
-          ds.analyzed,
-          ds.dataAttributes)
-        val projected = Project(withNewData.newColumns ++ ds.groupingAttributes, withNewData)
-        val analyzed = session.sessionState.executePlan(projected).analyzed
-        ds = ds.copy(
-          vEncoder = valueMapFunc.outEnc,
-          analyzed = analyzed,
-          dataAttributes = withNewData.newColumns)
-        aggExprs
-      case exprs =>
-        exprs.map(transformExpression)
-    }
-
+    val (aggExprs, modifiedDSOpt) = transformExpressionsWithTypedUnresolvedExpression(
+      rel.getAggregateExpressionsList.asScala.toSeq, input, Some(initialDS))
+    val finalDS = modifiedDSOpt.getOrElse(initialDS)
     val namedColumns = aggExprs.map { expr =>
-      val any = ds.vEncoder
+      val any = finalDS.vEncoder
       val asTyped = Column(expr).as(any).expr
-      val typedColumnExpr = TypedAggUtils.withInputType(asTyped, any, ds.dataAttributes)
+      val typedColumnExpr = TypedAggUtils.withInputType(asTyped, any, finalDS.dataAttributes)
       Column(typedColumnExpr).named
     }
-    logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
+    logical.Aggregate(finalDS.groupingAttributes, keyColumn +: namedColumns, finalDS.analyzed)
   }
 
   private def transformRelationalGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
@@ -2252,8 +2221,9 @@ class SparkConnectPlanner(
     val input = transformRelation(rel.getInput)
 
     val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
-    val aggExprs = rel.getAggregateExpressionsList.asScala.toSeq
-      .map(expr => transformExpressionWithTypedReduceExpression(expr, input))
+    val aggExprs = transformExpressionsWithTypedUnresolvedExpression(
+      rel.getAggregateExpressionsList.asScala.toSeq,
+      input)._1
     val aliasedAgg = (groupingExprs ++ aggExprs).map(toNamedExpression)
 
     rel.getGroupType match {
@@ -2316,7 +2286,7 @@ class SparkConnectPlanner(
       dataAttributes: Seq[Attribute]): Expression = {
     assert(fun.getFunctionName == "reduce")
     if (fun.getArgumentsCount != 1) {
-      throw InvalidPlanInput("reduce requires single child expression")
+      throw InvalidPlanInput("reduce requires a single child expression")
     }
     val udf = fun.getArgumentsList.asScala match {
       case collection.Seq(e)
@@ -2331,16 +2301,62 @@ class SparkConnectPlanner(
     TypedAggUtils.withInputType(reduce, encoderFor(encoder), dataAttributes)
   }
 
-  private def transformExpressionWithTypedReduceExpression(
-      expr: proto.Expression,
-      plan: LogicalPlan): Expression = {
-    expr.getExprTypeCase match {
-      case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
-          if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
-        // The reduce func needs the input data attribute, thus handle it specially here
-        transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
-      case _ => transformExpression(expr, Some(plan))
+  private def transformTypedMapValuesExpression(
+      fun: proto.Expression.UnresolvedFunction,
+      initialDS: UntypedKeyValueGroupedDataset
+  ): (UntypedKeyValueGroupedDataset, Seq[Expression]) = {
+    require(fun.getFunctionName == "map_values")
+    if (fun.getArgumentsCount <= 1) {
+      throw InvalidPlanInput("map_values requires a single child expression")
     }
+    val udfExpr = fun.getArgumentsList.get(0)
+    val otherExprs = fun.getArgumentsList.asScala.drop(1)
+    if (!udfExpr.hasCommonInlineUserDefinedFunction ||
+      !udfExpr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf) {
+      throw InvalidPlanInput(s"map_values should carry a scalar scala udf, but got $udfExpr")
+    }
+    val udf = TypedScalaUdf(udfExpr.getCommonInlineUserDefinedFunction, None)
+
+    // Recompute the dataset's logical plan and data attributes after applying the mapFunc.
+    val withNewData = AppendColumns(
+      udf.function,
+      udf.inEnc,
+      udf.outEnc,
+      initialDS.analyzed,
+      initialDS.dataAttributes)
+    val projected = Project(withNewData.newColumns ++ initialDS.groupingAttributes, withNewData)
+    val analyzed = session.sessionState.executePlan(projected).analyzed
+    val finalDS = initialDS.copy(
+      vEncoder = udf.outEnc,
+      analyzed = analyzed,
+      dataAttributes = withNewData.newColumns)
+    (finalDS, otherExprs.map(transformExpression).toSeq)
+  }
+
+  private def transformExpressionsWithTypedUnresolvedExpression(
+      exprs: Seq[proto.Expression],
+      plan: LogicalPlan,
+      initialDS: Option[UntypedKeyValueGroupedDataset] = None
+  ): (Seq[Expression], Option[UntypedKeyValueGroupedDataset]) = {
+    var modifiedDS = initialDS
+    val transformedExprs = exprs.flatMap { expr =>
+      if (expr.hasUnresolvedFunction) {
+        expr.getUnresolvedFunction.getFunctionName match {
+          case "reduce" =>
+            Some(transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output))
+          case "map_values" =>
+            val (ds, otherExprs) =
+              transformTypedMapValuesExpression(expr.getUnresolvedFunction, initialDS.get)
+            modifiedDS = Some(ds)
+            otherExprs
+          case _ =>
+            Some(transformExpression(expr, Some(plan)))
+        }
+      } else {
+        Some(transformExpression(expr, Some(plan)))
+      }
+    }
+    (transformedExprs, modifiedDS)
   }
 
   private def transformTypedAggregateExpression(
