@@ -41,6 +41,12 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       cause = Option(cause))
   }
 
+  def describeJsonNotExtendedError(): AnalysisException = {
+    new AnalysisException(
+      errorClass = "DESCRIBE_JSON_NOT_EXTENDED",
+      messageParameters = Map.empty)
+  }
+
   def cannotFindDescriptorFileError(filePath: String, cause: Throwable): AnalysisException = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",

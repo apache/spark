@@ -154,21 +154,36 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
     case DescribeRelation(
-         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
-      DescribeTableCommand(ident, partitionSpec, isExtended, output)
+        ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, asJson, output) =>
+      if (asJson) {
+        if (!isExtended) {
+          throw QueryCompilationErrors.describeJsonNotExtendedError()
+        }
+        DescribeTableJsonCommand(ident, partitionSpec, isExtended)
+      } else DescribeTableCommand(ident, partitionSpec, isExtended, output)
 
     case DescribeColumn(
-         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
+         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, asJson, output) =>
       // For views, the column will not be resolved by `ResolveReferences` because
       // `ResolvedView` stores only the identifier.
-      DescribeColumnCommand(ident, column.nameParts, isExtended, output)
+      if (asJson) {
+        if (!isExtended) {
+          throw QueryCompilationErrors.describeJsonNotExtendedError()
+        }
+        DescribeColumnJsonCommand(ident, column.nameParts, isExtended)
+      } else DescribeColumnCommand(ident, column.nameParts, isExtended, output)
 
-    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
+    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, asJson, output) =>
       column match {
         case u: UnresolvedAttribute =>
           throw QueryCompilationErrors.columnNotFoundError(u.name)
         case a: Attribute =>
-          DescribeColumnCommand(ident, a.qualifier :+ a.name, isExtended, output)
+          if (asJson) {
+            if (!isExtended) {
+              throw QueryCompilationErrors.describeJsonNotExtendedError()
+            }
+            DescribeColumnJsonCommand(ident, a.qualifier :+ a.name, isExtended)
+          } else DescribeColumnCommand(ident, a.qualifier :+ a.name, isExtended, output)
         case Alias(child, _) =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(child))

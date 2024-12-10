@@ -29,7 +29,7 @@ to return the metadata pertaining to a partition or column respectively.
 ### Syntax
 
 ```sql
-{ DESC | DESCRIBE } [ TABLE ] [ format ] table_identifier [ partition_spec ] [ col_name ]
+{ DESC | DESCRIBE } [ TABLE ] [ format ] table_identifier [ partition_spec ] [ col_name ] [ AS JSON ]
 ```
 
 ### Parameters
@@ -38,7 +38,8 @@ to return the metadata pertaining to a partition or column respectively.
 
     Specifies the optional format of describe output. If `EXTENDED` is specified
     then additional metadata information (such as parent database, owner, and access time)
-    is returned. 
+    is returned. If `EXTENDED` is specified, then the metadata can be returned in JSON format 
+    by specifying `AS JSON` at the end of the statement.
 
 * **table_identifier**
 
@@ -173,6 +174,10 @@ DESCRIBE customer salesdb.customer.name;
 |data_type|    string|
 |  comment|Short name|
 +---------+----------+
+
+-- Returns the table metadata in JSON format.
+DESC FORMATTED customer AS JSON;
+{"table_name":"customer","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.customer","columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "[not included in comparison]/{warehouse_dir}/customer","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
 ```
 
 ### Related Statements

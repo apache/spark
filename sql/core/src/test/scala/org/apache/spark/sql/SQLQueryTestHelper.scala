@@ -63,6 +63,25 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
   }
 
+  protected def replaceNotIncludedMsgJson(line: String): String = {
+    line.replaceAll("#\\d+", "#x")
+      .replaceAll("plan_id=\\d+", "plan_id=x")
+      .replaceAll(
+        s""""location":.*?$clsName/""",
+        s""""location": "$notIncludedMsg/{warehouse_dir}/""")
+      .replaceAll(s"""file:[^\\s,]*$clsName""", s"""file:$notIncludedMsg/{warehouse_dir}""")
+      .replaceAll(s""""created_by":".*?"""", s""""created_by $notIncludedMsg":"None"""")
+      .replaceAll(s""""created_time":".*?"""", s""""created_time $notIncludedMsg":"None"""")
+      .replaceAll(s""""last_access":".*?"""", s""""last_access $notIncludedMsg":"None"""")
+      .replaceAll(s""""owner":".*?"""", s""""owner $notIncludedMsg":"None"""")
+      .replaceAll(s""""partition_statistics":"\\d+"""",
+        s""""partition_statistics $notIncludedMsg":"None"""")
+      .replaceAll("CTERelationDef \\d+,", "CTERelationDef xxxx,")
+      .replaceAll("CTERelationRef \\d+,", "CTERelationRef xxxx,")
+      .replaceAll("@\\w*,", "@xxxxxxxx,")
+      .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
+  }
+
   /**
    * Analyzes a query and returns the result as (schema of the output, normalized resolved plan
    * tree string representation).
@@ -125,8 +144,14 @@ trait SQLQueryTestHelper extends Logging {
     val df = session.sql(sql)
     val schema = df.schema.catalogString
     // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-    val answer = SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
-      hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
+    val answer = if (sql.contains("AS JSON")) {
+      SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
+        hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsgJson)
+      }
+    } else {
+      SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
+          hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
+      }
     }
 
     // If the output is not pre-sorted, sort it.

@@ -144,9 +144,7 @@ class AstBuilder extends DataTypeAstBuilder
 
   override def visitSingleCompoundStatement(ctx: SingleCompoundStatementContext): CompoundBody = {
     val labelCtx = new SqlScriptingLabelContext()
-    Option(ctx.compoundBody())
-      .map(visitCompoundBodyImpl(_, None, allowVarDeclare = true, labelCtx))
-      .getOrElse(CompoundBody(Seq.empty, None))
+    visitCompoundBodyImpl(ctx.compoundBody(), None, allowVarDeclare = true, labelCtx)
   }
 
   private def visitCompoundBodyImpl(
@@ -193,9 +191,12 @@ class AstBuilder extends DataTypeAstBuilder
       labelCtx: SqlScriptingLabelContext): CompoundBody = {
     val labelText =
       labelCtx.enterLabeledScope(Option(ctx.beginLabel()), Option(ctx.endLabel()))
-    val body = Option(ctx.compoundBody())
-      .map(visitCompoundBodyImpl(_, Some(labelText), allowVarDeclare = true, labelCtx))
-      .getOrElse(CompoundBody(Seq.empty, Some(labelText)))
+    val body = visitCompoundBodyImpl(
+      ctx.compoundBody(),
+      Some(labelText),
+      allowVarDeclare = true,
+      labelCtx
+    )
     labelCtx.exitLabeledScope(Option(ctx.beginLabel()))
     body
   }
@@ -5145,6 +5146,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
+    val asJson = ctx.JSON != null
     val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
@@ -5153,7 +5155,8 @@ class AstBuilder extends DataTypeAstBuilder
         DescribeColumn(
           relation,
           UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
-          isExtended)
+          isExtended,
+          asJson)
       }
     } else {
       val partitionSpec = if (ctx.partitionSpec != null) {
@@ -5166,7 +5169,7 @@ class AstBuilder extends DataTypeAstBuilder
       } else {
         Map.empty[String, String]
       }
-      DescribeRelation(relation, partitionSpec, isExtended)
+      DescribeRelation(relation, partitionSpec, isExtended, asJson)
     }
   }
 
@@ -5967,8 +5970,10 @@ class AstBuilder extends DataTypeAstBuilder
     // analyzer behave as if we had added the corresponding SQL clause after a table subquery
     // containing the input plan.
     def withSubqueryAlias(): LogicalPlan = left match {
-      case _: SubqueryAlias | _: UnresolvedRelation | _: Join | _: Filter =>
-        left
+      case s: SubqueryAlias =>
+        s
+      case u: UnresolvedRelation =>
+        u
       case _ =>
         SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
     }
@@ -6003,14 +6008,6 @@ class AstBuilder extends DataTypeAstBuilder
       Project(projectList, left)
     }.getOrElse(Option(ctx.SET).map { _ =>
       visitOperatorPipeSet(ctx, left)
-    }.getOrElse(Option(ctx.DROP).map { _ =>
-      val ids: Seq[String] = visitIdentifierSeq(ctx.identifierSeq())
-      val projectList: Seq[NamedExpression] =
-        Seq(UnresolvedStarExceptOrReplace(
-          target = None, excepts = ids.map(s => Seq(s)), replacements = None))
-      Project(projectList, left)
-    }.getOrElse(Option(ctx.AS).map { _ =>
-      SubqueryAlias(ctx.errorCapturingIdentifier().getText, left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
         throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)
@@ -6037,7 +6034,7 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, withSubqueryAlias(), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    ))))))))))))
+    ))))))))))
   }
 
   private def visitOperatorPipeSet(
@@ -6124,8 +6121,7 @@ class AstBuilder extends DataTypeAstBuilder
                 Seq("GROUPING", "GROUPING_ID").foreach { name =>
                   if (f.nameParts.head.equalsIgnoreCase(name)) error(name)
                 }
-              case _: WindowSpec => error("window functions; please update the query to move " +
-                "the window functions to a subsequent |> SELECT operator instead")
+              case _: WindowSpec => error("window functions")
               case _ =>
             }
             e.children.foreach(visit)

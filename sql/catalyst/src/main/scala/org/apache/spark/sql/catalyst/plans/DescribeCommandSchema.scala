@@ -21,17 +21,41 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
 private[sql] object DescribeCommandSchema {
-  def describeTableAttributes(): Seq[AttributeReference] = Seq(
-    AttributeReference("col_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("data_type", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "comment of the column").build())())
+  // TODO asl3: remove the unecessary attribute fields
+  def describeTableAttributes(asJson: Boolean): Seq[AttributeReference] = {
+    if (asJson) {
+      Seq(
+        AttributeReference("json_metadata", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "JSON metadata of the table").build())(),
+        AttributeReference("", StringType, nullable = true,
+          new MetadataBuilder().putString("", "").build())(),
+        AttributeReference("", StringType, nullable = true,
+          new MetadataBuilder().putString("", "").build())()
+      )
+    } else {
+      Seq(AttributeReference("col_name", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "name of the column").build())(),
+        AttributeReference("data_type", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "data type of the column").build())(),
+        AttributeReference("comment", StringType, nullable = true,
+          new MetadataBuilder().putString("comment", "comment of the column").build())())
+    }
+  }
 
-  def describeColumnAttributes(): Seq[AttributeReference] = Seq(
-    AttributeReference("info_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column info").build())(),
-    AttributeReference("info_value", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "value of the column info").build())())
+  def describeColumnAttributes(asJson: Boolean): Seq[AttributeReference] = {
+    if (asJson) {
+      Seq(
+        AttributeReference("json_metadata", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "JSON metadata of the column").build())(),
+        AttributeReference("", StringType, nullable = true,
+          new MetadataBuilder().putString("", "").build())()
+      )
+    } else {
+      Seq(
+        AttributeReference("info_name", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "name of the column info").build())(),
+        AttributeReference("info_value", StringType, nullable = false,
+          new MetadataBuilder().putString("comment", "value of the column info").build())())
+    }
+  }
 }

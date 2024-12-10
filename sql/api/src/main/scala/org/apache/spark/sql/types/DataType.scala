@@ -72,6 +72,34 @@ abstract class DataType extends AbstractDataType {
   /** The pretty (i.e. indented) JSON representation of this data type. */
   def prettyJson: String = pretty(render(jsonValue))
 
+  /** Util to recursively form JSON representation of data type, used for DESCRIBE AS JSON.
+   * Differs from `json` by adding additional fields for complex types. */
+  def jsonType: String = {
+    this match {
+      case arrayType: ArrayType =>
+        val elementTypeJson = arrayType.elementType.jsonType
+        s"""{"type": "array","elementType": $elementTypeJson,
+           |"containsNull": ${arrayType.containsNull}}""".stripMargin
+
+      case mapType: MapType =>
+        val keyTypeJson = mapType.keyType.jsonType
+        val valueTypeJson = mapType.valueType.jsonType
+        s"""{"type": "map","keyType": $keyTypeJson,"valueType": $valueTypeJson,
+           |"valueContainsNull": ${mapType.valueContainsNull}}""".stripMargin
+
+      case structType: StructType =>
+        val fieldsJson = structType.fields.map { field =>
+          val fieldTypeJson = field.dataType.jsonType
+          s"""{"name": "${field.name}", "type": $fieldTypeJson, "nullable": ${field.nullable}}"""
+        }.mkString(", ")
+        s"""{"type": "struct", "fields": [$fieldsJson]}"""
+
+      // Base case for simple types
+      case _ =>
+        s"""{"type": "$typeName"}"""
+    }
+  }
+
   /** Readable string representation for the type. */
   def simpleString: String = typeName
 
@@ -447,7 +475,7 @@ object DataType {
   private[sql] def equalsIgnoreCompatibleCollation(from: DataType, to: DataType): Boolean = {
     (from, to) match {
       // String types with possibly different collations are compatible.
-      case (a: StringType, b: StringType) => a.constraint == b.constraint
+      case (_: StringType, _: StringType) => true
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
