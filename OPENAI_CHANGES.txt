@@ -2,6 +2,7 @@
 
 - [SPARK-48392][CORE] Also load `spark-defaults.conf` when provided `--properties-file
 - [SPARK-49259][SS] Size based partition creation during kafka read
+- [WIP][SPARK-24815][CORE] Trigger Interval based DRA for Structured Streaming
 
 # From 3.5.x
 
