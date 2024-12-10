@@ -28,6 +28,10 @@ class ParserUtilsSuite extends SparkFunSuite {
 
   import ParserUtils._
 
+  val singleStatementContext = buildContext("set example.setting.name=setting.value;") { parser =>
+    parser.singleStatement().asInstanceOf[SingleStatementContext]
+  }
+
   val setConfContext = buildContext("set example.setting.name=setting.value") { parser =>
     parser.setResetStatement().asInstanceOf[SetConfigurationContext]
   }
@@ -147,6 +151,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("command") {
+    assert(command(singleStatementContext) == "set example.setting.name=setting.value;")
     assert(command(setConfContext) == "set example.setting.name=setting.value")
     assert(command(showFuncContext) == "show functions foo.bar")
     assert(command(descFuncContext) == "describe function extended bar")
@@ -177,6 +182,7 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("source") {
+    assert(source(singleStatementContext) == "set example.setting.name=setting.value;")
     assert(source(setConfContext) == "set example.setting.name=setting.value")
     assert(source(showFuncContext) == "show functions foo.bar")
     assert(source(descFuncContext) == "describe function extended bar")
@@ -184,15 +190,34 @@ class ParserUtilsSuite extends SparkFunSuite {
   }
 
   test("remainder") {
-    assert(remainder(setConfContext) == "")
-    assert(remainder(showFuncContext) == "")
-    assert(remainder(descFuncContext) == "")
-    assert(remainder(showDbsContext) == "")
+    assert(remainder(singleStatementContext, singleStatementContext) == "")
+    assert(remainder(setConfContext, setConfContext) == "")
+    assert(remainder(showFuncContext, showFuncContext) == "")
+    assert(remainder(descFuncContext, descFuncContext) == "")
+    assert(remainder(showDbsContext, showDbsContext) == "")
 
-    assert(remainder(setConfContext.SET.getSymbol) == " example.setting.name=setting.value")
-    assert(remainder(showFuncContext.FUNCTIONS.getSymbol) == " foo.bar")
-    assert(remainder(descFuncContext.EXTENDED.getSymbol) == " bar")
-    assert(remainder(showDbsContext.LIKE.getSymbol) == " 'identifier_with_wildcards'")
+    assert(remainder(
+      singleStatementContext
+        .setResetStatement()
+        .asInstanceOf[SetConfigurationContext]
+        .SET.getSymbol,
+      singleStatementContext)
+      == " example.setting.name=setting.value;")
+    assert(remainder(
+      singleStatementContext
+        .setResetStatement()
+        .asInstanceOf[SetConfigurationContext]
+        .SET.getSymbol,
+      singleStatementContext
+        .setResetStatement()
+        .asInstanceOf[SetConfigurationContext])
+      == " example.setting.name=setting.value")
+    assert(remainder(setConfContext.SET.getSymbol, setConfContext)
+      == " example.setting.name=setting.value")
+    assert(remainder(showFuncContext.FUNCTIONS.getSymbol, showFuncContext) == " foo.bar")
+    assert(remainder(descFuncContext.EXTENDED.getSymbol, descFuncContext) == " bar")
+    assert(remainder(showDbsContext.LIKE.getSymbol, showDbsContext)
+      == " 'identifier_with_wildcards'")
   }
 
   test("string") {
