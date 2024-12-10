@@ -2714,20 +2714,6 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    ctx.dataType() match {
-      case context: PrimitiveDataTypeContext =>
-        val typeCtx = context.`type`()
-        if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
-            case _ =>
-          }
-        }
-      case _ =>
-    }
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     ctx.name.getType match {
       case SqlBaseParser.CAST =>
@@ -2747,20 +2733,6 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCastByColon(ctx: CastByColonContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
-    ctx.dataType() match {
-      case context: PrimitiveDataTypeContext =>
-        val typeCtx = context.`type`()
-        if (typeCtx.start.getType == STRING) {
-          typeCtx.children.asScala.toSeq match {
-            case Seq(_, cctx: CollateClauseContext) =>
-              throw QueryParsingErrors.dataTypeUnsupportedError(
-                rawDataType.typeName,
-                ctx.dataType().asInstanceOf[PrimitiveDataTypeContext])
-            case _ =>
-          }
-        }
-      case _ =>
-    }
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     val cast = Cast(expression(ctx.primaryExpression), dataType)
     cast.setTagValue(Cast.USER_SPECIFIED_CAST, ())
