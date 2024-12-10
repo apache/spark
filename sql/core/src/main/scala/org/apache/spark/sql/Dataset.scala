@@ -1010,7 +1010,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 4.0.0
    */
-  def forTableFunction(): TableArg = {
+  def asTable(): TableArg = {
     new TableArg(
       FunctionTableSubqueryArgumentExpression(plan = logicalPlan),
       sparkSession
