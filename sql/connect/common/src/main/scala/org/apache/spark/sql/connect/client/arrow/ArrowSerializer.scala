@@ -42,6 +42,7 @@ import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.unsafe.types.VariantVal
 
 /**
  * Helper class for converting user objects into arrow batches.
@@ -433,6 +434,22 @@ object ArrowSerializer {
       case (RowEncoder(fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (_, i) => r => r.asInstanceOf[Row].get(i) }
 
+      case (VariantEncoder, StructVectors(struct, vectors)) =>
+        assert(vectors.exists(_.getName == "value"))
+        assert(
+          vectors.exists(field =>
+            field.getName == "metadata" && field.getField.getMetadata
+              .containsKey("variant") && field.getField.getMetadata.get("variant") == "true"))
+        new StructSerializer(
+          struct,
+          Seq(
+            new StructFieldSerializer(
+              extractor = (v: Any) => v.asInstanceOf[VariantVal].getValue,
+              serializerFor(BinaryEncoder, struct.getChild("value"))),
+            new StructFieldSerializer(
+              extractor = (v: Any) => v.asInstanceOf[VariantVal].getMetadata,
+              serializerFor(BinaryEncoder, struct.getChild("metadata")))))
+
       case (JavaBeanEncoder(tag, fields), StructVectors(struct, vectors)) =>
         structSerializerFor(fields, struct, vectors) { (field, _) =>
           val getter = methodLookup.findVirtual(
@@ -450,7 +467,7 @@ object ArrowSerializer {
             delegate.write(index, codec.encode(value))
         }
 
-      case (CalendarIntervalEncoder | VariantEncoder | _: UDTEncoder[_], _) =>
+      case (CalendarIntervalEncoder | _: UDTEncoder[_], _) =>
         throw ExecutionErrors.unsupportedDataTypeError(encoder.dataType)
 
       case _ =>
