@@ -72,6 +72,26 @@ d                   	string
 
 
 -- !query
+DESCRIBE EXTENDED t AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"t","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location": "[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+
+
+-- !query
+DESCRIBE t AS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DESCRIBE_JSON_NOT_EXTENDED",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
 DESC default.t
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -135,6 +155,14 @@ Partition Provider  	Catalog
 
 
 -- !query
+DESC FORMATTED t AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"t","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location": "[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+
+
+-- !query
 DESC EXTENDED t
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -165,6 +193,14 @@ Table Properties    	[e=3, password=*********(redacted), t=test]
 Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2, password=*********(redacted)]	                    
 Partition Provider  	Catalog
+
+
+-- !query
+DESC EXTENDED t AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"t","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location": "[not included in comparison]/{warehouse_dir}/t","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"e":"3","password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
 
 
 -- !query
@@ -264,6 +300,14 @@ d                   	string
 
 
 -- !query
+DESC EXTENDED t PARTITION (c='Us', d=1) AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"t","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"partition_values":{"c":"Us","d":"1"},"location": "[not included in comparison]/{warehouse_dir}/t/c=Us/d=1","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","bucket_columns":["a"],"sort_columns":["b"],"table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+
+
+-- !query
 DESC EXTENDED t PARTITION (c='Us', d=1)
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -357,7 +401,31 @@ Storage Properties  	[a=1, b=2, password=*********(redacted)]
 
 
 -- !query
+DESC EXTENDED t PARTITION (C='Us', D=1) AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"t","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"partition_values":{"c":"Us","d":"1"},"location": "[not included in comparison]/{warehouse_dir}/t/c=Us/d=1","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","bucket_columns":["a"],"sort_columns":["b"],"table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+
+
+-- !query
 DESC t PARTITION (c='Us', d=2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
+{
+  "errorClass" : "PARTITIONS_NOT_FOUND",
+  "sqlState" : "428FT",
+  "messageParameters" : {
+    "partitionList" : "PARTITION (`c` = Us, `d` = 2)",
+    "tableName" : "`default`.`t`"
+  }
+}
+
+
+-- !query
+DESC EXTENDED t PARTITION (c='Us', d=2) AS JSON
 -- !query schema
 struct<>
 -- !query output
@@ -419,6 +487,14 @@ a                   	string
 b                   	int                 	                    
 c                   	string              	                    
 d                   	string
+
+
+-- !query
+DESC EXTENDED temp_v AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}]}
 
 
 -- !query
@@ -542,6 +618,14 @@ View Query Output Columns	[a, b, c, d]
 
 
 -- !query
+DESC FORMATTED v AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"v","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.v","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"VIEW","view_text":"SELECT * FROM t","view_original_text":"SELECT * FROM t","view_schema_mode":"COMPENSATION","view_catalog_and_namespace":"spark_catalog.default","view_query_output_columns":["a","b","c","d"]}
+
+
+-- !query
 DESC EXTENDED v
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -594,6 +678,16 @@ Execute DescribeTableCommand
 
 
 -- !query
+EXPLAIN DESC EXTENDED t AS JSON
+-- !query schema
+struct<plan:string>
+-- !query output
+== Physical Plan ==
+Execute DescribeTableJsonCommand
+   +- DescribeTableJsonCommand `spark_catalog`.`default`.`t`, true
+
+
+-- !query
 EXPLAIN DESC EXTENDED t
 -- !query schema
 struct<plan:string>
@@ -609,7 +703,7 @@ EXPLAIN EXTENDED DESC t
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'DescribeRelation false, [col_name#x, data_type#x, comment#x]
+'DescribeRelation false, false, [col_name#x, data_type#x, comment#x]
 +- 'UnresolvedTableOrView [t], DESCRIBE TABLE, true
 
 == Analyzed Logical Plan ==
@@ -642,6 +736,16 @@ struct<plan:string>
 == Physical Plan ==
 Execute DescribeTableCommand
    +- DescribeTableCommand `spark_catalog`.`default`.`t`, [c=Us, d=2], false, [col_name#x, data_type#x, comment#x]
+
+
+-- !query
+EXPLAIN DESCRIBE EXTENDED t PARTITION (c='Us', d=2) AS JSON
+-- !query schema
+struct<plan:string>
+-- !query output
+== Physical Plan ==
+Execute DescribeTableJsonCommand
+   +- DescribeTableJsonCommand `spark_catalog`.`default`.`t`, [c=Us, d=2], true
 
 
 -- !query
@@ -748,6 +852,14 @@ b                   	int                 	42
 
 
 -- !query
+DESC TABLE EXTENDED d AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"d","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.d","columns":[{"id":1,"name":"a","type":{"type":"string"},"default_value":"'default-value'"},{"id":2,"name":"b","type":{"type":"integer"},"default_value":"42"}],"location": "[not included in comparison]/{warehouse_dir}/d","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment"}
+
+
+-- !query
 DESC FORMATTED d
 -- !query schema
 struct<col_name:string,data_type:string,comment:string>
@@ -791,6 +903,14 @@ b                   	int
 # Column Default Values	                    	                    
 a                   	string              	CONCAT('a\n b\n ', 'c\n d')
 b                   	int                 	42
+
+
+-- !query
+DESC EXTENDED e AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"e","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.e","columns":[{"id":1,"name":"a","type":{"type":"string"},"default_value":"CONCAT('a\n b\n ', 'c\n d')"},{"id":2,"name":"b","type":{"type":"integer"},"default_value":"42"}],"location": "[not included in comparison]/{warehouse_dir}/e","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment"}
 
 
 -- !query
@@ -866,3 +986,184 @@ Location [not included in comparison]/{warehouse_dir}/e
 # Column Default Values	                    	                    
 a                   	string              	CONCAT('a\n b\n ', 'c\n d')
 b                   	int                 	42
+
+
+-- !query
+DESC TABLE FORMATTED e AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"e","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.e","columns":[{"id":1,"name":"a","type":{"type":"string"},"default_value":"CONCAT('a\n b\n ', 'c\n d')"},{"id":2,"name":"b","type":{"type":"integer"},"default_value":"42"}],"location": "[not included in comparison]/{warehouse_dir}/e","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"table_comment"}
+
+
+-- !query
+CREATE TABLE t2 (
+    a STRING,
+    b INT,
+    c STRING,
+    d STRING
+)
+USING parquet
+OPTIONS (
+    a '1',
+    b '2',
+    password 'password'
+)
+PARTITIONED BY (c, d)
+CLUSTERED BY (a) SORTED BY (b ASC) INTO 2 BUCKETS
+COMMENT 'table_comment'
+TBLPROPERTIES (
+    t 'test',
+    password 'password'
+)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESC t2
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+a                   	string              	                    
+b                   	int                 	                    
+c                   	string              	                    
+d                   	string              	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+c                   	string              	                    
+d                   	string
+
+
+-- !query
+DESC FORMATTED t2 as json
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"t2","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.t2","columns":[{"id":1,"name":"a","type":{"type":"string"}},{"id":2,"name":"b","type":{"type":"integer"}},{"id":3,"name":"c","type":{"type":"string"}},{"id":4,"name":"d","type":{"type":"string"}}],"bucket_columns":["a"],"sort_columns":["b"],"location":"file:[not included in comparison]/{warehouse_dir}/t2","storage_properties":{"a":"1","b":"2","password":"*********(redacted)"},"created_time":"2024-12-10T22:02:40.908Z","last_access":"UNKNOWN","created_by":"Spark 4.0.0-SNAPSHOT","type":"MANAGED","provider":"parquet","comment":"table_comment","table_properties":{"password":"*********(redacted)","t":"test"},"partition_provider":"Catalog","partition_columns":["c","d"]}
+
+
+-- !query
+CREATE TABLE c (
+  id STRING,
+  nested_struct STRUCT<
+    name: STRING,
+    age: INT,
+    contact: STRUCT<
+      email: STRING,
+      phone_numbers: ARRAY<STRING>,
+      addresses: ARRAY<STRUCT<
+        street: STRING,
+        city: STRING,
+        zip: INT
+      >>
+    >
+  >,
+  preferences MAP<STRING, ARRAY<STRING>>
+) USING parquet
+  OPTIONS (option1 'value1', option2 'value2')
+  PARTITIONED BY (id)
+  COMMENT 'A table with nested complex types'
+  TBLPROPERTIES ('property1' = 'value1', 'password' = 'password')
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESC FORMATTED c AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"c","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.c","columns":[{"id":1,"name":"nested_struct","type":{"type":"struct","fields":[{"name":"name","type":{"type":"string"},"nullable":true},{"name":"age","type":{"type":"integer"},"nullable":true},{"name":"contact","type":{"type":"struct","fields":[{"name":"email","type":{"type":"string"},"nullable":true},{"name":"phone_numbers","type":{"type":"array","elementType":{"type":"string"},"containsNull":true},"nullable":true},{"name":"addresses","type":{"type":"array","elementType":{"type":"struct","fields":[{"name":"street","type":{"type":"string"},"nullable":true},{"name":"city","type":{"type":"string"},"nullable":true},{"name":"zip","type":{"type":"integer"},"nullable":true}]},"containsNull":true},"nullable":true}]},"nullable":true}]}},{"id":2,"name":"preferences","type":{"type":"map","keyType":{"type":"string"},"valueType":{"type":"array","elementType":{"type":"string"},"containsNull":true},"valueContainsNull":true}},{"id":3,"name":"id","type":{"type":"string"}}],"location": "[not included in comparison]/{warehouse_dir}/c","storage_properties":{"option1":"value1","option2":"value2"},"created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","comment":"A table with nested complex types","table_properties":{"password":"*********(redacted)","property1":"value1"},"partition_provider":"Catalog","partition_columns":["id"]}
+
+
+-- !query
+CREATE TABLE customer(
+        cust_id INT,
+        state VARCHAR(20),
+        name STRING COMMENT "Short name"
+    )
+    USING parquet
+    PARTITIONED BY (state)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO customer PARTITION (state = "AR") VALUES (100, "Mike")
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESC FORMATTED customer
+-- !query schema
+struct<col_name:string,data_type:string,comment:string>
+-- !query output
+cust_id             	int                 	                    
+name                	string              	Short name          
+state               	varchar(20)         	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+state               	varchar(20)         	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Catalog             	spark_catalog       	                    
+Database            	default             	                    
+Table               	customer            	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/customer	                    
+Partition Provider  	Catalog
+
+
+-- !query
+DESC FORMATTED customer AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"table_name":"customer","catalog_names":["spark_catalog"],"database_names":["default"],"qualified_name":"spark_catalog.default.customer","columns":[{"id":1,"name":"cust_id","type":{"type":"integer"}},{"id":2,"name":"name","type":{"type":"string"},"comment":"Short name"},{"id":3,"name":"state","type":{"type":"varchar(20)"}}],"location": "[not included in comparison]/{warehouse_dir}/customer","created_time [not included in comparison]":"None","last_access [not included in comparison]":"None","created_by [not included in comparison]":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
+
+
+-- !query
+ANALYZE TABLE customer COMPUTE STATISTICS FOR COLUMNS cust_id
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE FORMATTED customer customer.cust_id
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+col_name	cust_id
+data_type	int
+comment	NULL
+min	100
+max	100
+num_nulls	0
+distinct_count	1
+avg_col_len	4
+max_col_len	4
+histogram	NULL
+
+
+-- !query
+DESCRIBE FORMATTED customer customer.cust_id AS JSON
+-- !query schema
+struct<json_metadata:string,:string,:string>
+-- !query output
+{"avg_col_len":"4","max_col_len":"4","num_nulls":"0","col_name":"cust_id","min":"100","data_type":"int","max":"100","distinct_count":"1"}

@@ -167,10 +167,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       // For views, the column will not be resolved by `ResolveReferences` because
       // `ResolvedView` stores only the identifier.
       if (asJson) {
-        if (!isExtended) {
-          throw QueryCompilationErrors.describeJsonNotExtendedError()
-        }
-        DescribeColumnJsonCommand(ident, column.nameParts, isExtended)
+        throw QueryCompilationErrors.describeColJsonUnsupportedError()
       } else DescribeColumnCommand(ident, column.nameParts, isExtended, output)
 
     case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, asJson, output) =>
@@ -179,10 +176,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.columnNotFoundError(u.name)
         case a: Attribute =>
           if (asJson) {
-            if (!isExtended) {
-              throw QueryCompilationErrors.describeJsonNotExtendedError()
-            }
-            DescribeColumnJsonCommand(ident, a.qualifier :+ a.name, isExtended)
+            throw QueryCompilationErrors.describeColJsonUnsupportedError()
           } else DescribeColumnCommand(ident, a.qualifier :+ a.name, isExtended, output)
         case Alias(child, _) =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(

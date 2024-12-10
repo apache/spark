@@ -702,16 +702,15 @@ case class DescribeColumn(
     column: Expression,
     isExtended: Boolean,
     asJson: Boolean = false,
-    override val output: Seq[Attribute] = DescribeColumn.getOutputAttrs(false))
-  extends UnaryCommand {
+    override val output: Seq[Attribute] = DescribeColumn.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = relation
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeColumn =
     copy(relation = newChild)
 }
 
 object DescribeColumn {
-  def getOutputAttrs(asJson: Boolean): Seq[Attribute] =
-    DescribeCommandSchema.describeColumnAttributes(asJson)
+  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
+
 }
 
 /**

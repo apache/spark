@@ -47,6 +47,12 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       messageParameters = Map.empty)
   }
 
+  def describeColJsonUnsupportedError(): AnalysisException = {
+    new AnalysisException(
+      errorClass = "DESCRIBE_COL_JSON_UNSUPPORTED",
+      messageParameters = Map.empty)
+  }
+
   def cannotFindDescriptorFileError(filePath: String, cause: Throwable): AnalysisException = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
