@@ -1581,26 +1581,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     //   at org.apache.spark.util.UtilsSuite.$anonfun$new$165(UtilsSuite.scala:1658)
     //   ... 56 more
     // scalastyle:on line.size.limit
-    val origSt = e1.getSuppressed.find(
-      _.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE)
+    val origSt = e1.getSuppressed.find(_.isInstanceOf[Utils.OriginalTryStackTraceException])
     assert(origSt.isDefined)
     assert(origSt.get.getStackTrace.exists(_.getMethodName == "throwException"))
     assert(origSt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
 
-    // The stack trace under Try should be in the suppressed exceptions.
-    // Example:
-    // Suppressed: java.lang.Exception: Stacktrace under doTryWithCallerStacktrace
-    //   at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala: 1640)
-    //   at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala: 1645)
-    //   at scala.util.Try$.apply(Try.scala: 213)
-    //   at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala: 1586)
-    val trySt = e1.getSuppressed.find(
-      _.getMessage == Utils.TRY_WITH_CALLER_STACKTRACE_TRY_STACKTRACE)
-    assert(trySt.isDefined)
-    // calls under callDoTry should be present.
-    assert(trySt.get.getStackTrace.exists(_.getMethodName == "throwException"))
-    // callDoTry should be removed.
-    assert(!trySt.get.getStackTrace.exists(_.getMethodName == "callDoTry"))
+    // Should save the depth of the stack trace under doTryWithCallerStacktrace.
+    assert(origSt.get.asInstanceOf[Utils.OriginalTryStackTraceException]
+      .doTryWithCallerStacktraceDepth == 4)
 
     val e2 = intercept[Exception] {
       callGetTryAgain(t)
@@ -1632,6 +1620,152 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val st1Again = e1.getStackTrace
     assert(st1Again.exists(_.getMethodName == "callGetTryAgain"))
     assert(!st1Again.exists(_.getMethodName == "callGetTry"))
+  }
+
+  private def callGetTryFromNested(t: Try[String]): String = {
+    Utils.getTryWithCallerStacktrace(t)
+  }
+
+  private def callDoTryNested(): Try[String] = {
+    Utils.doTryWithCallerStacktrace {
+      val t = callDoTry()
+      val e = intercept[Exception] {
+        callGetTryFromNested(t)
+      }
+
+      // Uncomment for manual inspection
+      //
+      // println("\nIntercepted in callDoTryNested:")
+      // e.printStackTrace()
+      //
+      // scalastyle:off line.size.limit
+      // java.lang.Exception: test
+      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1438)
+      // ----> at org.apache.spark.util.UtilsSuite.callGetTryFromNested(UtilsSuite.scala:1626) <---- STITCHED.
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$2(UtilsSuite.scala:1633)
+      //  at org.scalatest.Assertions.intercept(Assertions.scala:749)
+      //  at org.scalatest.Assertions.intercept$(Assertions.scala:746)
+      //  at org.scalatest.funsuite.AnyFunSuite.intercept(AnyFunSuite.scala:1564)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1632)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTryNested(UtilsSuite.scala:1630)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNestedNested$1(UtilsSuite.scala:1655)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTryNestedNested(UtilsSuite.scala:1654)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1674)
+      // ...
+      // Suppressed: org.apache.spark.util.Utils$OriginalTryStackTraceException: Full stacktrace of original doTryWithCallerStacktrace caller
+      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
+      //  ...
+      // scalastyle:on line.size.limit
+
+      assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
+      assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
+      assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
+      assert(e.getSuppressed.length == 1)
+
+      Utils.getTryWithCallerStacktrace(t)
+    }
+  }
+
+  private def callGetTryFromNestedNested(t: Try[String]): String = {
+    Utils.getTryWithCallerStacktrace(t)
+  }
+
+  private def callDoTryNestedNested(): Try[String] = {
+    Utils.doTryWithCallerStacktrace {
+      val t = callDoTryNested()
+      val e = intercept[Exception] {
+        callGetTryFromNestedNested(t)
+      }
+
+      // Uncomment for manual inspection
+      //
+      // println("\nIntercepted in callDoTryNestedNested:")
+      // e.printStackTrace()
+      //
+      // scalastyle:off line.size.limit
+      // java.lang.Exception: test
+      //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1438)
+      // ----> at org.apache.spark.util.UtilsSuite.callGetTryFromNestedNested(UtilsSuite.scala:1650) <---- STITCHED.
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNestedNested$2(UtilsSuite.scala:1657)
+      //  at org.scalatest.Assertions.intercept(Assertions.scala:749)
+      //  at org.scalatest.Assertions.intercept$(Assertions.scala:746)
+      //  at org.scalatest.funsuite.AnyFunSuite.intercept(AnyFunSuite.scala:1564)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNestedNested$1(UtilsSuite.scala:1656)
+      //  at scala.util.Try$.apply(Try.scala:217)
+      //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+      //  at org.apache.spark.util.UtilsSuite.callDoTryNestedNested(UtilsSuite.scala:1654)
+      //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1674)
+      // scalastyle:on line.size.limit
+
+      assert(e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
+      assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
+      assert(!e.getStackTrace.exists(_.getMethodName == "callGetTry"))
+      assert(e.getSuppressed.length == 1)
+
+      Utils.getTryWithCallerStacktrace(t)
+    }
+  }
+
+  test("nested doTryWithCallerStacktrace and getTryWithCallerStacktrace") {
+    val t = callDoTryNestedNested()
+
+    val e = intercept[Exception] {
+      callGetTry(t)
+    }
+
+    // Uncomment for manual inspection
+    //
+    // println("\nIntercepted in test:")
+    // e.printStackTrace()
+    //
+    // scalastyle:off line.size.limit
+    // java.lang.Exception: test
+    //  at org.apache.spark.util.UtilsSuite.throwException(UtilsSuite.scala:1529)
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTry$1(UtilsSuite.scala:1534)
+    //  at scala.util.Try$.apply(Try.scala:217)
+    //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+    //  at org.apache.spark.util.UtilsSuite.callDoTry(UtilsSuite.scala:1534)
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNested$1(UtilsSuite.scala:1631)
+    //  at scala.util.Try$.apply(Try.scala:217)
+    //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+    //  at org.apache.spark.util.UtilsSuite.callDoTryNested(UtilsSuite.scala:1630)
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$callDoTryNestedNested$1(UtilsSuite.scala:1655)
+    //  at scala.util.Try$.apply(Try.scala:217)
+    //  at org.apache.spark.util.Utils$.doTryWithCallerStacktrace(Utils.scala:1377)
+    //  at org.apache.spark.util.Utils$.getTryWithCallerStacktrace(Utils.scala:1438)
+    // ---->  at org.apache.spark.util.UtilsSuite.callGetTry(UtilsSuite.scala:1539) <---- STITCHED.
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$new$173(UtilsSuite.scala:1677)
+    //  at org.scalatest.Assertions.intercept(Assertions.scala:749)
+    //  at org.scalatest.Assertions.intercept$(Assertions.scala:746)
+    //  at org.scalatest.funsuite.AnyFunSuite.intercept(AnyFunSuite.scala:1564)
+    //  at org.apache.spark.util.UtilsSuite.$anonfun$new$172(UtilsSuite.scala:1676)
+    // scalastyle:on line.size.limit
+
+    assert(e.getStackTrace.exists(_.getMethodName == "callGetTry"))
+    assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNested"))
+    assert(!e.getStackTrace.exists(_.getMethodName == "callGetTryFromNestedNested"))
+    assert(e.getSuppressed.length == 1)
   }
 }
 
