@@ -21,7 +21,7 @@ import java.util.Properties
 
 import scala.collection.mutable.ArrayBuffer
 
-import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -280,6 +280,28 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
 
     assert(metricsSystem.invokePrivate(sinks()).length === 1)
+  }
+
+  test("MetricsSystem registers dynamically added metrics") {
+    val registry = new MetricRegistry()
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val instanceName = "testInstance"
+    val metricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, registry)
+    metricsSystem.registerSource(source)
+    assert(!registry.getNames.contains("dummySource.newMetric"), "Metric shouldn't be registered")
+
+    source.metricRegistry.register(
+      "newMetric",
+      new Gauge[Integer] {
+        override def getValue: Integer = 1
+      })
+    assert(
+      registry.getNames.contains("dummySource.newMetric"),
+      "Metric should have been registered")
   }
 }
 
