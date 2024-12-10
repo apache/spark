@@ -96,6 +96,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     case _ => None
   }
 
+  protected def variantExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
+    plan match {
+      case r: RepartitionByExpression =>
+        r.partitionExpressions.find(e => hasVariantType(e.dataType))
+      case _ => None
+    }
+
   private def checkLimitLikeClause(name: String, limitExpr: Expression): Unit = {
     limitExpr match {
       case e if !e.foldable => limitExpr.failAnalysis(
@@ -482,6 +489,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               errorClass = "UNBOUND_SQL_PARAMETER",
               messageParameters = Map("name" -> p.name))
 
+          case ma @ MultiAlias(child, names) if child.resolved && !child.isInstanceOf[Generator] =>
+            ma.failAnalysis(
+              errorClass = "MULTI_ALIAS_WITHOUT_GENERATOR",
+              messageParameters = Map("expr" -> toSQLExpr(child), "names" -> names.mkString(", ")))
           case _ =>
         })
 
@@ -848,6 +859,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
               messageParameters = Map(
                 "colName" -> toSQLId(variantCol.name),
                 "dataType" -> toSQLType(variantCol.dataType)))
+
+          case o if variantExprInPartitionExpression(o).isDefined =>
+            val variantExpr = variantExprInPartitionExpression(o).get
+            o.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_VARIANT",
+              messageParameters = Map(
+                "expr" -> variantExpr.sql,
+                "dataType" -> toSQLType(variantExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
@@ -1615,9 +1634,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
             case (CharType(l1), CharType(l2)) => l1 == l2
             case (CharType(l1), VarcharType(l2)) => l1 <= l2
             case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
-            case _ =>
-              Cast.canUpCast(from, to) ||
-                DataType.equalsIgnoreCompatibleCollation(field.dataType, newDataType)
+            case _ => Cast.canUpCast(from, to)
           }
           if (!canAlterColumnType(field.dataType, newDataType)) {
             alter.failAnalysis(
