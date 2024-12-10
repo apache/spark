@@ -221,6 +221,15 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val QUOTE_HIVE_STRUCT_FIELD_NAME =
+    buildConf("spark.sql.hive.quoteHiveStructFieldName")
+      .doc("When true, for a column defined in struct type, when it contains special characters " +
+        "in the field name, Spark will quote it for verification. E.g. struct<x:int,y.z:int>" +
+        " is read as struct<`x`:int,`y.z`:int> for verification.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
    * this does not necessarily need to be the same version of Hive that is used internally by
