@@ -72,6 +72,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var packagesExclusions: String = null
   var verbose: Boolean = false
   var isPython: Boolean = false
+  var isRemote: Boolean = false
   var pyFiles: String = null
   var isR: Boolean = false
   var action: SparkSubmitAction = null
@@ -492,6 +493,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       }
     isPython = SparkSubmit.isPython(opt)
     isR = SparkSubmit.isR(opt)
+    isRemote = SparkSubmit.isRemote(opt)
     false
   }
 

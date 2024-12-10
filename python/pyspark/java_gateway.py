@@ -69,6 +69,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
         if conf:
             for k, v in conf.getAll():
                 command += ["--conf", "%s=%s" % (k, v)]
+        command += ["--conf", "spark.api.mode=classic"]
         submit_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
         if os.environ.get("SPARK_TESTING"):
             submit_args = " ".join(["--conf spark.ui.enabled=false", submit_args])
