@@ -4546,6 +4546,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val VARIANT_ALLOW_READING_SHREDDED =
+    buildConf("spark.sql.variant.allowReadingShredded")
+      .internal()
+      .doc("When true, the Parquet reader is allowed to read shredded or unshredded variant. " +
+        "When false, it only reads unshredded variant.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
       .internal()

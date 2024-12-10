@@ -179,7 +179,12 @@ class ParquetToSparkSchemaConverter(
     field match {
       case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, targetType)
       case groupColumn: GroupColumnIO if targetType.contains(VariantType) =>
-        convertVariantField(groupColumn)
+        if (SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED)) {
+          val col = convertGroupField(groupColumn)
+          col.copy(sparkType = VariantType, variantFileType = Some(col))
+        } else {
+          convertVariantField(groupColumn)
+        }
       case groupColumn: GroupColumnIO => convertGroupField(groupColumn, targetType)
     }
   }
