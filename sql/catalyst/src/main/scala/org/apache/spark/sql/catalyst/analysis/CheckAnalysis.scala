@@ -192,6 +192,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
     )
   }
 
+  private def isContainsUnsupportedLCA(e: Expression, operator: LogicalPlan): Boolean = {
+    e.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE) && operator.expressions.exists {
+      case a: Alias
+        if e.collect { case l: LateralColumnAliasReference => l.nameParts.head }.contains(a.name) =>
+        a.exists(_.isInstanceOf[Generator])
+      case _ => false
+    }
+  }
+
   /**
    * Checks for errors in a `SELECT` clause, such as a trailing comma or an empty select list.
    *
@@ -359,6 +368,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           // surrounded with single quotes, or there is a typo in the attribute name.
           case GetMapValue(map, key: Attribute) if isMapWithStringKey(map) && !key.resolved =>
             failUnresolvedAttribute(operator, key, "UNRESOLVED_MAP_KEY")
+
+          case e: Expression if isContainsUnsupportedLCA(e, operator) =>
+            val lcaRefNames =
+              e.collect { case lcaRef: LateralColumnAliasReference => lcaRef.name }.distinct
+            failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GENERATOR",
+              messageParameters =
+                Map("lca" -> toSQLId(lcaRefNames), "generatorExpr" -> toSQLExpr(e)))
         }
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
