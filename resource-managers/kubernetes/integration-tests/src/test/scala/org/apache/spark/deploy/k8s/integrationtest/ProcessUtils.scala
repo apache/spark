@@ -44,7 +44,10 @@ object ProcessUtils extends Logging {
     Utils.tryWithResource(proc.getInputStream)(
       Source.fromInputStream(_, StandardCharsets.UTF_8.name()).getLines().foreach { line =>
         if (dumpOutput) {
+          // scalastyle:off println
+          println(line)
           logInfo(line)
+          // scalastyle:on println
         }
         outputLines += line
       })

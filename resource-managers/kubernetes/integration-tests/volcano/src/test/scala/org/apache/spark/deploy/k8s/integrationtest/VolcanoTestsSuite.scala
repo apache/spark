@@ -264,7 +264,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       )
     } else {
       // scalastyle:off println
-      println(s"runSparkPiAndVerifyCompletion ...  " +
+      println(s"Successfully runSparkPiAndVerifyCompletion, " +
         s"podName: $podName, appLoc: $appLoc, " +
         s"groupLoc: $groupLoc, queue: $queue, " +
         s"driverTemplate: $driverTemplate, driverPodGroupTemplate: $driverPodGroupTemplate")
