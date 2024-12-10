@@ -548,7 +548,10 @@ class AstBuilder extends DataTypeAstBuilder
         optionalMap(body.queryOrganization)(withQueryResultClauses(_, _, forPipeOperators = false))
     }
     // If there are multiple SELECT just UNION them together into one query.
-    if (selects.length == 1) {
+    if (selects.length == 0) {
+      // This is a "FROM <tableName>" clause with no other syntax.
+      from
+    } else if (selects.length == 1) {
       selects.head
     } else {
       Union(selects.toSeq)
