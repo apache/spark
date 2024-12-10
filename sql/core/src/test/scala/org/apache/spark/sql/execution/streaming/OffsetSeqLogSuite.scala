@@ -129,4 +129,20 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     val log = new OffsetSeqLog(spark, input.toString)
     log.getLatest().get
   }
+
+  // SPARK-50526 - sanity tests to ensure that values are set correctly for state store
+  // encoding format within OffsetSeqMetadata
+  test("offset log records defaults to unsafeRow for store encoding format") {
+    val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
+      spark.conf)
+    assert(offsetSeqMetadata.conf.get(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key) ===
+      Some("unsaferow"))
+  }
+
+  test("offset log uses the store encoding format set in the conf") {
+    val offsetSeqMetadata = OffsetSeqMetadata.apply(batchWatermarkMs = 0, batchTimestampMs = 0,
+      Map(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "avro"))
+    assert(offsetSeqMetadata.conf.get(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key) ===
+      Some("avro"))
+  }
 }
