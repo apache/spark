@@ -1084,6 +1084,18 @@ class BaseUDTFTestsMixin:
                 Row(key=2, value="c"),
                 Row(key=2, value="d"),
             ],
+            checkRowOrder=True,
+        )
+
+        assertDataFrameEqual(
+            func(df.asTable().partitionBy(df.key).orderBy(df.value.desc())),
+            [
+                Row(key=1, value="b"),
+                Row(key=1, value="a"),
+                Row(key=2, value="d"),
+                Row(key=2, value="c"),
+            ],
+            checkRowOrder=True,
         )
         assertDataFrameEqual(
             func(df.asTable().withSinglePartition()),

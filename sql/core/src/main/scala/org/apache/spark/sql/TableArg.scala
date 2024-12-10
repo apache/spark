@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, FunctionTableSubqueryArgumentExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, FunctionTableSubqueryArgumentExpression, SortOrder}
 
 
 class TableArg(
@@ -41,7 +41,16 @@ class TableArg(
   }
 
   def orderBy(cols: Seq[Column]): TableArg = {
-    val orderByExpressions = cols.map(c => SortOrder(c.expr, Ascending))
+    val orderByExpressions = cols.map { col =>
+      col.expr match {
+        case sortOrder: SortOrder => sortOrder
+        case expr: Expression => SortOrder(expr, Ascending)
+        case other =>
+          throw new IllegalArgumentException(
+            s"Unsupported expression type in orderBy: ${other.getClass.getName}"
+          )
+      }
+    }
     new TableArg(expression.copy(orderByExpressions = orderByExpressions),
       sparkSession)
   }
