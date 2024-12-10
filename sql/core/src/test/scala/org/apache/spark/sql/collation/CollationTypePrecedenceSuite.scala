@@ -110,6 +110,54 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("lateral alias has implicit strength") {
+    checkAnswer(
+      sql("""
+        |SELECT
+        |  a collate unicode as col1,
+        |  COLLATION(col1 || 'b')
+        |FROM VALUES ('a') AS t(a)
+        |""".stripMargin),
+      Row("a", UNICODE_COLLATION_NAME))
+
+    assertImplicitMismatch(
+      sql("""
+        |SELECT
+        |  a collate unicode as col1,
+        |  a collate utf8_lcase as col2,
+        |  col1 = col2
+        |FROM VALUES ('a') AS t(a)
+        |""".stripMargin))
+
+    checkAnswer(
+      sql("""
+        |SELECT
+        |  a collate unicode as col1,
+        |  COLLATION(col1 || 'b' collate UTF8_LCASE)
+        |FROM VALUES ('a') AS t(a)
+        |""".stripMargin),
+      Row("a", UTF8_LCASE_COLLATION_NAME))
+  }
+
+  test("outer reference has implicit strength") {
+    val tableName = "outer_ref_tbl"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (c STRING COLLATE UNICODE_CI, c1 STRING) USING $dataSource")
+      sql(s"INSERT INTO $tableName VALUES ('a', 'a'), ('A', 'A')")
+
+      checkAnswer(
+        sql(s"SELECT DISTINCT (SELECT COLLATION(c || 'a')) FROM $tableName"),
+        Seq(Row(UNICODE_CI_COLLATION_NAME)))
+
+      assertImplicitMismatch(
+        sql(s"SELECT DISTINCT (SELECT COLLATION(c || c1)) FROM $tableName"))
+
+      checkAnswer(
+        sql(s"SELECT DISTINCT (SELECT COLLATION(c || 'a' collate utf8_lcase)) FROM $tableName"),
+        Seq(Row(UTF8_LCASE_COLLATION_NAME)))
+    }
+  }
+
   test("variables have implicit collation") {
     val v1Collation = UTF8_BINARY_COLLATION_NAME
     val v2Collation = UTF8_LCASE_COLLATION_NAME
