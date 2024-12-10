@@ -314,7 +314,7 @@ class RocksDB(
    * Note that this will copy all the necessary file from DFS to local disk as needed,
    * and possibly restart the native RocksDB instance.
    */
-  private def loadV2(
+  private def loadWithCheckpointId(
         version: Long,
         stateStoreCkptId: Option[String],
         readOnly: Boolean = false): RocksDB = {
@@ -368,11 +368,12 @@ class RocksDB(
 
       // reset the last snapshot version to the latest available snapshot version
       lastSnapshotVersion = latestSnapshotVersion
+      lineageManager.resetLineage(currVersionLineage)
 
       // Initialize maxVersion upon successful load from DFS
       fileManager.setMaxSeenVersion(version)
 
-      init(metadata)
+      openLocalRocksDB(metadata)
 
       if (loadedVersion != version) {
         val versionsAndUniqueIds = currVersionLineage
@@ -425,7 +426,7 @@ class RocksDB(
   this
 }
 
-  private def loadV1(
+  private def loadWithoutCheckpointId(
       version: Long,
       readOnly: Boolean = false): RocksDB = {
     try {
@@ -443,7 +444,7 @@ class RocksDB(
         // Initialize maxVersion upon successful load from DFS
         fileManager.setMaxSeenVersion(version)
 
-        init(metadata)
+        openLocalRocksDB(metadata)
 
         if (loadedVersion != version) {
           val versionsAndUniqueIds: Array[(Long, Option[String])] =
@@ -476,7 +477,7 @@ class RocksDB(
   /**
    * Initialize key metrics based on the metadata loaded from DFS and open local RocksDB.
    */
-  private def init(metadata: RocksDBCheckpointMetadata): Unit = {
+  private def openLocalRocksDB(metadata: RocksDBCheckpointMetadata): Unit = {
 
     setInitialCFInfo()
     metadata.columnFamilyMapping.foreach { mapping =>
@@ -509,9 +510,9 @@ class RocksDB(
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
     if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
-      loadV2(version, stateStoreCkptId, readOnly)
+      loadWithCheckpointId(version, stateStoreCkptId, readOnly)
     } else {
-      loadV1(version, readOnly)
+      loadWithoutCheckpointId(version, readOnly)
     }
     this
   }
@@ -594,6 +595,11 @@ class RocksDB(
    * Replay change log from the loaded version to the target version.
    */
   private def replayChangelog(versionsAndUniqueIds: Array[(Long, Option[String])]): Unit = {
+    assert(!versionsAndUniqueIds.isEmpty && versionsAndUniqueIds.head._1 == loadedVersion + 1,
+      s"Replay changelog should start from one version after loadedVersion: $loadedVersion," +
+        s" but it is not."
+    )
+
     logInfo(log"Replaying changelog from version " +
       log"${MDC(LogKeys.LOADED_VERSION, loadedVersion)} -> " +
       log"${MDC(LogKeys.END_VERSION, versionsAndUniqueIds.lastOption.map(_._1))}")

@@ -323,9 +323,15 @@ class RocksDBFileManager(
     metadata
   }
 
+  // Return if there is a snapshot file at the corresponding version
+  // and optionally with checkpointunique id, e.g. version.zip or version_uniqueId.zip
   def existsSnapshotFile(version: Long, checkpointUniqueId: Option[String] = None): Boolean = {
-    val path = new Path(dfsRootDir)
-    fm.exists(path) && fm.exists(dfsBatchZipFile(version, checkpointUniqueId))
+    if (!rootDirChecked) {
+      val path = new Path(dfsRootDir)
+      if (!fm.exists(path)) fm.mkdirs(path)
+      rootDirChecked = true
+    }
+    fm.exists(dfsBatchZipFile(version, checkpointUniqueId))
   }
 
   // Get latest snapshot version <= version
