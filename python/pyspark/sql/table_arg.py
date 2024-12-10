@@ -15,16 +15,23 @@
 # limitations under the License.
 #
 
+from typing import TYPE_CHECKING
+
 from pyspark.sql.classic.column import _to_java_column, _to_seq
 from pyspark.sql.udtf_argument import UDTFArgument
 from pyspark.sql.utils import get_active_spark_context
 
 
+if TYPE_CHECKING:
+    from py4j.java_gateway import JavaObject
+    from pyspark.sql._typing import ColumnOrName
+
+
 class TableArg(UDTFArgument):
-    def __init__(self, j_table_arg):
+    def __init__(self, j_table_arg: "JavaObject"):
         self._j_table_arg = j_table_arg
 
-    def partitionBy(self, *cols):
+    def partitionBy(self, *cols: "ColumnOrName"):
         sc = get_active_spark_context()
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
@@ -32,7 +39,7 @@ class TableArg(UDTFArgument):
         new_j_table_arg = self._j_table_arg.partitionBy(j_cols)
         return TableArg(new_j_table_arg)
 
-    def orderBy(self, *cols):
+    def orderBy(self, *cols: "ColumnOrName"):
         sc = get_active_spark_context()
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
