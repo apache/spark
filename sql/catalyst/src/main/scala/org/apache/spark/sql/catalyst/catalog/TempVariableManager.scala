@@ -63,6 +63,10 @@ class TempVariableManager extends DataTypeErrorsBase {
   def clear(): Unit = synchronized {
     variables.clear()
   }
+
+  def isEmpty: Boolean = synchronized {
+    variables.isEmpty
+  }
 }
 
 case class VariableDefinition(defaultValueSQL: String, currentValue: Literal)

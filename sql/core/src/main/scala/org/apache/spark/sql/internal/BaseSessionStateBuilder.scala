@@ -20,6 +20,7 @@ import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -199,6 +200,15 @@ abstract class BaseSessionStateBuilder(
   protected def analyzer: Analyzer = new Analyzer(catalogManager) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
+
+    override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
+      new DataSourceResolver(session)
+    )
+
+    override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] = Seq(
+      new FileResolver(session)
+    )
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
