@@ -585,7 +585,7 @@ select str_to_map(text, pairDelim, keyValueDelim) from t4
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -1051,7 +1051,7 @@ select elt(2, utf8_binary, utf8_lcase, s) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -1176,7 +1176,7 @@ select split_part(utf8_binary, utf8_lcase, 3) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -1357,7 +1357,7 @@ select contains(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -1552,7 +1552,7 @@ select substring_index(utf8_binary, utf8_lcase, 2) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -1747,7 +1747,7 @@ select instr(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -1920,7 +1920,7 @@ select find_in_set(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -2089,7 +2089,7 @@ select startswith(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -2306,12 +2306,12 @@ select translate(utf8_binary, utf8_lcase, '12345') from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
   "messageParameters" : {
-    "expr" : "\"translate(utf8_binary, utf8_lcase, '12345' collate NULL)\""
+    "expr" : "\"translate(utf8_binary, utf8_lcase, 12345)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2457,12 +2457,12 @@ select replace(utf8_binary, utf8_lcase, 'abc') from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
   "messageParameters" : {
-    "expr" : "\"replace(utf8_binary, utf8_lcase, 'abc' collate NULL)\""
+    "expr" : "\"replace(utf8_binary, utf8_lcase, abc)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2652,7 +2652,7 @@ select endswith(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -3332,7 +3332,7 @@ select overlay(utf8_binary, utf8_lcase, 2) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -3710,7 +3710,7 @@ select levenshtein(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -4253,7 +4253,7 @@ select rpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -4422,7 +4422,7 @@ select lpad(utf8_binary, 8, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -4591,7 +4591,7 @@ select locate(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -4786,7 +4786,7 @@ select TRIM(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -4967,7 +4967,7 @@ select BTRIM(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -5162,7 +5162,7 @@ select LTRIM(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",
@@ -5343,7 +5343,7 @@ select RTRIM(utf8_binary, utf8_lcase) from t5
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INDETERMINATE_COLLATION",
   "sqlState" : "42P22",

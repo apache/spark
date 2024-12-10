@@ -135,22 +135,24 @@ class IndeterminateCollationTestSuite extends QueryTest with SharedSparkSession 
              |""".stripMargin)
       }
 
-      assertIndeterminateCollationInSchemaError(
-        "myCol",
-        "arr.element",
-        "map.value",
-        "struct.f1") {
+      assertIndeterminateCollationInSchemaError("col") {
+        sql(s"""
+             |CREATE TABLE t AS
+             |SELECT concat_ws(', ', c1, c2) as col FROM $testTableName
+             |""".stripMargin)
+      }
+
+      assertIndeterminateCollationInExpressionError(
         sql(s"""
              |CREATE TABLE t
              |USING $dataSource
              |AS SELECT
-             |  c1 || c2 AS myCol,
              |  array(c1 || c2) AS arr,
              |  map('a', c1 || c2) AS map,
-             |  named_struct('f1', c1 || c2, 'f2', c2) AS struct
+             |  named_struct('f1', c1 || c2, 'f2', c2) AS struct,
+             |  named_struct(c1 || c2, 'v1') AS struct2
              |FROM $testTableName
-             |""".stripMargin)
-      }
+             |""".stripMargin))
     }
   }
 

@@ -3696,10 +3696,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def indeterminateCollationInExpressionError(expr: String): Throwable = {
+  def indeterminateCollationInExpressionError(expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INDETERMINATE_COLLATION",
-      messageParameters = Map("expr" -> expr)
+      messageParameters = Map("expr" -> toSQLExpr(expr))
     )
   }
 
