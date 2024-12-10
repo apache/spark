@@ -82,25 +82,45 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // Match the serialization pattern for case of Dataset.toJSON
       // Call `planTakeOrdered` first which matches a larger plan.
-      case ReturnAnswer(rootPlan) => planTakeOrdered(rootPlan).getOrElse(rootPlan match {
-        // We should match the combination of limit and offset first, to get the optimal physical
-        // plan, instead of planning limit and offset separately.
-        case LimitAndOffset(limit, offset, child) =>
-          CollectLimitExec(limit = limit, child = planLater(child), offset = offset)
-        case OffsetAndLimit(offset, limit, child) =>
-          // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
-          CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
-        case Limit(IntegerLiteral(limit), child) =>
-          CollectLimitExec(limit = limit, child = planLater(child))
-        case logical.Offset(IntegerLiteral(offset), child) =>
-          CollectLimitExec(child = planLater(child), offset = offset)
-        case Tail(IntegerLiteral(limit), child) =>
-          CollectTailExec(limit, planLater(child))
-        case other => planLater(other)
-      })  :: Nil
+      case ReturnAnswer(
+          SerializeFromObject(
+          serializer,
+            MapPartitions(
+              f,
+              objAttr1,
+              DeserializeToObject(deserializer, objAttr2, child)))) =>
+        SerializeFromObjectExec(
+          serializer,
+          MapPartitionsExec(
+            f,
+            objAttr1,
+            DeserializeToObjectExec(
+              deserializer,
+              objAttr2,
+              planTakeOrdered(child).getOrElse(planCollectLimit(child))))) :: Nil
+      case ReturnAnswer(rootPlan) =>
+        planTakeOrdered(rootPlan).getOrElse(planCollectLimit(rootPlan)) :: Nil
 
       case other => planTakeOrdered(other).toSeq
+    }
+
+    private def planCollectLimit(plan: LogicalPlan): SparkPlan = plan match {
+      // We should match the combination of limit and offset first, to get the optimal physical
+      // plan, instead of planning limit and offset separately.
+      case LimitAndOffset(limit, offset, child) =>
+        CollectLimitExec(limit = limit, child = planLater(child), offset = offset)
+      case OffsetAndLimit(offset, limit, child) =>
+        // 'Offset a' then 'Limit b' is the same as 'Limit a + b' then 'Offset a'.
+        CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
+      case Limit(IntegerLiteral(limit), child) =>
+        CollectLimitExec(limit = limit, child = planLater(child))
+      case logical.Offset(IntegerLiteral(offset), child) =>
+        CollectLimitExec(child = planLater(child), offset = offset)
+      case Tail(IntegerLiteral(limit), child) =>
+        CollectTailExec(limit, planLater(child))
+      case other => planLater(other)
     }
 
     private def planTakeOrdered(plan: LogicalPlan): Option[SparkPlan] = plan match {
