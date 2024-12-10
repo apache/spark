@@ -45,6 +45,12 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     if (!conf.coalesceShufflePartitionsEnabled) {
       return plan
     }
+    if (conf.partialStageNotcoalesceShufflePartitionsEnabled) {
+      val shuffleStageInfos = collectShuffleStageInfos(plan)
+      if (!shuffleStageInfos.forall(s => s.shuffleStage.getUseCoalesceShufflePartitions)) {
+        return plan
+      }
+    }
 
     // Ideally, this rule should simply coalesce partitions w.r.t. the target size specified by
     // ADVISORY_PARTITION_SIZE_IN_BYTES (default 64MB). To avoid perf regression in AQE, this
