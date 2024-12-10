@@ -22,7 +22,6 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
@@ -1106,39 +1105,22 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-47972: Cast expression limitation for collations") {
-    checkError(
-      exception = intercept[ParseException]
-        (sql("SELECT cast(1 as string collate unicode)")),
-      condition = "UNSUPPORTED_DATATYPE",
-      parameters = Map(
-        "typeName" -> toSQLType(StringType("UNICODE"))),
-      context =
-        ExpectedContext(fragment = s"cast(1 as string collate unicode)", start = 7, stop = 39)
-    )
+  test("Cast expression for collations") {
+    checkAnswer(
+      sql(s"SELECT collation(cast('a' as string collate utf8_lcase))"),
+      Seq(Row(fullyQualifiedPrefix + "UTF8_LCASE")))
 
-    checkError(
-      exception = intercept[ParseException]
-        (sql("SELECT 'A' :: string collate unicode")),
-      condition = "UNSUPPORTED_DATATYPE",
-      parameters = Map(
-        "typeName" -> toSQLType(StringType("UNICODE"))),
-      context = ExpectedContext(fragment = s"'A' :: string collate unicode", start = 7, stop = 35)
-    )
+    checkAnswer(
+      sql(s"SELECT collation('a' :: string collate utf8_lcase)"),
+      Seq(Row(fullyQualifiedPrefix + "UTF8_LCASE")))
 
     checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
     checkAnswer(sql(s"SELECT cast('A' as string)"), Seq(Row("A")))
 
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
-      checkError(
-        exception = intercept[ParseException]
-          (sql("SELECT cast(1 as string collate unicode)")),
-        condition = "UNSUPPORTED_DATATYPE",
-        parameters = Map(
-          "typeName" -> toSQLType(StringType("UNICODE"))),
-        context =
-          ExpectedContext(fragment = s"cast(1 as string collate unicode)", start = 7, stop = 39)
-      )
+      checkAnswer(
+        sql(s"SELECT collation(cast(1 as string))"),
+        Seq(Row(fullyQualifiedPrefix + "UNICODE")))
 
       checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
       checkAnswer(sql(s"SELECT collation(cast(1 as string))"),
