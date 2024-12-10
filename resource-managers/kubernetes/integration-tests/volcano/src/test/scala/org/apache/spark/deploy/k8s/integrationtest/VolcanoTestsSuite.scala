@@ -246,6 +246,12 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // create new configuration for every job
     val conf = createVolcanoSparkConf(podName, appLoc, groupLoc, queue, driverTemplate,
       driverPodGroupTemplate)
+    // scalastyle:off println
+    println(s"Successfully createVolcanoSparkConf, " +
+      s"podName: $podName, appLoc: $appLoc, " +
+      s"groupLoc: $groupLoc, queue: $queue, " +
+      s"driverTemplate: $driverTemplate, driverPodGroupTemplate: $driverPodGroupTemplate")
+    // scalastyle:on println
     if (isDriverJob) {
       runSparkDriverSubmissionAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
@@ -257,6 +263,12 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
         customAppLocator = Option(appLoc)
       )
     } else {
+      // scalastyle:off println
+      println(s"runSparkPiAndVerifyCompletion ...  " +
+        s"podName: $podName, appLoc: $appLoc, " +
+        s"groupLoc: $groupLoc, queue: $queue, " +
+        s"driverTemplate: $driverTemplate, driverPodGroupTemplate: $driverPodGroupTemplate")
+      // scalastyle:on println
       runSparkPiAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
           checkScheduler(driverPod)
@@ -338,25 +350,6 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     conf
   }
 
-  test("Run SparkPi with volcano scheduler", k8sTestTag, volcanoTag) {
-    sparkAppConf
-      .set("spark.kubernetes.driver.pod.featureSteps", VOLCANO_FEATURE_STEP)
-      .set("spark.kubernetes.executor.pod.featureSteps", VOLCANO_FEATURE_STEP)
-    runSparkPiAndVerifyCompletion(
-      driverPodChecker = (driverPod: Pod) => {
-        doBasicDriverPodCheck(driverPod)
-        checkScheduler(driverPod)
-        checkAnnotation(driverPod)
-        checkPodGroup(driverPod)
-      },
-      executorPodChecker = (executorPod: Pod) => {
-        doBasicExecutorPodCheck(executorPod)
-        checkScheduler(executorPod)
-        checkAnnotation(executorPod)
-      }
-    )
-  }
-
   private def verifyJobsSucceededOneByOne(jobNum: Int, groupName: String): Unit = {
     // Check Pending jobs completed one by one
     (1 until jobNum).map { completedNum =>
@@ -379,6 +372,25 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       // scalastyle:on println
       assert(succeededPods.size === jobNum)
     }
+  }
+
+  test("Run SparkPi with volcano scheduler", k8sTestTag, volcanoTag) {
+    sparkAppConf
+      .set("spark.kubernetes.driver.pod.featureSteps", VOLCANO_FEATURE_STEP)
+      .set("spark.kubernetes.executor.pod.featureSteps", VOLCANO_FEATURE_STEP)
+    runSparkPiAndVerifyCompletion(
+      driverPodChecker = (driverPod: Pod) => {
+        doBasicDriverPodCheck(driverPod)
+        checkScheduler(driverPod)
+        checkAnnotation(driverPod)
+        checkPodGroup(driverPod)
+      },
+      executorPodChecker = (executorPod: Pod) => {
+        doBasicExecutorPodCheck(executorPod)
+        checkScheduler(executorPod)
+        checkAnnotation(executorPod)
+      }
+    )
   }
 
   test("SPARK-38187: Run SparkPi Jobs with minCPU", k8sTestTag, volcanoTag) {

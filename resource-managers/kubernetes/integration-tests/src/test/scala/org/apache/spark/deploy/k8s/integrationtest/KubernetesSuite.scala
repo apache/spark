@@ -472,6 +472,9 @@ class KubernetesSuite extends SparkFunSuite
       })
 
     logDebug("Starting Spark K8s job")
+    // scalastyle:off println
+    println("SparkAppLauncher.launch begin ...")
+    // scalastyle:on println
     SparkAppLauncher.launch(
       appArguments,
       customSparkConf.getOrElse(sparkAppConf),
@@ -480,6 +483,9 @@ class KubernetesSuite extends SparkFunSuite
       isJVM,
       pyFiles,
       env)
+    // scalastyle:off println
+    println("SparkAppLauncher.launch end ...")
+    // scalastyle:on println
 
     val driverPod = kubernetesTestComponents.kubernetesClient
       .pods()
@@ -490,6 +496,9 @@ class KubernetesSuite extends SparkFunSuite
       .getItems
       .get(0)
     driverPodChecker(driverPod)
+    // scalastyle:off println
+    println("Pass driverPodChecker.")
+    // scalastyle:on println
 
     if (patienceInterval.value.toSeconds.toInt > 0) {
       // If we're testing decommissioning we an executors, but we should have an executor
@@ -499,6 +508,9 @@ class KubernetesSuite extends SparkFunSuite
       }
     }
     execPods.values.foreach(executorPodChecker(_))
+    // scalastyle:off println
+    println("Pass executorPodChecker")
+    // scalastyle:on println
 
     val execPod: Option[Pod] = if (expectedExecutorLogOnCompletion.nonEmpty) {
       Some(kubernetesTestComponents.kubernetesClient
