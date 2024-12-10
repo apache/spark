@@ -1119,7 +1119,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
 
     withSQLConf(SqlApiConf.DEFAULT_COLLATION -> "UNICODE") {
       checkAnswer(
-        sql(s"SELECT collation(cast(1 as string))"),
+        sql(s"SELECT collation(cast(1 as string collate unicode))"),
         Seq(Row(fullyQualifiedPrefix + "UNICODE")))
 
       checkAnswer(sql(s"SELECT cast(1 as string)"), Seq(Row("1")))
