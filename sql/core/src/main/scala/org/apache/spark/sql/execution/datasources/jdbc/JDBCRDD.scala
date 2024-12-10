@@ -157,7 +157,7 @@ object JDBCRDD extends Logging {
  * Both the driver code and the workers must be able to access the database; the driver
  * needs to fetch the schema while the workers need to fetch the data.
  */
-private[jdbc] class JDBCRDD(
+class JDBCRDD(
     sc: SparkContext,
     getConnection: Int => Connection,
     schema: StructType,
