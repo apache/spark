@@ -157,7 +157,6 @@ case class StructsToJsonEvaluator(
   }
 
   final def evaluate(value: Any): Any = {
-    if (value == null) return null
     converter(value)
   }
 }

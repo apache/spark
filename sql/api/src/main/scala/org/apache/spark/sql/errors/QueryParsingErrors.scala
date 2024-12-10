@@ -105,6 +105,19 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES", ctx)
   }
 
+  def pipeOperatorAggregateUnsupportedCaseError(
+      caseArgument: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+      messageParameters = Map("case" -> caseArgument),
+      ctx)
+  }
+
+  def windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE.WINDOW_CLAUSE", ctx)
+  }
+
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0012", ctx)
   }
@@ -539,7 +552,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   def unexpectedFormatForResetConfigurationError(ctx: ResetConfigurationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0043", ctx)
+    new ParseException(errorClass = "INVALID_RESET_COMMAND_FORMAT", ctx)
   }
 
   def intervalValueOutOfRangeError(input: String, ctx: IntervalContext): Throwable = {

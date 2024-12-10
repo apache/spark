@@ -275,7 +275,7 @@
       },
       "INVALID_CHANGE_LOG_READER_VERSION" : {
         "message" : [
-          "The change log reader version cannot be <version>."
+          "The change log reader version cannot be <version>. The checkpoint probably is from a future Spark version, please upgrade your Spark."
         ]
       },
       "INVALID_CHANGE_LOG_WRITER_VERSION" : {
@@ -496,6 +496,12 @@
       "If this problem persists, you may consider using `rdd.checkpoint()` instead, which is slower than local checkpointing but more fault-tolerant."
     ],
     "sqlState" : "56000"
+  },
+  "CIRCULAR_CLASS_REFERENCE" : {
+    "message" : [
+      "Cannot have circular references in class, but got the circular reference of class <t>."
+    ],
+    "sqlState" : "42602"
   },
   "CLASS_NOT_OVERRIDE_EXPECTED_METHOD" : {
     "message" : [
@@ -959,7 +965,7 @@
       },
       "RANGE_FRAME_INVALID_TYPE" : {
         "message" : [
-          "The data type <orderSpecType> used in the order specification does not match the data type <valueBoundaryType> which is used in the range frame."
+          "The data type <orderSpecType> used in the order specification does not support the data type <valueBoundaryType> which is used in the range frame."
         ]
       },
       "RANGE_FRAME_MULTI_ORDER" : {
@@ -1045,16 +1051,6 @@
           "The input of <functionName> can't be <dataType> type data."
         ]
       },
-      "UNSUPPORTED_UDF_INPUT_TYPE" : {
-        "message" : [
-          "UDFs do not support '<dataType>' as an input data type."
-        ]
-      },
-      "UNSUPPORTED_UDF_OUTPUT_TYPE" : {
-        "message" : [
-          "UDFs do not support '<dataType>' as an output data type."
-        ]
-      },
       "VALUE_OUT_OF_RANGE" : {
         "message" : [
           "The <exprName> must be between <valueRange> (current value = <currentValue>)."
@@ -1110,6 +1106,12 @@
       "Expected schema: <expectedSchema>"
     ],
     "sqlState" : "42K03"
+  },
+  "DATETIME_FIELD_OUT_OF_BOUNDS" : {
+    "message" : [
+      "<rangeMessage>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22023"
   },
   "DATETIME_OVERFLOW" : {
     "message" : [
@@ -1473,6 +1475,11 @@
       "PARQUET_COLUMN_DATA_TYPE_MISMATCH" : {
         "message" : [
           "Data type mismatches when reading Parquet column <column>. Expected Spark type <expectedType>, actual Parquet type <actualType>."
+        ]
+      },
+      "UNSUPPORTED_FILE_SYSTEM" : {
+        "message" : [
+          "The file system <fileSystemClass> hasn't implemented <method>."
         ]
       }
     },
@@ -2022,8 +2029,20 @@
   },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
-      "<message>.<alternative>"
+      "Integer overflow while operating with intervals."
     ],
+    "subClass" : {
+      "WITHOUT_SUGGESTION" : {
+        "message" : [
+          "Try devising appropriate values for the interval parameters."
+        ]
+      },
+      "WITH_SUGGESTION" : {
+        "message" : [
+          "Use <functionName> to tolerate overflow and return NULL instead."
+        ]
+      }
+    },
     "sqlState" : "22015"
   },
   "INTERVAL_DIVIDED_BY_ZERO" : {
@@ -2607,28 +2626,11 @@
     },
     "sqlState" : "22006"
   },
-  "INVALID_INVERSE_DISTRIBUTION_FUNCTION" : {
+  "INVALID_INTERVAL_WITH_MICROSECONDS_ADDITION" : {
     "message" : [
-      "Invalid inverse distribution function <funcName>."
+      "Cannot add an interval to a date because its microseconds part is not 0. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
-    "subClass" : {
-      "DISTINCT_UNSUPPORTED" : {
-        "message" : [
-          "Cannot use DISTINCT with WITHIN GROUP."
-        ]
-      },
-      "WITHIN_GROUP_MISSING" : {
-        "message" : [
-          "WITHIN GROUP is required for inverse distribution function."
-        ]
-      },
-      "WRONG_NUM_ORDERINGS" : {
-        "message" : [
-          "Requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
-        ]
-      }
-    },
-    "sqlState" : "42K0K"
+    "sqlState" : "22006"
   },
   "INVALID_JAVA_IDENTIFIER_AS_FIELD_NAME" : {
     "message" : [
@@ -2654,6 +2656,12 @@
       "Collations can only be applied to string types, but the JSON data type is <jsonType>."
     ],
     "sqlState" : "2203G"
+  },
+  "INVALID_JSON_RECORD_TYPE" : {
+    "message" : [
+      "Detected an invalid type of a JSON record while inferring a common schema in the mode <failFastMode>. Expected a STRUCT type, but found <invalidType>."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -2747,12 +2755,6 @@
       }
     },
     "sqlState" : "42K0E"
-  },
-  "INVALID_LOCATION" : {
-    "message" : [
-      "The location name cannot be an invalid URI, but `<location>` was given."
-    ],
-    "sqlState" : "42K05"
   },
   "INVALID_NON_DETERMINISTIC_EXPRESSIONS" : {
     "message" : [
@@ -2960,6 +2962,12 @@
     },
     "sqlState" : "42601"
   },
+  "INVALID_PARTITION_VALUE" : {
+    "message" : [
+      "Failed to cast value <value> to data type <dataType> for partition column <columnName>. Ensure the value matches the expected data type for this partition column."
+    ],
+    "sqlState" : "42846"
+  },
   "INVALID_PROPERTY_KEY" : {
     "message" : [
       "<key> is an invalid property key, please use quotes, e.g. SET <key>=<value>."
@@ -2983,6 +2991,12 @@
       "Could not perform regexp_replace for source = \"<source>\", pattern = \"<pattern>\", replacement = \"<replacement>\" and position = <position>."
     ],
     "sqlState" : "22023"
+  },
+  "INVALID_RESET_COMMAND_FORMAT" : {
+    "message" : [
+      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
+    ],
+    "sqlState" : "42000"
   },
   "INVALID_SAVE_MODE" : {
     "message" : [
@@ -3313,6 +3327,12 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_SHREDDING_SCHEMA" : {
+    "message" : [
+      "The schema `<schema>` is not a valid variant shredding schema."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -3325,6 +3345,34 @@
       "Cannot specify ORDER BY or a window frame for <aggFunc>."
     ],
     "sqlState" : "42601"
+  },
+  "INVALID_WITHIN_GROUP_EXPRESSION" : {
+    "message" : [
+      "Invalid function <funcName> with WITHIN GROUP."
+    ],
+    "subClass" : {
+      "DISTINCT_UNSUPPORTED" : {
+        "message" : [
+          "The function does not support DISTINCT with WITHIN GROUP."
+        ]
+      },
+      "MISMATCH_WITH_DISTINCT_INPUT" : {
+        "message" : [
+          "The function is invoked with DISTINCT and WITHIN GROUP but expressions <funcArg> and <orderingExpr> do not match. The WITHIN GROUP ordering expression must be picked from the function inputs."
+        ]
+      },
+      "WITHIN_GROUP_MISSING" : {
+        "message" : [
+          "WITHIN GROUP is required for the function."
+        ]
+      },
+      "WRONG_NUM_ORDERINGS" : {
+        "message" : [
+          "The function requires <expectedNum> orderings in WITHIN GROUP but got <actualNum>."
+        ]
+      }
+    },
+    "sqlState" : "42K0K"
   },
   "INVALID_WRITER_COMMIT_MESSAGE" : {
     "message" : [
@@ -3370,6 +3418,12 @@
   "LABELS_MISMATCH" : {
     "message" : [
       "Begin label <beginLabel> does not match the end label <endLabel>."
+    ],
+    "sqlState" : "42K0L"
+  },
+  "LABEL_ALREADY_EXISTS" : {
+    "message" : [
+      "The label <label> already exists. Choose another name or rename the existing label."
     ],
     "sqlState" : "42K0L"
   },
@@ -3520,6 +3574,12 @@
     ],
     "sqlState" : "42710"
   },
+  "MULTI_ALIAS_WITHOUT_GENERATOR" : {
+    "message" : [
+      "Multi part aliasing (<names>) is not supported with <expr> as it is not a generator function."
+    ],
+    "sqlState" : "42K0E"
+  },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
       "The expression <expr> does not support more than one source."
@@ -3631,6 +3691,19 @@
       "UNPIVOT_WITH_PIVOT" : {
         "message" : [
           "UNPIVOT together with PIVOT."
+        ]
+      }
+    },
+    "sqlState" : "42601"
+  },
+  "NOT_ALLOWED_IN_PIPE_OPERATOR_WHERE" : {
+    "message" : [
+      "Not allowed in the pipe WHERE clause:"
+    ],
+    "subClass" : {
+      "WINDOW_CLAUSE" : {
+        "message" : [
+          "WINDOW clause."
         ]
       }
     },
@@ -3938,9 +4011,15 @@
     ],
     "sqlState" : "42K03"
   },
-  "PIPE_OPERATOR_SELECT_CONTAINS_AGGREGATE_FUNCTION" : {
+  "PIPE_OPERATOR_AGGREGATE_EXPRESSION_CONTAINS_NO_AGGREGATE_FUNCTION" : {
     "message" : [
-      "Aggregate function <expr> is not allowed when using the pipe operator |> SELECT clause; please use the pipe operator |> AGGREGATE clause instead"
+      "Non-grouping expression <expr> is provided as an argument to the |> AGGREGATE pipe operator but does not contain any aggregate function; please update it to include an aggregate function and then retry the query again."
+    ],
+    "sqlState" : "0A000"
+  },
+  "PIPE_OPERATOR_CONTAINS_AGGREGATE_FUNCTION" : {
+    "message" : [
+      "Aggregate function <expr> is not allowed when using the pipe operator |> <clause> clause; please use the pipe operator |> AGGREGATE clause instead."
     ],
     "sqlState" : "0A000"
   },
@@ -4224,12 +4303,6 @@
   "STATEFUL_PROCESSOR_CANNOT_PERFORM_OPERATION_WITH_INVALID_TIME_MODE" : {
     "message" : [
       "Failed to perform stateful processor operation=<operationType> with invalid timeMode=<timeMode>"
-    ],
-    "sqlState" : "42802"
-  },
-  "STATEFUL_PROCESSOR_CANNOT_REINITIALIZE_STATE_ON_KEY" : {
-    "message" : [
-      "Cannot re-initialize state on the same grouping key during initial state handling for stateful processor. Invalid grouping key=<groupingKey>."
     ],
     "sqlState" : "42802"
   },
@@ -4635,6 +4708,18 @@
     ],
     "sqlState" : "42K09"
   },
+  "TUPLE_IS_EMPTY" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, empty tuple is not supported."
+    ],
+    "sqlState" : "22004"
+  },
+  "TUPLE_SIZE_EXCEEDS_LIMIT" : {
+    "message" : [
+      "Due to Scala's limited support of tuple, tuples with more than 22 elements are not supported."
+    ],
+    "sqlState" : "54011"
+  },
   "UDTF_ALIAS_NUMBER_MISMATCH" : {
     "message" : [
       "The number of aliases supplied in the AS clause does not match the number of columns output by the UDTF.",
@@ -4759,7 +4844,7 @@
   },
   "UNRECOGNIZED_STATISTIC" : {
     "message" : [
-      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values."
+      "The statistic <stats> is not recognized. Valid statistics include `count`, `count_distinct`, `approx_count_distinct`, `mean`, `stddev`, `min`, `max`, and percentile values. Percentile must be a numeric value followed by '%', within the range 0% to 100%."
     ],
     "sqlState" : "42704"
   },
@@ -4912,6 +4997,64 @@
     },
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_CONNECT_FEATURE" : {
+    "message" : [
+      "Feature is not supported in Spark Connect:"
+    ],
+    "subClass" : {
+      "DATASET_QUERY_EXECUTION" : {
+        "message" : [
+          "Access to the Dataset Query Execution. This is server side developer API."
+        ]
+      },
+      "RDD" : {
+        "message" : [
+          "Resilient Distributed Datasets (RDDs)."
+        ]
+      },
+      "SESSION_BASE_RELATION_TO_DATAFRAME" : {
+        "message" : [
+          "Invoking SparkSession 'baseRelationToDataFrame'. This is server side developer API"
+        ]
+      },
+      "SESSION_EXECUTE_COMMAND" : {
+        "message" : [
+          "Invoking SparkSession 'executeCommand'."
+        ]
+      },
+      "SESSION_EXPERIMENTAL_METHODS" : {
+        "message" : [
+          "Access to SparkSession Experimental (methods). This is server side developer API"
+        ]
+      },
+      "SESSION_LISTENER_MANAGER" : {
+        "message" : [
+          "Access to the SparkSession Listener Manager. This is server side developer API"
+        ]
+      },
+      "SESSION_SESSION_STATE" : {
+        "message" : [
+          "Access to the SparkSession Session State. This is server side developer API."
+        ]
+      },
+      "SESSION_SHARED_STATE" : {
+        "message" : [
+          "Access to the SparkSession Shared State. This is server side developer API."
+        ]
+      },
+      "SESSION_SPARK_CONTEXT" : {
+        "message" : [
+          "Access to the SparkContext."
+        ]
+      },
+      "SESSION_SQL_CONTEXT" : {
+        "message" : [
+          "Access to the SparkSession SQL Context."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
     "message" : [
       "Unsupported data source type for direct query on files: <dataSourceType>"
@@ -5056,6 +5199,11 @@
           "The SQL pipe operator syntax using |> does not support <clauses>."
         ]
       },
+      "COLLATIONS_IN_MAP_KEYS" : {
+        "message" : [
+          "Collated strings for keys of maps"
+        ]
+      },
       "COMBINATION_QUERY_RESULT_CLAUSES" : {
         "message" : [
           "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY."
@@ -5111,6 +5259,11 @@
           "Referencing lateral column alias <lca> in the aggregate query both with window expressions and with having clause. Please rewrite the aggregate query by removing the having clause or removing lateral alias reference in the SELECT list."
         ]
       },
+      "LATERAL_COLUMN_ALIAS_IN_GENERATOR" : {
+        "message" : [
+          "Referencing a lateral column alias <lca> in generator expression <generatorExpr>."
+        ]
+      },
       "LATERAL_COLUMN_ALIAS_IN_GROUP_BY" : {
         "message" : [
           "Referencing a lateral column alias via GROUP BY alias/ALL is not supported yet."
@@ -5161,9 +5314,19 @@
           "Parameter markers are not allowed in <statement>."
         ]
       },
+      "PARTITION_BY_VARIANT" : {
+        "message" : [
+          "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
+        ]
+      },
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
         "message" : [
           "Invalid partitioning: <cols> is missing or is in a map or array."
+        ]
+      },
+      "PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE" : {
+        "message" : [
+          "The SQL pipe operator syntax with aggregation (using |> AGGREGATE) does not support <case>."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
@@ -5223,6 +5386,11 @@
           "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
+      "SET_OPERATION_ON_VARIANT_TYPE" : {
+        "message" : [
+          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+        ]
+      },
       "SET_PROPERTIES_AND_DBPROPERTIES" : {
         "message" : [
           "set PROPERTIES and DBPROPERTIES at the same time."
@@ -5236,6 +5404,16 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "SQL_SCRIPTING" : {
+        "message" : [
+          "SQL Scripting is under development and not all features are supported. SQL Scripting enables users to write procedural SQL including control flow and error handling. To enable existing features set <sqlScriptingEnabled> to `true`."
+        ]
+      },
+      "SQL_SCRIPTING_WITH_POSITIONAL_PARAMETERS" : {
+        "message" : [
+          "Positional parameters are not supported with SQL Scripting."
         ]
       },
       "STATE_STORE_MULTIPLE_COLUMN_FAMILIES" : {
@@ -5291,6 +5469,11 @@
       "UPDATE_COLUMN_NULLABILITY" : {
         "message" : [
           "Update column nullability for MySQL and MS SQL Server."
+        ]
+      },
+      "WRITE_FOR_BINARY_SOURCE" : {
+        "message" : [
+          "Write for the binary file data source."
         ]
       }
     },
@@ -5409,6 +5592,12 @@
       }
     },
     "sqlState" : "42902"
+  },
+  "UNSUPPORTED_PARTITION_TRANSFORM" : {
+    "message" : [
+      "Unsupported partition transform: <transform>. The supported transforms are `identity`, `bucket`, and `clusterBy`. Ensure your transform expression uses one of these."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_SAVE_MODE" : {
     "message" : [
@@ -5793,11 +5982,6 @@
   "_LEGACY_ERROR_TEMP_0037" : {
     "message" : [
       "It is not allowed to add catalog/namespace prefix <quoted> to the table name in CACHE TABLE AS SELECT."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0043" : {
-    "message" : [
-      "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
     ]
   },
   "_LEGACY_ERROR_TEMP_0045" : {
@@ -6260,11 +6444,6 @@
   "_LEGACY_ERROR_TEMP_1155" : {
     "message" : [
       "Partition column `<col>` not found in schema <schemaCatalog>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1156" : {
-    "message" : [
-      "Column <colName> not found in schema <tableSchema>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1158" : {
@@ -6791,11 +6970,6 @@
       "Sinks cannot request distribution and ordering in continuous execution mode."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2000" : {
-    "message" : [
-      "<message>. If necessary set <ansiConfig> to false to bypass this error."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2003" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
@@ -6936,11 +7110,6 @@
       "Unable to clear partition directory <path> prior to writing to it."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2058" : {
-    "message" : [
-      "Failed to cast value `<value>` to `<dataType>` for partition column `<columnName>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2059" : {
     "message" : [
       "End of stream."
@@ -6968,11 +7137,6 @@
       "Invalid namespace name: <namespace>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2067" : {
-    "message" : [
-      "Unsupported partition transform: <transform>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2068" : {
     "message" : [
       "Missing database location."
@@ -6996,11 +7160,6 @@
   "_LEGACY_ERROR_TEMP_2074" : {
     "message" : [
       "user-specified schema."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2075" : {
-    "message" : [
-      "Write is not supported for binary file data source."
     ]
   },
   "_LEGACY_ERROR_TEMP_2076" : {
@@ -7158,11 +7317,6 @@
       "Unexpected window function frame <frame>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2113" : {
-    "message" : [
-      "Unable to parse <stats> as a percentile."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2115" : {
     "message" : [
       "Unknown column: <unknownColumn>."
@@ -7213,16 +7367,6 @@
       "Exception when registering StreamingQueryListener."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2138" : {
-    "message" : [
-      "Cannot have circular references in bean class, but got the circular reference of class <clazz>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2139" : {
-    "message" : [
-      "cannot have circular references in class, but got the circular reference of class <t>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2144" : {
     "message" : [
       "Unable to find constructor for <tpe>. This could happen if <tpe> is an interface, or a trait without companion object constructor."
@@ -7248,11 +7392,6 @@
       "null value found but field <name> is not nullable."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2150" : {
-    "message" : [
-      "Due to Scala's limited support of tuple, tuple with more than 22 elements are not supported."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2154" : {
     "message" : [
       "Failed to get outer pointer for <innerCls>."
@@ -7276,11 +7415,6 @@
   "_LEGACY_ERROR_TEMP_2166" : {
     "message" : [
       "Malformed JSON."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2167" : {
-    "message" : [
-      "Malformed records are detected in schema inference. Parse Mode: <failFastMode>. Reasons: Failed to infer a common schema. Struct types are expected, but `<dataType>` was found."
     ]
   },
   "_LEGACY_ERROR_TEMP_2168" : {

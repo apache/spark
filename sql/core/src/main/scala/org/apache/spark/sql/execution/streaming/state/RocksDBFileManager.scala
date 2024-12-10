@@ -153,58 +153,73 @@ class RocksDBFileManager(
   @volatile private var rootDirChecked: Boolean = false
   private val versionToRocksDBFiles = new ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]]
 
-  private def getChangelogVersion(useColumnFamilies: Boolean): Short = {
-    val changelogVersion: Short = if (useColumnFamilies) {
-      2
-    } else {
-      1
+  /**
+   * Get the changelog version based on rocksDB features.
+   * @return the version of changelog
+   */
+  private def getChangelogWriterVersion(
+      useColumnFamilies: Boolean,
+      stateStoreCheckpointIdEnabled: Boolean): Short = {
+    (useColumnFamilies, stateStoreCheckpointIdEnabled) match {
+      case (false, false) => 1
+      case (true, false) => 2
+      case (false, true) => 3
+      case _ => 4
     }
-    changelogVersion
   }
 
   def getChangeLogWriter(
       version: Long,
-      useColumnFamilies: Boolean = false): StateStoreChangelogWriter = {
-    val changelogFile = dfsChangelogFile(version)
+      useColumnFamilies: Boolean = false,
+      checkpointUniqueId: Option[String] = None,
+      stateStoreCheckpointIdLineage: Option[Array[LineageItem]] = None
+    ): StateStoreChangelogWriter = {
+    val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
     if (!rootDirChecked) {
       val rootDir = new Path(dfsRootDir)
       if (!fm.exists(rootDir)) fm.mkdirs(rootDir)
       rootDirChecked = true
     }
 
-    val changelogVersion = getChangelogVersion(useColumnFamilies)
+    val enableStateStoreCheckpointIds = checkpointUniqueId.isDefined
+    val changelogVersion = getChangelogWriterVersion(
+      useColumnFamilies, enableStateStoreCheckpointIds)
     val changelogWriter = changelogVersion match {
       case 1 =>
         new StateStoreChangelogWriterV1(fm, changelogFile, codec)
       case 2 =>
         new StateStoreChangelogWriterV2(fm, changelogFile, codec)
+      case 3 =>
+        assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
+          "StateStoreChangelogWriterV3 should only be initialized when " +
+            "state store checkpoint unique id is enabled")
+        new StateStoreChangelogWriterV3(fm, changelogFile, codec, stateStoreCheckpointIdLineage.get)
+      case 4 =>
+        assert(enableStateStoreCheckpointIds && stateStoreCheckpointIdLineage.isDefined,
+          "StateStoreChangelogWriterV4 should only be initialized when " +
+            "state store checkpoint unique id is enabled")
+        new StateStoreChangelogWriterV4(fm, changelogFile, codec, stateStoreCheckpointIdLineage.get)
       case _ =>
         throw QueryExecutionErrors.invalidChangeLogWriterVersion(changelogVersion)
     }
+
+    logInfo(log"Loaded change log reader version " +
+      log"${MDC(LogKeys.FILE_VERSION, changelogWriter.version)}")
+
     changelogWriter
   }
 
   // Get the changelog file at version
   def getChangelogReader(
       version: Long,
-      useColumnFamilies: Boolean = false): StateStoreChangelogReader = {
-    val changelogFile = dfsChangelogFile(version)
+      checkpointUniqueId: Option[String] = None): StateStoreChangelogReader = {
+    val changelogFile = dfsChangelogFile(version, checkpointUniqueId)
+    val reader = new StateStoreChangelogReaderFactory(fm, changelogFile, codec)
+      .constructChangelogReader()
 
-    // Note that ideally we should get the version for the reader from the
-    // changelog itself. However, since we don't record this for v1, we need to
-    // rely on external arguments to make this call today. Within the reader, we verify
-    // for the correctness of the decided/expected version. We might revisit this pattern
-    // as we add more changelog versions in the future.
-    val changelogVersion = getChangelogVersion(useColumnFamilies)
-    val changelogReader = changelogVersion match {
-      case 1 =>
-        new StateStoreChangelogReaderV1(fm, changelogFile, codec)
-      case 2 =>
-        new StateStoreChangelogReaderV2(fm, changelogFile, codec)
-      case _ =>
-        throw QueryExecutionErrors.invalidChangeLogReaderVersion(changelogVersion)
-    }
-    changelogReader
+    logInfo(log"Loaded change log reader version ${MDC(LogKeys.FILE_VERSION, reader.version)}")
+
+    reader
   }
 
   /**
@@ -288,7 +303,7 @@ class RocksDBFileManager(
       val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
       logInfo(log"Read metadata for version ${MDC(LogKeys.VERSION_NUM, version)}:\n" +
         log"${MDC(LogKeys.METADATA_JSON, metadata.prettyJson)}")
-      loadImmutableFilesFromDfs(metadata.immutableFiles, localDir, rocksDBFileMapping)
+      loadImmutableFilesFromDfs(metadata.immutableFiles, localDir, rocksDBFileMapping, version)
       versionToRocksDBFiles.put(version, metadata.immutableFiles)
       metadataFile.delete()
       metadata
@@ -628,7 +643,8 @@ class RocksDBFileManager(
   private def loadImmutableFilesFromDfs(
       immutableFiles: Seq[RocksDBImmutableFile],
       localDir: File,
-      rocksDBFileMapping: RocksDBFileMapping): Unit = {
+      rocksDBFileMapping: RocksDBFileMapping,
+      version: Long): Unit = {
     val requiredFileNameToFileDetails = immutableFiles.map(f => f.localFileName -> f).toMap
 
     val localImmutableFiles = listRocksDBFiles(localDir)._1
@@ -637,7 +653,7 @@ class RocksDBFileManager(
     localImmutableFiles.foreach { existingFile =>
       val existingFileSize = existingFile.length()
       val requiredFile = requiredFileNameToFileDetails.get(existingFile.getName)
-      val prevDfsFile = rocksDBFileMapping.getDfsFile(this, existingFile.getName)
+      val prevDfsFile = rocksDBFileMapping.getDfsFileForLoad(this, existingFile.getName, version)
       val isSameFile = if (requiredFile.isDefined && prevDfsFile.isDefined) {
         requiredFile.get.dfsFileName == prevDfsFile.get.dfsFileName &&
           existingFile.length() == requiredFile.get.sizeBytes
@@ -679,7 +695,7 @@ class RocksDBFileManager(
         }
         filesCopied += 1
         bytesCopied += localFileSize
-        rocksDBFileMapping.mapToDfsFileForCurrentVersion(localFileName, file)
+        rocksDBFileMapping.mapToDfsFile(localFileName, file, version)
         logInfo(log"Copied ${MDC(LogKeys.DFS_FILE, dfsFile)} to " +
           log"${MDC(LogKeys.FILE_NAME, localFile)} - " +
           log"${MDC(LogKeys.NUM_BYTES, localFileSize)} bytes")
@@ -776,7 +792,9 @@ class RocksDBFileManager(
   private def dfsBatchZipFile(version: Long): Path = new Path(s"$dfsRootDir/$version.zip")
   // We use changelog suffix intentionally so that we can tell the difference from changelog file of
   // HDFSBackedStateStore which is named version.delta.
-  private def dfsChangelogFile(version: Long): Path = new Path(s"$dfsRootDir/$version.changelog")
+  private def dfsChangelogFile(version: Long, checkpointUniqueId: Option[String] = None): Path =
+    checkpointUniqueId.map(id => new Path(s"$dfsRootDir/${version}_$id.changelog"))
+      .getOrElse(new Path(s"$dfsRootDir/$version.changelog"))
 
   private def localMetadataFile(parentDir: File): File = new File(parentDir, "metadata")
 

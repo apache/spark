@@ -22,7 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
-import java.util.{Locale, Properties}
+import java.util.{Locale, Properties, Timer, TimerTask}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
@@ -209,9 +209,10 @@ private[spark] class Executor(
   // The default isolation group
   val defaultSessionState: IsolatedSessionState = newSessionState(JobArtifactState("default", None))
 
+  private val cacheExpiryTime = 30 * 60 * 1000
   val isolatedSessionCache: Cache[String, IsolatedSessionState] = CacheBuilder.newBuilder()
     .maximumSize(100)
-    .expireAfterAccess(30, TimeUnit.MINUTES)
+    .expireAfterAccess(cacheExpiryTime, TimeUnit.MILLISECONDS)
     .removalListener(new RemovalListener[String, IsolatedSessionState]() {
       override def onRemoval(
           notification: RemovalNotification[String, IsolatedSessionState]): Unit = {
@@ -294,6 +295,8 @@ private[spark] class Executor(
   private val METRICS_POLLING_INTERVAL_MS = conf.get(EXECUTOR_METRICS_POLLING_INTERVAL)
 
   private val pollOnHeartbeat = if (METRICS_POLLING_INTERVAL_MS > 0) false else true
+
+  private val timer = new Timer("executor-state-timer", true)
 
   // Poller for the memory metrics. Visible for testing.
   private[executor] val metricsPoller = new ExecutorMetricsPoller(
@@ -445,6 +448,9 @@ private[spark] class Executor(
         case NonFatal(e) =>
           logWarning("Unable to stop heartbeater", e)
       }
+      if (timer != null) {
+        timer.cancel()
+      }
       ShuffleBlockPusher.stop()
       if (threadPool != null) {
         threadPool.shutdown()
@@ -559,9 +565,17 @@ private[spark] class Executor(
     override def run(): Unit = {
 
       // Classloader isolation
+      var maybeTimerTask: Option[TimerTask] = None
       val isolatedSession = taskDescription.artifacts.state match {
         case Some(jobArtifactState) =>
-          isolatedSessionCache.get(jobArtifactState.uuid, () => newSessionState(jobArtifactState))
+          val state = isolatedSessionCache.get(
+            jobArtifactState.uuid, () => newSessionState(jobArtifactState))
+          maybeTimerTask = Some(new TimerTask {
+            // Resets the expire time till the task ends.
+            def run(): Unit = isolatedSessionCache.getIfPresent(jobArtifactState.uuid)
+          })
+          maybeTimerTask.foreach(timer.schedule(_, cacheExpiryTime / 10, cacheExpiryTime / 10))
+          state
         case _ => defaultSessionState
       }
 
@@ -862,6 +876,7 @@ private[spark] class Executor(
             uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t)
           }
       } finally {
+        maybeTimerTask.foreach(_.cancel)
         cleanMDCForTask(taskName, mdcProperties)
         runningTasks.remove(taskId)
         if (taskStarted) {

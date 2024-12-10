@@ -29,26 +29,30 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import io.grpc.ClientInterceptor
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.connect.proto.ExecutePlanResponse.ObservedMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.connect.ConnectClientUnsupportedErrors
 import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SqlApiConf}
+import org.apache.spark.sql.internal.{CatalogImpl, ConnectRuntimeConfig, SessionCleaner, SessionState, SharedState, SqlApiConf}
 import org.apache.spark.sql.internal.ColumnNodeToProtoConverter.{toExpr, toTypedExpr}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -93,7 +97,7 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   override def sparkContext: SparkContext =
-    throw new UnsupportedOperationException("sparkContext is not supported in Spark Connect.")
+    throw ConnectClientUnsupportedErrors.sparkContext()
 
   /** @inheritdoc */
   val conf: RuntimeConfig = new ConnectRuntimeConfig(client)
@@ -153,38 +157,92 @@ class SparkSession private[sql] (
 
   /** @inheritdoc */
   override def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame =
-    throwRddNotSupportedException()
+    throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
   override def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame =
-    throwRddNotSupportedException()
+    throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
   override def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame =
-    throwRddNotSupportedException()
+    throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
   override def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame =
-    throwRddNotSupportedException()
+    throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
   override def createDataFrame(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame =
-    throwRddNotSupportedException()
+    throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
   override def createDataset[T: Encoder](data: RDD[T]): Dataset[T] =
-    throwRddNotSupportedException()
+    throw ConnectClientUnsupportedErrors.rdd()
 
   /** @inheritdoc */
-  @Experimental
-  def sql(sqlText: String, args: Array[_]): DataFrame = newDataFrame { builder =>
+  override def sharedState: SharedState =
+    throw ConnectClientUnsupportedErrors.sharedState()
+
+  /** @inheritdoc */
+  override def sessionState: SessionState =
+    throw ConnectClientUnsupportedErrors.sessionState()
+
+  /** @inheritdoc */
+  override def sqlContext: SQLContext =
+    throw ConnectClientUnsupportedErrors.sqlContext()
+
+  /** @inheritdoc */
+  override def listenerManager: ExecutionListenerManager =
+    throw ConnectClientUnsupportedErrors.listenerManager()
+
+  /** @inheritdoc */
+  override def experimental: ExperimentalMethods =
+    throw ConnectClientUnsupportedErrors.experimental()
+
+  /** @inheritdoc */
+  override def baseRelationToDataFrame(baseRelation: BaseRelation): api.Dataset[Row] =
+    throw ConnectClientUnsupportedErrors.baseRelationToDataFrame()
+
+  /** @inheritdoc */
+  override def executeCommand(
+      runner: String,
+      command: String,
+      options: Map[String, String]): DataFrame =
+    throw ConnectClientUnsupportedErrors.executeCommand()
+
+  /** @inheritdoc */
+  def sql(sqlText: String, args: Array[_]): DataFrame = {
+    val sqlCommand = proto.SqlCommand
+      .newBuilder()
+      .setSql(sqlText)
+      .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)
+      .build()
+    sql(sqlCommand)
+  }
+
+  /** @inheritdoc */
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
+    sql(sqlText, args.asJava)
+  }
+
+  /** @inheritdoc */
+  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
+    val sqlCommand = proto.SqlCommand
+      .newBuilder()
+      .setSql(sqlText)
+      .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)
+      .build()
+    sql(sqlCommand)
+  }
+
+  /** @inheritdoc */
+  override def sql(query: String): DataFrame = {
+    sql(query, Array.empty)
+  }
+
+  private def sql(sqlCommand: proto.SqlCommand): DataFrame = newDataFrame { builder =>
     // Send the SQL once to the server and then check the output.
-    val cmd = newCommand(b =>
-      b.setSqlCommand(
-        proto.SqlCommand
-          .newBuilder()
-          .setSql(sqlText)
-          .addAllPosArguments(args.map(lit(_).expr).toImmutableArraySeq.asJava)))
+    val cmd = newCommand(b => b.setSqlCommand(sqlCommand))
     val plan = proto.Plan.newBuilder().setCommand(cmd)
     val responseIter = client.execute(plan.build())
 
@@ -201,47 +259,13 @@ class SparkSession private[sql] (
   }
 
   /** @inheritdoc */
-  @Experimental
-  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
-    sql(sqlText, args.asJava)
-  }
-
-  /** @inheritdoc */
-  @Experimental
-  override def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = newDataFrame {
-    builder =>
-      // Send the SQL once to the server and then check the output.
-      val cmd = newCommand(b =>
-        b.setSqlCommand(
-          proto.SqlCommand
-            .newBuilder()
-            .setSql(sqlText)
-            .putAllNamedArguments(args.asScala.map { case (k, v) => (k, lit(v).expr) }.asJava)))
-      val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseIter = client.execute(plan.build())
-
-      try {
-        val response = responseIter
-          .find(_.hasSqlCommandResult)
-          .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
-        // Update the builder with the values from the result.
-        builder.mergeFrom(response.getSqlCommandResult.getRelation)
-      } finally {
-        // consume the rest of the iterator
-        responseIter.foreach(_ => ())
-      }
-  }
-
-  /** @inheritdoc */
-  override def sql(query: String): DataFrame = {
-    sql(query, Array.empty)
-  }
-
-  /** @inheritdoc */
   def read: DataFrameReader = new DataFrameReader(this)
 
   /** @inheritdoc */
   def readStream: DataStreamReader = new DataStreamReader(this)
+
+  /** @inheritdoc */
+  def tvf: TableValuedFunction = new TableValuedFunction(this)
 
   /** @inheritdoc */
   lazy val streams: StreamingQueryManager = new StreamingQueryManager(this)
@@ -348,13 +372,8 @@ class SparkSession private[sql] (
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
-    val value = client.execute(plan)
-    new SparkResult(
-      value,
-      allocator,
-      encoder,
-      timeZoneId,
-      Some(setMetricsAndUnregisterObservation))
+    val value = executeInternal(plan)
+    new SparkResult(value, allocator, encoder, timeZoneId)
   }
 
   private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {
@@ -363,7 +382,7 @@ class SparkSession private[sql] (
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
     // .foreach forces that the iterator is consumed and closed
-    client.execute(plan).foreach(_ => ())
+    executeInternal(plan).foreach(_ => ())
   }
 
   @Since("4.0.0")
@@ -372,11 +391,26 @@ class SparkSession private[sql] (
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     // .toSeq forces that the iterator is consumed and closed. On top, ignore all
     // progress messages.
-    client.execute(plan).filter(!_.hasExecutionProgress).toSeq
+    executeInternal(plan).filter(!_.hasExecutionProgress).toSeq
   }
 
-  private[sql] def execute(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] =
-    client.execute(plan)
+  /**
+   * The real `execute` method that calls into `SparkConnectClient`.
+   *
+   * Here we inject a lazy map to process registered observed metrics, so consumers of the
+   * returned iterator does not need to worry about it.
+   *
+   * Please make sure all `execute` methods call this method.
+   */
+  private[sql] def executeInternal(plan: proto.Plan): CloseableIterator[ExecutePlanResponse] = {
+    client
+      .execute(plan)
+      .map { response =>
+        // Note, this map() is lazy.
+        processRegisteredObservedMetrics(response.getObservedMetricsList)
+        response
+      }
+  }
 
   private[sql] def registerUdf(udf: proto.CommonInlineUserDefinedFunction): Unit = {
     val command = proto.Command.newBuilder().setRegisterFunction(udf).build()
@@ -518,10 +552,14 @@ class SparkSession private[sql] (
     observationRegistry.putIfAbsent(planId, observation)
   }
 
-  private[sql] def setMetricsAndUnregisterObservation(planId: Long, metrics: Row): Unit = {
-    val observationOrNull = observationRegistry.remove(planId)
-    if (observationOrNull != null) {
-      observationOrNull.setMetricsAndNotify(metrics)
+  private def processRegisteredObservedMetrics(metrics: java.util.List[ObservedMetrics]): Unit = {
+    metrics.asScala.map { metric =>
+      // Here we only process metrics that belong to a registered Observation object.
+      // All metrics, whether registered or not, will be collected by `SparkResult`.
+      val observationOrNull = observationRegistry.remove(metric.getPlanId)
+      if (observationOrNull != null) {
+        observationOrNull.setMetricsAndNotify(SparkResult.transformObservedMetrics(metric))
+      }
     }
   }
 
@@ -661,6 +699,9 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
     override def config(map: java.util.Map[String, Any]): this.type = super.config(map)
 
     /** @inheritdoc */
+    override def config(conf: SparkConf): Builder.this.type = super.config(conf)
+
+    /** @inheritdoc */
     @deprecated("enableHiveSupport does not work in Spark Connect")
     override def enableHiveSupport(): this.type = this
 
@@ -671,6 +712,10 @@ object SparkSession extends api.BaseSparkSessionCompanion with Logging {
     /** @inheritdoc */
     @deprecated("appName does not work in Spark Connect")
     override def appName(name: String): this.type = this
+
+    /** @inheritdoc */
+    @deprecated("withExtensions does not work in Spark Connect")
+    override def withExtensions(f: SparkSessionExtensions => Unit): this.type = this
 
     private def tryCreateSessionFromClient(): Option[SparkSession] = {
       if (client != null && client.isSessionValid) {

@@ -420,7 +420,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         sHolder.pushedLimit = Some(limit)
       }
       (operation, isPushed && !isPartiallyPushed)
-    case s @ Sort(order, _, operation @ PhysicalOperation(project, Nil, sHolder: ScanBuilderHolder))
+    case s @ Sort(order, _,
+    operation @ PhysicalOperation(project, Nil, sHolder: ScanBuilderHolder), _)
       if CollapseProject.canCollapseExpressions(order, project, alwaysInline = true) =>
       val aliasMap = getAliasMap(project)
       val aliasReplacedOrder = order.map(replaceAlias(_, aliasMap))

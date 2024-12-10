@@ -269,10 +269,8 @@ trait PredicateHelper extends AliasHelper with Logging {
   }
 
   // If one expression and its children are null intolerant, it is null intolerant.
-  protected def isNullIntolerant(expr: Expression): Boolean = expr match {
-    case e: NullIntolerant => e.children.forall(isNullIntolerant)
-    case _ => false
-  }
+  protected def isNullIntolerant(expr: Expression): Boolean =
+    expr.nullIntolerant && expr.children.forall(isNullIntolerant)
 
   protected def outputWithNullability(
       output: Seq[Attribute],
@@ -317,7 +315,8 @@ trait PredicateHelper extends AliasHelper with Logging {
   since = "1.0.0",
   group = "predicate_funcs")
 case class Not(child: Expression)
-  extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with Predicate with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def toString: String = s"NOT $child"
 
@@ -610,6 +609,9 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   require(hset != null, "hset could not be null")
 
   override def toString: String = {
+    if (!child.resolved) {
+      return s"$child INSET (values with unresolved data types)"
+    }
     val listString = hset.toSeq
       .map(elem => Literal(elem, child.dataType).toString)
       // Sort elements for deterministic behaviours
@@ -1070,8 +1072,8 @@ object Equality {
   since = "1.0.0",
   group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
-
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
   override def symbol: String = "="
 
   // +---------+---------+---------+---------+
@@ -1219,8 +1221,8 @@ case class EqualNull(left: Expression, right: Expression, replacement: Expressio
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
-
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
   override def symbol: String = "<"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
@@ -1254,8 +1256,8 @@ case class LessThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
-
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
   override def symbol: String = "<="
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
@@ -1289,7 +1291,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">"
 
@@ -1324,7 +1327,8 @@ case class GreaterThan(left: Expression, right: Expression)
   since = "1.0.0",
   group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
-    extends BinaryComparison with NullIntolerant {
+    extends BinaryComparison {
+  override def nullIntolerant: Boolean = true
 
   override def symbol: String = ">="
 

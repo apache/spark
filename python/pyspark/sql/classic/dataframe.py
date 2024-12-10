@@ -42,6 +42,7 @@ from pyspark import _NoValue
 from pyspark.resource import ResourceProfile
 from pyspark._globals import _NoValueType
 from pyspark.errors import (
+    AnalysisException,
     PySparkTypeError,
     PySparkValueError,
     PySparkIndexError,
@@ -74,10 +75,6 @@ from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
-try:
-    from pyspark.sql.plot import PySparkPlotAccessor
-except ImportError:
-    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -218,6 +215,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 self._schema = cast(
                     StructType, _parse_datatype_json_string(self._jdf.schema().json())
                 )
+            except AnalysisException as e:
+                raise e
             except Exception as e:
                 raise PySparkValueError(
                     errorClass="CANNOT_PARSE_DATATYPE",
@@ -714,6 +713,22 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 on = self._jseq([])
             assert isinstance(how, str), "how should be a string"
             jdf = self._jdf.join(other._jdf, on, how)
+        return DataFrame(jdf, self.sparkSession)
+
+    def lateralJoin(
+        self,
+        other: ParentDataFrame,
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> ParentDataFrame:
+        if on is None and how is None:
+            jdf = self._jdf.lateralJoin(other._jdf)
+        elif on is None:
+            jdf = self._jdf.lateralJoin(other._jdf, how)
+        elif how is None:
+            jdf = self._jdf.lateralJoin(other._jdf, on._jc)
+        else:
+            jdf = self._jdf.lateralJoin(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sparkSession)
 
     # TODO(SPARK-22947): Fix the DataFrame API.
@@ -1787,6 +1802,12 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         else:
             return DataFrame(self._jdf.transpose(), self.sparkSession)
 
+    def scalar(self) -> Column:
+        return Column(self._jdf.scalar())
+
+    def exists(self) -> Column:
+        return Column(self._jdf.exists())
+
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
         raise PySparkValueError(
@@ -1795,7 +1816,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         )
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+        from pyspark.sql.plot import PySparkPlotAccessor
+
         return PySparkPlotAccessor(self)
 
 

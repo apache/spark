@@ -2549,7 +2549,7 @@ class DataFrame:
         pyspark.errors.exceptions.captured.AnalysisException: Column name#0 are ambiguous...
 
         A better approach is to assign aliases to the dataframes, and then reference
-        the ouptut columns from the join operation using these aliases:
+        the output columns from the join operation using these aliases:
 
         >>> df.alias("a").join(
         ...     df.alias("b"), sf.col("a.name") == sf.col("b.name"), "outer"
@@ -2626,6 +2626,109 @@ class DataFrame:
         +-----+---+
         |Alice|  2|
         +-----+---+
+        """
+        ...
+
+    def lateralJoin(
+        self,
+        other: "DataFrame",
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> "DataFrame":
+        """
+        Lateral joins with another :class:`DataFrame`, using the given join expression.
+
+        A lateral join (also known as a correlated join) is a type of join where each row from
+        one DataFrame is used as input to a subquery or a derived table that computes a result
+        specific to that row. The right side `DataFrame` can reference columns from the current
+        row of the left side `DataFrame`, allowing for more complex and context-dependent results
+        than a standard join.
+
+        .. versionadded:: 4.0.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Right side of the join
+        on : :class:`Column`, optional
+            a join expression (Column).
+        how : str, optional
+            default ``inner``. Must be one of: ``inner``, ``cross``, ``left``, ``leftouter``,
+            and ``left_outer``.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
+
+        Examples
+        --------
+        Setup a sample DataFrame.
+
+        >>> from pyspark.sql import functions as sf
+        >>> from pyspark.sql import Row
+        >>> customers_data = [
+        ...     Row(customer_id=1, name="Alice"), Row(customer_id=2, name="Bob"),
+        ...     Row(customer_id=3, name="Charlie"), Row(customer_id=4, name="Diana")
+        ... ]
+        >>> customers = spark.createDataFrame(customers_data)
+        >>> orders_data = [
+        ...     Row(order_id=101, customer_id=1, order_date="2024-01-10",
+        ...         items=[Row(product="laptop", quantity=5), Row(product="mouse", quantity=12)]),
+        ...     Row(order_id=102, customer_id=1, order_date="2024-02-15",
+        ...         items=[Row(product="phone", quantity=2), Row(product="charger", quantity=15)]),
+        ...     Row(order_id=105, customer_id=1, order_date="2024-03-20",
+        ...         items=[Row(product="tablet", quantity=4)]),
+        ...     Row(order_id=103, customer_id=2, order_date="2024-01-12",
+        ...         items=[Row(product="tablet", quantity=8)]),
+        ...     Row(order_id=104, customer_id=2, order_date="2024-03-05",
+        ...         items=[Row(product="laptop", quantity=7)]),
+        ...     Row(order_id=106, customer_id=3, order_date="2024-04-05",
+        ...         items=[Row(product="monitor", quantity=1)]),
+        ... ]
+        >>> orders = spark.createDataFrame(orders_data)
+
+        Example 1 (use TVF): Expanding Items in Each Order into Separate Rows
+
+        >>> customers.join(orders, "customer_id").lateralJoin(
+        ...     spark.tvf.explode(sf.col("items").outer()).select("col.*")
+        ... ).select(
+        ...     "customer_id", "name", "order_id", "order_date", "product", "quantity"
+        ... ).orderBy("customer_id", "order_id", "product").show()
+        +-----------+-------+--------+----------+-------+--------+
+        |customer_id|   name|order_id|order_date|product|quantity|
+        +-----------+-------+--------+----------+-------+--------+
+        |          1|  Alice|     101|2024-01-10| laptop|       5|
+        |          1|  Alice|     101|2024-01-10|  mouse|      12|
+        |          1|  Alice|     102|2024-02-15|charger|      15|
+        |          1|  Alice|     102|2024-02-15|  phone|       2|
+        |          1|  Alice|     105|2024-03-20| tablet|       4|
+        |          2|    Bob|     103|2024-01-12| tablet|       8|
+        |          2|    Bob|     104|2024-03-05| laptop|       7|
+        |          3|Charlie|     106|2024-04-05|monitor|       1|
+        +-----------+-------+--------+----------+-------+--------+
+
+        Example 2 (use subquery): Finding the Two Most Recent Orders for Customer
+
+        >>> customers.alias("c").lateralJoin(
+        ...     orders.alias("o")
+        ...     .where(sf.col("o.customer_id") == sf.col("c.customer_id").outer())
+        ...     .orderBy(sf.col("order_date").desc())
+        ...     .limit(2),
+        ...     how="left"
+        ... ).select(
+        ...     "c.customer_id", "name", "order_id", "order_date"
+        ... ).orderBy("customer_id", "order_id").show()
+        +-----------+-------+--------+----------+
+        |customer_id|   name|order_id|order_date|
+        +-----------+-------+--------+----------+
+        |          1|  Alice|     102|2024-02-15|
+        |          1|  Alice|     105|2024-03-20|
+        |          2|    Bob|     103|2024-01-12|
+        |          2|    Bob|     104|2024-03-05|
+        |          3|Charlie|     106|2024-04-05|
+        |          4|  Diana|    NULL|      NULL|
+        +-----------+-------+--------+----------+
         """
         ...
 
@@ -3907,7 +4010,7 @@ class DataFrame:
         groupingSets : sequence of sequence of columns or str
             Individual set of columns to group on.
         cols : :class:`Column` or str
-            Addional grouping columns specified by users.
+            Additional grouping columns specified by users.
             Those columns are shown as the output columns after aggregation.
 
         Returns
@@ -6473,6 +6576,173 @@ class DataFrame:
         |val1|  1|  3|
         |val2|  2|  4|
         +----+---+---+
+        """
+        ...
+
+    def scalar(self) -> Column:
+        """
+        Return a `Column` object for a SCALAR Subquery containing exactly one row and one column.
+
+        The `scalar()` method is useful for extracting a `Column` object that represents a scalar
+        value from a DataFrame, especially when the DataFrame results from an aggregation or
+        single-value computation. This returned `Column` can then be used directly in `select`
+        clauses or as predicates in filters on the outer DataFrame, enabling dynamic data filtering
+        and calculations based on scalar values.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Column`
+            A `Column` object representing a SCALAR subquery.
+
+        Examples
+        --------
+        Setup a sample DataFrame.
+
+        >>> data = [
+        ...     (1, "Alice", 45000, 101), (2, "Bob", 54000, 101), (3, "Charlie", 29000, 102),
+        ...     (4, "David", 61000, 102), (5, "Eve", 48000, 101),
+        ... ]
+        >>> employees = spark.createDataFrame(data, ["id", "name", "salary", "department_id"])
+
+        Example 1 (non-correlated): Filter for employees with salary greater than the average
+        salary.
+
+        >>> from pyspark.sql import functions as sf
+        >>> employees.where(
+        ...     sf.col("salary") > employees.select(sf.avg("salary")).scalar()
+        ... ).select("name", "salary", "department_id").show()
+        +-----+------+-------------+
+        | name|salary|department_id|
+        +-----+------+-------------+
+        |  Bob| 54000|          101|
+        |David| 61000|          102|
+        |  Eve| 48000|          101|
+        +-----+------+-------------+
+
+        Example 2 (correlated): Filter for employees with salary greater than the average salary
+        in their department.
+
+        >>> from pyspark.sql import functions as sf
+        >>> employees.alias("e1").where(
+        ...     sf.col("salary")
+        ...     > employees.alias("e2").where(
+        ...         sf.col("e2.department_id") == sf.col("e1.department_id").outer()
+        ...     ).select(sf.avg("salary")).scalar()
+        ... ).select("name", "salary", "department_id").show()
+        +-----+------+-------------+
+        | name|salary|department_id|
+        +-----+------+-------------+
+        |  Bob| 54000|          101|
+        |David| 61000|          102|
+        +-----+------+-------------+
+
+        Example 3 (in select): Select the name, salary, and the proportion of the salary in the
+        department.
+
+        >>> from pyspark.sql import functions as sf
+        >>> employees.alias("e1").select(
+        ...     "name", "salary", "department_id",
+        ...     sf.format_number(
+        ...         sf.lit(100) * sf.col("salary") /
+        ...             employees.alias("e2").where(
+        ...                 sf.col("e2.department_id") == sf.col("e1.department_id").outer()
+        ...             ).select(sf.sum("salary")).scalar().alias("avg_salary"),
+        ...         1
+        ...     ).alias("salary_proportion_in_department")
+        ... ).show()
+        +-------+------+-------------+-------------------------------+
+        |   name|salary|department_id|salary_proportion_in_department|
+        +-------+------+-------------+-------------------------------+
+        |  Alice| 45000|          101|                           30.6|
+        |    Bob| 54000|          101|                           36.7|
+        |Charlie| 29000|          102|                           32.2|
+        |    Eve| 48000|          101|                           32.7|
+        |  David| 61000|          102|                           67.8|
+        +-------+------+-------------+-------------------------------+
+        """
+        ...
+
+    def exists(self) -> Column:
+        """
+        Return a `Column` object for an EXISTS Subquery.
+
+        The `exists` method provides a way to create a boolean column that checks for the presence
+        of related records in a subquery. When applied within a `DataFrame`, this method allows you
+        to filter rows based on whether matching records exist in the related dataset. The resulting
+        `Column` object can be used directly in filtering conditions or as a computed column.
+
+        .. versionadded:: 4.0.0
+
+        Returns
+        -------
+        :class:`Column`
+            A `Column` object representing an EXISTS subquery
+
+        Examples
+        --------
+        Setup sample data for customers and orders.
+
+        >>> data_customers = [
+        ...     (101, "Alice", "USA"), (102, "Bob", "Canada"), (103, "Charlie", "USA"),
+        ...     (104, "David", "Australia")
+        ... ]
+        >>> data_orders = [
+        ...     (1, 101, "2023-01-15", 250), (2, 102, "2023-01-20", 300),
+        ...     (3, 103, "2023-01-25", 400), (4, 101, "2023-02-05", 150)
+        ... ]
+        >>> customers = spark.createDataFrame(
+        ...     data_customers, ["customer_id", "customer_name", "country"])
+        >>> orders = spark.createDataFrame(
+        ...     data_orders, ["order_id", "customer_id", "order_date", "total_amount"])
+
+        Example 1: Filter for customers who have placed at least one order.
+
+        >>> from pyspark.sql import functions as sf
+        >>> customers.alias("c").where(
+        ...     orders.alias("o").where(
+        ...         sf.col("o.customer_id") == sf.col("c.customer_id").outer()
+        ...     ).exists()
+        ... ).orderBy("customer_id").show()
+        +-----------+-------------+-------+
+        |customer_id|customer_name|country|
+        +-----------+-------------+-------+
+        |        101|        Alice|    USA|
+        |        102|          Bob| Canada|
+        |        103|      Charlie|    USA|
+        +-----------+-------------+-------+
+
+        Example 2: Filter for customers who have never placed an order.
+
+        >>> from pyspark.sql import functions as sf
+        >>> customers.alias("c").where(
+        ...     ~orders.alias("o").where(
+        ...         sf.col("o.customer_id") == sf.col("c.customer_id").outer()
+        ...     ).exists()
+        ... ).orderBy("customer_id").show()
+        +-----------+-------------+---------+
+        |customer_id|customer_name|  country|
+        +-----------+-------------+---------+
+        |        104|        David|Australia|
+        +-----------+-------------+---------+
+
+        Example 3: Find Orders from Customers in the USA.
+
+        >>> from pyspark.sql import functions as sf
+        >>> orders.alias("o").where(
+        ...     customers.alias("c").where(
+        ...         (sf.col("c.customer_id") == sf.col("o.customer_id").outer())
+        ...         & (sf.col("country") == "USA")
+        ...     ).exists()
+        ... ).orderBy("order_id").show()
+        +--------+-----------+----------+------------+
+        |order_id|customer_id|order_date|total_amount|
+        +--------+-----------+----------+------------+
+        |       1|        101|2023-01-15|         250|
+        |       3|        103|2023-01-25|         400|
+        |       4|        101|2023-02-05|         150|
+        +--------+-----------+----------+------------+
         """
         ...
 

@@ -854,7 +854,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
        |""".stripMargin
     val analyzedPlan = sql(query).queryExecution.analyzed
     analyzedPlan.collect {
-      case Aggregate(_, aggregateExpressions, _) =>
+      case Aggregate(_, aggregateExpressions, _, _) =>
         val extracted = aggregateExpressions.collect {
           case Alias(child, _) => child
           case a: Attribute => a
@@ -1364,5 +1364,42 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
     // the states are cleared - a subsequent correct query should succeed
     sql("select 1 as a, a").queryExecution.assertAnalyzed()
+  }
+
+  test("SPARK-49349: Improve error message for LCA with Generate") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+            |SELECT
+            |  explode(split(name , ',')) AS new_name,
+            |  new_name like 'a%'
+            |FROM $testTable
+            |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GENERATOR",
+      sqlState = "0A000",
+      parameters = Map(
+        "lca" -> "`new_name`",
+        "generatorExpr" -> "\"unresolvedalias(lateralAliasReference(new_name) LIKE a%)\""))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |SELECT
+             |  explode_outer(from_json(name,'array<struct<values:string>>')) as newName,
+             |  size(from_json(newName.values,'array<string>')) +
+             |    size(array(from_json(newName.values,'map<string,string>'))) as size
+             |FROM $testTable
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_GENERATOR",
+      sqlState = "0A000",
+      parameters = Map(
+        "lca" -> "`newName.values`",
+        "generatorExpr" -> ("\"(size(from_json(lateralAliasReference(newName.values), " +
+          "array<string>)) + size(array(from_json(lateralAliasReference(newName.values), " +
+          "map<string,string>)))) AS size\"")))
   }
 }

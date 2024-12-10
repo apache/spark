@@ -223,9 +223,7 @@ abstract class StreamExecution(
         // To fix call site like "run at <unknown>:0", we bridge the call site from the caller
         // thread to this micro batch thread
         sparkSession.sparkContext.setCallSite(callSite)
-        JobArtifactSet.withActiveJobArtifactState(jobArtifactState) {
-          runStream()
-        }
+        runStream()
       }
     }
 
@@ -717,6 +715,7 @@ abstract class StreamExecution(
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+  val RUN_ID_KEY = "sql.streaming.runId"
   val IS_CONTINUOUS_PROCESSING = "__is_continuous_processing"
   val IO_EXCEPTION_NAMES = Seq(
     classOf[InterruptedException].getName,

@@ -241,6 +241,8 @@ private[spark] object LogKeys {
   case object EXECUTOR_ID extends LogKey
   case object EXECUTOR_IDS extends LogKey
   case object EXECUTOR_LAUNCH_COMMANDS extends LogKey
+  case object EXECUTOR_MEMORY_OFFHEAP extends LogKey
+  case object EXECUTOR_MEMORY_OVERHEAD_SIZE extends LogKey
   case object EXECUTOR_MEMORY_SIZE extends LogKey
   case object EXECUTOR_RESOURCES extends LogKey
   case object EXECUTOR_SHUFFLE_INFO extends LogKey
@@ -692,6 +694,7 @@ private[spark] object LogKeys {
   case object RPC_ENDPOINT_REF extends LogKey
   case object RPC_MESSAGE_CAPACITY extends LogKey
   case object RPC_SSL_ENABLED extends LogKey
+  case object RULE_EXECUTOR_NAME extends LogKey
   case object RULE_NAME extends LogKey
   case object RUN_ID extends LogKey
   case object SCALA_VERSION extends LogKey

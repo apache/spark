@@ -29,14 +29,17 @@ import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.rocksdb.CompressionType
 import org.scalactic.source.Position
+import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
@@ -44,6 +47,7 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+
 
 class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
@@ -60,6 +64,17 @@ class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Co
       super.renameTempFile(srcPath, dstPath, overwriteIfPossible)
     }
   }
+}
+
+class TestStateStoreChangelogWriterV101(
+    fm: CheckpointFileManager,
+    file: Path,
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogWriterV1(fm, file, compressionCodec) {
+
+  override def version: Short = 101
+
+  writeVersion()
 }
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
@@ -83,6 +98,19 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
       .map(_.toLong)
       .sorted
       .toImmutableArraySeq
+  }
+}
+
+trait AlsoTestWithEncodingTypes extends SQLTestUtils {
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
+                             (implicit pos: Position): Unit = {
+    Seq("unsaferow", "avro").foreach { encoding =>
+      super.test(s"$testName (encoding = $encoding)", testTags: _*) {
+        withSQLConf(SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
+          testBody
+        }
+      }
+    }
   }
 }
 
@@ -164,12 +192,80 @@ trait AlsoTestWithChangelogCheckpointingEnabled
   }
 }
 
+class OpenNumCountedTestInputStream(in: InputStream) extends FSDataInputStream(in) {
+  import OpenNumCountedTestInputStream._
+
+  addOpenStreams(this)
+
+  override def close(): Unit = {
+    removeOpenStream(this)
+    super.close()
+  }
+}
+
+class OpenStreamCountedTestFileManager(path: Path, hadoopConf: Configuration)
+  extends FileContextBasedCheckpointFileManager(path, hadoopConf) {
+
+  override def open(path: Path): FSDataInputStream = {
+    val stream = new OpenNumCountedTestInputStream(super.open(path))
+    stream
+  }
+}
+
+object OpenNumCountedTestInputStream extends Logging {
+  private val openStreams = mutable.Map.empty[FSDataInputStream, Throwable]
+
+  def addOpenStreams(stream: FSDataInputStream): Unit = openStreams.synchronized {
+    openStreams.put(stream, new Throwable())
+  }
+
+  def removeOpenStream(stream: FSDataInputStream): Unit = openStreams.synchronized {
+    openStreams.remove(stream)
+  }
+
+  def clearOpenStreams(): Unit = openStreams.synchronized {
+    openStreams.clear()
+  }
+
+  def assertNoOpenStreams(): Unit = openStreams.synchronized {
+    val numOpen = openStreams.values.size
+    if (numOpen > 0) {
+      for (exc <- openStreams.values) {
+        logWarning("Leaked filesystem connection created at:")
+        exc.printStackTrace()
+      }
+      throw new IllegalStateException(s"There are $numOpen possibly leaked file streams.",
+        openStreams.values.head)
+    }
+  }
+}
+
 @SlowSQLTest
-class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
+class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession
+    with PrivateMethodTester {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
+  }
+
+  // In each test we verify opened streams are all closed
+  private def hadoopConf: Configuration = {
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "OpenStreamCountedTestFileManager"
+    val hadoopConf = new Configuration()
+    hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+    hadoopConf
+  }
+
+  override def beforeEach(): Unit = {
+    OpenNumCountedTestInputStream.clearOpenStreams()
+  }
+
+  override def afterEach(): Unit = {
+    eventually(timeout(10.seconds), interval(2.seconds)) {
+      OpenNumCountedTestInputStream.assertNoOpenStreams()
+    }
   }
 
   testWithColumnFamilies(
@@ -680,7 +776,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     " with Changelog Checkpointing") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
-      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
     val changelogWriter = fileManager.getChangeLogWriter(1)
     assert(changelogWriter.version === 1)
 
@@ -729,7 +825,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
-      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
     val changelogWriter = fileManager.getChangeLogWriter(1)
     assert(changelogWriter.version === 1)
 
@@ -748,6 +844,153 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         null, StateStore.DEFAULT_COL_FAMILY_NAME)
     }
 
+    changelogReader.closeIfNeeded()
+
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: StateStoreChangelogReaderFactory " +
+    "edge case") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    val lineage: Array[LineageItem] = Array(
+      LineageItem(1, java.util.UUID.randomUUID.toString),
+      LineageItem(2, java.util.UUID.randomUUID.toString),
+      LineageItem(3, java.util.UUID.randomUUID.toString)
+    )
+
+    // Create a v1 writer
+    val changelogWriterV1 = fileManager.getChangeLogWriter(101)
+    assert(changelogWriterV1.version === 1)
+    changelogWriterV1.commit() // v1 with empty content
+
+    val changelogReaderV1 = fileManager.getChangelogReader(101)
+    assert(changelogReaderV1.version === 1) // getChangelogReader should return a v1 reader
+    changelogReaderV1.closeIfNeeded()
+
+    // Create a v2 writer
+    val changelogWriterV2 = fileManager.getChangeLogWriter(102, useColumnFamilies = true)
+    assert(changelogWriterV2.version === 2)
+    changelogWriterV2.commit() // v2 with empty content
+
+    val changelogReaderV2 = fileManager.getChangelogReader(102)
+    assert(changelogReaderV2.version === 2) // getChangelogReader should return a v2 reader
+    changelogReaderV2.closeIfNeeded()
+
+    // Create a v3 writer
+    val changelogWriterV3 = fileManager.getChangeLogWriter(
+      103, useColumnFamilies = false, checkpointUniqueId, Some(lineage))
+    assert(changelogWriterV3.version === 3)
+    changelogWriterV3.commit() // v1 with empty content
+
+    val changelogReaderV3 = fileManager.getChangelogReader(
+      103, checkpointUniqueId = checkpointUniqueId)
+    assert(changelogReaderV3.version === 3) // getChangelogReader should return a v3 reader
+    assert(changelogReaderV3.lineage sameElements lineage)
+    changelogReaderV3.closeIfNeeded()
+
+    // Create a v4 writer
+    val changelogWriterV4 = fileManager.getChangeLogWriter(
+      104, useColumnFamilies = true, checkpointUniqueId, Some(lineage))
+    assert(changelogWriterV4.version === 4)
+    changelogWriterV4.commit() // v1 with empty content
+
+    val changelogReaderV4 = fileManager.getChangelogReader(
+      104, checkpointUniqueId = checkpointUniqueId)
+    assert(changelogReaderV4.version === 4) // getChangelogReader should return a v4 reader
+    assert(changelogReaderV4.lineage sameElements lineage)
+    changelogReaderV4.closeIfNeeded()
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: changelog reader / writer " +
+    "failure cases") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+    // Failure case 1: reader writer version mismatch
+    // Create a v1 writer
+    val changelogWriterV1 = fileManager.getChangeLogWriter(101)
+    assert(changelogWriterV1.version === 1)
+
+    (1 to 5).foreach(i => changelogWriterV1.put(i.toString, i.toString))
+    (2 to 4).foreach(j => changelogWriterV1.delete(j.toString))
+
+    changelogWriterV1.commit()
+    // Success case, when reading from the same file, a V1 reader should be constructed.
+    val changelogReaderV1 = fileManager.getChangelogReader(101)
+    assert(changelogReaderV1.version === 1)
+    changelogReaderV1.closeIfNeeded()
+
+    // Failure case, force creating a V3 reader.
+    val dfsChangelogFile = PrivateMethod[Path](Symbol("dfsChangelogFile"))
+    val codec = PrivateMethod[CompressionCodec](Symbol("codec"))
+    var changelogFile = fileManager invokePrivate dfsChangelogFile(101L, None)
+    val compressionCodec = fileManager invokePrivate codec()
+    val fm = CheckpointFileManager.create(new Path(dfsRootDir.getAbsolutePath), new Configuration)
+    val e = intercept[AssertionError] {
+      new StateStoreChangelogReaderV3(fm, changelogFile, compressionCodec)
+    }
+    assert(e.getMessage.contains("Changelog version mismatch"))
+
+    changelogFile = fileManager invokePrivate dfsChangelogFile(1L, None)
+    // Failure case 2: readerFactory throw when reading from ckpt built in future Spark version
+    // Create a v101 writer
+    val changelogWriter = new TestStateStoreChangelogWriterV101(
+      fm, changelogFile, compressionCodec)
+    assert(changelogWriter.version === 101)
+
+    changelogWriter.commit()
+
+    // Failure case, force creating a V3 reader.
+    val ex = intercept[SparkException] {
+      fileManager.getChangelogReader(1)
+    }
+    checkError(
+      ex,
+      condition = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_READER_VERSION",
+      parameters = Map("version" -> 101.toString)
+    )
+    assert(ex.getMessage.contains("please upgrade your Spark"))
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog " +
+      "with state checkpoint id enabled") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    val lineage: Array[LineageItem] = Array(
+      LineageItem(1, java.util.UUID.randomUUID.toString),
+      LineageItem(2, java.util.UUID.randomUUID.toString),
+      LineageItem(3, java.util.UUID.randomUUID.toString)
+    )
+    val changelogWriter = fileManager.getChangeLogWriter(
+      3, useColumnFamilies = false, checkpointUniqueId, Some(lineage))
+    assert(changelogWriter.version === 3)
+
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString))
+
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(3, checkpointUniqueId)
+    assert(changelogReader.version === 3)
+    assert(changelogReader.lineage sameElements lineage)
+    val entries = changelogReader.toSeq
+    val expectedEntries = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+    changelogReader.closeIfNeeded()
+
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
@@ -758,8 +1001,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     "RocksDBFileManager: read and write v2 changelog with default col family") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
-      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
-    val changelogWriter = fileManager.getChangeLogWriter(1, true)
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+    val changelogWriter = fileManager.getChangeLogWriter(1, useColumnFamilies = true)
     assert(changelogWriter.version === 2)
     (1 to 5).foreach { i =>
       changelogWriter.put(i.toString, i.toString)
@@ -773,7 +1016,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(1, true)
+    val changelogReader = fileManager.getChangelogReader(1)
     assert(changelogReader.version === 2)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
@@ -783,6 +1026,52 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes, null)
     }
+    changelogReader.closeIfNeeded()
+
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write v2 changelog with " +
+      "default col family and state checkpoint id enabled") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    val lineage: Array[LineageItem] = Array(
+      LineageItem(1, java.util.UUID.randomUUID.toString),
+      LineageItem(2, java.util.UUID.randomUUID.toString),
+      LineageItem(3, java.util.UUID.randomUUID.toString)
+    )
+    val changelogWriter = fileManager.getChangeLogWriter(
+      1, useColumnFamilies = true, checkpointUniqueId, Some(lineage))
+    assert(changelogWriter.version === 4)
+    (1 to 5).foreach { i =>
+      changelogWriter.put(i.toString, i.toString)
+    }
+    (1 to 5).foreach { i =>
+      changelogWriter.merge(i.toString, i.toString)
+    }
+
+    (2 to 4).foreach { j =>
+      changelogWriter.delete(j.toString)
+    }
+
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(1, checkpointUniqueId)
+    assert(changelogReader.version === 4)
+    assert(changelogReader.lineage sameElements lineage)
+    val entries = changelogReader.toSeq
+    val expectedEntries = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes, i.toString.getBytes)
+    } ++ (1 to 5).map { i =>
+      (RecordType.MERGE_RECORD, i.toString.getBytes, i.toString.getBytes)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes, null)
+    }
+    changelogReader.closeIfNeeded()
 
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
@@ -797,7 +1086,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     try {
       val verificationDir = Utils.createTempDir().getAbsolutePath
       val fileManager = new RocksDBFileManager(
-        dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+        dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
       // Save a version of empty checkpoint files
       val cpFiles = Seq()
       generateFiles(verificationDir, cpFiles)
@@ -897,10 +1186,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // Use 2 file managers here to emulate concurrent execution
       // that checkpoint the same version of state
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val rocksDBFileMapping = new RocksDBFileMapping()
       val fileManager_ = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
@@ -916,7 +1205,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         "archive/00002.log" -> 2000
       )
 
-      rocksDBFileMapping.currentVersion = 1
       saveCheckpointFiles(fileManager, cpFiles1, version = 1,
         numKeys = 101, rocksDBFileMapping)
       assert(fileManager.getLatestVersion() === 1)
@@ -982,7 +1270,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       (new File(dfsRootDir, "SSTs")).mkdir()
       (new File(dfsRootDir, "logs")).mkdir()
 
@@ -1041,7 +1329,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       val dfsRootDir = dir.getAbsolutePath
       val verificationDir = Utils.createTempDir().getAbsolutePath // local dir to load checkpoints
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
@@ -2240,13 +2528,201 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
   }
 
+  test("Rocks DB task completion listener does not double unlock acquireThread") {
+    // This test verifies that a thread that locks then unlocks the db and then
+    // fires a completion listener (Thread 1) does not unlock the lock validly
+    // acquired by another thread (Thread 2).
+    //
+    // Timeline of this test (* means thread is active):
+    // STATE | MAIN             | THREAD 1         | THREAD 2         |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 0.    | wait for s3      | *load, commit    | wait for s1      |
+    //       |                  | *signal s1       |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 1.    |                  | wait for s2      | *load, signal s2 |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 2.    |                  | *task complete   | wait for s4      |
+    //       |                  | *signal s3, END  |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 3.    | *verify locked   |                  |                  |
+    //       | *signal s4       |                  |                  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 4.    | wait for s5      |                  | *commit          |
+    //       |                  |                  | *signal s5, END  |
+    // ------| ---------------- | ---------------- | ---------------- |
+    // 5.    | *close db, END   |                  |                  |
+    //
+    // NOTE: state 4 and 5 are only for cleanup
+
+    // Create a custom ExecutionContext with 3 threads
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonFixedThreadPool(3, "pool-thread-executor"))
+    val stateLock = new Object()
+    var state = 0
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      val db = new RocksDB(
+        remoteDir,
+        conf = dbConf,
+        localRootDir = Utils.createTempDir(),
+        hadoopConf = new Configuration(),
+        loggingId = s"[Thread-${Thread.currentThread.getId}]",
+        useColumnFamilies = false
+      )
+      try {
+        Future { // THREAD 1
+          // Set thread 1's task context so that it is not a clone
+          // of the main thread's taskContext, which will end if the
+          // task is marked as complete
+          val taskContext = TaskContext.empty()
+          TaskContext.setTaskContext(taskContext)
+
+          stateLock.synchronized {
+            // -------------------- STATE 0 --------------------
+            // Simulate a task that loads and commits, db should be unlocked after
+            db.load(0)
+            db.put("a", "1")
+            db.commit()
+            // Signal that we have entered state 1
+            state = 1
+            stateLock.notifyAll()
+
+            // -------------------- STATE 2 --------------------
+            // Wait until we have entered state 2 (thread 2 has loaded db and acquired lock)
+            while (state != 2) {
+              stateLock.wait()
+            }
+
+            // thread 1's task context is marked as complete and signal
+            // that we have entered state 3
+            // At this point, thread 2 should still hold the DB lock.
+            taskContext.markTaskCompleted(None)
+            state = 3
+            stateLock.notifyAll()
+          }
+        }
+
+        Future { // THREAD 2
+          // Set thread 2's task context so that it is not a clone of thread 1's
+          // so it won't be marked as complete
+          val taskContext = TaskContext.empty()
+          TaskContext.setTaskContext(taskContext)
+
+          stateLock.synchronized {
+            // -------------------- STATE 1 --------------------
+            // Wait until we have entered state 1 (thread 1 finished loading and committing)
+            while (state != 1) {
+              stateLock.wait()
+            }
+
+            // Load the db and signal that we have entered state 2
+            db.load(1)
+            assertAcquiredThreadIsCurrentThread(db)
+            state = 2
+            stateLock.notifyAll()
+
+            // -------------------- STATE 4 --------------------
+            // Wait until we have entered state 4 (thread 1 completed and
+            // main thread confirmed that lock is held)
+            while (state != 4) {
+              stateLock.wait()
+            }
+
+            // Ensure we still have the lock
+            assertAcquiredThreadIsCurrentThread(db)
+
+            // commit and signal that we have entered state 5
+            db.commit()
+            state = 5
+            stateLock.notifyAll()
+          }
+        }
+
+        // MAIN THREAD
+        stateLock.synchronized {
+          // -------------------- STATE 3 --------------------
+          // Wait until we have entered state 3 (thread 1 is complete)
+          while (state != 3) {
+            stateLock.wait()
+          }
+
+          // Verify that the lock is being held
+          val threadInfo = db.getAcquiredThreadInfo()
+          assert(threadInfo.nonEmpty, s"acquiredThreadInfo was None when it should be Some")
+
+          // Signal that we have entered state 4 (thread 2 can now release lock)
+          state = 4
+          stateLock.notifyAll()
+
+          // -------------------- STATE 5 --------------------
+          // Wait until we have entered state 5 (thread 2 has released lock)
+          // so that we can clean up
+          while (state != 5) {
+            stateLock.wait()
+          }
+        }
+      } finally {
+        db.close()
+      }
+    }
+  }
+
+  test("RocksDB task completion listener correctly releases for failed task") {
+    // This test verifies that a thread that locks the DB and then fails
+    // can rely on the completion listener to release the lock.
+
+    // Create a custom ExecutionContext with 1 thread
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(
+      ThreadUtils.newDaemonSingleThreadExecutor("single-thread-executor"))
+    val timeout = 5.seconds
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir) { db =>
+        // Release the lock acquired by withDB
+        db.commit()
+
+        // New task that will load and then complete with failure
+        val fut = Future {
+          val taskContext = TaskContext.empty()
+          TaskContext.setTaskContext(taskContext)
+
+          db.load(0)
+          assertAcquiredThreadIsCurrentThread(db)
+
+          // Task completion listener should unlock
+          taskContext.markTaskCompleted(
+            Some(new SparkException("Task failure injection")))
+        }
+
+        ThreadUtils.awaitResult(fut, timeout)
+
+        // Assert that db is not locked
+        val threadInfo = db.getAcquiredThreadInfo()
+        assert(threadInfo.isEmpty, s"acquiredThreadInfo should be None but was $threadInfo")
+      }
+    }
+  }
+
+  private def assertAcquiredThreadIsCurrentThread(db: RocksDB): Unit = {
+    val threadInfo = db.getAcquiredThreadInfo()
+    assert(threadInfo != None,
+      "acquired thread info should not be null after load")
+    val threadId = threadInfo.get.threadRef.get.get.getId
+    assert(
+      threadId == Thread.currentThread().getId,
+      s"acquired thread should be curent thread ${Thread.currentThread().getId} " +
+        s"after load but was $threadId")
+  }
+
   private def dbConf = RocksDBConf(StateStoreConf(SQLConf.get.clone()))
 
   def withDB[T](
       remoteDir: String,
       version: Int = 0,
       conf: RocksDBConf = dbConf,
-      hadoopConf: Configuration = new Configuration(),
+      hadoopConf: Configuration = hadoopConf,
       useColumnFamilies: Boolean = false,
       localDir: File = Utils.createTempDir())(
       func: RocksDB => T): T = {
@@ -2284,7 +2760,6 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       fileMapping: RocksDBFileMapping): Unit = {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
-    fileMapping.currentVersion = version - 1
     val (dfsFileSuffix, immutableFileMapping) = fileMapping.createSnapshotFileMapping(
       fileManager, checkpointDir, version)
     fileManager.saveCheckpointToDfs(

@@ -589,4 +589,13 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       assert(session.conf.get(e._1) == e._2.toString)
     }
   }
+
+  test("SPARK-50222: Support spark.submit.appName") {
+    val session = SparkSession.builder()
+      .master("local")
+      .appName("appName")
+      .config("spark.submit.appName", "newAppName")
+      .getOrCreate()
+    assert(session.sparkContext.appName === "newAppName")
+  }
 }

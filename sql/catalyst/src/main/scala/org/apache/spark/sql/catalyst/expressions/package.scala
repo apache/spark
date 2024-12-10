@@ -346,7 +346,16 @@ package object expressions  {
      */
     def resolve(nameParts: Seq[String], resolver: Resolver): Option[NamedExpression] = {
       val (candidates, nestedFields) = getCandidatesForResolution(nameParts, resolver)
-      resolveCandidates(nameParts, resolver, candidates, nestedFields)
+      val resolvedCandidates = resolveCandidates(nameParts, resolver, candidates, nestedFields)
+      resolvedCandidates match {
+        case Seq() => None
+        case Seq(a) => Some(a)
+        case _ =>
+          throw QueryCompilationErrors.ambiguousReferenceError(
+            UnresolvedAttribute(nameParts).name,
+            resolvedCandidates.map(_.toAttribute)
+          )
+      }
     }
 
     def getCandidatesForResolution(
@@ -371,7 +380,7 @@ package object expressions  {
         nameParts: Seq[String],
         resolver: Resolver,
         candidates: Seq[Attribute],
-        nestedFields: Seq[String]): Option[NamedExpression] = {
+        nestedFields: Seq[String]): Seq[NamedExpression] = {
       def name = UnresolvedAttribute(nameParts).name
       // We may have resolved the attributes from metadata columns. The resolved attributes will be
       // put in a logical plan node and becomes normal attributes. They can still keep the special
@@ -389,27 +398,20 @@ package object expressions  {
           val fieldExprs = nestedFields.foldLeft(a: Expression) { (e, name) =>
             ExtractValue(e, Literal(name), resolver)
           }
-          Some(Alias(fieldExprs, nestedFields.last)())
+          Seq(Alias(fieldExprs, nestedFields.last)())
 
         case Seq(a) =>
           // One match, no nested fields, use it.
-          Some(a)
+          Seq(a)
 
         case Seq() =>
           // No matches.
-          None
+          Seq()
 
         case ambiguousReferences =>
           // More than one match.
-          throw QueryCompilationErrors.ambiguousReferenceError(name, ambiguousReferences)
+          ambiguousReferences
       }
     }
   }
-
-  /**
-   * When an expression inherits this, meaning the expression is null intolerant (i.e. any null
-   * input will result in null output). We will use this information during constructing IsNotNull
-   * constraints.
-   */
-  trait NullIntolerant extends Expression
 }

@@ -1627,13 +1627,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
 
     withSpark(new SparkContext(conf)) { sc =>
       withCoordinatorRef(sc) { _ =>
+        val rootLocation = s"${Utils.createTempDir().getAbsolutePath}/spark-48997"
         // 0 and 1's maintenance will fail
         val provider0Id =
-          StateStoreProviderId(StateStoreId("spark-48997", 0, 0), UUID.randomUUID)
+          StateStoreProviderId(StateStoreId(rootLocation, 0, 0), UUID.randomUUID)
         val provider1Id =
-          StateStoreProviderId(StateStoreId("spark-48997", 0, 1), UUID.randomUUID)
+          StateStoreProviderId(StateStoreId(rootLocation, 0, 1), UUID.randomUUID)
         val provider2Id =
-          StateStoreProviderId(StateStoreId("spark-48997", 0, 2), UUID.randomUUID)
+          StateStoreProviderId(StateStoreId(rootLocation, 0, 2), UUID.randomUUID)
 
         // Create provider 2 first to start the maintenance task + pool
         StateStore.get(

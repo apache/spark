@@ -193,6 +193,18 @@ public final class Variant {
     });
   }
 
+  // Get the dictionary ID for the object field at the `index` slot. Throws malformedVariant if
+  // `index` is out of the bound of `[0, objectSize())`.
+  // It is only legal to call it when `getType()` is `Type.OBJECT`.
+  public int getDictionaryIdAtIndex(int index) {
+    return handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+      if (index < 0 || index >= size) {
+        throw malformedVariant();
+      }
+      return readUnsigned(value, idStart + idSize * index, idSize);
+    });
+  }
+
   // Get the number of array elements in the variant.
   // It is only legal to call it when `getType()` is `Type.ARRAY`.
   public int arraySize() {

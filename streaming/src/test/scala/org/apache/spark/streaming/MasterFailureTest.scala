@@ -218,7 +218,7 @@ object MasterFailureTest extends Logging {
     val checkpointDir = ssc.checkpointDir
     val batchDuration = ssc.graph.batchDuration
 
-    while(!isLastOutputGenerated && !isTimedOut) {
+    while (!isLastOutputGenerated && !isTimedOut) {
       // Get the output buffer
       val outputQueue = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[T]].output
       def output = outputQueue.asScala.flatten

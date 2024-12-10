@@ -1522,6 +1522,24 @@ class Column:
         ...
 
     @dispatch_col_method
+    def outer(self) -> "Column":
+        """
+        Mark this column as an outer column if its expression refers to columns from an outer query.
+
+        This is used to trigger lazy analysis of Spark Classic DataFrame, so that we can use it
+        to build subquery expressions. Spark Connect DataFrame is always lazily analyzed and
+        does not need to use this function.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        pyspark.sql.dataframe.DataFrame.scalar
+        pyspark.sql.dataframe.DataFrame.exists
+        """
+        ...
+
+    @dispatch_col_method
     def __nonzero__(self) -> None:
         ...
 

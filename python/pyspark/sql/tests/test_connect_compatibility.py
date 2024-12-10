@@ -64,12 +64,16 @@ if should_test_connect:
 class ConnectCompatibilityTestsMixin:
     def get_public_methods(self, cls):
         """Get public methods of a class."""
-        return {
-            name: method
-            for name, method in inspect.getmembers(cls)
-            if (inspect.isfunction(method) or isinstance(method, functools._lru_cache_wrapper))
-            and not name.startswith("_")
-        }
+        methods = {}
+        for name, method in inspect.getmembers(cls):
+            if (
+                inspect.isfunction(method) or isinstance(method, functools._lru_cache_wrapper)
+            ) and not name.startswith("_"):
+                if getattr(method, "_remote_only", False):
+                    methods[name] = None
+                else:
+                    methods[name] = method
+        return methods
 
     def get_public_properties(self, cls):
         """Get public properties of a class."""
@@ -88,6 +92,10 @@ class ConnectCompatibilityTestsMixin:
         common_methods = set(classic_methods.keys()) & set(connect_methods.keys())
 
         for method in common_methods:
+            # Skip non-callable, Spark Connect-specific methods
+            if classic_methods[method] is None or connect_methods[method] is None:
+                continue
+
             classic_signature = inspect.signature(classic_methods[method])
             connect_signature = inspect.signature(connect_methods[method])
 
@@ -145,7 +153,11 @@ class ConnectCompatibilityTestsMixin:
         connect_methods = self.get_public_methods(connect_cls)
 
         # Identify missing methods
-        classic_only_methods = set(classic_methods.keys()) - set(connect_methods.keys())
+        classic_only_methods = {
+            name
+            for name, method in classic_methods.items()
+            if name not in connect_methods or method is None
+        }
         connect_only_methods = set(connect_methods.keys()) - set(classic_methods.keys())
 
         # Compare the actual missing methods with the expected ones
@@ -249,7 +261,18 @@ class ConnectCompatibilityTestsMixin:
         """Test SparkSession compatibility between classic and connect."""
         expected_missing_connect_properties = {"sparkContext"}
         expected_missing_classic_properties = {"is_stopped", "session_id"}
-        expected_missing_connect_methods = {"newSession"}
+        expected_missing_connect_methods = {
+            "addArtifact",
+            "addArtifacts",
+            "clearProgressHandlers",
+            "copyFromLocalToFs",
+            "interruptAll",
+            "interruptOperation",
+            "interruptTag",
+            "newSession",
+            "registerProgressHandler",
+            "removeProgressHandler",
+        }
         expected_missing_classic_methods = set()
         self.check_compatibility(
             ClassicSparkSession,

@@ -220,4 +220,18 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
       )
     }
   }
+
+  test("SPARK-50492: drop event time column after dropDuplicatesWithinWatermark") {
+    val inputData = MemoryStream[(Int, Int)]
+    val result = inputData.toDS()
+      .withColumn("first", timestamp_seconds($"_1"))
+      .withWatermark("first", "10 seconds")
+      .dropDuplicatesWithinWatermark("_2")
+      .select("_2")
+
+    testStream(result, Append)(
+      AddData(inputData, (1, 2)),
+      CheckAnswer(2)
+    )
+  }
 }

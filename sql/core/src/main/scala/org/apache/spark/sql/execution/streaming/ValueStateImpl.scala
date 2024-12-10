@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
@@ -37,7 +36,7 @@ class ValueStateImpl[S](
     store: StateStore,
     stateName: String,
     keyExprEnc: ExpressionEncoder[Any],
-    valEncoder: Encoder[S],
+    valEncoder: ExpressionEncoder[Any],
     metrics: Map[String, SQLMetric] = Map.empty)
   extends ValueState[S] with Logging {
 
@@ -66,7 +65,7 @@ class ValueStateImpl[S](
     val retRow = store.get(encodedGroupingKey, stateName)
 
     if (retRow != null) {
-      stateTypesEncoder.decodeValue(retRow)
+      stateTypesEncoder.decodeValue(retRow).asInstanceOf[S]
     } else {
       null.asInstanceOf[S]
     }

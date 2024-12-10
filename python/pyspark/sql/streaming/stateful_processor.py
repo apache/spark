@@ -18,7 +18,10 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, TYPE_CHECKING, Iterator, Optional, Union, Tuple
 
-from pyspark.sql.streaming.stateful_processor_api_client import StatefulProcessorApiClient
+from pyspark.sql.streaming.stateful_processor_api_client import (
+    StatefulProcessorApiClient,
+    ListTimerIterator,
+)
 from pyspark.sql.streaming.list_state_client import ListStateClient, ListStateIterator
 from pyspark.sql.streaming.map_state_client import (
     MapStateClient,
@@ -72,6 +75,48 @@ class ValueState:
         Remove this state.
         """
         self._value_state_client.clear(self._state_name)
+
+
+class TimerValues:
+    """
+    Class used for arbitrary stateful operations with transformWithState to access processing
+    time or event time for current batch.
+    .. versionadded:: 4.0.0
+    """
+
+    def __init__(
+        self, current_processing_time_in_ms: int = -1, current_watermark_in_ms: int = -1
+    ) -> None:
+        self._current_processing_time_in_ms = current_processing_time_in_ms
+        self._current_watermark_in_ms = current_watermark_in_ms
+
+    def get_current_processing_time_in_ms(self) -> int:
+        """
+        Get processing time for current batch, return timestamp in millisecond.
+        """
+        return self._current_processing_time_in_ms
+
+    def get_current_watermark_in_ms(self) -> int:
+        """
+        Get watermark for current batch, return timestamp in millisecond.
+        """
+        return self._current_watermark_in_ms
+
+
+class ExpiredTimerInfo:
+    """
+    Class used to provide access to expired timer's expiry time.
+    .. versionadded:: 4.0.0
+    """
+
+    def __init__(self, expiry_time_in_ms: int = -1) -> None:
+        self._expiry_time_in_ms = expiry_time_in_ms
+
+    def get_expiry_time_in_ms(self) -> int:
+        """
+        Get the timestamp for expired timer, return timestamp in millisecond.
+        """
+        return self._expiry_time_in_ms
 
 
 class ListState:
@@ -292,6 +337,30 @@ class StatefulProcessorHandle:
             state_name,
         )
 
+    def registerTimer(self, expiry_time_stamp_ms: int) -> None:
+        """
+        Register a timer for a given expiry timestamp in milliseconds for the grouping key.
+        """
+        self.stateful_processor_api_client.register_timer(expiry_time_stamp_ms)
+
+    def deleteTimer(self, expiry_time_stamp_ms: int) -> None:
+        """
+        Delete a timer for a given expiry timestamp in milliseconds for the grouping key.
+        """
+        self.stateful_processor_api_client.delete_timer(expiry_time_stamp_ms)
+
+    def listTimers(self) -> Iterator[int]:
+        """
+        List all timers of their expiry timestamps in milliseconds for the grouping key.
+        """
+        return ListTimerIterator(self.stateful_processor_api_client)
+
+    def deleteIfExists(self, state_name: str) -> None:
+        """
+        Function to delete and purge state variable if defined previously
+        """
+        self.stateful_processor_api_client.delete_if_exists(state_name)
+
 
 class StatefulProcessor(ABC):
     """
@@ -317,7 +386,10 @@ class StatefulProcessor(ABC):
 
     @abstractmethod
     def handleInputRows(
-        self, key: Any, rows: Iterator["PandasDataFrameLike"]
+        self,
+        key: Any,
+        rows: Iterator["PandasDataFrameLike"],
+        timer_values: TimerValues,
     ) -> Iterator["PandasDataFrameLike"]:
         """
         Function that will allow users to interact with input data rows along with the grouping key.
@@ -336,8 +408,31 @@ class StatefulProcessor(ABC):
             grouping key.
         rows : iterable of :class:`pandas.DataFrame`
             iterator of input rows associated with grouping key
+        timer_values: TimerValues
+                      Timer value for the current batch that process the input rows.
+                      Users can get the processing or event time timestamp from TimerValues.
         """
         ...
+
+    def handleExpiredTimer(
+        self, key: Any, timer_values: TimerValues, expired_timer_info: ExpiredTimerInfo
+    ) -> Iterator["PandasDataFrameLike"]:
+        """
+        Optional to implement. Will act return an empty iterator if not defined.
+        Function that will be invoked when a timer is fired for a given key. Users can choose to
+        evict state, register new timers and optionally provide output rows.
+
+        Parameters
+        ----------
+        key : Any
+            grouping key.
+        timer_values: TimerValues
+                      Timer value for the current batch that process the input rows.
+                      Users can get the processing or event time timestamp from TimerValues.
+        expired_timer_info: ExpiredTimerInfo
+                            Instance of ExpiredTimerInfo that provides access to expired timer.
+        """
+        return iter([])
 
     @abstractmethod
     def close(self) -> None:
@@ -346,3 +441,22 @@ class StatefulProcessor(ABC):
         operations.
         """
         ...
+
+    def handleInitialState(
+        self, key: Any, initialState: "PandasDataFrameLike", timer_values: TimerValues
+    ) -> None:
+        """
+        Optional to implement. Will act as no-op if not defined or no initial state input.
+         Function that will be invoked only in the first batch for users to process initial states.
+
+        Parameters
+        ----------
+        key : Any
+            grouping key.
+        initialState: :class:`pandas.DataFrame`
+                      One dataframe in the initial state associated with the key.
+        timer_values: TimerValues
+                      Timer value for the current batch that process the input rows.
+                      Users can get the processing or event time timestamp from TimerValues.
+        """
+        pass
