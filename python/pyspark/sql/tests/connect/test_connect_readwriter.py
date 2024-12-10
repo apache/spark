@@ -147,6 +147,7 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
             )
 
     def test_parquet_compression_option(self):
+        # SPARK-50537: Fix compression option being overwritten in df.write.parquet
         with tempfile.TemporaryDirectory(prefix="test_parquet") as d:
             self.connect.range(10).write.mode("overwrite").option("compression", "gzip").parquet(d)
             self.assertTrue(any(file.endswith(".gz.parquet") for file in os.listdir(d)))
