@@ -294,6 +294,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     Batch("Resolution", fixedPoint,
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
+      MoveParameterizedQueriesDown ::
+      BindParameters ::
+      ResolveIdentifierClause ::
       ResolveRelations ::
       ResolvePartitionSpec ::
       ResolveFieldNameAndPosition ::
@@ -339,11 +342,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
-      ResolveIdentifierClause ::
       ResolveUnion ::
       ResolveRowLevelCommandAssignments ::
-      MoveParameterizedQueriesDown ::
-      BindParameters ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
