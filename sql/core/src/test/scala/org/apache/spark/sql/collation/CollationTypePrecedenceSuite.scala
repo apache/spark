@@ -112,7 +112,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
   test("lateral alias has implicit strength") {
     checkAnswer(
-      sql(s"""
+      sql("""
         |SELECT
         |  a collate unicode as col1,
         |  COLLATION(col1 || 'b')
@@ -121,7 +121,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       Row("a", UNICODE_COLLATION_NAME))
 
     assertImplicitMismatch(
-      sql(s"""
+      sql("""
         |SELECT
         |  a collate unicode as col1,
         |  a collate utf8_lcase as col2,
@@ -130,7 +130,7 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
         |""".stripMargin))
 
     checkAnswer(
-      sql(s"""
+      sql("""
         |SELECT
         |  a collate unicode as col1,
         |  COLLATION(col1 || 'b' collate UTF8_LCASE)
