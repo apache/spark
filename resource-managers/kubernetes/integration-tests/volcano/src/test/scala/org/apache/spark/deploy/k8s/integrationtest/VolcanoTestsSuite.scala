@@ -202,10 +202,10 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .getItems.asScala
   }
 
-  private def getAllPods(
+  private def printAllPods(
       role: String,
       groupLocator: String): Unit = {
-    val res = kubernetesTestComponents.kubernetesClient
+    val pods = kubernetesTestComponents.kubernetesClient
       .pods()
       .inNamespace(kubernetesTestComponents.namespace)
       .withLabel("spark-group-locator", groupLocator)
@@ -214,12 +214,11 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
       .getItems.asScala
     // scalastyle:off println
     println("---------------------------------------------------")
-    println(s"Pods size: ${res.size}")
-    res.foreach(pod => {
-      println(pod.getApiVersion)
-      // println(pod.getStatus)
-      println(pod.getStatus.getPhase)
-      // println(pod)
+    println(s"Pods size: ${pods.size}")
+    pods.foreach(pod => {
+      println(s"pod status: ${pod.getStatus.getPhase}, " +
+        s"namespace: ${pod.getMetadata.getNamespace}, " +
+        s"name: ${pod.getMetadata.getName}")
     })
     println("---------------------------------------------------")
     // scalastyle:on println
@@ -353,7 +352,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     (1 until jobNum).map { completedNum =>
       Eventually.eventually(TIMEOUT, INTERVAL) {
         val pendingPods = getPods(role = "driver", groupName, statusPhase = "Pending")
-        getAllPods(role = "driver", groupName)
+        printAllPods(role = "driver", groupName)
         // scalastyle:off println
         println(s"pendingPods size: ${pendingPods.size}, " +
           s"jobNum - completedNum: ${jobNum - completedNum}")
@@ -364,7 +363,7 @@ private[spark] trait VolcanoTestsSuite extends BeforeAndAfterEach { k8sSuite: Ku
     // All jobs succeeded finally
     Eventually.eventually(TIMEOUT, INTERVAL) {
       val succeededPods = getPods(role = "driver", groupName, statusPhase = "Succeeded")
-      getAllPods(role = "driver", groupName)
+      printAllPods(role = "driver", groupName)
       // scalastyle:off println
       println(s"succeededPods size: ${succeededPods.size}, jobNum: $jobNum")
       // scalastyle:on println

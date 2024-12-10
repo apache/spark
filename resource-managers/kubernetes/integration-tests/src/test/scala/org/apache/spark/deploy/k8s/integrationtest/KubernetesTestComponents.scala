@@ -134,6 +134,14 @@ private[spark] object SparkAppLauncher extends Logging {
       commandLine ++= appArguments.appArgs
     }
     logInfo(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
-    ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
+    val outputs = ProcessUtils.executeProcess(commandLine.toArray, timeoutSecs, env = env)
+    // scalastyle:off println
+    println("-----------------------Output Begin-----------------------")
+    println(s"Launching a spark app with command line: ${commandLine.mkString(" ")}")
+    outputs.foreach(line => {
+      println(line)
+    })
+    println("-----------------------Output End-----------------------")
+    // scalastyle:on println
   }
 }
