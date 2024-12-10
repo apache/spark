@@ -6013,10 +6013,8 @@ class AstBuilder extends DataTypeAstBuilder
     // analyzer behave as if we had added the corresponding SQL clause after a table subquery
     // containing the input plan.
     def withSubqueryAlias(): LogicalPlan = left match {
-      case s: SubqueryAlias =>
-        s
-      case u: UnresolvedRelation =>
-        u
+      case _: SubqueryAlias | _: UnresolvedRelation | _: Join | _: Filter =>
+        left
       case _ =>
         SubqueryAlias(SubqueryAlias.generateSubqueryName(), left)
     }
