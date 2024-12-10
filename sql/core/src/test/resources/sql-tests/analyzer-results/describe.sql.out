@@ -614,12 +614,10 @@ AnalyzeColumnCommand `spark_catalog`.`default`.`customer`, List(cust_id), false
 
 
 -- !query
-DESCRIBE FORMATTED customer customer.cust_id
+DESC FORMATTED customer cust_id AS JSON
 -- !query analysis
-DescribeColumnCommand `spark_catalog`.`default`.`customer`, [spark_catalog, default, customer, cust_id], true, [info_name#x, info_value#x]
-
-
--- !query
-DESCRIBE FORMATTED customer customer.cust_id AS JSON
--- !query analysis
-DescribeColumnJsonCommand `spark_catalog`.`default`.`customer`, [spark_catalog, default, customer, cust_id], true
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DESCRIBE_COL_JSON_UNSUPPORTED",
+  "sqlState" : "0A000"
+}

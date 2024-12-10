@@ -214,9 +214,7 @@ DESC FORMATTED customer AS JSON;
 
 ANALYZE TABLE customer COMPUTE STATISTICS FOR COLUMNS cust_id;
 
--- describe columns
-DESCRIBE FORMATTED customer customer.cust_id;
-
-DESCRIBE FORMATTED customer customer.cust_id AS JSON;
+-- AnalysisException: describe col as json unsupported
+DESC FORMATTED customer cust_id AS JSON;
 
 

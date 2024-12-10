@@ -101,12 +101,12 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           |""".stripMargin
       spark.sql(tableCreationStr)
 
-      val e1 = intercept[AnalysisException] {
+      val error = intercept[AnalysisException] {
         spark.sql(s"DESCRIBE $t AS JSON")
       }
 
       checkError(
-        exception = e1,
+        exception = error,
         condition = "DESCRIBE_JSON_NOT_EXTENDED")
     }
   }
@@ -307,7 +307,7 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
     }
   }
 
-  test("DESCRIBE AS JSON customers docs example") {
+  test("DESCRIBE AS JSON for column throws Analysis Exception") {
     withNamespaceAndTable("ns", "table") { t =>
       val tableCreationStr =
         """
@@ -321,21 +321,13 @@ class DescribeTableSuite extends v1.DescribeTableSuiteBase with CommandSuiteBase
           |""".stripMargin
       spark.sql(tableCreationStr)
       spark.sql("INSERT INTO customer PARTITION (state = \"AR\") VALUES (100, \"Mike\")")
-      val descriptionDf = spark.sql(s"DESCRIBE FORMATTED customer customer.name AS JSON")
-      val firstRow = descriptionDf.select("json_metadata").head()
-      val jsonValue = firstRow.getString(0)
-      val parsedOutput = parse(jsonValue).extract[DescribeTableJson]
+      val error = intercept[AnalysisException] {
+        spark.sql(s"DESCRIBE FORMATTED customer customer.name AS JSON")
+      }
 
-      val expectedOutput = DescribeTableJson(
-        columns = Some(List(
-          TableColumn(1, "a", Type("string")),
-          TableColumn(2, "b", Type("integer")),
-          TableColumn(3, "c", Type("string")),
-          TableColumn(4, "d", Type("string"))
-        ))
-      )
-
-      assert(expectedOutput == parsedOutput)
+      checkError(
+        exception = error,
+        condition = "DESCRIBE_COL_JSON_UNSUPPORTED")
     }
   }
 

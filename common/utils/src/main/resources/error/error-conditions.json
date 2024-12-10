@@ -1144,16 +1144,16 @@
     ],
     "sqlState" : "42623"
   },
+  "DESCRIBE_COL_JSON_UNSUPPORTED" : {
+    "message" : [
+      "DESCRIBE TABLE ... AS JSON not supported for individual columns."
+    ],
+    "sqlState" : "0A000"
+  },
   "DESCRIBE_JSON_NOT_EXTENDED" : {
     "message" : [
       "DESCRIBE TABLE ... AS JSON only supported when [EXTENDED|FORMATTED] is specified.",
       "For example: `DESCRIBE EXTENDED TABLE t AS JSON` is supported but `DESCRIBE TABLE t AS JSON` is not."
-    ],
-    "sqlState" : "0A000"
-  },
-  "DESCRIBE_COL_JSON_UNSUPPORTED" : {
-    "message" : [
-      "DESCRIBE TABLE ... AS JSON not supported for individual columns."
     ],
     "sqlState" : "0A000"
   },
