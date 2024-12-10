@@ -104,19 +104,21 @@ object CollationTypeCoercion {
    * should be that of the childType.
    */
   private def shouldRemoveCast(cast: Cast): Boolean = {
-    val isUserDefined = cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
     val isChildTypeCollatedString = cast.child.dataType match {
       case st: StringType => !st.isUTF8BinaryCollation
       case _ => false
     }
     val targetType = cast.dataType
 
-    isUserDefined && isChildTypeCollatedString && targetType == StringType
+    isUserDefined(cast) && isChildTypeCollatedString && targetType == StringType
   }
 
   private def hasStringType(dataType: DataType): Boolean = {
     dataType.existsRecursively(_.isInstanceOf[StringType])
   }
+
+  private def isUserDefined(cast: Cast): Boolean =
+    cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined
 
   /**
    * Changes the data type of the expression to the given `newType`.
@@ -126,18 +128,11 @@ object CollationTypeCoercion {
       case Some(newDataType) if newDataType != expr.dataType =>
         assert(!newDataType.existsRecursively(_.isInstanceOf[StringTypeWithContext]))
 
-        val exprWithNewType = expr match {
+        expr match {
           case lit: Literal => lit.copy(dataType = newDataType)
           case cast: Cast => cast.copy(dataType = newDataType)
           case _ => Cast(expr, newDataType)
         }
-
-        // also copy the collation context tag
-        if (hasCollationContextTag(expr)) {
-          exprWithNewType.setTagValue(
-            COLLATION_CONTEXT_TAG, expr.getTagValue(COLLATION_CONTEXT_TAG).get)
-        }
-        exprWithNewType
 
       case _ =>
         expr
@@ -329,6 +324,15 @@ object CollationTypeCoercion {
     case collate: Collate =>
       Some(addContextToStringType(collate.dataType, Explicit))
 
+    case cast: Cast =>
+      if (isUserDefined(cast) && isComplexType(cast.dataType)) {
+        // since we can't use collate clause with complex types
+        // user defined casts should be treated as implicit
+        Some(addContextToStringType(cast.dataType, Implicit))
+      } else {
+        Some(addContextToStringType(cast.dataType, Default))
+      }
+
     case expr @ (_: Alias | _: SubqueryExpression | _: AttributeReference | _: VariableReference) =>
       Some(addContextToStringType(expr.dataType, Implicit))
 
@@ -452,6 +456,13 @@ object CollationTypeCoercion {
     case _: Alias | _: AttributeReference | _: Cast | _: Concat | _: ConcatWs |
          _: Collation | _: InvokeLike | _: Literal => true
     case _ => false
+  }
+
+  private def isComplexType(dataType: DataType): Boolean = {
+    dataType match {
+      case _: ArrayType | _: MapType | _: StructType => true
+      case _ => false
+    }
   }
 }
 

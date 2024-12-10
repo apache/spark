@@ -438,6 +438,32 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
       sql(s"SELECT map('key1', 'val1' collate utf8_lcase, 'key2', 'val2' collate unicode)"))
   }
 
+  test("user defined cast on maps") {
+    checkAnswer(
+      sql(s"""
+        |SELECT map_contains_key(
+        |  map('a' collate utf8_lcase, 'b'),
+        |  'A' collate utf8_lcase)
+        |""".stripMargin),
+      Seq(Row(true)))
+
+    checkAnswer(
+      sql(s"""
+        |SELECT map_contains_key(
+        |  CAST(map('a' collate utf8_lcase, 'b') AS MAP<STRING, STRING>),
+        |  'A')
+        |""".stripMargin),
+      Seq(Row(false)))
+
+    checkAnswer(
+      sql(s"""
+        |SELECT map_contains_key(
+        |  CAST(map('a' collate utf8_lcase, 'b') AS MAP<STRING COLLATE UNICODE, STRING>),
+        |  'A' COLLATE UNICODE)
+        |""".stripMargin),
+      Seq(Row(false)))
+  }
+
   test("maps of structs") {
     assertQuerySchema(
       sql(s"SELECT map('key1', struct(1, 'a' collate unicode), 'key2', struct(2, 'b'))"),
@@ -480,6 +506,42 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
 
     assertExplicitMismatch(
       sql(s"SELECT array('a', 'b' collate unicode) = array('A' collate utf8_lcase, 'B')"))
+  }
+
+  test("user defined cast on arrays") {
+    checkAnswer(
+      sql(s"""
+        |SELECT array_contains(
+        |  array('a', 'b' collate utf8_lcase),
+        |  'A')
+        |""".stripMargin),
+      Seq(Row(true)))
+
+    // should be false because ARRAY<STRING> should take precedence
+    // over UTF8_LCASE in array creation
+    checkAnswer(
+      sql(s"""
+        |SELECT array_contains(
+        |  CAST(array('a', 'b' collate utf8_lcase) AS ARRAY<STRING>),
+        |  'A')
+        |""".stripMargin),
+      Seq(Row(false)))
+
+    checkAnswer(
+      sql(s"""
+        |SELECT array_contains(
+        |  CAST(array('a', 'b' collate utf8_lcase) AS ARRAY<STRING COLLATE UNICODE>),
+        |  'A')
+        |""".stripMargin),
+      Seq(Row(false)))
+
+    checkAnswer(
+      sql(s"""
+        |SELECT array_contains(
+        |  CAST(array('a', 'b' collate utf8_lcase) AS ARRAY<STRING COLLATE UNICODE>),
+        |  'A' collate unicode)
+        |""".stripMargin),
+      Seq(Row(false)))
   }
 
   test("array of structs") {

@@ -299,6 +299,16 @@ class CogroupedMapInArrowTestsMixin:
             "+---------+------------+----------+-------------+\n",
         )
 
+    def test_self_join(self):
+        df = self.spark.createDataFrame([(1, 1)], ("k", "v"))
+
+        def arrow_func(key, left, right):
+            return pa.Table.from_pydict({"x": [2], "y": [2]})
+
+        df2 = df.groupby("k").cogroup(df.groupby("k")).applyInArrow(arrow_func, "x long, y long")
+
+        self.assertEqual(df2.join(df2).count(), 1)
+
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
@@ -324,7 +334,7 @@ class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase)
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_arrow_cogrouped_map import *  # noqa: F401
+    from pyspark.sql.tests.arrow.test_arrow_cogrouped_map import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]

@@ -29,14 +29,17 @@ import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.rocksdb.CompressionType
 import org.scalactic.source.Position
+import org.scalatest.PrivateMethodTester
 import org.scalatest.Tag
 
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{CreateAtomicTestManager, FileSystemBasedCheckpointFileManager}
+import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, CreateAtomicTestManager, FileContextBasedCheckpointFileManager, FileSystemBasedCheckpointFileManager}
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
@@ -44,6 +47,7 @@ import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+
 
 class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
@@ -60,6 +64,17 @@ class NoOverwriteFileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Co
       super.renameTempFile(srcPath, dstPath, overwriteIfPossible)
     }
   }
+}
+
+class TestStateStoreChangelogWriterV101(
+    fm: CheckpointFileManager,
+    file: Path,
+    compressionCodec: CompressionCodec)
+  extends StateStoreChangelogWriterV1(fm, file, compressionCodec) {
+
+  override def version: Short = 101
+
+  writeVersion()
 }
 
 trait RocksDBStateStoreChangelogCheckpointingTestUtil {
@@ -177,12 +192,80 @@ trait AlsoTestWithChangelogCheckpointingEnabled
   }
 }
 
+class OpenNumCountedTestInputStream(in: InputStream) extends FSDataInputStream(in) {
+  import OpenNumCountedTestInputStream._
+
+  addOpenStreams(this)
+
+  override def close(): Unit = {
+    removeOpenStream(this)
+    super.close()
+  }
+}
+
+class OpenStreamCountedTestFileManager(path: Path, hadoopConf: Configuration)
+  extends FileContextBasedCheckpointFileManager(path, hadoopConf) {
+
+  override def open(path: Path): FSDataInputStream = {
+    val stream = new OpenNumCountedTestInputStream(super.open(path))
+    stream
+  }
+}
+
+object OpenNumCountedTestInputStream extends Logging {
+  private val openStreams = mutable.Map.empty[FSDataInputStream, Throwable]
+
+  def addOpenStreams(stream: FSDataInputStream): Unit = openStreams.synchronized {
+    openStreams.put(stream, new Throwable())
+  }
+
+  def removeOpenStream(stream: FSDataInputStream): Unit = openStreams.synchronized {
+    openStreams.remove(stream)
+  }
+
+  def clearOpenStreams(): Unit = openStreams.synchronized {
+    openStreams.clear()
+  }
+
+  def assertNoOpenStreams(): Unit = openStreams.synchronized {
+    val numOpen = openStreams.values.size
+    if (numOpen > 0) {
+      for (exc <- openStreams.values) {
+        logWarning("Leaked filesystem connection created at:")
+        exc.printStackTrace()
+      }
+      throw new IllegalStateException(s"There are $numOpen possibly leaked file streams.",
+        openStreams.values.head)
+    }
+  }
+}
+
 @SlowSQLTest
-class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession {
+class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with SharedSparkSession
+    with PrivateMethodTester {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.STATE_STORE_PROVIDER_CLASS, classOf[RocksDBStateStoreProvider].getName)
+  }
+
+  // In each test we verify opened streams are all closed
+  private def hadoopConf: Configuration = {
+    val fmClass = "org.apache.spark.sql.execution.streaming.state." +
+      "OpenStreamCountedTestFileManager"
+    val hadoopConf = new Configuration()
+    hadoopConf.set(STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key, fmClass)
+    hadoopConf
+  }
+
+  override def beforeEach(): Unit = {
+    OpenNumCountedTestInputStream.clearOpenStreams()
+  }
+
+  override def afterEach(): Unit = {
+    eventually(timeout(10.seconds), interval(2.seconds)) {
+      OpenNumCountedTestInputStream.assertNoOpenStreams()
+    }
   }
 
   testWithColumnFamilies(
@@ -693,7 +776,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     " with Changelog Checkpointing") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
-      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
     val changelogWriter = fileManager.getChangeLogWriter(1)
     assert(changelogWriter.version === 1)
 
@@ -742,7 +825,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
   testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
-      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
     val changelogWriter = fileManager.getChangeLogWriter(1)
     assert(changelogWriter.version === 1)
 
@@ -761,6 +844,153 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
         null, StateStore.DEFAULT_COL_FAMILY_NAME)
     }
 
+    changelogReader.closeIfNeeded()
+
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: StateStoreChangelogReaderFactory " +
+    "edge case") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    val lineage: Array[LineageItem] = Array(
+      LineageItem(1, java.util.UUID.randomUUID.toString),
+      LineageItem(2, java.util.UUID.randomUUID.toString),
+      LineageItem(3, java.util.UUID.randomUUID.toString)
+    )
+
+    // Create a v1 writer
+    val changelogWriterV1 = fileManager.getChangeLogWriter(101)
+    assert(changelogWriterV1.version === 1)
+    changelogWriterV1.commit() // v1 with empty content
+
+    val changelogReaderV1 = fileManager.getChangelogReader(101)
+    assert(changelogReaderV1.version === 1) // getChangelogReader should return a v1 reader
+    changelogReaderV1.closeIfNeeded()
+
+    // Create a v2 writer
+    val changelogWriterV2 = fileManager.getChangeLogWriter(102, useColumnFamilies = true)
+    assert(changelogWriterV2.version === 2)
+    changelogWriterV2.commit() // v2 with empty content
+
+    val changelogReaderV2 = fileManager.getChangelogReader(102)
+    assert(changelogReaderV2.version === 2) // getChangelogReader should return a v2 reader
+    changelogReaderV2.closeIfNeeded()
+
+    // Create a v3 writer
+    val changelogWriterV3 = fileManager.getChangeLogWriter(
+      103, useColumnFamilies = false, checkpointUniqueId, Some(lineage))
+    assert(changelogWriterV3.version === 3)
+    changelogWriterV3.commit() // v1 with empty content
+
+    val changelogReaderV3 = fileManager.getChangelogReader(
+      103, checkpointUniqueId = checkpointUniqueId)
+    assert(changelogReaderV3.version === 3) // getChangelogReader should return a v3 reader
+    assert(changelogReaderV3.lineage sameElements lineage)
+    changelogReaderV3.closeIfNeeded()
+
+    // Create a v4 writer
+    val changelogWriterV4 = fileManager.getChangeLogWriter(
+      104, useColumnFamilies = true, checkpointUniqueId, Some(lineage))
+    assert(changelogWriterV4.version === 4)
+    changelogWriterV4.commit() // v1 with empty content
+
+    val changelogReaderV4 = fileManager.getChangelogReader(
+      104, checkpointUniqueId = checkpointUniqueId)
+    assert(changelogReaderV4.version === 4) // getChangelogReader should return a v4 reader
+    assert(changelogReaderV4.lineage sameElements lineage)
+    changelogReaderV4.closeIfNeeded()
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: changelog reader / writer " +
+    "failure cases") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+    // Failure case 1: reader writer version mismatch
+    // Create a v1 writer
+    val changelogWriterV1 = fileManager.getChangeLogWriter(101)
+    assert(changelogWriterV1.version === 1)
+
+    (1 to 5).foreach(i => changelogWriterV1.put(i.toString, i.toString))
+    (2 to 4).foreach(j => changelogWriterV1.delete(j.toString))
+
+    changelogWriterV1.commit()
+    // Success case, when reading from the same file, a V1 reader should be constructed.
+    val changelogReaderV1 = fileManager.getChangelogReader(101)
+    assert(changelogReaderV1.version === 1)
+    changelogReaderV1.closeIfNeeded()
+
+    // Failure case, force creating a V3 reader.
+    val dfsChangelogFile = PrivateMethod[Path](Symbol("dfsChangelogFile"))
+    val codec = PrivateMethod[CompressionCodec](Symbol("codec"))
+    var changelogFile = fileManager invokePrivate dfsChangelogFile(101L, None)
+    val compressionCodec = fileManager invokePrivate codec()
+    val fm = CheckpointFileManager.create(new Path(dfsRootDir.getAbsolutePath), new Configuration)
+    val e = intercept[AssertionError] {
+      new StateStoreChangelogReaderV3(fm, changelogFile, compressionCodec)
+    }
+    assert(e.getMessage.contains("Changelog version mismatch"))
+
+    changelogFile = fileManager invokePrivate dfsChangelogFile(1L, None)
+    // Failure case 2: readerFactory throw when reading from ckpt built in future Spark version
+    // Create a v101 writer
+    val changelogWriter = new TestStateStoreChangelogWriterV101(
+      fm, changelogFile, compressionCodec)
+    assert(changelogWriter.version === 101)
+
+    changelogWriter.commit()
+
+    // Failure case, force creating a V3 reader.
+    val ex = intercept[SparkException] {
+      fileManager.getChangelogReader(1)
+    }
+    checkError(
+      ex,
+      condition = "CANNOT_LOAD_STATE_STORE.INVALID_CHANGE_LOG_READER_VERSION",
+      parameters = Map("version" -> 101.toString)
+    )
+    assert(ex.getMessage.contains("please upgrade your Spark"))
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write changelog " +
+      "with state checkpoint id enabled") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    val lineage: Array[LineageItem] = Array(
+      LineageItem(1, java.util.UUID.randomUUID.toString),
+      LineageItem(2, java.util.UUID.randomUUID.toString),
+      LineageItem(3, java.util.UUID.randomUUID.toString)
+    )
+    val changelogWriter = fileManager.getChangeLogWriter(
+      3, useColumnFamilies = false, checkpointUniqueId, Some(lineage))
+    assert(changelogWriter.version === 3)
+
+    (1 to 5).foreach(i => changelogWriter.put(i.toString, i.toString))
+    (2 to 4).foreach(j => changelogWriter.delete(j.toString))
+
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(3, checkpointUniqueId)
+    assert(changelogReader.version === 3)
+    assert(changelogReader.lineage sameElements lineage)
+    val entries = changelogReader.toSeq
+    val expectedEntries = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes,
+        i.toString.getBytes, StateStore.DEFAULT_COL_FAMILY_NAME)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes,
+        null, StateStore.DEFAULT_COL_FAMILY_NAME)
+    }
+    changelogReader.closeIfNeeded()
+
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
       case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
@@ -771,8 +1001,8 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     "RocksDBFileManager: read and write v2 changelog with default col family") {
     val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
     val fileManager = new RocksDBFileManager(
-      dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
-    val changelogWriter = fileManager.getChangeLogWriter(1, true)
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+    val changelogWriter = fileManager.getChangeLogWriter(1, useColumnFamilies = true)
     assert(changelogWriter.version === 2)
     (1 to 5).foreach { i =>
       changelogWriter.put(i.toString, i.toString)
@@ -786,7 +1016,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     }
 
     changelogWriter.commit()
-    val changelogReader = fileManager.getChangelogReader(1, true)
+    val changelogReader = fileManager.getChangelogReader(1)
     assert(changelogReader.version === 2)
     val entries = changelogReader.toSeq
     val expectedEntries = (1 to 5).map { i =>
@@ -796,6 +1026,52 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     } ++ (2 to 4).map { j =>
       (RecordType.DELETE_RECORD, j.toString.getBytes, null)
     }
+    changelogReader.closeIfNeeded()
+
+    assert(entries.size == expectedEntries.size)
+    entries.zip(expectedEntries).map{
+      case (e1, e2) => assert(e1._1 === e2._1 && e1._2 === e2._2 && e1._3 === e2._3)
+    }
+  }
+
+  testWithChangelogCheckpointingEnabled("RocksDBFileManager: read and write v2 changelog with " +
+      "default col family and state checkpoint id enabled") {
+    val dfsRootDir = new File(Utils.createTempDir().getAbsolutePath + "/state/1/1")
+    val fileManager = new RocksDBFileManager(
+      dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
+    val checkpointUniqueId = Some(java.util.UUID.randomUUID.toString)
+    val lineage: Array[LineageItem] = Array(
+      LineageItem(1, java.util.UUID.randomUUID.toString),
+      LineageItem(2, java.util.UUID.randomUUID.toString),
+      LineageItem(3, java.util.UUID.randomUUID.toString)
+    )
+    val changelogWriter = fileManager.getChangeLogWriter(
+      1, useColumnFamilies = true, checkpointUniqueId, Some(lineage))
+    assert(changelogWriter.version === 4)
+    (1 to 5).foreach { i =>
+      changelogWriter.put(i.toString, i.toString)
+    }
+    (1 to 5).foreach { i =>
+      changelogWriter.merge(i.toString, i.toString)
+    }
+
+    (2 to 4).foreach { j =>
+      changelogWriter.delete(j.toString)
+    }
+
+    changelogWriter.commit()
+    val changelogReader = fileManager.getChangelogReader(1, checkpointUniqueId)
+    assert(changelogReader.version === 4)
+    assert(changelogReader.lineage sameElements lineage)
+    val entries = changelogReader.toSeq
+    val expectedEntries = (1 to 5).map { i =>
+      (RecordType.PUT_RECORD, i.toString.getBytes, i.toString.getBytes)
+    } ++ (1 to 5).map { i =>
+      (RecordType.MERGE_RECORD, i.toString.getBytes, i.toString.getBytes)
+    } ++ (2 to 4).map { j =>
+      (RecordType.DELETE_RECORD, j.toString.getBytes, null)
+    }
+    changelogReader.closeIfNeeded()
 
     assert(entries.size == expectedEntries.size)
     entries.zip(expectedEntries).map{
@@ -810,7 +1086,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     try {
       val verificationDir = Utils.createTempDir().getAbsolutePath
       val fileManager = new RocksDBFileManager(
-        dfsRootDir.getAbsolutePath, Utils.createTempDir(), new Configuration)
+        dfsRootDir.getAbsolutePath, Utils.createTempDir(), hadoopConf)
       // Save a version of empty checkpoint files
       val cpFiles = Seq()
       generateFiles(verificationDir, cpFiles)
@@ -910,10 +1186,10 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       // Use 2 file managers here to emulate concurrent execution
       // that checkpoint the same version of state
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val rocksDBFileMapping = new RocksDBFileMapping()
       val fileManager_ = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
@@ -994,7 +1270,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       (new File(dfsRootDir, "SSTs")).mkdir()
       (new File(dfsRootDir, "logs")).mkdir()
 
@@ -1053,7 +1329,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       val dfsRootDir = dir.getAbsolutePath
       val verificationDir = Utils.createTempDir().getAbsolutePath // local dir to load checkpoints
       val fileManager = new RocksDBFileManager(
-        dfsRootDir, Utils.createTempDir(), new Configuration)
+        dfsRootDir, Utils.createTempDir(), hadoopConf)
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
@@ -2446,7 +2722,7 @@ class RocksDBSuite extends AlsoTestWithChangelogCheckpointingEnabled with Shared
       remoteDir: String,
       version: Int = 0,
       conf: RocksDBConf = dbConf,
-      hadoopConf: Configuration = new Configuration(),
+      hadoopConf: Configuration = hadoopConf,
       useColumnFamilies: Boolean = false,
       localDir: File = Utils.createTempDir())(
       func: RocksDB => T): T = {

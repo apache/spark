@@ -330,6 +330,7 @@ case object VariantGet {
    */
   def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
     dataType match {
+    case CharType(_) | VarcharType(_) => false
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
         VariantType =>
       true

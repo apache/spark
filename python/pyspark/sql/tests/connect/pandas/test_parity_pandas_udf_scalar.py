@@ -14,28 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import unittest
+from pyspark.sql.tests.pandas.test_pandas_udf_scalar import ScalarPandasUDFTestsMixin
+from pyspark.testing.connectutils import ReusedConnectTestCase
 
-from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
-from pyspark.sql.tests.test_arrow_python_udf import PythonUDFArrowTestsMixin
 
-
-class ArrowPythonUDFParityTests(UDFParityTests, PythonUDFArrowTestsMixin):
-    @classmethod
-    def setUpClass(cls):
-        super(ArrowPythonUDFParityTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        finally:
-            super(ArrowPythonUDFParityTests, cls).tearDownClass()
+class PandasUDFScalarParityTests(ScalarPandasUDFTestsMixin, ReusedConnectTestCase):
+    pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.connect.test_parity_arrow_python_udf import *  # noqa: F401
+    from pyspark.sql.tests.connect.pandas.test_parity_pandas_udf_scalar import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
