@@ -43,7 +43,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
 
       iter.next() // open iterator, guarantees that the RPC reached the server
       // expire all RPCs on server
-      SparkConnectService.executionManager.setAllRPCsDeadline(System.currentTimeMillis() - 1)
+      SparkConnectService.executionManager.setAllRPCsDeadline(System.nanoTime() - 1)
       assertEventuallyNoActiveRpcs()
       // iterator should reattach
       // (but not necessarily at first next, as there might have been messages buffered client side)
@@ -155,7 +155,7 @@ class ReattachableExecuteSuite extends SparkConnectServerTest {
       // open the iterator, guarantees that the RPC reached the server
       iter.next()
       // disconnect and remove on server
-      SparkConnectService.executionManager.setAllRPCsDeadline(System.currentTimeMillis() - 1)
+      SparkConnectService.executionManager.setAllRPCsDeadline(System.nanoTime() - 1)
       assertEventuallyNoActiveRpcs()
       SparkConnectService.executionManager.periodicMaintenance(0)
       assertNoActiveExecutions()
