@@ -27,6 +27,7 @@ from pyspark.errors import (
     PySparkTypeError,
     AnalysisException,
     PySparkPicklingError,
+    IllegalArgumentException,
 )
 from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
@@ -1097,6 +1098,7 @@ class BaseUDTFTestsMixin:
             ],
             checkRowOrder=True,
         )
+
         assertDataFrameEqual(
             func(df.asTable().withSinglePartition()),
             [
@@ -1106,6 +1108,18 @@ class BaseUDTFTestsMixin:
                 Row(key=2, value="d"),
             ],
         )
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call withSinglePartition\(\) after partitionBy\(\) has been called",
+        ):
+            df.asTable().partitionBy(df.key).withSinglePartition()
+
+        with self.assertRaisesRegex(
+            IllegalArgumentException,
+            r"Cannot call partitionBy\(\) after withSinglePartition\(\) has been called",
+        ):
+            df.asTable().withSinglePartition().partitionBy(df.key)
 
     def test_udtf_with_int_and_table_argument_query(self):
         class TestUDTF:
