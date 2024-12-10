@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.avro.SchemaConverters
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -39,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPandasExec}
 import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSourceV1
-import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter}
+import org.apache.spark.sql.execution.streaming.state.{OperatorStateMetadataReader, OperatorStateMetadataV1, OperatorStateMetadataV2, OperatorStateMetadataWriter, StateSchemaCompatibilityChecker, StateSchemaMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -256,10 +257,31 @@ class IncrementalExecution(
                 ssw.operatorStateMetadataVersion,
                 Some(currentBatchId))
             metadataWriter.write(metadata)
-          case _ =>
+            ssw match {
+              case tws: TransformWithStateExec =>
+                val stateSchemaMetadata = createStateSchemaMetadata(stateSchemaMapping.head)
+                val ssmBc = sparkSession.sparkContext.broadcast(stateSchemaMetadata)
+                tws.copy(stateSchemaMetadata = Some(ssmBc))
+              case _ => ssw
+            }
+          case _ => statefulOp
         }
-        statefulOp
     }
+  }
+
+  private def createStateSchemaMetadata(
+      stateSchemaMapping: Map[Int, String]
+  ): StateSchemaMetadata = {
+    val fm = CheckpointFileManager.create(new Path(checkpointLocation), hadoopConf)
+    val stateSchemas = stateSchemaMapping.map { case (stateSchemaId, stateSchemaPath) =>
+      val inStream = fm.open(new Path(stateSchemaPath))
+      val colFamilySchemas =
+        StateSchemaCompatibilityChecker.readSchemaFile(inStream).map { schema =>
+          schema.colFamilyName -> SchemaConverters.toAvroType(schema.valueSchema)
+        }.toMap
+      stateSchemaId -> colFamilySchemas
+    }
+    StateSchemaMetadata(stateSchemas.keys.max, stateSchemas)
   }
 
   object StateOpIdRule extends SparkPlanPartialRule {
@@ -556,10 +578,10 @@ class IncrementalExecution(
 
       // The rule below doesn't change the plan but can cause the side effect that
       // metadata/schema is written in the checkpoint directory of stateful operator.
-      planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
+      val m = planWithStateOpId transform StateSchemaAndOperatorMetadataRule.rule
 
-      simulateWatermarkPropagation(planWithStateOpId)
-      planWithStateOpId transform WatermarkPropagationRule.rule
+      simulateWatermarkPropagation(m)
+      m transform WatermarkPropagationRule.rule
     }
   }
 

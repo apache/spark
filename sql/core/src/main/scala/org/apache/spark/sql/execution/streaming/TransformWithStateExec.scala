@@ -75,7 +75,8 @@ case class TransformWithStateExec(
     initialStateGroupingAttrs: Seq[Attribute],
     initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
-    initialState: SparkPlan)
+    initialState: SparkPlan,
+    stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None)
   extends BinaryExecNode with StateStoreWriter with WatermarkSupport with ObjectProducerExec {
 
   override def shortName: String = "transformWithStateExec"

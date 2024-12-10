@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.CompressionCodec
@@ -86,7 +87,8 @@ private[sql] class RocksDBStateStoreProvider
 
       keyValueEncoderMap.putIfAbsent(colFamilyName,
         (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec, useColumnFamilies,
-          Some(newColFamilyId), avroEnc), RocksDBStateEncoder.getValueEncoder(valueSchema,
+          Some(newColFamilyId), avroEnc), RocksDBStateEncoder.getValueEncoder(
+          RocksDBStateStoreProvider.this, colFamilyName, valueSchema,
           useMultipleValuesPerKey, avroEnc)))
     }
 
@@ -367,7 +369,8 @@ private[sql] class RocksDBStateStoreProvider
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None): Unit = {
     this.stateStoreId_ = stateStoreId
     this.keySchema = keySchema
     this.valueSchema = valueSchema
@@ -398,7 +401,9 @@ private[sql] class RocksDBStateStoreProvider
     keyValueEncoderMap.putIfAbsent(StateStore.DEFAULT_COL_FAMILY_NAME,
       (RocksDBStateEncoder.getKeyEncoder(keyStateEncoderSpec,
         useColumnFamilies, defaultColFamilyId, avroEnc),
-        RocksDBStateEncoder.getValueEncoder(valueSchema, useMultipleValuesPerKey, avroEnc)))
+        RocksDBStateEncoder.getValueEncoder(
+          RocksDBStateStoreProvider.this, colFamilyName,
+          valueSchema, useMultipleValuesPerKey, avroEnc)))
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_

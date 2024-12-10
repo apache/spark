@@ -32,6 +32,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.{Logging, LogKeys, MDC, MessageWithContext}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -338,7 +339,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       useColumnFamilies: Boolean,
       storeConf: StateStoreConf,
       hadoopConf: Configuration,
-      useMultipleValuesPerKey: Boolean = false): Unit = {
+      useMultipleValuesPerKey: Boolean = false,
+      stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None): Unit = {
     assert(
       !storeConf.enableStateStoreCheckpointIds,
       "HDFS State Store Provider doesn't support checkpointFormatVersion >= 2 " +

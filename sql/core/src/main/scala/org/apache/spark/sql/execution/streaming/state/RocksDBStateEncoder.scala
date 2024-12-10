@@ -51,6 +51,19 @@ sealed trait RocksDBValueStateEncoder {
   def decodeValues(valueBytes: Array[Byte]): Iterator[UnsafeRow]
 }
 
+abstract class RocksDBValueStateEncoderWithProvider(
+    provider: RocksDBStateStoreProvider,
+    colFamilyName: String
+) extends RocksDBValueStateEncoder {
+  def getSchemaFromId(schemaId: Short): Schema = {
+    null
+  }
+
+  def getCurrentSchemaId: Short = {
+    0
+  }
+}
+
 abstract class RocksDBKeyStateEncoderBase(
     useColumnFamilies: Boolean,
     virtualColFamilyId: Option[Short] = None) extends RocksDBKeyStateEncoder {
@@ -124,13 +137,15 @@ object RocksDBStateEncoder extends Logging {
   }
 
   def getValueEncoder(
+      provider: RocksDBStateStoreProvider,
+      colFamilyName: String,
       valueSchema: StructType,
       useMultipleValuesPerKey: Boolean,
       avroEnc: Option[AvroEncoder] = None): RocksDBValueStateEncoder = {
     if (useMultipleValuesPerKey) {
-      new MultiValuedStateEncoder(valueSchema, avroEnc)
+      new MultiValuedStateEncoder(provider, colFamilyName, valueSchema, avroEnc)
     } else {
-      new SingleValueStateEncoder(valueSchema, avroEnc)
+      new SingleValueStateEncoder(provider, colFamilyName, valueSchema, avroEnc)
     }
   }
 
@@ -1142,9 +1157,11 @@ class NoPrefixKeyStateEncoder(
  * If the avroEnc is specified, we are using Avro encoding for this column family's values
  */
 class MultiValuedStateEncoder(
+    provider: RocksDBStateStoreProvider,
+    colFamilyName: String,
     valueSchema: StructType,
     avroEnc: Option[AvroEncoder] = None)
-  extends RocksDBValueStateEncoder with Logging {
+  extends RocksDBValueStateEncoderWithProvider(provider, colFamilyName) with Logging {
 
   import RocksDBStateEncoder._
 
@@ -1238,9 +1255,11 @@ class MultiValuedStateEncoder(
  * If the avroEnc is specified, we are using Avro encoding for this column family's values
  */
 class SingleValueStateEncoder(
+    provider: RocksDBStateStoreProvider,
+    colFamilyName: String,
     valueSchema: StructType,
     avroEnc: Option[AvroEncoder] = None)
-  extends RocksDBValueStateEncoder with Logging {
+  extends RocksDBValueStateEncoderWithProvider(provider, colFamilyName) with Logging {
 
   import RocksDBStateEncoder._
 

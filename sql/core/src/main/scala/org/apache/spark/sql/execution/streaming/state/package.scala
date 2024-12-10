@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.internal.SessionState
@@ -60,7 +61,8 @@ package object state {
         storeCoordinator: Option[StateStoreCoordinatorRef],
         useColumnFamilies: Boolean = false,
         extraOptions: Map[String, String] = Map.empty,
-        useMultipleValuesPerKey: Boolean = false)(
+        useMultipleValuesPerKey: Boolean = false,
+        stateSchemaMetadata: Option[Broadcast[StateSchemaMetadata]] = None)(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
