@@ -427,36 +427,29 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
       context = ExpectedContext(fragment = "parse_json('')", start = 7, stop = 20)
     )
 
-    Seq("false", "true").foreach { stableDerivedColumnAlias =>
-      withSQLConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED.key -> stableDerivedColumnAlias) {
-        val exprString = if (SQLConf.get.getConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED)) {
-          "\"parse_json('') ASC NULLS FIRST\""
-        } else "\"parse_json() ASC NULLS FIRST\""
-        checkError(
-          exception = intercept[AnalysisException] {
-            spark.sql("select parse_json('') order by 1")
-          },
-          condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
-          parameters = Map(
-            "functionName" -> "`sortorder`",
-            "dataType" -> "\"VARIANT\"",
-            "sqlExpr" -> exprString),
-          context = ExpectedContext(fragment = "order by 1", start = 22, stop = 31)
-        )
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("select parse_json('') v order by 1")
+      },
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`sortorder`",
+        "dataType" -> "\"VARIANT\"",
+        "sqlExpr" -> "\"v ASC NULLS FIRST\""),
+      context = ExpectedContext(fragment = "order by 1", start = 24, stop = 33)
+    )
 
-        checkError(
-          exception = intercept[AnalysisException] {
-            spark.sql("select parse_json('') sort by 1")
-          },
-          condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
-          parameters = Map(
-            "functionName" -> "`sortorder`",
-            "dataType" -> "\"VARIANT\"",
-            "sqlExpr" -> exprString),
-          context = ExpectedContext(fragment = "sort by 1", start = 22, stop = 30)
-        )
-      }
-    }
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql("select parse_json('') v sort by 1")
+      },
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`sortorder`",
+        "dataType" -> "\"VARIANT\"",
+        "sqlExpr" -> "\"v ASC NULLS FIRST\""),
+      context = ExpectedContext(fragment = "sort by 1", start = 24, stop = 32)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
