@@ -56,6 +56,8 @@ trait UserDefinedFunction {
 }
 
 object UserDefinedFunction {
+  val SQL_CONFIG_PREFIX = "sqlConfig."
+
   def parseTableSchema(text: String, parser: ParserInterface): StructType = {
     val parsed = parser.parseTableSchema(text)
     CharVarcharUtils.failIfHasCharVarchar(parsed).asInstanceOf[StructType]
