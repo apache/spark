@@ -102,6 +102,14 @@ message DataType {
   message String {
     uint32 type_variation_reference = 1;
     string collation = 2;
+    optional Constraint constraint = 3;
+
+    message Constraint {
+      oneof value {
+        uint32 fixed_length = 1;
+        uint32 max_length = 2;
+      }
+    }
   }
 
   message Binary {
