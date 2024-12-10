@@ -85,21 +85,19 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
   private def rewriteWithExprAndInputPlans(
       e: Expression,
-      inputPlans: Array[LogicalPlan]): Expression = {
+      inputPlans: Array[LogicalPlan],
+      isNestedWith: Boolean = false): Expression = {
     if (!e.containsPattern(WITH_EXPRESSION)) return e
     e match {
-      case w: With =>
+      // Do not handle nested With in one pass. Leave it to the next rule executor batch.
+      case w: With if !isNestedWith =>
         // Rewrite nested With expressions first
-        val child = rewriteWithExprAndInputPlans(w.child, inputPlans)
-        val defs = w.defs.map(rewriteWithExprAndInputPlans(_, inputPlans))
+        val child = rewriteWithExprAndInputPlans(w.child, inputPlans, isNestedWith = true)
+        val defs = w.defs.map(rewriteWithExprAndInputPlans(_, inputPlans, isNestedWith = true))
         val refToExpr = mutable.HashMap.empty[CommonExpressionId, Expression]
         val childProjections = Array.fill(inputPlans.length)(mutable.ArrayBuffer.empty[Alias])
 
         defs.zipWithIndex.foreach { case (CommonExpressionDef(child, id), index) =>
-          if (child.containsPattern(COMMON_EXPR_REF)) {
-            throw SparkException.internalError(
-              "Common expression definition cannot reference other Common expression definitions")
-          }
           if (id.canonicalized) {
             throw SparkException.internalError(
               "Cannot rewrite canonicalized Common expression definitions")
@@ -148,10 +146,9 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
         }
 
         child.transformWithPruning(_.containsPattern(COMMON_EXPR_REF)) {
-          case ref: CommonExpressionRef =>
-            if (!refToExpr.contains(ref.id)) {
-              throw SparkException.internalError("Undefined common expression id " + ref.id)
-            }
+          // `child` may contain nested With and we only replace `CommonExpressionRef` that
+          // references common expressions in the current `With`.
+          case ref: CommonExpressionRef if refToExpr.contains(ref.id) =>
             if (ref.id.canonicalized) {
               throw SparkException.internalError(
                 "Cannot rewrite canonicalized Common expression references")
@@ -161,7 +158,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
 
       case c: ConditionalExpression =>
         val newAlwaysEvaluatedInputs = c.alwaysEvaluatedInputs.map(
-          rewriteWithExprAndInputPlans(_, inputPlans))
+          rewriteWithExprAndInputPlans(_, inputPlans, isNestedWith))
         val newExpr = c.withNewAlwaysEvaluatedInputs(newAlwaysEvaluatedInputs)
         // Use transformUp to handle nested With.
         newExpr.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
@@ -174,7 +171,7 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
             }
         }
 
-      case other => other.mapChildren(rewriteWithExprAndInputPlans(_, inputPlans))
+      case other => other.mapChildren(rewriteWithExprAndInputPlans(_, inputPlans, isNestedWith))
     }
   }
 }
