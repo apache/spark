@@ -3574,6 +3574,12 @@
     ],
     "sqlState" : "42710"
   },
+  "MULTI_ALIAS_WITHOUT_GENERATOR" : {
+    "message" : [
+      "Multi part aliasing (<names>) is not supported with <expr> as it is not a generator function."
+    ],
+    "sqlState" : "42K0E"
+  },
   "MULTI_SOURCES_UNSUPPORTED_FOR_EXPRESSION" : {
     "message" : [
       "The expression <expr> does not support more than one source."
@@ -5301,6 +5307,11 @@
       "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
         "message" : [
           "Parameter markers are not allowed in <statement>."
+        ]
+      },
+      "PARTITION_BY_VARIANT" : {
+        "message" : [
+          "Cannot use VARIANT producing expressions to partition a DataFrame, but the type of expression <expr> is <dataType>."
         ]
       },
       "PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED" : {
