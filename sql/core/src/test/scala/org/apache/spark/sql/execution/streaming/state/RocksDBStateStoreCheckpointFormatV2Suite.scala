@@ -38,6 +38,7 @@ object CkptIdCollectingStateStoreWrapper {
 
   // Method to add a string (checkpoint ID) to the list in a synchronized way
   def addCheckpointInfo(checkpointID: StateStoreCheckpointInfo): Unit = synchronized {
+    println(s"wei== added new ckpt info: $checkpointID")
     checkpointInfos = checkpointID :: checkpointInfos
   }
 
@@ -128,8 +129,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
 
   override def commit(): Long = innerStore.commit()
   override def metrics: StateStoreMetrics = innerStore.metrics
-  override def getStateStoreCheckpointInfo: StateStoreCheckpointInfo = {
-    val ret = innerStore.getStateStoreCheckpointInfo
+  override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+    val ret = innerStore.getStateStoreCheckpointInfo()
     CkptIdCollectingStateStoreWrapper.addCheckpointInfo(ret)
     ret
   }

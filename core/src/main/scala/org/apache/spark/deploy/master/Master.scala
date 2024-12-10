@@ -26,7 +26,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkSubmit}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
@@ -128,6 +128,7 @@ private[deploy] class Master(
   val reverseProxy = conf.get(UI_REVERSE_PROXY)
   val historyServerUrl = conf.get(MASTER_UI_HISTORY_SERVER_URL)
   val useAppNameAsAppId = conf.get(MASTER_USE_APP_NAME_AS_APP_ID)
+  val useDriverIdAsAppName = conf.get(MASTER_USE_DRIVER_ID_AS_APP_NAME)
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.get(MASTER_REST_SERVER_ENABLED)
@@ -1330,10 +1331,33 @@ private[deploy] class Master(
     appId
   }
 
+  /**
+   * Update and add `spark.app.name` configurations to DriverDescription.
+   */
+  private def maybeUpdateAppName(desc: DriverDescription, appName: String): DriverDescription = {
+    if (!useDriverIdAsAppName) return desc
+
+    val config = s"spark.app.name=$appName"
+    val javaOpts = desc.command.javaOpts
+      .filter(opt => !opt.startsWith("-Dspark.app.name=")) :+ s"-D$config"
+    val args = desc.command.arguments
+    val arguments = if (args(2).equals(classOf[SparkSubmit].getName)) {
+      if (args.length > 4 && args(4).startsWith("spark.app.name=")) {
+        args.updated(4, config)
+      } else {
+        args.patch(3, Seq("-c", config), 0)
+      }
+    } else {
+      args
+    }
+    desc.copy(command = desc.command.copy(arguments = arguments, javaOpts = javaOpts))
+  }
+
   private def createDriver(desc: DriverDescription): DriverInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new DriverInfo(now, newDriverId(date), desc, date)
+    val id = newDriverId(date)
+    new DriverInfo(now, id, maybeUpdateAppName(desc, id), date)
   }
 
   private def launchDriver(worker: WorkerInfo, driver: DriverInfo): Unit = {

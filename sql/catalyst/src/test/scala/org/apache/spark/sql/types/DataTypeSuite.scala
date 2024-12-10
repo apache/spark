@@ -715,12 +715,12 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_LCASE"),
     expected = true)
   checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_BINARY"), StringType("UTF8_LCASE"), expected = true)
+    StringType("UTF8_LCASE"), StringType("UTF8_BINARY"), expected = true)
   // Complex types.
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
     ArrayType(StringType("UTF8_LCASE")),
-    expected = true
+    expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
@@ -730,12 +730,12 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(ArrayType(StringType)),
     ArrayType(ArrayType(StringType("UTF8_LCASE"))),
-    expected = true
+    expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType, StringType),
     MapType(StringType, StringType("UTF8_LCASE")),
-    expected = true
+    expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), StringType),
@@ -745,7 +745,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
     MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
-    expected = true
+    expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType), IntegerType),
@@ -760,12 +760,12 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
-    expected = true
+    expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType)) :: Nil),
     StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
-    expected = true
+    expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),

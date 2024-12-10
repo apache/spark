@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCaseAccentSensitivity}
+import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SQLOpenHashSet
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -188,7 +188,8 @@ case class ArraySize(child: Expression)
   group = "map_funcs",
   since = "2.0.0")
 case class MapKeys(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
 
@@ -477,7 +478,8 @@ object ArraysZip {
   group = "map_funcs",
   since = "2.0.0")
 case class MapValues(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
 
@@ -510,7 +512,8 @@ case class MapValues(child: Expression)
   group = "map_funcs",
   since = "3.0.0")
 case class MapEntries(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(MapType)
 
@@ -813,8 +816,8 @@ case class MapConcat(children: Seq[Expression])
   since = "2.4.0")
 case class MapFromEntries(child: Expression)
   extends UnaryExpression
-  with NullIntolerant
   with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   @transient
   private lazy val dataTypeDetails: Option[(MapType, Boolean, Boolean)] = child.dataType match {
@@ -894,7 +897,8 @@ case class MapFromEntries(child: Expression)
 }
 
 case class MapSort(base: Expression)
-  extends UnaryExpression with NullIntolerant with QueryErrorsBase {
+  extends UnaryExpression with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   val keyType: DataType = base.dataType.asInstanceOf[MapType].keyType
   val valueType: DataType = base.dataType.asInstanceOf[MapType].valueType
@@ -1048,7 +1052,8 @@ case class MapSort(base: Expression)
   since = "1.5.0")
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
-  extends BinaryExpression with ExpectsInputTypes with NullIntolerant with QueryErrorsBase {
+  extends BinaryExpression with ExpectsInputTypes with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   def this(e: Expression) = this(e, Literal(true))
 
@@ -1345,11 +1350,11 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
   """
 )
 case class Reverse(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeWithCaseAccentSensitivity, ArrayType))
+    Seq(TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -1421,8 +1426,9 @@ case class Reverse(child: Expression)
   group = "array_funcs",
   since = "1.5.0")
 case class ArrayContains(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Predicate
+  extends BinaryExpression with ImplicitCastInputTypes with Predicate
   with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
@@ -1551,9 +1557,9 @@ case class ArrayContains(left: Expression, right: Expression)
 case class ArrayBinarySearch(array: Expression, value: Expression)
   extends BinaryExpression
   with ImplicitCastInputTypes
-  with NullIntolerant
   with RuntimeReplaceable
   with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   override def left: Expression = array
   override def right: Expression = value
@@ -1603,12 +1609,7 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
 
   @transient private lazy val elementType: DataType =
     array.dataType.asInstanceOf[ArrayType].elementType
-  @transient private lazy val resultArrayElementNullable: Boolean =
-    array.dataType.asInstanceOf[ArrayType].containsNull
-
   @transient private lazy val isPrimitiveType: Boolean = CodeGenerator.isPrimitiveType(elementType)
-  @transient private lazy val canPerformFastBinarySearch: Boolean = isPrimitiveType &&
-    elementType != BooleanType && !resultArrayElementNullable
 
   @transient private lazy val comp: Comparator[Any] = new Comparator[Any] with Serializable {
     private val ordering = array.dataType match {
@@ -1619,39 +1620,28 @@ case class ArrayBinarySearch(array: Expression, value: Expression)
     override def compare(o1: Any, o2: Any): Int =
       (o1, o2) match {
         case (null, null) => 0
-        case (null, _) => 1
-        case (_, null) => -1
+        case (null, _) => -1
+        case (_, null) => 1
         case _ => ordering.compare(o1, o2)
       }
   }
 
-  @transient private lazy val elementObjectType = ObjectType(classOf[DataType])
-  @transient private lazy val  comparatorObjectType = ObjectType(classOf[Comparator[Object]])
-  override def replacement: Expression =
-    if (canPerformFastBinarySearch) {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearch",
-        Seq(array, value),
-        inputTypes)
-    } else if (isPrimitiveType) {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearchNullSafe",
-        Seq(array, value),
-        inputTypes)
+  @transient private lazy val comparatorObjectType = ObjectType(classOf[Comparator[Object]])
+
+  override def replacement: Expression = {
+    val toJavaArray = ToJavaArray(array)
+    val (arguments, inputTypes) = if (isPrimitiveType) {
+      (Seq(toJavaArray, value), Seq(toJavaArray.dataType, value.dataType))
     } else {
-      StaticInvoke(
-        classOf[ArrayExpressionUtils],
-        IntegerType,
-        "binarySearch",
-        Seq(Literal(elementType, elementObjectType),
-          Literal(comp, comparatorObjectType),
-          array,
-          value),
-        elementObjectType +: comparatorObjectType +: inputTypes)
+      (Seq(toJavaArray, value, Literal(comp, comparatorObjectType)),
+        Seq(toJavaArray.dataType, value.dataType, comparatorObjectType))
+    }
+    StaticInvoke(
+      classOf[ArrayExpressionUtils],
+      IntegerType,
+      "binarySearch",
+      arguments,
+      inputTypes)
   }
 
   override def prettyName: String = "array_binary_search"
@@ -1780,7 +1770,8 @@ case class ArrayAppend(left: Expression, right: Expression) extends ArrayPendBas
   since = "2.4.0")
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
-  extends BinaryArrayExpressionWithImplicitCast with NullIntolerant with Predicate {
+  extends BinaryArrayExpressionWithImplicitCast with Predicate {
+  override def nullIntolerant: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
     case TypeCheckResult.TypeCheckSuccess =>
@@ -2006,7 +1997,8 @@ case class ArraysOverlap(left: Expression, right: Expression)
   since = "2.4.0")
 // scalastyle:on line.size.limit
 case class Slice(x: Expression, start: Expression, length: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends TernaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def dataType: DataType = x.dataType
 
@@ -2135,12 +2127,12 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-    Seq(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
-      StringTypeWithCaseAccentSensitivity,
-        StringTypeWithCaseAccentSensitivity)
+    Seq(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+      StringTypeWithCollation(supportsTrimCollation = true),
+        StringTypeWithCollation(supportsTrimCollation = true))
   } else {
-    Seq(AbstractArrayType(StringTypeWithCaseAccentSensitivity),
-        StringTypeWithCaseAccentSensitivity)
+    Seq(AbstractArrayType(StringTypeWithCollation(supportsTrimCollation = true)),
+        StringTypeWithCollation(supportsTrimCollation = true))
   }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
@@ -2305,8 +2297,8 @@ case class ArrayJoin(
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayMin(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
@@ -2378,8 +2370,8 @@ case class ArrayMin(child: Expression)
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayMax(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
   override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
@@ -2460,7 +2452,8 @@ case class ArrayMax(child: Expression)
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayPosition(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with QueryErrorsBase {
+  extends BinaryExpression with ImplicitCastInputTypes with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   @transient private lazy val ordering: Ordering[Any] =
     TypeUtils.getInterpretedOrdering(right.dataType)
@@ -2608,8 +2601,9 @@ case class ElementAt(
     // The value to return if index is out of bound
     defaultValueOutOfBound: Option[Literal] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends GetMapValueUtil with GetArrayItemUtil with NullIntolerant with SupportQueryContext
+  extends GetMapValueUtil with GetArrayItemUtil with SupportQueryContext
   with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   def this(left: Expression, right: Expression) = this(left, right, None, SQLConf.get.ansiEnabled)
 
@@ -2861,7 +2855,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   with QueryErrorsBase {
 
   private def allowedTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, BinaryType, ArrayType)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), BinaryType, ArrayType)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(CONCAT)
 
@@ -3071,8 +3065,9 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class Flatten(child: Expression) extends UnaryExpression with NullIntolerant
+case class Flatten(child: Expression) extends UnaryExpression
   with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
 
   private def childDataType: ArrayType = child.dataType.asInstanceOf[ArrayType]
 
@@ -3957,8 +3952,8 @@ case class ArrayRepeat(left: Expression, right: Expression)
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayRemove(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with QueryErrorsBase {
-
+  extends BinaryExpression with ImplicitCastInputTypes with QueryErrorsBase {
+  override def nullIntolerant: Boolean = true
   override def dataType: DataType = left.dataType
 
   override def inputTypes: Seq[AbstractDataType] = {
@@ -4169,8 +4164,8 @@ trait ArraySetLike {
   group = "array_funcs",
   since = "2.4.0")
 case class ArrayDistinct(child: Expression)
-  extends UnaryExpression with ArraySetLike with ExpectsInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def dataType: DataType = child.dataType
@@ -4333,7 +4328,8 @@ case class ArrayDistinct(child: Expression)
  * Will become common base class for [[ArrayUnion]], [[ArrayIntersect]], and [[ArrayExcept]].
  */
 trait ArrayBinaryLike
-  extends BinaryArrayExpressionWithImplicitCast with ArraySetLike with NullIntolerant {
+  extends BinaryArrayExpressionWithImplicitCast with ArraySetLike {
+  override def nullIntolerant: Boolean = true
   override protected def dt: DataType = dataType
   override protected def et: DataType = elementType
 

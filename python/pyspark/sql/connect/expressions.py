@@ -266,7 +266,8 @@ class LiteralExpression(Expression):
             elif isinstance(dataType, DecimalType):
                 assert isinstance(value, decimal.Decimal)
             elif isinstance(dataType, StringType):
-                assert isinstance(value, str)
+                assert isinstance(value, (str, np.str_))
+                value = str(value)
             elif isinstance(dataType, DateType):
                 assert isinstance(value, (datetime.date, datetime.datetime))
                 if isinstance(value, datetime.date):
@@ -319,7 +320,7 @@ class LiteralExpression(Expression):
                 )
         elif isinstance(value, float):
             return DoubleType()
-        elif isinstance(value, str):
+        elif isinstance(value, (str, np.str_)):
             return StringType()
         elif isinstance(value, decimal.Decimal):
             return DecimalType()
@@ -489,7 +490,7 @@ class LiteralExpression(Expression):
                 # is sightly different:
                 # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
                 # while Pandas applies all supported units.
-                return pd.Timedelta(delta).isoformat()  # type: ignore[attr-defined]
+                return pd.Timedelta(delta).isoformat()
         return f"{self._value}"
 
 

@@ -119,9 +119,16 @@ struct<make_timestamp(2021, 7, 11, 6, 30, 45.678, CET):timestamp>
 -- !query
 SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007)
 -- !query schema
-struct<make_timestamp(2021, 7, 11, 6, 30, 60.007):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "INVALID_FRACTION_OF_SECOND",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "secAndMicros" : "60.007"
+  }
+}
 
 
 -- !query
@@ -143,9 +150,17 @@ struct<make_timestamp(1, 1, 1, 1, 1, 60):timestamp>
 -- !query
 SELECT make_timestamp(1, 1, 1, 1, 1, 61)
 -- !query schema
-struct<make_timestamp(1, 1, 1, 1, 1, 61):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 61"
+  }
+}
 
 
 -- !query
@@ -167,17 +182,33 @@ struct<make_timestamp(1, 1, 1, 1, 1, 59.999999):timestamp>
 -- !query
 SELECT make_timestamp(1, 1, 1, 1, 1, 99.999999)
 -- !query schema
-struct<make_timestamp(1, 1, 1, 1, 1, 99.999999):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 99"
+  }
+}
 
 
 -- !query
 SELECT make_timestamp(1, 1, 1, 1, 1, 999.999999)
 -- !query schema
-struct<make_timestamp(1, 1, 1, 1, 1, 999.999999):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "DATETIME_FIELD_OUT_OF_BOUNDS",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "rangeMessage" : "Invalid value for SecondOfMinute (valid values 0 - 59): 999"
+  }
+}
 
 
 -- !query
@@ -357,9 +388,17 @@ struct<to_timestamp(1):timestamp>
 -- !query
 select to_timestamp('2019-10-06 10:11:12.', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp(2019-10-06 10:11:12., yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '2019-10-06 10:11:12.' could not be parsed at index 20"
+  }
+}
 
 
 -- !query
@@ -421,9 +460,17 @@ struct<to_timestamp(2019-10-06 10:11:12.123456PST, yyyy-MM-dd HH:mm:ss.SSSSSS[zz
 -- !query
 select to_timestamp('2019-10-06 10:11:12.1234567PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp(2019-10-06 10:11:12.1234567PST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '2019-10-06 10:11:12.1234567PST' could not be parsed, unparsed text found at index 26"
+  }
+}
 
 
 -- !query
@@ -437,9 +484,17 @@ struct<to_timestamp(123456 2019-10-06 10:11:12.123456PST, SSSSSS yyyy-MM-dd HH:m
 -- !query
 select to_timestamp('223456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
-struct<to_timestamp(223456 2019-10-06 10:11:12.123456PST, SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '223456 2019-10-06 10:11:12.123456PST' could not be parsed at index 27"
+  }
+}
 
 
 -- !query
@@ -501,17 +556,33 @@ struct<to_timestamp(12.12342019-10-06S10:11, ss.SSSSyyyy-MM-dd'S'HH:mm):timestam
 -- !query
 select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 -- !query schema
-struct<to_timestamp(12.1232019-10-06S10:11, ss.SSSSyyyy-MM-dd'S'HH:mm):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 7"
+  }
+}
 
 
 -- !query
 select to_timestamp("12.1232019-10-06S10:11", "ss.SSSSyy-MM-dd'S'HH:mm")
 -- !query schema
-struct<to_timestamp(12.1232019-10-06S10:11, ss.SSSSyy-MM-dd'S'HH:mm):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Text '12.1232019-10-06S10:11' could not be parsed at index 9"
+  }
+}
 
 
 -- !query
@@ -581,9 +652,17 @@ struct<to_timestamp(16, dd):timestamp>
 -- !query
 select to_timestamp("02-29", "MM-dd")
 -- !query schema
-struct<to_timestamp(02-29, MM-dd):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "message" : "Invalid date 'February 29' as '1970' is not a leap year"
+  }
+}
 
 
 -- !query
@@ -629,53 +708,17 @@ struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - DATE '2020-01-01'):interval day
 -- !query
 select timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10'
 -- !query schema
-struct<>
+struct<(TIMESTAMP '2011-11-11 11:11:11' - 2011-11-11 11:11:10):interval day to second>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"2011-11-11 11:11:10\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' - 2011-11-11 11:11:10)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 61,
-    "fragment" : "timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10'"
-  } ]
-}
+0 00:00:01.000000000
 
 
 -- !query
 select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'
 -- !query schema
-struct<>
+struct<(2011-11-11 11:11:11 - TIMESTAMP '2011-11-11 11:11:10'):interval day to second>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"2011-11-11 11:11:11\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"(2011-11-11 11:11:11 - TIMESTAMP '2011-11-11 11:11:10')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 61,
-    "fragment" : "'2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'"
-  } ]
-}
+0 00:00:01.000000000
 
 
 -- !query
@@ -705,53 +748,17 @@ struct<>
 -- !query
 select str - timestamp'2011-11-11 11:11:11' from ts_view
 -- !query schema
-struct<>
+struct<(str - TIMESTAMP '2011-11-11 11:11:11'):interval day to second>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"str\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"(str - TIMESTAMP '2011-11-11 11:11:11')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 43,
-    "fragment" : "str - timestamp'2011-11-11 11:11:11'"
-  } ]
-}
+0 00:00:00.000000000
 
 
 -- !query
 select timestamp'2011-11-11 11:11:11' - str from ts_view
 -- !query schema
-struct<>
+struct<(TIMESTAMP '2011-11-11 11:11:11' - str):interval day to second>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"str\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' - str)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 43,
-    "fragment" : "timestamp'2011-11-11 11:11:11' - str"
-  } ]
-}
+0 00:00:00.000000000
 
 
 -- !query
@@ -761,11 +768,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"TIMESTAMP\"",
+    "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "sqlExpr" : "\"(TIMESTAMP '2011-11-11 11:11:11' + 1)\""
   },
   "queryContext" : [ {
@@ -785,11 +792,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\"",
+    "actualDataType" : "\"TIMESTAMP\"",
+    "inputType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
     "sqlExpr" : "\"(1 + TIMESTAMP '2011-11-11 11:11:11')\""
   },
   "queryContext" : [ {

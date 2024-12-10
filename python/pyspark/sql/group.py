@@ -32,7 +32,7 @@ __all__ = ["GroupedData"]
 
 
 def dfapi(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
-    def _api(self: "GroupedData") -> DataFrame:
+    def _api(self: "GroupedData") -> "DataFrame":
         name = f.__name__
         jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.session)
@@ -43,7 +43,7 @@ def dfapi(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
 
 
 def df_varargs_api(f: Callable[..., DataFrame]) -> Callable[..., DataFrame]:
-    def _api(self: "GroupedData", *cols: str) -> DataFrame:
+    def _api(self: "GroupedData", *cols: str) -> "DataFrame":
         from pyspark.sql.classic.column import _to_seq
 
         name = f.__name__
@@ -80,14 +80,14 @@ class GroupedData(PandasGroupedOpsMixin):
             return super().__repr__()
 
     @overload
-    def agg(self, *exprs: Column) -> DataFrame:
+    def agg(self, *exprs: Column) -> "DataFrame":
         ...
 
     @overload
-    def agg(self, __exprs: Dict[str, str]) -> DataFrame:
+    def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
         ...
 
-    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> DataFrame:
+    def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
         The available aggregate functions can be:
@@ -126,8 +126,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Examples
         --------
+        >>> import pandas as pd  # doctest: +SKIP
         >>> from pyspark.sql import functions as sf
-        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame(
         ...      [(2, "Alice"), (3, "Alice"), (5, "Bob"), (10, "Bob")], ["age", "name"])
         >>> df.show()
@@ -165,8 +166,8 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Same as above but uses pandas UDF.
 
-        >>> @pandas_udf('int', PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
-        ... def min_udf(v):
+        >>> @pandas_udf('int')  # doctest: +SKIP
+        ... def min_udf(v: pd.Series) -> int:
         ...     return v.min()
         ...
         >>> df.groupBy(df.name).agg(min_udf(df.age)).sort("name").show()  # doctest: +SKIP
@@ -190,7 +191,7 @@ class GroupedData(PandasGroupedOpsMixin):
         return DataFrame(jdf, self.session)
 
     @dfapi
-    def count(self) -> DataFrame:  # type: ignore[empty-body]
+    def count(self) -> "DataFrame":  # type: ignore[empty-body]
         """Counts the number of records for each group.
 
         .. versionadded:: 1.3.0
@@ -241,7 +242,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def avg(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
+    def avg(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
@@ -292,7 +293,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def max(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
+    def max(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
         """Computes the max value for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
@@ -336,7 +337,7 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    def min(self, *cols: str) -> DataFrame:  # type: ignore[empty-body]
+    def min(self, *cols: str) -> "DataFrame":  # type: ignore[empty-body]
         """Computes the min value for each numeric column for each group.
 
         .. versionadded:: 1.3.0

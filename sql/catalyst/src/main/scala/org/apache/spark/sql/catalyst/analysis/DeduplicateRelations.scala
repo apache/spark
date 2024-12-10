@@ -132,8 +132,22 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         _.output.map(_.exprId.id),
         newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
 
+    case f: FlatMapGroupsInArrow =>
+      deduplicateAndRenew[FlatMapGroupsInArrow](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
     case f: FlatMapCoGroupsInPandas =>
       deduplicateAndRenew[FlatMapCoGroupsInPandas](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
+    case f: FlatMapCoGroupsInArrow =>
+      deduplicateAndRenew[FlatMapCoGroupsInArrow](
         existingRelations,
         f,
         _.output.map(_.exprId.id),
@@ -361,14 +375,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         if findAliases(projectList).size == projectList.size =>
         Nil
 
-      case oldVersion @ Aggregate(_, aggregateExpressions, _)
+      case oldVersion @ Aggregate(_, aggregateExpressions, _, _)
           if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
       // We don't search the child plan recursively for the same reason as the above Project.
-      case _ @ Aggregate(_, aggregateExpressions, _)
+      case _ @ Aggregate(_, aggregateExpressions, _, _)
         if findAliases(aggregateExpressions).size == aggregateExpressions.size =>
         Nil
 
@@ -423,7 +437,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ Window(windowExpressions, _, _, child)
+      case oldVersion @ Window(windowExpressions, _, _, child, _)
           if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
           .nonEmpty =>
         val newVersion = oldVersion.copy(windowExpressions = newAliases(windowExpressions))

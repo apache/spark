@@ -490,7 +490,7 @@ abstract class JsonSuite
 
       // The following tests are about type coercion instead of JSON data source.
       // Here we simply forcus on the behavior of non-Ansi.
-      if(!SQLConf.get.ansiEnabled) {
+      if (!SQLConf.get.ansiEnabled) {
         // Number and Boolean conflict: resolve the type as number in this query.
         checkAnswer(
           sql("select num_bool - 10 from jsonTable where num_bool > 11"),
@@ -1072,8 +1072,10 @@ abstract class JsonSuite
           .option("mode", "FAILFAST")
           .json(corruptRecords)
       },
-      condition = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST")
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
 
     checkError(
@@ -2076,8 +2078,8 @@ abstract class JsonSuite
             .option("mode", "FAILFAST")
             .json(path)
         },
-        condition = "_LEGACY_ERROR_TEMP_2167",
-        parameters = Map("failFastMode" -> "FAILFAST", "dataType" -> "string|bigint"))
+        condition = "INVALID_JSON_RECORD_TYPE",
+        parameters = Map("failFastMode" -> "FAILFAST", "invalidType" -> "\"STRING\"|\"BIGINT\""))
 
       val ex = intercept[SparkException] {
         spark.read
@@ -2117,8 +2119,9 @@ abstract class JsonSuite
           .schema(schema)
           .json(corruptRecords)
       },
-      condition = "_LEGACY_ERROR_TEMP_1097",
-      parameters = Map.empty
+      condition = "INVALID_CORRUPT_RECORD_TYPE",
+      parameters = Map(
+        "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
     )
 
     // We use `PERMISSIVE` mode by default if invalid string is given.
@@ -2134,8 +2137,9 @@ abstract class JsonSuite
             .json(path)
             .collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1097",
-        parameters = Map.empty
+        condition = "INVALID_CORRUPT_RECORD_TYPE",
+        parameters = Map(
+          "columnName" -> toSQLId(columnNameOfCorruptRecord), "actualType" -> "\"INT\"")
       )
     }
   }

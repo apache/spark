@@ -104,7 +104,8 @@ trait NamedExpression extends Expression {
   def newInstance(): NamedExpression
 }
 
-abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
+abstract class Attribute extends LeafExpression with NamedExpression {
+  override def nullIntolerant: Boolean = true
 
   @transient
   override lazy val references: AttributeSet = AttributeSet(this)

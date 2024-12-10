@@ -198,6 +198,9 @@ object MimaExcludes {
 
     // SPARK-49748: Add getCondition and deprecate getErrorClass in SparkThrowable
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.SparkThrowable.getCondition"),
+
+    // SPARK-50112: Moving avro files from connector to sql/core
+    ProblemFilters.exclude[Problem]("org.apache.spark.sql.avro.*"),
   ) ++ loggingExcludes("org.apache.spark.sql.DataFrameReader") ++
     loggingExcludes("org.apache.spark.sql.streaming.DataStreamReader") ++
     loggingExcludes("org.apache.spark.sql.SparkSession#Builder")

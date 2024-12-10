@@ -626,27 +626,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT every("true")
 -- !query schema
-struct<>
+struct<every(true):boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"true\"",
-    "inputType" : "\"STRING\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"BOOLEAN\"",
-    "sqlExpr" : "\"every(true)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 20,
-    "fragment" : "every(\"true\")"
-  } ]
-}
+true
 
 
 -- !query
@@ -1066,7 +1048,7 @@ SELECT
 FROM VALUES
   (1), (2), (1) AS tab(col)
 -- !query schema
-struct<collect_list(col):array<int>,array_agg(col):array<int>>
+struct<collect_list(col):array<int>,collect_list(col):array<int>>
 -- !query output
 [1,2,1]	[1,2,1]
 
@@ -1080,7 +1062,7 @@ FROM VALUES
   (1,4),(2,3),(1,4),(2,4) AS v(a,b)
 GROUP BY a
 -- !query schema
-struct<a:int,collect_list(b):array<int>,array_agg(b):array<int>>
+struct<a:int,collect_list(b):array<int>,collect_list(b):array<int>>
 -- !query output
 1	[4,4]	[4,4]
 2	[3,4]	[3,4]

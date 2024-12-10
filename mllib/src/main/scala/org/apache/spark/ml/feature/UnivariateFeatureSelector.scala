@@ -410,7 +410,9 @@ object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelect
       featuresCol: String,
       isNumericAttribute: Boolean): StructField = {
     val selector = selectedFeatures.toSet
-    val origAttrGroup = AttributeGroup.fromStructField(schema(featuresCol))
+    val origAttrGroup = AttributeGroup.fromStructField(
+      SchemaUtils.getSchemaField(schema, featuresCol)
+    )
     val featureAttributes: Array[Attribute] = if (origAttrGroup.attributes.nonEmpty) {
       origAttrGroup.attributes.get.zipWithIndex.filter(x => selector.contains(x._2)).map(_._1)
     } else {
