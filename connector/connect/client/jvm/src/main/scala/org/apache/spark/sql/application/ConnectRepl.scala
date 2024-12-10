@@ -50,7 +50,7 @@ object ConnectRepl {
       /_/
 
 Type in expressions to have them evaluated.
-Spark connect server version %s.
+Spark connect server version %s.%s
 Spark session available as 'spark'.
    """
 
@@ -102,8 +102,11 @@ Spark session available as 'spark'.
         |""".stripMargin
     // Please note that we make ammonite generate classes instead of objects.
     // Classes tend to have superior serialization behavior when using UDFs.
+    val webUrl = spark.webUrl
+      .map(url => s"\nSpark Connect server context Web UI is available at $url.")
+      .getOrElse("")
     val main = new ammonite.Main(
-      welcomeBanner = Option(splash.format(spark_version, spark.version)),
+      welcomeBanner = Option(splash.format(spark_version, spark.version, webUrl)),
       predefCode = predefCode,
       replCodeWrapper = ExtendedCodeClassWrapper,
       scriptCodeWrapper = ExtendedCodeClassWrapper,
