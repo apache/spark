@@ -16,7 +16,7 @@
  */
 package org.apache.spark.storage
 
-import java.io.{DataOutputStream, File, FileOutputStream, InputStream, IOException}
+import java.io.{DataOutputStream, File, FileFilter, FileOutputStream, InputStream, IOException}
 import java.nio.file.Files
 
 import scala.concurrent.duration._
@@ -293,6 +293,68 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  Seq(0, 1, 2, 4, 1024, Int.MaxValue).foreach { subPaths =>
+    test(s"Get path for filename with $subPaths subdirectories") {
+      val conf = getSparkConf(2, 2).set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS, subPaths)
+      val path = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get
+      val appId = "app-id"
+      val shuffleId = 123
+      val filename = "the-file"
+      val actual = FallbackStorage.getPath(conf, appId, shuffleId, filename)
+      val expected = if (subPaths == 0) {
+        new Path(s"${path}/$appId/$shuffleId/$filename")
+      } else {
+        new Path(s"${path}/$appId/$shuffleId/${1049883992 % subPaths}/$filename")
+      }
+      assert(actual == expected)
+    }
+  }
+
+  Seq(0, 1, 2, 4, 1024, Int.MaxValue).foreach { subPaths =>
+    test(s"Control number of sub-directories ($subPaths)") {
+      val conf = getSparkConf(2, 2).set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_SUBPATHS, subPaths)
+      sc = new SparkContext(conf)
+      withSpark(sc) { sc =>
+        TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+        val rdd1 = sc.parallelize(1 to 10, 10)
+        val rdd2 = rdd1.map(x => (x % 2, 1))
+        val rdd3 = rdd2.reduceByKey(_ + _)
+        assert(rdd3.count() === 2)
+
+        // Decommission all
+        val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+        sc.getExecutorIds().foreach {
+          sched.decommissionExecutor(_, ExecutorDecommissionInfo(""), false)
+        }
+
+        // We expect two files per partition, with ten partitions
+        val files = 0 until 10 flatMap (idx => Seq(
+          s"shuffle_0_${idx}_0.index", s"shuffle_0_${idx}_0.data")
+        )
+        val fallbackStorage = new FallbackStorage(sc.getConf)
+        // Uploading is completed on decommissioned executors
+        eventually(timeout(20.seconds), interval(1.seconds)) {
+          files.foreach { file => assert(fallbackStorage.exists(0, file)) }
+        }
+
+        // Check number of subdirectories
+        val path = conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get
+        val dirsOnly = new FileFilter {
+          override def accept(file: File): Boolean = file.isDirectory
+        }
+        // first level is app dir
+        val appDirs = new File(path).listFiles(dirsOnly)
+        assert(appDirs.length == 1)
+        // second level is shuffle id
+        val shuffleDirs = appDirs(0).listFiles(dirsOnly)
+        assert(shuffleDirs.length == 1)
+        // third level is controlled number of hash / bucket dirs
+        val subDirs = shuffleDirs(0).listFiles(dirsOnly)
+        assert(subDirs.length == Math.min(subPaths, 20), subDirs.mkString(", "))
+      }
+    }
+   }
+
   CompressionCodec.shortCompressionCodecNames.keys.foreach { codec =>
     test(s"$codec - Newly added executors should access old data from remote storage") {
       sc = new SparkContext(getSparkConf(2, 0).set(IO_COMPRESSION_CODEC, codec))
@@ -335,6 +397,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 }
+
 class ReadPartialInputStream(val in: FSDataInputStream) extends InputStream
   with Seekable with PositionedReadable {
   override def read: Int = in.read
