@@ -1788,8 +1788,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         else:
             return DataFrame(self._jdf.transpose(), self.sparkSession)
 
-    def forTableFunction(self) -> TableArg:
-        return TableArg(self._jdf.forTableFunction())
+    def asTable(self) -> TableArg:
+        return TableArg(self._jdf.asTable())
 
     def scalar(self) -> Column:
         return Column(self._jdf.scalar())

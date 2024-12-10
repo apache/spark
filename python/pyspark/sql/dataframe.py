@@ -6580,7 +6580,7 @@ class DataFrame:
         """
         ...
 
-    def forTableFunction(self) -> TableArg:
+    def asTable(self) -> TableArg:
         """
         Converts the DataFrame into a `TableArg` object, which can be used as a table argument
         in a user-defined table function (UDTF).
@@ -6601,6 +6601,7 @@ class DataFrame:
         :class:`TableArg`
             A `TableArg` object representing a table argument.
         """
+        ...
 
     def scalar(self) -> Column:
         """
