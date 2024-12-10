@@ -16,10 +16,11 @@
 #
 
 from pyspark.sql.classic.column import _to_java_column, _to_seq
+from pyspark.sql.udtf_argument import UDTFArgument
 from pyspark.sql.utils import get_active_spark_context
 
 
-class TableArg:
+class TableArg(UDTFArgument):
     def __init__(self, j_table_arg):
         self._j_table_arg = j_table_arg
 
