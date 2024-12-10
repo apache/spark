@@ -324,7 +324,8 @@ class PlanParserSuite extends AnalysisTest {
       "from db.a select b, c where d < 1", table("db", "a").where($"d" < 1).select($"b", $"c"))
     assertEqual("from a select distinct b, c", Distinct(table("a").select($"b", $"c")))
     assertEqual("from a", table("a"))
-    assertEqual("from (from a union all from b) c select *", table("c").union(table("b")))
+    assertEqual("from (from a union all from b) c select *",
+      table("a").union(table("b")).subquery("c").select(star()))
   }
 
   test("multi select query") {
