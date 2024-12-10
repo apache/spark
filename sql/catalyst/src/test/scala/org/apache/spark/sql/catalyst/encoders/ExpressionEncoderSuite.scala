@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -92,6 +92,8 @@ class JavaSerializable(val value: Int) extends Serializable {
     case _ => false
   }
 }
+
+class UDTDerivedClass(urii: java.net.URI) extends UDTCaseClass(urii)
 
 /** For testing UDT for a case class */
 @SQLUserDefinedType(udt = classOf[UDTForCaseClass])
@@ -437,7 +439,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       exception = exception,
       condition = "ENCODER_NOT_FOUND",
       parameters = Map(
-        "typeName" -> "Any",
+        ExecutionErrors.TYPE_NAME -> "Any",
         "docroot" -> SPARK_DOC_ROOT)
     )
   }
