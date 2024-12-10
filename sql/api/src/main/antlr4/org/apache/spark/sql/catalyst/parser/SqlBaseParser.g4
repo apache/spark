@@ -48,15 +48,15 @@ compoundOrSingleStatement
     ;
 
 singleCompoundStatement
-    : BEGIN compoundBody END SEMICOLON? EOF
+    : BEGIN compoundBody? END SEMICOLON? EOF
     ;
 
 beginEndCompoundBlock
-    : beginLabel? BEGIN compoundBody END endLabel?
+    : beginLabel? BEGIN compoundBody? END endLabel?
     ;
 
 compoundBody
-    : (compoundStatements+=compoundStatement SEMICOLON)*
+    : (compoundStatements+=compoundStatement SEMICOLON)+
     ;
 
 compoundStatement
@@ -285,7 +285,7 @@ statement
     | (DESC | DESCRIBE) namespace EXTENDED?
         identifierReference                                            #describeNamespace
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
-        identifierReference partitionSpec? describeColName? (AS JSON)?     #describeRelation
+        identifierReference partitionSpec? describeColName? (AS JSON)? #describeRelation
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | COMMENT ON namespace identifierReference IS
         comment                                                        #commentNamespace
@@ -1510,6 +1510,8 @@ operatorPipeRightSide
     : selectClause windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
+    | DROP identifierSeq
+    | AS errorCapturingIdentifier
     // Note that the WINDOW clause is not allowed in the WHERE pipe operator, but we add it here in
     // the grammar simply for purposes of catching this invalid syntax and throwing a specific
     // dedicated error message.
@@ -2031,7 +2033,6 @@ nonReserved
     | IS
     | ITEMS
     | ITERATE
-    | JSON
     | KEYS
     | LANGUAGE
     | LAST
