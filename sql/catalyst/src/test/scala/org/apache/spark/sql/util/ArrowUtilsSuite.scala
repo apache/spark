@@ -30,7 +30,8 @@ class ArrowUtilsSuite extends SparkFunSuite {
   def roundtrip(dt: DataType): Unit = {
     dt match {
       case schema: StructType =>
-        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, true)) === schema)
+        assert(
+          ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, true)) === schema)
       case _ =>
         roundtrip(new StructType().add("value", dt))
     }
@@ -58,11 +59,10 @@ class ArrowUtilsSuite extends SparkFunSuite {
       parameters = Map("message" -> "Missing timezoneId where it is mandatory."))
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
-        ArrowUtils.fromArrowType(new ArrowType.Int(8, false))
+        ArrowUtils.fromArrowType(ArrowType.BinaryView.INSTANCE)
       },
       condition = "UNSUPPORTED_ARROWTYPE",
-      parameters = Map("typeName" -> "Int(8, false)")
-    )
+      parameters = Map("typeName" -> "BinaryView"))
   }
 
   test("timestamp") {
@@ -95,9 +95,9 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(new StructType().add("i", IntegerType))
     roundtrip(new StructType().add("arr", ArrayType(IntegerType)))
     roundtrip(new StructType().add("i", IntegerType).add("arr", ArrayType(IntegerType)))
-    roundtrip(new StructType().add(
-      "struct",
-      new StructType().add("i", IntegerType).add("arr", ArrayType(IntegerType))))
+    roundtrip(
+      new StructType()
+        .add("struct", new StructType().add("i", IntegerType).add("arr", ArrayType(IntegerType))))
   }
 
   test("struct with duplicated field names") {
@@ -107,17 +107,28 @@ class ArrowUtilsSuite extends SparkFunSuite {
       intercept[SparkUnsupportedOperationException] {
         ArrowUtils.toArrowSchema(schema, null, true)
       }
-      assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, false))
-        === new StructType().add("value", expected))
+      assert(
+        ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null, false))
+          === new StructType().add("value", expected))
     }
 
     roundtrip(new StructType().add("i", IntegerType).add("i", StringType))
 
-    check(new StructType().add("i", IntegerType).add("i", StringType),
+    check(
+      new StructType().add("i", IntegerType).add("i", StringType),
       new StructType().add("i_0", IntegerType).add("i_1", StringType))
-    check(ArrayType(new StructType().add("i", IntegerType).add("i", StringType)),
+    check(
+      ArrayType(new StructType().add("i", IntegerType).add("i", StringType)),
       ArrayType(new StructType().add("i_0", IntegerType).add("i_1", StringType)))
-    check(MapType(StringType, new StructType().add("i", IntegerType).add("i", StringType)),
+    check(
+      MapType(StringType, new StructType().add("i", IntegerType).add("i", StringType)),
       MapType(StringType, new StructType().add("i_0", IntegerType).add("i_1", StringType)))
+  }
+
+  test("SPARK-50464: support unsigned integer for arrow") {
+    assert(ArrowUtils.fromArrowType(new ArrowType.Int(8, false)) === DataTypes.ShortType)
+    assert(ArrowUtils.fromArrowType(new ArrowType.Int(8 * 2, false)) === DataTypes.IntegerType)
+    assert(ArrowUtils.fromArrowType(new ArrowType.Int(8 * 4, false)) === DataTypes.LongType)
+    assert(ArrowUtils.fromArrowType(new ArrowType.Int(8 * 8, false)) === DecimalType(20, 0))
   }
 }
