@@ -24,6 +24,8 @@ import org.apache.spark.sql.internal.connector.ProcedureParameterImpl;
 import org.apache.spark.sql.types.DataType;
 
 import static org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.IN;
+import static org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.INOUT;
+import static org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.OUT;
 
 /**
  * A {@link Procedure procedure} parameter.
@@ -46,6 +48,28 @@ public interface ProcedureParameter {
    */
   static Builder in(String name, DataType dataType) {
     return new Builder(IN, name, dataType);
+  }
+
+  /**
+   * Creates a builder for an OUT procedure parameter.
+   *
+   * @param name the name of the parameter
+   * @param dataType the type of the parameter
+   * @return the constructed stored procedure parameter
+   */
+  static Builder out(String name, DataType dataType) {
+    return new Builder(OUT, name, dataType);
+  }
+
+  /**
+   * Creates a builder for an INOUT procedure parameter.
+   *
+   * @param name the name of the parameter
+   * @param dataType the type of the parameter
+   * @return the constructed stored procedure parameter
+   */
+  static Builder inout(String name, DataType dataType) {
+    return new Builder(INOUT, name, dataType);
   }
 
   /**
@@ -92,7 +116,7 @@ public interface ProcedureParameter {
     private String defaultValueExpression;
     private String comment;
 
-    private Builder(Mode mode, String name, DataType dataType) {
+    public Builder(Mode mode, String name, DataType dataType) {
       this.mode = mode;
       this.name = name;
       this.dataType = dataType;
