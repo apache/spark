@@ -175,6 +175,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends api.DataStr
         extraOptions.get("path"),
         None,
         None,
+        None,
         external = false)
       val cmd = CreateTable(
         UnresolvedIdentifier(originalMultipartIdentifier),
