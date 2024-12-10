@@ -21,9 +21,38 @@ from pyspark.sql.tests.test_subquery import SubqueryTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-@unittest.skip("TODO(SPARK-50134): Support subquery in connect")
 class SubqueryParityTests(SubqueryTestsMixin, ReusedConnectTestCase):
-    pass
+    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
+    def test_simple_uncorrelated_scalar_subquery(self):
+        super().test_simple_uncorrelated_scalar_subquery()
+
+    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
+    def test_uncorrelated_scalar_subquery_with_view(self):
+        super().test_uncorrelated_scalar_subquery_with_view()
+
+    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
+    def test_scalar_subquery_against_local_relations(self):
+        super().test_scalar_subquery_against_local_relations()
+
+    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
+    def test_correlated_scalar_subquery(self):
+        super().test_correlated_scalar_subquery()
+
+    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
+    def test_exists_subquery(self):
+        super().test_exists_subquery()
+
+    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
+    def test_scalar_subquery_with_outer_reference_errors(self):
+        super().test_scalar_subquery_with_outer_reference_errors()
+
+    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
+    def test_scalar_subquery_inside_lateral_join(self):
+        super().test_scalar_subquery_inside_lateral_join()
+
+    @unittest.skip("TODO(SPARK-50134): Support subquery in connect")
+    def test_lateral_join_inside_subquery(self):
+        super().test_lateral_join_inside_subquery()
 
 
 if __name__ == "__main__":

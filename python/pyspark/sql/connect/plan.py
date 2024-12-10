@@ -893,7 +893,35 @@ class Join(LogicalPlan):
         else:
             raise AnalysisException(
                 errorClass="UNSUPPORTED_JOIN_TYPE",
-                messageParameters={"join_type": how},
+                messageParameters={
+                    "typ": how,
+                    "supported": (
+                        "'"
+                        + "', '".join(
+                            [
+                                "inner",
+                                "outer",
+                                "full",
+                                "fullouter",
+                                "full_outer",
+                                "leftouter",
+                                "left",
+                                "left_outer",
+                                "rightouter",
+                                "right",
+                                "right_outer",
+                                "leftsemi",
+                                "left_semi",
+                                "semi",
+                                "leftanti",
+                                "left_anti",
+                                "anti",
+                                "cross",
+                            ]
+                        )
+                        + "'"
+                    ),
+                },
             )
         self.how = join_type
 
@@ -1021,6 +1049,74 @@ class AsOfJoin(LogicalPlan):
         <ul>
             <li>
                 <b>AsOfJoin</b><br />
+                Left: {self.left._repr_html_()}
+                Right: {self.right._repr_html_()}
+            </li>
+        </uL>
+        """
+
+
+class LateralJoin(LogicalPlan):
+    def __init__(
+        self,
+        left: Optional[LogicalPlan],
+        right: LogicalPlan,
+        on: Optional[Column],
+        how: Optional[str],
+    ) -> None:
+        super().__init__(left)
+        self.left = cast(LogicalPlan, left)
+        self.right = right
+        self.on = on
+        if how is None:
+            join_type = proto.Join.JoinType.JOIN_TYPE_INNER
+        elif how == "inner":
+            join_type = proto.Join.JoinType.JOIN_TYPE_INNER
+        elif how in ["leftouter", "left"]:
+            join_type = proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER
+        elif how == "cross":
+            join_type = proto.Join.JoinType.JOIN_TYPE_CROSS
+        else:
+            raise AnalysisException(
+                errorClass="UNSUPPORTED_JOIN_TYPE",
+                messageParameters={
+                    "typ": how,
+                    "supported": (
+                        "'"
+                        + "', '".join(["inner", "leftouter", "left", "left_outer", "cross"])
+                        + "'"
+                    ),
+                },
+            )
+        self.how = join_type
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.lateral_join.left.CopyFrom(self.left.plan(session))
+        plan.lateral_join.right.CopyFrom(self.right.plan(session))
+        if self.on is not None:
+            plan.lateral_join.join_condition.CopyFrom(self.on.to_plan(session))
+        plan.lateral_join.join_type = self.how
+        return plan
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return dict(**super().observations, **self.right.observations)
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
+        n = indent + LogicalPlan.INDENT * 2
+        return (
+            f"{i}<LateralJoin on={self.on} how={self.how}>\n{o}"
+            f"left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
+        )
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>LateralJoin</b><br />
                 Left: {self.left._repr_html_()}
                 Right: {self.right._repr_html_()}
             </li>
