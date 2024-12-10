@@ -4820,7 +4820,7 @@ object SQLConf {
 
   val CHAR_VARCHAR_EXTENDS_STRING = buildConf("spark.sql.charVarcharExtendsString")
     .doc("When true, Spark treats CHAR/VARCHAR type differently than STRING type, which is the " +
-      "opposite behavior then that of Spark 3.0 and earlier. This means length check for " +
+      "opposite of its behavior in Spark 3.0 and earlier versions. This means length check for " +
       "CHAR/VARCHAR type and padding for CHAR type when writing data to the table.")
     .version("4.0.0")
     .booleanConf
